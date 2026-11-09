@@ -124,43 +124,26 @@ func TestRLS_MessagesClientTierAllowsClientInsert(t *testing.T) {
 	}
 }
 
-// TestMessages_HasContentConstraintRejectsEmptyMessage proves
-// messages_has_content: a row with neither a body nor an attachment is
-// rejected at the schema level. Not an RLS test -- it runs through
-// db.Admin (which bypasses RLS) to isolate the CHECK constraint from the
-// policies under test elsewhere in this file.
-func TestMessages_HasContentConstraintRejectsEmptyMessage(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
-	staff := fixture.Staff(t, db, p)
-	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
+// TestMessages_ConstraintsRejectMalformedRows proves the schema-level
+// CHECKs: messages_has_content rejects a row with neither a body nor an
+// attachment, and messages_attachment_all_or_nothing rejects one with only
+// some attachment columns set. Not an RLS test -- it runs through db.Admin
+// (which bypasses RLS) to isolate the CHECK constraints from the policies
+// under test elsewhere in this file.
+func TestMessages_ConstraintsRejectMalformedRows(t *testing.T) {
+	for _, tc := range []struct{ name, insert string }{
+		{"neither a body nor an attachment", `INSERT INTO messages (engagement_id, sender_type, sender_id) VALUES ($1, 'staff', $2)`},
+		{"only attachment_object_path set", `INSERT INTO messages (engagement_id, sender_type, sender_id, attachment_object_path)
+		 VALUES ($1, 'staff', $2, 'objects/some-file.png')`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			engagement := e.AnotherEngagement()
 
-	_, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO messages (engagement_id, sender_type, sender_id) VALUES ($1, 'staff', $2)`,
-		engagement.ID, staff.ID,
-	)
-	if err == nil {
-		t.Fatal("expected INSERT with neither body nor attachment to be rejected, got no error")
-	}
-}
-
-// TestMessages_AttachmentColumnsMustAllBeSetTogether proves
-// messages_attachment_all_or_nothing: a row with only some attachment
-// columns set is rejected at the schema level. Not an RLS test -- see
-// TestMessages_HasContentConstraintRejectsEmptyMessage above.
-func TestMessages_AttachmentColumnsMustAllBeSetTogether(t *testing.T) {
-	db := testdb.New(t)
-	p := fixture.Practice(t, db, fixture.PracticeName("Practice"))
-	staff := fixture.Staff(t, db, p)
-	engagement := fixture.Engagement(t, db, p, fixture.NewClient(fixture.ClientName("Client"), fixture.ClientEmail("client@example.com")))
-
-	_, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO messages (engagement_id, sender_type, sender_id, attachment_object_path)
-		 VALUES ($1, 'staff', $2, 'objects/some-file.png')`,
-		engagement.ID, staff.ID,
-	)
-	if err == nil {
-		t.Fatal("expected INSERT with only attachment_object_path set to be rejected, got no error")
+			if _, err := e.DB.Admin.ExecContext(t.Context(), tc.insert, engagement.ID, e.Staff.ID); err == nil {
+				t.Fatal("expected the INSERT to be rejected, got no error")
+			}
+		})
 	}
 }
 
@@ -198,22 +181,7 @@ func TestRLS_PushSubscriptionsStaffScopedToOwnIdentity(t *testing.T) {
 
 	tx := db.BeginAs(t, testdb.Identity(staffA.UID), testdb.Practice(practiceA.ID))
 
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
-	if err != nil {
-		t.Fatalf("query push_subscriptions as staff A: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM push_subscriptions`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != subA {
 		t.Fatalf("visible push_subscriptions = %v, want only %q", visibleIDs, subA)
@@ -234,22 +202,7 @@ func TestRLS_PushSubscriptionsClientScopedToOwnIdentity(t *testing.T) {
 
 	tx := db.BeginAs(t, testdb.Client(engagement.Client.ID))
 
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM push_subscriptions`)
-	if err != nil {
-		t.Fatalf("query push_subscriptions as client A: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
+	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM push_subscriptions`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != subA {
 		t.Fatalf("visible push_subscriptions = %v, want only %q", visibleIDs, subA)

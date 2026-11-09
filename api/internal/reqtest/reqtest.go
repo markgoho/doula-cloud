@@ -220,3 +220,14 @@ func ExpectPDF(t *testing.T, method, url string, opts ...Option) PDF {
 	}
 	return PDF{Disposition: resp.Header.Get("Content-Disposition"), Body: ReadBody(t, resp)}
 }
+
+// RequirePage fails the test unless a cursor-paginated page holds wantItems
+// items and its hasMore flag and next cursor agree with wantMore: a page
+// that has more carries a cursor, and the last page carries none.
+func RequirePage(t *testing.T, page string, items int, hasMore bool, nextCursor *string, wantItems int, wantMore bool) {
+	t.Helper()
+	if items != wantItems || hasMore != wantMore || (nextCursor != nil) != wantMore {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("%s page = %d items, hasMore=%v, cursor=%v; want %d/%v/%v", page, items, hasMore, nextCursor, wantItems, wantMore, wantMore)
+	}
+}

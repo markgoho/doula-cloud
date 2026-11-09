@@ -1,68 +1,33 @@
 package client_test
 
 import (
-	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
-
-// beginRuntimeTx opens a transaction on the low-privilege app_runtime
-// connection with practiceID's own session variables set -- the seat the
-// running application actually calls a SECURITY DEFINER function from,
-// and therefore the only seat that proves what one refuses. The
-// superuser Admin connection would prove nothing: it is not the role the
-// grants and the RLS the function relies on are written against.
-func beginRuntimeTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	return tx
-}
 
 // clientIDOfEngagement reads an Engagement's client_id off the superuser
 // connection -- the fact the whole of #813 turns on, read independently
 // of anything an endpoint chooses to report.
 func clientIDOfEngagement(t *testing.T, db *testdb.DB, engagementID string) string {
 	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT client_id FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
-		t.Fatalf("read engagement client_id: %v", err)
-	}
-	return clientID
+	return testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM engagements WHERE id = $1`, engagementID)
 }
 
 func clientIDOfRequest(t *testing.T, db *testdb.DB, requestID string) string {
 	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT client_id FROM engagement_requests WHERE id = $1`, requestID).Scan(&clientID); err != nil {
-		t.Fatalf("read request client_id: %v", err)
-	}
-	return clientID
+	return testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM engagement_requests WHERE id = $1`, requestID)
 }
 
 func clientIDOfPortalUser(t *testing.T, db *testdb.DB, identityUID string) string {
 	t.Helper()
-	var clientID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID).Scan(&clientID); err != nil {
-		t.Fatalf("read portal user client_id: %v", err)
-	}
-	return clientID
+	return testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identityUID)
 }
 
 // hasDataKey answers whether clientID's data key still exists -- what
@@ -70,38 +35,40 @@ func clientIDOfPortalUser(t *testing.T, db *testdb.DB, identityUID string) strin
 // quietly shredded one".
 func hasDataKey(t *testing.T, db *testdb.DB, clientID string) bool {
 	t.Helper()
-	var exists bool
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT EXISTS(SELECT 1 FROM client_data_keys WHERE client_id = $1)`, clientID).Scan(&exists); err != nil {
-		t.Fatalf("read client data key: %v", err)
-	}
-	return exists
+	return testdb.Scalar[bool](t, db.Admin, `SELECT EXISTS(SELECT 1 FROM client_data_keys WHERE client_id = $1)`, clientID)
 }
 
 func seedApprovedRequest(t *testing.T, db *testdb.DB, practiceID, clientID, engagementID, staffID, kind string) string {
 	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	return testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO engagement_requests (practice_id, client_id, kind, state, requested_by, decided_by, decided_at, engagement_id)
 		 VALUES ($1, $2, $3, 'approved', $4, $4, now(), $5) RETURNING id`,
-		practiceID, clientID, kind, staffID, engagementID,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed approved request: %v", err)
-	}
-	return id
+		practiceID, clientID, kind, staffID, engagementID)
 }
 
 // markEnteredInError ends an Engagement as "This Engagement should never
 // have existed" (00090's ending_reason), which is the Practice's own way
 // of saying one pregnancy was typed twice.
-func markEnteredInError(t *testing.T, db *testdb.DB, engagementID string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET status = 'completed', ending_reason = 'entered_in_error', birth_outcome = 'unknown' WHERE id = $1`,
-		engagementID,
-	); err != nil {
-		t.Fatalf("mark entered_in_error: %v", err)
-	}
+func (e *env) markEnteredInError(engagementID string) {
+	e.T.Helper()
+	e.Exec(`UPDATE engagements SET status = 'completed', ending_reason = 'entered_in_error', birth_outcome = 'unknown' WHERE id = $1`, engagementID)
+}
+
+// twoRecordsOfOneWoman is a survivor with an active Engagement and a later
+// Client typed for her again, each with an Engagement of its own.
+func (e *env) twoRecordsOfOneWoman(name string, absorbedKind string) (survivorID, absorbedID, absorbedEngagementID string) {
+	e.T.Helper()
+	survivorID = e.attachedClient(name, "first@example.com")
+	absorbedID, absorbedEngagementID = testdb.SeedEngagementWithKind(e.T, e.DB, e.Practice.ID, name, "second@example.com", absorbedKind)
+	e.setCreatedAt(survivorID, "2024-01-01T00:00:00Z")
+	e.setCreatedAt(absorbedID, "2025-01-01T00:00:00Z")
+	return survivorID, absorbedID, absorbedEngagementID
+}
+
+// erasure erases clientID as the person at the screen.
+func (e *env) erasure(clientID string) client.ErasureResponse {
+	e.T.Helper()
+	return reqtest.Expect[client.ErasureResponse](e.T, http.MethodPost, e.clientURL(clientID, "/erasure"), http.StatusOK, e.SignedIn)
 }
 
 // TestMergeHandler_MovesEngagementsRequestsAndPortalLinks is the whole
@@ -111,63 +78,39 @@ func markEnteredInError(t *testing.T, db *testdb.DB, engagementID string) {
 // trigger admits the merge's central write -- before that migration the
 // database refused it outright, whatever GLOSSARY.md said.
 func TestMergeHandler_MovesEngagementsRequestsAndPortalLinks(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-moves"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Rosa Lind", "rosa@example.com", "active")
-	absorbedID, absorbedEngagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Rosa Lind", "rosa2@example.com", "postpartum")
-	setCreatedAt(t, db, survivorID, "2024-01-01T00:00:00Z")
-	setCreatedAt(t, db, absorbedID, "2025-01-01T00:00:00Z")
-	requestID := seedApprovedRequest(t, db, practiceID, absorbedID, absorbedEngagementID, staffID, "postpartum")
-	testdb.SeedPortalUser(t, db, "portal-rosa-second", absorbedID)
+	e := newEnv(t)
+	survivorID, absorbedID, absorbedEngagementID := e.twoRecordsOfOneWoman("Rosa Lind", "postpartum")
+	requestID := seedApprovedRequest(t, e.DB, e.Practice.ID, absorbedID, absorbedEngagementID, e.Staff.ID, "postpartum")
+	testdb.SeedPortalUser(t, e.DB, "portal-rosa-second", absorbedID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.mergeOK(absorbedID, client.MergeRequest{GivenName: "Rosa Lind", Email: "second@example.com", OtherClientID: survivorID})
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{GivenName: "Rosa Lind", Email: "rosa2@example.com", OtherClientID: survivorID})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
-	}
-	var out client.MergeResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.MergedFrom != absorbedID {
 		t.Fatalf("mergedFrom = %q, want %q", out.MergedFrom, absorbedID)
 	}
 	if out.Moved.Engagements != 1 || out.Moved.EngagementRequests != 1 || out.Moved.PortalAccounts != 1 {
 		t.Fatalf("moved = %+v, want one of each -- a silent zero is exactly what the row counts exist to catch", out.Moved)
 	}
-
-	if got := clientIDOfEngagement(t, db, absorbedEngagementID); got != survivorID {
+	if got := clientIDOfEngagement(t, e.DB, absorbedEngagementID); got != survivorID {
 		t.Fatalf("engagement client_id = %q, want the survivor %q", got, survivorID)
 	}
-	if got := clientIDOfRequest(t, db, requestID); got != survivorID {
+	if got := clientIDOfRequest(t, e.DB, requestID); got != survivorID {
 		t.Fatalf("request client_id = %q, want the survivor %q -- an approved Request follows its Engagement", got, survivorID)
 	}
-	if got := clientIDOfPortalUser(t, db, "portal-rosa-second"); got != survivorID {
+	if got := clientIDOfPortalUser(t, e.DB, "portal-rosa-second"); got != survivorID {
 		t.Fatalf("portal link client_id = %q, want the survivor %q", got, survivorID)
 	}
 
 	// The plaintext audit, which has to outlive a shredding of both keys.
-	var mergedAt *time.Time
-	var mergedBy *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT merged_at, merged_by_staff_id FROM clients WHERE id = $1`, absorbedID,
-	).Scan(&mergedAt, &mergedBy); err != nil {
-		t.Fatalf("read merge audit: %v", err)
-	}
-	if mergedAt == nil {
+	if mergedAt := testdb.Scalar[*time.Time](t, e.DB.Admin, `SELECT merged_at FROM clients WHERE id = $1`, absorbedID); mergedAt == nil {
 		t.Fatalf("merged_at = nil, want a timestamp -- who merged this and when must survive an erasure")
 	}
-	if mergedBy == nil || *mergedBy != staffID {
-		t.Fatalf("merged_by_staff_id = %v, want %q", mergedBy, staffID)
+	if mergedBy := testdb.Scalar[*string](t, e.DB.Admin, `SELECT merged_by_staff_id FROM clients WHERE id = $1`, absorbedID); mergedBy == nil || *mergedBy != e.Staff.ID {
+		t.Fatalf("merged_by_staff_id = %v, want %q", mergedBy, e.Staff.ID)
 	}
 
 	// Both keys survive: the two sealed histories may never fold into one.
-	if !hasDataKey(t, db, absorbedID) || !hasDataKey(t, db, survivorID) {
+	if !hasDataKey(t, e.DB, absorbedID) || !hasDataKey(t, e.DB, survivorID) {
 		t.Fatalf("a data key was destroyed by the merge -- ADR-0027 keeps both until an erasure shreds them")
 	}
 }
@@ -178,17 +121,15 @@ func TestMergeHandler_MovesEngagementsRequestsAndPortalLinks(t *testing.T) {
 // the only thing that opens it is a durable tombstone -- not a session
 // flag, and not a caller's say-so.
 func TestEngagementFreezeStillRefusesAnUntombstonedMove(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-freeze-still-refuses", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Held Fast", "held@example.com")
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Somebody Else", "")
+	e := newEnv(t)
+	_, engagementID := testdb.SeedNamedEngagement(t, e.DB, e.Practice.ID, "Held Fast", "held@example.com")
+	otherID := e.newClient("Somebody Else")
 
-	_, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagements SET client_id = $2 WHERE id = $1`, engagementID, otherID)
+	_, err := e.DB.Admin.ExecContext(t.Context(), `UPDATE engagements SET client_id = $2 WHERE id = $1`, engagementID, otherID)
 	if err == nil {
 		t.Fatalf("moving an Engagement with no tombstone succeeded, want the trigger's refusal")
 	}
-	if got := clientIDOfEngagement(t, db, engagementID); got == otherID {
+	if got := clientIDOfEngagement(t, e.DB, engagementID); got == otherID {
 		t.Fatalf("engagement moved to %q anyway", otherID)
 	}
 }
@@ -201,34 +142,12 @@ func TestEngagementFreezeStillRefusesAnUntombstonedMove(t *testing.T) {
 // are read under their own key and labeled with the record they were
 // written against.
 func TestDetailHandler_MergedClientShowsBothHistoriesAsTwo(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merged-detail"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Nell Frost", "nell@example.com", "active")
-	absorbedID, absorbedEngagementID := testdb.SeedEngagementWithKind(t, db, practiceID, "Nell Frost", "nell2@example.com", "postpartum")
-	seedApprovedRequest(t, db, practiceID, absorbedID, absorbedEngagementID, staffID, "postpartum")
-	setCreatedAt(t, db, survivorID, "2024-01-01T00:00:00Z")
-	setCreatedAt(t, db, absorbedID, "2025-01-01T00:00:00Z")
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	survivorID, absorbedID, absorbedEngagementID := e.twoRecordsOfOneWoman("Nell Frost", "postpartum")
+	seedApprovedRequest(t, e.DB, e.Practice.ID, absorbedID, absorbedEngagementID, e.Staff.ID, "postpartum")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{GivenName: "Nell Frost", OtherClientID: survivorID})
-	defer merge.Body.Close()
-	if merge.StatusCode != http.StatusOK {
-		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
-	}
-
-	resp := authedJSON(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/clients/"+survivorID, nil)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("detail status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
+	e.merge(absorbedID, client.MergeRequest{GivenName: "Nell Frost", OtherClientID: survivorID}, http.StatusOK)
+	out := reqtest.Expect[client.DetailResponse](t, http.MethodGet, e.clientURL(survivorID, ""), http.StatusOK, e.SignedIn)
 
 	if len(out.MergedFrom) != 1 || out.MergedFrom[0].ClientID != absorbedID {
 		t.Fatalf("mergedFrom = %+v, want the one absorbed record %q", out.MergedFrom, absorbedID)
@@ -263,37 +182,19 @@ func TestDetailHandler_MergedClientShowsBothHistoriesAsTwo(t *testing.T) {
 // redacts it, which no ordinary write can, because clients_update
 // refuses a merged row outright.
 func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-erase-absorbed"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Vera Ash", "vera@example.com", "active")
-	absorbedID := seedFullClient(t, db, practiceID, staffID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	survivorID := e.attachedClient("Vera Ash", "vera@example.com")
+	absorbedID := seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)
 	// A Stripe Customer allocated against the absorbed record before the
 	// merge. It cannot move -- client_stripe_customers carries no UPDATE
 	// grant (00076) -- so the survivor's erasure is the only thing that
 	// will ever delete it, and its 90-day redaction floor has to reach
 	// the date the erasure reports.
-	seedMappedCustomer(t, db, practiceID, absorbedID, "acct_absorbed", "cus_absorbed", 0)
+	seedMappedCustomer(t, e.DB, e.Practice.ID, absorbedID, "acct_absorbed", "cus_absorbed", 0)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.merge(absorbedID, client.MergeRequest{GivenName: "Vera Ash", OtherClientID: survivorID}, http.StatusOK)
+	erasure := e.erasure(survivorID)
 
-	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{GivenName: "Vera Ash", OtherClientID: survivorID})
-	defer merge.Body.Close()
-	if merge.StatusCode != http.StatusOK {
-		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
-	}
-
-	erase := postErasure(t, session, srv, practiceID, survivorID)
-	defer erase.Body.Close()
-	if erase.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d: %s", erase.StatusCode, http.StatusOK, readBody(t, erase))
-	}
-	var erasure client.ErasureResponse
-	if err := json.UnmarshalRead(erase.Body, &erasure); err != nil {
-		t.Fatalf("decode erasure: %v", err)
-	}
 	if erasure.StripeCustomersQueued != 1 {
 		t.Fatalf("stripeCustomersQueued = %d, want 1 -- the absorbed record's Customer is only ever reached from here", erasure.StripeCustomersQueued)
 	}
@@ -306,7 +207,7 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 	var erasedAt *time.Time
 	var mergedInto *string
 	var mergedAt *time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT given_name, email, erased_at, merged_into, merged_at FROM clients WHERE id = $1`, absorbedID,
 	).Scan(&givenName, &email, &erasedAt, &mergedInto, &mergedAt); err != nil {
 		t.Fatalf("read absorbed record: %v", err)
@@ -320,21 +221,16 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 	if mergedInto == nil || *mergedInto != survivorID || mergedAt == nil {
 		t.Fatalf("merge audit was destroyed by the erasure -- it is plaintext precisely so it outlives one")
 	}
-	if hasDataKey(t, db, absorbedID) {
+	if hasDataKey(t, e.DB, absorbedID) {
 		t.Fatalf("absorbed record's data key survived the erasure -- her second sealed trail is still readable")
 	}
-	if hasDataKey(t, db, survivorID) {
+	if hasDataKey(t, e.DB, survivorID) {
 		t.Fatalf("survivor's data key survived her own erasure")
 	}
 
 	// The screen's own answer afterwards. Both trails are unreadable, and
 	// the plaintext merge audit is what still explains why there are two.
-	detail := authedJSON(t, session, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/clients/"+survivorID, nil)
-	defer detail.Body.Close()
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(detail.Body, &out); err != nil {
-		t.Fatalf("decode detail: %v", err)
-	}
+	out := reqtest.Expect[client.DetailResponse](t, http.MethodGet, e.clientURL(survivorID, ""), http.StatusOK, e.SignedIn)
 	if len(out.MergedFrom) != 1 {
 		t.Fatalf("mergedFrom = %+v, want the absorbed record still named after the erasure", out.MergedFrom)
 	}
@@ -352,51 +248,25 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 // (00026) whenever the survivor holds her own, and the address it was
 // sent to may not even be the address the fold kept.
 func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-revokes-invite"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Della Roe", "della@example.com", "active")
-	absorbedID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Della Roe", "della2@example.com")
-	testdb.SeedPendingPortalInvite(t, db, absorbedID)
-	setCreatedAt(t, db, survivorID, "2024-01-01T00:00:00Z")
-	setCreatedAt(t, db, absorbedID, "2025-01-01T00:00:00Z")
+	e := newEnv(t)
+	survivorID := e.attachedClient("Della Roe", "della@example.com")
+	absorbedID, _ := testdb.SeedNamedEngagement(t, e.DB, e.Practice.ID, "Della Roe", "della2@example.com")
+	testdb.SeedPendingPortalInvite(t, e.DB, absorbedID)
+	e.setCreatedAt(survivorID, "2024-01-01T00:00:00Z")
+	e.setCreatedAt(absorbedID, "2025-01-01T00:00:00Z")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	out := e.mergeOK(absorbedID, client.MergeRequest{GivenName: "Della Roe", OtherClientID: survivorID})
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{GivenName: "Della Roe", OtherClientID: survivorID})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
-	}
-	var out client.MergeResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Moved.RevokedInvitations != 1 || out.Moved.PortalAccounts != 0 {
 		t.Fatalf("moved = %+v, want one revoked invitation and no moved account", out.Moved)
 	}
-
-	var inviteToken *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT invite_token FROM client_portal_users WHERE client_id = $1`, absorbedID,
-	).Scan(&inviteToken); err != nil {
-		t.Fatalf("read absorbed invite: %v", err)
+	if token := testdb.Scalar[*string](t, e.DB.Admin, `SELECT invite_token FROM client_portal_users WHERE client_id = $1`, absorbedID); token != nil {
+		t.Fatalf("invite_token = %v, want nil -- an invitation to a record that no longer exists must not stay redeemable", *token)
 	}
-	if inviteToken != nil {
-		t.Fatalf("invite_token = %v, want nil -- an invitation to a record that no longer exists must not stay redeemable", *inviteToken)
-	}
-
-	var outboxStatus string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if status := testdb.Scalar[string](t, e.DB.Admin,
 		`SELECT o.status FROM portal_invite_outbox o
 		   JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
-		  WHERE pu.client_id = $1`, absorbedID,
-	).Scan(&outboxStatus); err != nil {
-		t.Fatalf("read invite outbox: %v", err)
-	}
-	if outboxStatus == "pending" {
+		  WHERE pu.client_id = $1`, absorbedID); status == pendingStatus {
 		t.Fatalf("outbox status = pending, want the send stopped -- the email would name a record that is now a tombstone")
 	}
 }
@@ -410,12 +280,10 @@ func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {
 // app_runtime can call them, and "MergeHandler's ordering makes this
 // unreachable" is a claim about one caller, not about the function.
 func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-definer-refusals"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Kept Record", "kept@example.com", "active")
-	otherID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Other Record", "other@example.com")
-	testdb.SeedPortalUser(t, db, "portal-definer-refusals", otherID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	survivorID := e.attachedClient("Kept Record", "kept@example.com")
+	otherID, _ := testdb.SeedNamedEngagement(t, e.DB, e.Practice.ID, "Other Record", "other@example.com")
+	testdb.SeedPortalUser(t, e.DB, "portal-definer-refusals", otherID)
 
 	// One transaction per refusal: a RAISE aborts the transaction it fires
 	// in, so a second call on the same one reports only that the block is
@@ -423,9 +291,8 @@ func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
 
 	// No tombstone: the two records are simply two records.
 	var moved int
-	tx := beginRuntimeTx(t, db, practiceID)
-	err := tx.QueryRowContext(t.Context(),
-		`SELECT merge_client_portal_links($1, $2)`, otherID, survivorID).Scan(&moved)
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
+	err := tx.QueryRowContext(t.Context(), `SELECT merge_client_portal_links($1, $2)`, otherID, survivorID).Scan(&moved)
 	_ = tx.Rollback()
 	if err == nil {
 		t.Fatalf("merge_client_portal_links moved %d links with no tombstone, want a refusal", moved)
@@ -433,16 +300,15 @@ func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
 	if !strings.Contains(err.Error(), "already merged into the destination") {
 		t.Fatalf("error = %v, want the function's own refusal", err)
 	}
-	if got := clientIDOfPortalUser(t, db, "portal-definer-refusals"); got != otherID {
+	if got := clientIDOfPortalUser(t, e.DB, "portal-definer-refusals"); got != otherID {
 		t.Fatalf("portal link moved to %q anyway", got)
 	}
 
 	// Nor may a tombstone be redacted while the record it was merged into
 	// is still live -- that is what keeps this from being a delete button
 	// on somebody else's Client.
-	tx = beginRuntimeTx(t, db, practiceID)
-	_, err = tx.ExecContext(t.Context(),
-		`SELECT redact_absorbed_client($1)`, otherID)
+	tx = e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
+	_, err = tx.ExecContext(t.Context(), `SELECT redact_absorbed_client($1)`, otherID)
 	_ = tx.Rollback()
 	if err == nil {
 		t.Fatalf("redact_absorbed_client redacted a live record, want a refusal")
@@ -460,36 +326,17 @@ func TestDefinerFunctionsRefuseWithoutTheirPrecondition(t *testing.T) {
 // drifting into an erased record that reads differently depending on
 // which path erased it.
 func TestRedactAbsorbedClientWritesTheSameNameErasureDoes(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-definer-name"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Kept Record", "kept@example.com", "active")
-	absorbedID := seedFullClient(t, db, practiceID, staffID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	survivorID := e.attachedClient("Kept Record", "kept@example.com")
+	absorbedID := seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.merge(absorbedID, client.MergeRequest{GivenName: "Kept Record", OtherClientID: survivorID}, http.StatusOK)
+	e.erasure(survivorID)
 
-	merge := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+absorbedID+"/merge",
-		client.MergeRequest{GivenName: "Kept Record", OtherClientID: survivorID})
-	defer merge.Body.Close()
-	if merge.StatusCode != http.StatusOK {
-		t.Fatalf("merge status = %d, want %d: %s", merge.StatusCode, http.StatusOK, readBody(t, merge))
-	}
-	erase := postErasure(t, session, srv, practiceID, survivorID)
-	defer erase.Body.Close()
-	if erase.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", erase.StatusCode, http.StatusOK)
-	}
-
-	var absorbedName, survivorName string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT (SELECT given_name FROM clients WHERE id = $1), (SELECT given_name FROM clients WHERE id = $2)`,
-		absorbedID, survivorID,
-	).Scan(&absorbedName, &survivorName); err != nil {
-		t.Fatalf("read redacted names: %v", err)
-	}
-	if absorbedName != client.ErasedGivenName || survivorName != client.ErasedGivenName {
-		t.Fatalf("names = %q / %q, want both %q -- the definer function and Go must write the same word", absorbedName, survivorName, client.ErasedGivenName)
+	for _, id := range []string{absorbedID, survivorID} {
+		if name := testdb.Scalar[string](t, e.DB.Admin, `SELECT given_name FROM clients WHERE id = $1`, id); name != client.ErasedGivenName {
+			t.Fatalf("name of %s = %q, want %q -- the definer function and Go must write the same word", id, name, client.ErasedGivenName)
+		}
 	}
 }
 
@@ -500,24 +347,15 @@ func TestRedactAbsorbedClientWritesTheSameNameErasureDoes(t *testing.T) {
 // would raise a constraint violation the endpoint could only report as
 // a 500.
 func TestMergeHandler_RefusesTwoPendingRequestsOfOneKind(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-two-pending"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	survivorID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Wren Ash", "wren@example.com", "active")
-	otherID := testdb.SeedNamedClient(t, db, practiceID, "Wren Ash", "wren2@example.com")
-	seedPendingRequest(t, db, practiceID, survivorID, staffID, "birth")
-	seedPendingRequest(t, db, practiceID, otherID, staffID, "birth")
+	e := newEnv(t)
+	survivorID := e.attachedClient("Wren Ash", "wren@example.com")
+	otherID := testdb.SeedNamedClient(t, e.DB, e.Practice.ID, "Wren Ash", "wren2@example.com")
+	seedPendingRequest(t, e.DB, e.Practice.ID, survivorID, e.Staff.ID, "birth")
+	seedPendingRequest(t, e.DB, e.Practice.ID, otherID, e.Staff.ID, "birth")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.merge(otherID, client.MergeRequest{GivenName: "Wren Ash", OtherClientID: survivorID}, http.StatusConflict)
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+otherID+"/merge",
-		client.MergeRequest{GivenName: "Wren Ash", OtherClientID: survivorID})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusConflict, readBody(t, resp))
-	}
-	if got := mergedIntoOf(t, db, otherID); got != nil {
+	if got := mergedIntoOf(t, e.DB, otherID); got != nil {
 		t.Fatalf("merged_into = %v, want nil -- the refusal must be asked before anything is written", got)
 	}
 }
@@ -531,29 +369,18 @@ func TestMergeHandler_RefusesTwoPendingRequestsOfOneKind(t *testing.T) {
 // only because a Request was approved and discounting the Engagement
 // alone would have changed nothing.
 func TestMergeHandler_EnteredInErrorDoesNotCountAsAttached(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-merge-in-error"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	realID, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Iris Vale", "iris@example.com", "active")
-	typoID, typoEngagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Iris Vale", "iris2@example.com")
-	seedApprovedRequest(t, db, practiceID, typoID, typoEngagementID, staffID, "birth")
-	markEnteredInError(t, db, typoEngagementID)
+	e := newEnv(t)
+	realID := e.attachedClient("Iris Vale", "iris@example.com")
+	typoID, typoEngagementID := testdb.SeedNamedEngagement(t, e.DB, e.Practice.ID, "Iris Vale", "iris2@example.com")
+	seedApprovedRequest(t, e.DB, e.Practice.ID, typoID, typoEngagementID, e.Staff.ID, "birth")
+	e.markEnteredInError(typoEngagementID)
 	// The typo record is deliberately the OLDER of the two, so the
 	// older-survives tiebreak would keep it if the discount did not
 	// apply. Attachment is the only thing that can decide this one.
-	setCreatedAt(t, db, realID, "2025-06-01T00:00:00Z")
-	setCreatedAt(t, db, typoID, "2024-06-01T00:00:00Z")
+	e.setCreatedAt(realID, "2025-06-01T00:00:00Z")
+	e.setCreatedAt(typoID, "2024-06-01T00:00:00Z")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+	e.merge(typoID, client.MergeRequest{GivenName: "Iris Vale", OtherClientID: realID}, http.StatusOK)
 
-	resp := authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+typoID+"/merge",
-		client.MergeRequest{GivenName: "Iris Vale", OtherClientID: realID})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d: %s", resp.StatusCode, http.StatusOK, readBody(t, resp))
-	}
-	if got := mergedIntoOf(t, db, typoID); got == nil || *got != realID {
-		t.Fatalf("typo merged_into = %v, want %q -- an in-error Engagement is not history worth keeping", got, realID)
-	}
+	requireMergedInto(t, e.DB, typoID, realID)
 }

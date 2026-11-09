@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -38,20 +39,24 @@ func seedFullClient(t *testing.T, db *testdb.DB, practiceID, staffID string) (cl
 // it writes is genuinely sealed under her key rather than a hand-built
 // envelope. The changed field is her phone -- something erasure will
 // null out, so the sealed diff really does hold personal data.
-func editOnce(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) {
-	t.Helper()
-	resp := authedJSON(t, session, http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID,
+func (e *eraseEnv) editOnce() {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.clientURL(e.ClientID, ""), http.StatusOK, e.SignedIn, reqtest.JSON(
 		client.EditRequest{
-			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("seeding edit: status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+			GivenName: "Ada", FamilyName: "Lovelace", Email: "ada@example.com", Phone: "585-555-0199", Override: true}))
 }
 
 func postErasure(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) *http.Response {
 	t.Helper()
 	return authedJSON(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID+"/erasure", nil)
+}
+
+// manualCheckPayment is a manually recorded check Payment on the invoice.
+func (e *eraseEnv) manualCheckPayment(invoiceID string) (paymentID string) {
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin,
+		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
+		invoiceID)
 }
 
 // TestEraseHandler_RedactsTheRecordInPlace is the central acceptance
@@ -60,7 +65,7 @@ func postErasure(t *testing.T, session string, srv *httptest.Server, practiceID,
 func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 	e := newEraseEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	e.erase()
 
 	var row struct {
 		id                                                    string
@@ -69,7 +74,7 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 		fieldValues                                           string
 		erasedAt                                              *time.Time
 	}
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT id, given_name, family_name, preferred_name, email, phone, address_line1,
 		        date_of_birth::text, address_locality, field_values::text, erased_at
 		   FROM clients WHERE id = $1`, e.ClientID,
@@ -108,8 +113,8 @@ func TestEraseHandler_RedactsTheRecordInPlace(t *testing.T) {
 func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	e := newEraseEnv(t)
 
-	editOnce(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	before := readActivityRows(t, e.db, e.ClientID)
+	e.editOnce()
+	before := readActivityRows(t, e.DB, e.ClientID)
 	if len(before) != 1 {
 		t.Fatalf("seeded activity rows = %d, want 1", len(before))
 	}
@@ -117,9 +122,9 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 		t.Fatalf("seeded activity row is not sealed: %q", before[0])
 	}
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	e.erase()
 
-	after := readActivityRows(t, e.db, e.ClientID)
+	after := readActivityRows(t, e.DB, e.ClientID)
 	if len(after) != 2 {
 		t.Fatalf("activity rows after erasure = %d, want 2 (the sealed one plus the plaintext 'erased' row)", len(after))
 	}
@@ -128,14 +133,8 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 	}
 
 	// Her key is gone.
-	var keys int
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM client_data_keys WHERE client_id = $1`, e.ClientID,
-	).Scan(&keys); err != nil {
-		t.Fatalf("count keys: %v", err)
-	}
-	if keys != 0 {
-		t.Fatalf("client_data_keys rows = %d, want 0", keys)
+	if hasDataKey(t, e.DB, e.ClientID) {
+		t.Fatal("her data key survived the erasure")
 	}
 
 	// And the read path says so rather than failing.
@@ -175,22 +174,12 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 	e := newEraseEnv(t)
 	invoiceID := e.paidInvoice()
 
-	var paymentID string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
-		invoiceID,
-	).Scan(&paymentID); err != nil {
-		t.Fatalf("seed manual payment: %v", err)
-	}
-	if _, err := e.db.Admin.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
-		 VALUES ($1, -15000, now(), 'reversal', $2, 'logged against the wrong invoice')`,
-		invoiceID, paymentID,
-	); err != nil {
-		t.Fatalf("seed reversal: %v", err)
-	}
+	paymentID := e.manualCheckPayment(invoiceID)
+	e.Exec(`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
+	        VALUES ($1, -15000, now(), 'reversal', $2, 'logged against the wrong invoice')`,
+		invoiceID, paymentID)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	e.erase()
 	var scope struct {
 		PaymentReversalReasons int `json:"paymentReversalReasons"`
 	}
@@ -199,12 +188,7 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 		t.Fatalf("erasureScope.paymentReversalReasons = %d, want 1", scope.PaymentReversalReasons)
 	}
 
-	var reason *string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`SELECT reason FROM payments WHERE invoice_id = $1 AND kind = 'reversal'`, invoiceID,
-	).Scan(&reason); err != nil {
-		t.Fatalf("query reversal reason: %v", err)
-	}
+	reason := testdb.Scalar[*string](t, e.DB.Admin, `SELECT reason FROM payments WHERE invoice_id = $1 AND kind = 'reversal'`, invoiceID)
 	if reason != nil {
 		t.Fatalf("reversal reason = %v, want NULL after erasure", *reason)
 	}
@@ -219,34 +203,17 @@ func TestEraseHandler_RedactsRefundNote(t *testing.T) {
 	e := newEraseEnv(t)
 	invoiceID := e.paidInvoice()
 
-	var paymentID string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
-		invoiceID,
-	).Scan(&paymentID); err != nil {
-		t.Fatalf("seed manual payment: %v", err)
-	}
-	if _, err := e.db.Admin.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, method, note)
-		 VALUES ($1, -15000, now(), 'refund', $2, 'check', 'check #2201 mailed to 12 Elm St')`,
-		invoiceID, paymentID,
-	); err != nil {
-		t.Fatalf("seed refund: %v", err)
-	}
+	paymentID := e.manualCheckPayment(invoiceID)
+	e.Exec(`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, method, note)
+	        VALUES ($1, -15000, now(), 'refund', $2, 'check', 'check #2201 mailed to 12 Elm St')`,
+		invoiceID, paymentID)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	e.erase()
 
-	var note *string
-	var amount int64
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`SELECT note, amount_cents FROM payments WHERE invoice_id = $1 AND kind = 'refund'`, invoiceID,
-	).Scan(&note, &amount); err != nil {
-		t.Fatalf("query refund after erasure: %v", err)
-	}
-	if note != nil {
+	if note := testdb.Scalar[*string](t, e.DB.Admin, `SELECT note FROM payments WHERE invoice_id = $1 AND kind = 'refund'`, invoiceID); note != nil {
 		t.Fatalf("refund note = %q, want NULL after erasure", *note)
 	}
-	if amount != -15000 {
+	if amount := testdb.Scalar[int64](t, e.DB.Admin, `SELECT amount_cents FROM payments WHERE invoice_id = $1 AND kind = 'refund'`, invoiceID); amount != -15000 {
 		t.Fatalf("refund amount = %d, want the row kept at -15000", amount)
 	}
 }
@@ -262,15 +229,11 @@ func TestEraseHandler_RedactsOtherMethodPaymentNote(t *testing.T) {
 	e := newEraseEnv(t)
 	invoiceID := e.paidInvoice()
 
-	if _, err := e.db.Admin.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method, note)
-		 VALUES ($1, 15000, now(), 'manual', 'other', 'wire transfer via her employer')`,
-		invoiceID,
-	); err != nil {
-		t.Fatalf("seed other-method payment: %v", err)
-	}
+	e.Exec(`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method, note)
+	        VALUES ($1, 15000, now(), 'manual', 'other', 'wire transfer via her employer')`,
+		invoiceID)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	e.erase()
 	var scope struct {
 		PaymentNotes int `json:"paymentNotes"`
 	}
@@ -279,47 +242,50 @@ func TestEraseHandler_RedactsOtherMethodPaymentNote(t *testing.T) {
 		t.Fatalf("erasureScope.paymentNotes = %d, want 1", scope.PaymentNotes)
 	}
 
-	var note *string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
-		`SELECT note FROM payments WHERE invoice_id = $1 AND method = 'other'`, invoiceID,
-	).Scan(&note); err != nil {
-		t.Fatalf("query other-method payment note: %v", err)
-	}
-	if note != nil {
+	if note := testdb.Scalar[*string](t, e.DB.Admin, `SELECT note FROM payments WHERE invoice_id = $1 AND method = 'other'`, invoiceID); note != nil {
 		t.Fatalf("other-method payment note = %v, want NULL after erasure", *note)
 	}
 }
 
-// TestEraseHandler_RefusesEveryRoleButOwner is the Owner-only criterion.
-func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
-	for name, roles := range map[string][]string{
-		adminRole: {adminRole},
-		doulaRole: {doulaRole},
-	} {
-		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "erase-role-" + name
-			practiceID := testdb.SeedPractice(t, db, "Erasure Practice")
-			staffID := testdb.SeedStaffAtPractice(t, db, practiceID, uid, roles, "employee")
-			clientID := seedFullClient(t, db, practiceID, staffID)
+// eraseRoutes are the two routes at /clients/{clientId}/erasure: the
+// eligibility precheck (#691) and the act it precedes.
+var eraseRoutes = []struct{ name, method string }{
+	{"the eligibility precheck", http.MethodGet},
+	{"the erasure", http.MethodPost},
+}
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
+// TestEraseRoutes_RefuseEveryRoleButOwner is the Owner-only criterion, for
+// the act and for the precheck that answers the same question (ADR-0027 and
+// #394).
+func TestEraseRoutes_RefuseEveryRoleButOwner(t *testing.T) {
+	for _, route := range eraseRoutes {
+		for _, role := range []string{adminRole, doulaRole} {
+			t.Run(route.name+"/"+role, func(t *testing.T) {
+				e := newEraseEnv(t, signedInAs(fixture.Roles(role)))
 
-			resp := postErasure(t, session, srv, practiceID, clientID)
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusForbidden {
-				t.Fatalf("status = %d, want %d -- only an Owner may erase", resp.StatusCode, http.StatusForbidden)
-			}
-			var erasedAt *time.Time
-			if err := db.Admin.QueryRowContext(t.Context(),
-				`SELECT erased_at FROM clients WHERE id = $1`, clientID,
-			).Scan(&erasedAt); err != nil {
-				t.Fatalf("read client: %v", err)
-			}
-			if erasedAt != nil {
-				t.Fatal("erased_at is set after a refused erasure")
-			}
+				reqtest.ExpectStatus(t, route.method, e.erasureURL(), http.StatusForbidden, e.SignedIn)
+
+				if erasedAt := testdb.Scalar[*time.Time](t, e.DB.Admin, `SELECT erased_at FROM clients WHERE id = $1`, e.ClientID); erasedAt != nil {
+					t.Fatal("erased_at is set after a refused erasure")
+				}
+			})
+		}
+	}
+}
+
+// TestEraseRoutes_RefuseWhatTheyCannotReach keeps a Client at another
+// Practice unerasable, and says "not found" rather than "forbidden" -- the
+// caller learns nothing about whether she exists -- and refuses an id that
+// is no id.
+func TestEraseRoutes_RefuseWhatTheyCannotReach(t *testing.T) {
+	for _, route := range eraseRoutes {
+		t.Run(route.name, func(t *testing.T) {
+			e := newEraseEnv(t)
+			otherPractice := fixture.Practice(t, e.DB, fixture.PracticeName("Other Practice"))
+			otherClientID := seedFullClient(t, e.DB, otherPractice.ID, "")
+
+			reqtest.ExpectStatus(t, route.method, e.clientURL(otherClientID, "/erasure"), http.StatusNotFound, e.SignedIn)
+			reqtest.ExpectStatus(t, route.method, e.clientURL("not-a-uuid", "/erasure"), http.StatusBadRequest, e.SignedIn)
 		})
 	}
 }
@@ -329,16 +295,10 @@ func TestEraseHandler_RefusesEveryRoleButOwner(t *testing.T) {
 func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	e := newEraseEnv(t)
 
-	first := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-	second := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
+	e.erase()
+	second := reqtest.Post(t, e.erasureURL(), e.SignedIn)
 	defer second.Body.Close()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, second, http.StatusConflict)
 	// The code, not the prose, is what tells this refusal from the
 	// unsettled-invoice one -- see EraseHandler's own doc comment.
 	if got := apierrtest.Decode(t, second); got.Code != apierr.CodeConflict {
@@ -346,55 +306,15 @@ func TestEraseHandler_RefusesASecondErasure(t *testing.T) {
 	}
 }
 
-// TestEraseHandler_RefusesAnUnknownClient keeps a Client at another
-// Practice unerasable, and says "not found" rather than "forbidden" --
-// the caller learns nothing about whether she exists.
-func TestEraseHandler_RefusesAnUnknownClient(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-other-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	otherStaffID := testdb.SeedStaffAtPractice(t, db, otherPracticeID, "other-owner", []string{ownerRole}, "employee")
-	otherClientID := seedFullClient(t, db, otherPracticeID, otherStaffID)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, otherClientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestEraseHandler_RefusesAMalformedClientID(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-bad-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 // TestEditHandler_RefusesAnErasedClient -- her record is not editable
 // afterwards, and the refusal says why.
 func TestEditHandler_RefusesAnErasedClient(t *testing.T) {
 	e := newEraseEnv(t)
 
-	erased := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer erased.Body.Close()
-	if erased.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", erased.StatusCode, http.StatusOK)
-	}
+	e.erase()
 
-	resp := authedJSON(t, e.session, http.MethodPut, e.srv.URL+"/api/practices/"+e.Practice.ID+"/clients/"+e.ClientID,
-		client.EditRequest{GivenName: "Ada", Override: true})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("edit status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.ExpectStatus(t, http.MethodPut, e.clientURL(e.ClientID, ""), http.StatusConflict, e.SignedIn,
+		reqtest.JSON(client.EditRequest{GivenName: "Ada", Override: true}))
 }
 
 // containsSealed reports whether a row's text carries a sealed envelope

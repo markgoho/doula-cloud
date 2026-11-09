@@ -88,11 +88,11 @@ func seedInvoicedClient(t *testing.T, db *testdb.DB, practiceID, clientID, custo
 // that date is visible to the Practice rather than implied.
 func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_recent", "paid", 10*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_recent", "paid", 10*24*time.Hour)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
-	acts := readOutbox(t, e.db, e.ClientID)
+	acts := readOutbox(t, e.DB, e.ClientID)
 	if len(acts) != 2 {
 		t.Fatalf("outbox rows = %+v, want a delete and a redaction", acts)
 	}
@@ -122,7 +122,7 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 
 	// Her Contract's captured merge fields went with her.
 	var mergeFields string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT ct.merge_field_values::text FROM contracts ct
 		   JOIN engagements e ON e.id = ct.engagement_id WHERE e.client_id = $1`, e.ClientID,
 	).Scan(&mergeFields); err != nil {
@@ -138,11 +138,11 @@ func TestEraseHandler_QueuesStripeWorkAndReportsWhenItCanRun(t *testing.T) {
 // there is no future date to show.
 func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_old", "paid", 200*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_old", "paid", 200*24*time.Hour)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
-	acts := readOutbox(t, e.db, e.ClientID)
+	acts := readOutbox(t, e.DB, e.ClientID)
 	redact, ok := acts["stripe_redaction_job|cus_old"]
 	if !ok {
 		t.Fatalf("no redaction row queued: %+v", acts)
@@ -172,12 +172,12 @@ func TestEraseHandler_RedactionIsDueAtOnceForAnOldInvoice(t *testing.T) {
 // the new one turning 90.
 func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_ancient", "paid", 200*24*time.Hour)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_fresh", "paid", 10*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_ancient", "paid", 200*24*time.Hour)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_fresh", "paid", 10*24*time.Hour)
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
-	acts := readOutbox(t, e.db, e.ClientID)
+	acts := readOutbox(t, e.DB, e.ClientID)
 	ancient, ok := acts["stripe_redaction_job|cus_ancient"]
 	if !ok {
 		t.Fatalf("no redaction row for the older Customer: %+v", acts)
@@ -211,8 +211,8 @@ func TestEraseHandler_EachStripeCustomerGetsItsOwnEligibilityDate(t *testing.T) 
 // account (ADR-0027), so a failing job is today's normal path.
 func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_failing", "paid", 10*24*time.Hour)
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_failing", "paid", 10*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
 	atErasure := e.detail().StripeRedactionEligibleAt
 	if atErasure == nil {
@@ -225,14 +225,14 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 	stripe := &fakeStripeEraser{redactErr: errors.New("Unrecognized request URL")}
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	for range len(outbox.BackoffSchedule) + 1 {
-		forceOutboxDueNow(t, e.db, e.ClientID)
-		runWorker(t, e.db, worker)
+		forceOutboxDueNow(t, e.DB, e.ClientID)
+		runWorker(t, e.DB, worker)
 	}
 
-	if status := readOutboxStatus(t, e.db, e.ClientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
+	if status := readOutboxStatus(t, e.DB, e.ClientID)["stripe_redaction_job|cus_failing"]; status != deadLetteredStatus {
 		t.Fatalf("redaction status = %q, want dead_lettered after the schedule is exhausted", status)
 	}
-	if reason := readOutboxReason(t, e.db, e.ClientID)["stripe_redaction_job|cus_failing"]; reason != "retries_exhausted" {
+	if reason := readOutboxReason(t, e.DB, e.ClientID)["stripe_redaction_job|cus_failing"]; reason != "retries_exhausted" {
 		t.Fatalf("redaction dead_letter_reason = %q, want retries_exhausted", reason)
 	}
 
@@ -250,11 +250,11 @@ func TestEraseHandler_RedactionStateSurvivesRetriesAndDeadLettering(t *testing.T
 // and the date goes.
 func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_done", "paid", 200*24*time.Hour)
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_done", "paid", 200*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
-	forceOutboxDueNow(t, e.db, e.ClientID)
-	runWorker(t, e.db, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
+	forceOutboxDueNow(t, e.DB, e.ClientID)
+	runWorker(t, e.DB, client.ErasureWorker{Stripe: &fakeStripeEraser{}, Now: time.Now})
 
 	if got := e.detail().StripeRedactionEligibleAt; got != nil {
 		t.Fatalf("stripeRedactionEligibleAt = %v, want absent once the redaction has run", got)
@@ -268,19 +268,19 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 	for _, status := range []string{"draft", "open"} {
 		t.Run(status, func(t *testing.T) {
 			e := newEraseEnv(t)
-			seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_"+status, status, time.Hour)
+			seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_"+status, status, time.Hour)
 
 			// The code, not the prose, is what tells this refusal from
 			// "already erased" -- see EraseHandler's own doc comment.
 			// The message still has to name the blocking invoice.
-			got := apierrtest.Expect(t, http.MethodPost, e.erasureURL(), http.StatusConflict, e.signedIn)
+			got := apierrtest.Expect(t, http.MethodPost, e.erasureURL(), http.StatusConflict, e.SignedIn)
 			if got.Code != apierr.CodeFailedPrecondition {
 				t.Fatalf("code = %q, want %q", got.Code, apierr.CodeFailedPrecondition)
 			}
 			if !strings.Contains(got.Message, "in_cus_"+status) {
 				t.Fatalf("message = %q, want it to name invoice %q", got.Message, "in_cus_"+status)
 			}
-			if rows := readOutbox(t, e.db, e.ClientID); len(rows) != 0 {
+			if rows := readOutbox(t, e.DB, e.ClientID); len(rows) != 0 {
 				t.Fatalf("outbox rows = %+v, want none after a refusal", rows)
 			}
 		})
@@ -291,57 +291,23 @@ func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
 // Portal Account criterion, and the session deletion it implies: deleting
 // the account does not by itself sign her out.
 func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-portal"
+	e := newEraseEnv(t)
 	const portalUID = "portal-uid-erasure"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
-	); err != nil {
-		t.Fatalf("seed portal user: %v", err)
-	}
-	authntest.SeedSession(t, db.App, portalUID)
+	e.seedPortalLogin(portalUID)
+	authntest.SeedSession(t, e.DB.App, portalUID)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e.erase()
 
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	var sessions int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM sessions WHERE identity_uid = $1`, portalUID,
-	).Scan(&sessions); err != nil {
-		t.Fatalf("count sessions: %v", err)
-	}
-	if sessions != 0 {
+	if sessions := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM sessions WHERE identity_uid = $1`, portalUID); sessions != 0 {
 		t.Fatalf("portal sessions = %d, want 0 -- she must not still be signed in", sessions)
 	}
-
-	var storedUID *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, clientID,
-	).Scan(&storedUID); err != nil {
-		t.Fatalf("read portal user: %v", err)
-	}
-	if storedUID != nil {
+	if storedUID := testdb.Scalar[*string](t, e.DB.Admin, `SELECT identity_uid FROM client_portal_users WHERE client_id = $1`, e.ClientID); storedUID != nil {
 		t.Fatalf("identity_uid = %q, want NULL", *storedUID)
 	}
-
-	if rows := readOutbox(t, db, clientID); len(rows) != 0 {
+	if rows := readOutbox(t, e.DB, e.ClientID); len(rows) != 0 {
 		t.Fatalf("outbox rows = %+v, want none -- there is no Identity Platform account left to queue a delete for", rows)
 	}
-
-	var portalAccounts int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM portal_accounts WHERE identifier = $1`, portalUID,
-	).Scan(&portalAccounts); err != nil {
-		t.Fatalf("count portal accounts: %v", err)
-	}
-	if portalAccounts != 0 {
+	if portalAccounts := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM portal_accounts WHERE identifier = $1`, portalUID); portalAccounts != 0 {
 		t.Fatal("portal_accounts row still exists -- it holds the sign-in address erasure exists to scrub")
 	}
 }
@@ -352,16 +318,16 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 // revoked and that is the whole act.
 func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 	e := newEraseEnv(t)
-	if _, err := e.db.Admin.ExecContext(t.Context(),
+	if _, err := e.DB.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, e.ClientID,
 	); err != nil {
 		t.Fatalf("seed portal invite: %v", err)
 	}
 
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
 	var token *string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT invite_token::text FROM client_portal_users WHERE client_id = $1`, e.ClientID,
 	).Scan(&token); err != nil {
 		t.Fatalf("read portal user: %v", err)
@@ -369,7 +335,7 @@ func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 	if token != nil {
 		t.Fatalf("invite_token = %q, want NULL", *token)
 	}
-	if rows := readOutbox(t, e.db, e.ClientID); len(rows) != 0 {
+	if rows := readOutbox(t, e.DB, e.ClientID); len(rows) != 0 {
 		t.Fatalf("outbox rows = %+v, want none -- there is no account to delete", rows)
 	}
 }
@@ -377,26 +343,12 @@ func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 // TestErasureWorker_PerformsEveryQueuedAct is the worker's happy path,
 // both Stripe acts at once.
 func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-worker-happy"
-	const portalUID = "portal-uid-worker"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID := seedFullClient(t, db, practiceID, staffID)
-	seedInvoicedClient(t, db, practiceID, clientID, "cus_worker", "paid", 200*24*time.Hour)
-	testdb.SeedPortalAccount(t, db, portalUID, portalUID+"@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, clientID, portalUID,
-	); err != nil {
-		t.Fatalf("seed portal user: %v", err)
-	}
+	e := newEraseEnv(t)
+	db, clientID := e.DB, e.ClientID
+	seedInvoicedClient(t, db, e.Practice.ID, clientID, "cus_worker", "paid", 200*24*time.Hour)
+	e.seedPortalLogin("portal-uid-worker")
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("erase status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	e.erase()
 
 	stripe := &fakeStripeEraser{}
 	forceOutboxDueNow(t, db, clientID)
@@ -420,15 +372,11 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 // rather than being marked done.
 func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_retry", "paid", 200*24*time.Hour)
-	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer resp.Body.Close()
-
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_retry", "paid", 200*24*time.Hour)
 	stripe := &fakeStripeEraser{deleteErr: errors.New("stripe is down"), redactErr: errors.New("stripe is down")}
-	forceOutboxDueNow(t, e.db, e.ClientID)
-	runWorker(t, e.db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	e.eraseAndRunWorker(stripe)
 
-	for act, status := range readOutboxStatus(t, e.db, e.ClientID) {
+	for act, status := range readOutboxStatus(t, e.DB, e.ClientID) {
 		if status != pendingStatus {
 			t.Errorf("%s = %q, want pending -- a failed act is retried, not abandoned", act, status)
 		}
@@ -440,25 +388,17 @@ func TestErasureWorker_RetriesAFailedAct(t *testing.T) {
 // rather than retried forever or falsely marked done.
 func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_orphan", "paid", 200*24*time.Hour)
-	if _, err := e.db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = NULL WHERE id = $1`, e.Practice.ID,
-	); err != nil {
-		t.Fatalf("clear connect account: %v", err)
-	}
-	resp := postErasure(t, e.session, e.srv, e.Practice.ID, e.ClientID)
-	defer resp.Body.Close()
-
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_orphan", "paid", 200*24*time.Hour)
+	e.Exec(`UPDATE practices SET stripe_connect_account_id = NULL WHERE id = $1`, e.Practice.ID)
 	stripe := &fakeStripeEraser{}
-	forceOutboxDueNow(t, e.db, e.ClientID)
-	runWorker(t, e.db, client.ErasureWorker{Stripe: stripe, Now: time.Now})
+	e.eraseAndRunWorker(stripe)
 
-	for act, status := range readOutboxStatus(t, e.db, e.ClientID) {
+	for act, status := range readOutboxStatus(t, e.DB, e.ClientID) {
 		if status != deadLetteredStatus {
 			t.Errorf("%s = %q, want dead_lettered", act, status)
 		}
 	}
-	for act, reason := range readOutboxReason(t, e.db, e.ClientID) {
+	for act, reason := range readOutboxReason(t, e.DB, e.ClientID) {
 		if reason != "own_data" {
 			t.Errorf("%s dead_letter_reason = %q, want own_data", act, reason)
 		}
@@ -474,14 +414,14 @@ func TestErasureWorker_DeadLettersWhenThePracticeHasNoConnectedAccount(t *testin
 // a correct secret runs the worker, a wrong one does not.
 func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing.T) {
 	e := newEraseEnv(t)
-	seedInvoicedClient(t, e.db, e.Practice.ID, e.ClientID, "cus_endpoint", "paid", 200*24*time.Hour)
-	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
+	seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_endpoint", "paid", 200*24*time.Hour)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.SignedIn)
 
 	stripe := &fakeStripeEraser{}
 	worker := client.ErasureWorker{Stripe: stripe, Now: time.Now}
 	mux := http.NewServeMux()
 	mux.Handle("POST /internal/clients/process-erasure-outbox",
-		outbox.ProcessHandler(e.db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
+		outbox.ProcessHandler(e.DB.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
 	workerSrv := httptest.NewServer(mux)
 	defer workerSrv.Close()
 
@@ -494,7 +434,7 @@ func TestProcessErasureOutboxHandler_RunsDueActsBehindTheWorkerSecret(t *testing
 		t.Fatalf("customer deletes = %v, want none behind a rejected secret", stripe.deleted)
 	}
 
-	forceOutboxDueNow(t, e.db, e.ClientID)
+	forceOutboxDueNow(t, e.DB, e.ClientID)
 	right := postProcessErasure(t, workerSrv, "correct-secret")
 	defer right.Body.Close()
 	if right.StatusCode != http.StatusOK {
@@ -718,4 +658,21 @@ func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
 	if !scope.PortalAccount {
 		t.Fatal("erasureScope.portalAccount = false, want true -- her portal link at this Practice was removed")
 	}
+}
+
+// seedPortalLogin gives the Client a Portal Account that has accepted its
+// invitation.
+func (e *eraseEnv) seedPortalLogin(portalUID string) {
+	e.T.Helper()
+	testdb.SeedPortalAccount(e.T, e.DB, portalUID, portalUID+"@example.com")
+	e.Exec(`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, e.ClientID, portalUID)
+}
+
+// eraseAndRunWorker erases the Client, brings every queued act due, and
+// runs one pass of the worker with stripe standing in for Stripe.
+func (e *eraseEnv) eraseAndRunWorker(stripe *fakeStripeEraser) {
+	e.T.Helper()
+	e.erase()
+	forceOutboxDueNow(e.T, e.DB, e.ClientID)
+	runWorker(e.T, e.DB, client.ErasureWorker{Stripe: stripe, Now: time.Now})
 }
