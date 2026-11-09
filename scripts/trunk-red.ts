@@ -459,6 +459,8 @@ function flagCanceled(): void {
  * a silent red trunk is worse than an alarm for a run that heals.
  */
 function beingRerun(): boolean {
+  // ci-heal sets this when its rerun was refused (#2822): no rerun is coming.
+  if (process.env.TRUNK_RED_FORCE === '1') return false;
   if (run.conclusion !== 'failure' || (run.run_attempt ?? 1) !== 1) {
     return false;
   }

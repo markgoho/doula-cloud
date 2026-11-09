@@ -7,8 +7,16 @@
 // failure is left to trunk-red and to a person. What counts as transient
 // is in scripts/ci-transient.ts, which trunk-red reads too, so the alarm
 // stays quiet for exactly the runs that this reruns.
+//
+// When the rerun cannot be made (#2822), no rerun comes and trunk-red has
+// stayed quiet on the promise of one, so a trunk run opens its alarm here:
+// this runs scripts/trunk-red.ts with TRUNK_RED_FORCE set, on the same
+// event payload, so the alarm is the one it would have opened without the
+// heal. A pull request run has no alarm to open, as trunk-red's own
+// `branches: [trunk]` filter has it.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { classifyRun } from './ci-transient.ts';
 
 type Run = {
@@ -16,6 +24,8 @@ type Run = {
   name: string;
   conclusion: string | null;
   run_attempt?: number;
+  head_branch?: string | null;
+  event?: string;
   html_url: string;
 };
 
@@ -82,8 +92,30 @@ if (run.conclusion !== 'failure') {
     if (dryRun) {
       console.log(`dry run: would POST ${endpoint}`);
     } else {
-      gh(['api', '--method', 'POST', endpoint]);
-      console.log(`reran the failed jobs of run ${run.id}`);
+      const rerun = spawnSync(
+        process.env.GH_BIN || 'gh',
+        ['api', '--method', 'POST', endpoint],
+        { encoding: 'utf8' }
+      );
+      if (rerun.status === 0) {
+        console.log(`reran the failed jobs of run ${run.id}`);
+      } else {
+        console.error(
+          `::error::ci-heal: gh api POST ${endpoint} failed (exit ${rerun.status}): ${rerun.stderr || rerun.error?.message || ''}`
+        );
+        if (run.head_branch === 'trunk' && run.event !== 'pull_request') {
+          console.log('the rerun was refused on trunk: opening its alarm');
+          const alarm = spawnSync(
+            'bun',
+            [path.join(import.meta.dir, 'trunk-red.ts')],
+            { stdio: 'inherit', env: { ...process.env, TRUNK_RED_FORCE: '1' } }
+          );
+          if (alarm.status !== 0) fail('the alarm could not be opened');
+        } else {
+          console.log('not a trunk run, so there is no alarm to open');
+        }
+        process.exit(1);
+      }
     }
   }
 }

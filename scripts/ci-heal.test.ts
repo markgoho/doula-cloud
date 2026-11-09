@@ -52,8 +52,11 @@ function standIn(jobs: object[], logs: Record<number, string>, run = {}) {
       "const f = JSON.parse(fs.readFileSync(path.join(import.meta.dir, 'fixtures.json'), 'utf8'));",
       "fs.appendFileSync(path.join(import.meta.dir, 'calls.jsonl'), JSON.stringify({ method, endpoint }) + '\\n');",
       'const log = endpoint.match(/\\/jobs\\/(\\d+)\\/logs$/);',
-      "if (log) console.log(f.logs[log[1]] ?? '');",
+      "if (method === 'POST' && endpoint.endsWith('/rerun-failed-jobs') && process.env.REFUSE_RERUN) { console.error('HTTP 403'); process.exit(1); }",
+      "else if (log) console.log(f.logs[log[1]] ?? '');",
       'else if (/\\/attempts\\/\\d+\\/jobs/.test(endpoint)) console.log(JSON.stringify({ jobs: f.jobs }));',
+      "else if (/\\/issues\\?/.test(endpoint)) console.log('[]');",
+      "else if (method === 'POST' && /\\/issues$/.test(endpoint)) console.log(JSON.stringify({ number: 42 }));",
       'else if (/\\/actions\\/runs\\/\\d+(\\/attempts\\/1)?$/.test(endpoint)) console.log(JSON.stringify(f.run));',
       "else console.log('{}');",
       '',
@@ -173,6 +176,63 @@ describe('a failed run', () => {
   );
 });
 
+describe('a refused rerun (#2822)', () => {
+  const trunkRun = {
+    ...run('failure'),
+    path: '.github/workflows/ci.yml',
+    head_branch: 'trunk',
+    head_sha: 'a'.repeat(40),
+    event: 'push',
+  };
+  const setup = [job(11, 'format', 'Run oven-sh/setup-bun@v2')];
+
+  test.each(['push', 'repository_dispatch'])(
+    'of a trunk %s run opens the alarm for the original run',
+    (event) => {
+      const result = heal(
+        { ...trunkRun, event },
+        setup,
+        { 11: BUN_504 },
+        {
+          REFUSE_RERUN: '1',
+        }
+      );
+      expect(result.status).toBe(1);
+      expect(result.stdout).toContain('opening its alarm');
+      expect(result.stdout).toContain('opened #42');
+      expect(result.reruns.map((call) => call.endpoint)).toContain(
+        `repos/${REPO}/issues`
+      );
+    }
+  );
+
+  test('of a pull request run opens no alarm', () => {
+    const result = heal(
+      {
+        ...trunkRun,
+        head_branch: 'some-feature',
+        event: 'pull_request',
+      },
+      setup,
+      { 11: BUN_504 },
+      { REFUSE_RERUN: '1' }
+    );
+    expect(result.status).toBe(1);
+    expect(result.stdout).toContain('no alarm to open');
+    expect(result.reruns.map((call) => call.endpoint)).not.toContain(
+      `repos/${REPO}/issues`
+    );
+  });
+
+  test('is not needed when the rerun is accepted: no alarm', () => {
+    const result = heal(trunkRun, setup, { 11: BUN_504 });
+    expect(result.status).toBe(0);
+    expect(result.reruns.map((call) => call.endpoint)).not.toContain(
+      `repos/${REPO}/issues`
+    );
+  });
+});
+
 describe('a replay', () => {
   test('reads attempt 1 of a run that was rerun by hand and writes nothing', () => {
     const result = heal(
@@ -211,7 +271,11 @@ describe('.github/workflows/ci-heal.yml', () => {
     expect(heals.on.workflow_run.branches).toBeUndefined();
   });
 
-  test('can rerun a run, and write nothing else', () => {
-    expect(heals.permissions).toEqual({ contents: 'read', actions: 'write' });
+  test('can rerun a run and open the alarm, and write nothing else', () => {
+    expect(heals.permissions).toEqual({
+      contents: 'read',
+      actions: 'write',
+      issues: 'write',
+    });
   });
 });
