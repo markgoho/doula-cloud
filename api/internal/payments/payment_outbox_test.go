@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
@@ -50,37 +51,6 @@ func seedPaymentOutboxRow(t *testing.T, db *testdb.DB, practiceID, suffix string
 	return id
 }
 
-// runPaymentWorker begins a tx on db.App, sets the trusted session var
-// outbox.ProcessHandler would otherwise set after its own
-// secret check, runs ProcessPending, and commits.
-func runPaymentWorker(t *testing.T, db *testdb.DB, w payments.PaymentReceivedWorker) {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-}
-
-func paymentOutboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int) {
-	t.Helper()
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count FROM payment_received_outbox WHERE id = $1`, id,
-	).Scan(&status, &attemptCount); err != nil {
-		t.Fatalf("query payment_received_outbox row: %v", err)
-	}
-	return status, attemptCount
-}
-
 func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Queue Payment Insert")
@@ -119,7 +89,7 @@ func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-one", []string{ownerRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "payment-admin-one", []string{"admin"}, "employee")
+	testdb.SeedStaffAtPractice(t, db, practiceID, "payment-admin-one", []string{adminRole}, "employee")
 	// A Doula at the same Practice should never be mailed -- ADR-0006's
 	// read table gives Contract money/Invoice history to Owner and Admin
 	// only.
@@ -127,9 +97,9 @@ func TestPaymentWorker_ProcessPending_MailsEveryOwnerAndAdminMarksSent(t *testin
 	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
+	runWorker(t, db, newTestPaymentWorker(sender))
 
-	status, _ := paymentOutboxRowState(t, db, outboxID)
+	status, _ := outboxRowState(t, db, paymentOutboxTable, outboxID)
 	if status != testPaymentOutboxStatusSent {
 		t.Fatalf("status = %q, want %s", status, testPaymentOutboxStatusSent)
 	}
@@ -170,10 +140,10 @@ func TestPaymentWorker_ProcessPending_TwoPaymentsForSamePracticeBothMailed(t *te
 	secondID := seedPaymentOutboxRow(t, db, practiceID, "-second", 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
+	runWorker(t, db, newTestPaymentWorker(sender))
 
-	firstStatus, _ := paymentOutboxRowState(t, db, firstID)
-	secondStatus, _ := paymentOutboxRowState(t, db, secondID)
+	firstStatus, _ := outboxRowState(t, db, paymentOutboxTable, firstID)
+	secondStatus, _ := outboxRowState(t, db, paymentOutboxTable, secondID)
 	if firstStatus != testPaymentOutboxStatusSent || secondStatus != testPaymentOutboxStatusSent {
 		t.Fatalf("statuses = %q/%q, want both %s", firstStatus, secondStatus, testPaymentOutboxStatusSent)
 	}
@@ -182,69 +152,51 @@ func TestPaymentWorker_ProcessPending_TwoPaymentsForSamePracticeBothMailed(t *te
 	}
 }
 
-func TestPaymentWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-not-due", []string{ownerRole}, "employee")
-	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(time.Hour))
+// TestPaymentWorker_ProcessPending_Outcomes proves what the worker does to
+// a row it finds: it leaves one not yet due; marks one sent with no mail
+// when the Practice has no Owner or Admin; retries on a send failure; and
+// dead-letters on the final attempt.
+func TestPaymentWorker_ProcessPending_Outcomes(t *testing.T) {
+	errMailgun := errors.New("mailgun unavailable")
+	for _, tc := range []struct {
+		name         string
+		noOwner      bool
+		attemptCount int
+		due          time.Duration
+		sendErr      error
+		wantStatus   string
+		wantAttempts int
+	}{
+		{name: "a row not yet due is skipped", due: time.Hour, wantStatus: testPaymentOutboxStatusPending},
+		{name: "a Practice with no Owner or Admin is marked sent with no mail", noOwner: true, due: -time.Minute, wantStatus: testPaymentOutboxStatusSent},
+		{name: "a send failure retries", due: -time.Minute, sendErr: errMailgun, wantStatus: testPaymentOutboxStatusPending, wantAttempts: 1},
+		// One attempt short of the schedule's length -- this failure is the
+		// last one before dead-letter.
+		{name: "the final attempt dead-letters", attemptCount: 4, due: -time.Minute, sendErr: errMailgun, wantStatus: statusDeadLettered, wantAttempts: 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			staff := fixture.Owner()
+			if tc.noOwner {
+				staff = fixture.NoRole()
+			}
+			e := newEnv(t, signedInAs(staff))
+			outboxID := seedPaymentOutboxRow(t, e.db, e.Practice.ID, "", tc.attemptCount, time.Now().Add(tc.due))
 
-	sender := &mail.FakeSender{}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
+			sender := &mail.FakeSender{Err: tc.sendErr}
+			runWorker(t, e.db, newTestPaymentWorker(sender))
 
-	status, _ := paymentOutboxRowState(t, db, outboxID)
-	if status != testPaymentOutboxStatusPending {
-		t.Fatalf("status = %q, want %s (not due yet)", status, testPaymentOutboxStatusPending)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no send for a not-yet-due row")
-	}
-}
-
-func TestPaymentWorker_ProcessPending_ZeroOwnersOrAdminsMarksSentWithNoMail(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Payment Ownerless Practice")
-	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
-
-	status, _ := paymentOutboxRowState(t, db, outboxID)
-	if status != testPaymentOutboxStatusSent {
-		t.Fatalf("status = %q, want %s", status, testPaymentOutboxStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent when the Practice has no Owner or Admin")
-	}
-}
-
-func TestPaymentWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-retry", []string{ownerRole}, "employee")
-	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
-
-	status, attemptCount := paymentOutboxRowState(t, db, outboxID)
-	if status != testPaymentOutboxStatusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want %s/1", status, attemptCount, testPaymentOutboxStatusPending)
-	}
-}
-
-func TestPaymentWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "payment-owner-dead-letter", []string{ownerRole}, "employee")
-	// One attempt short of the schedule's length -- this failure is the
-	// last one before dead-letter.
-	outboxID := seedPaymentOutboxRow(t, db, practiceID, "", 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runPaymentWorker(t, db, newTestPaymentWorker(sender))
-
-	status, attemptCount := paymentOutboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if got := testdb.DeadLetterReason(t, db, "payment_received_outbox", outboxID); got != "retries_exhausted" {
-		t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+			status, attemptCount := outboxRowState(t, e.db, paymentOutboxTable, outboxID)
+			if status != tc.wantStatus || attemptCount != tc.wantAttempts {
+				t.Fatalf("status/attempt_count = %q/%d, want %s/%d", status, attemptCount, tc.wantStatus, tc.wantAttempts)
+			}
+			if len(sender.Sent()) != 0 {
+				t.Fatalf("sent %d messages, want none", len(sender.Sent()))
+			}
+			if tc.wantStatus == statusDeadLettered {
+				if got := testdb.DeadLetterReason(t, e.db, "payment_received_outbox", outboxID); got != "retries_exhausted" {
+					t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+				}
+			}
+		})
 	}
 }

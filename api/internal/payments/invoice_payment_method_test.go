@@ -37,7 +37,7 @@ func TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid(t *testing.T) {
 		isAttached bool
 	}{
 		{"owner", ownerRole, false},
-		{"admin", adminRole, false},
+		{adminRole, adminRole, false},
 		{"employee doula", doulaRole, true},
 	}
 	for _, tc := range cases {

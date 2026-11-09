@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/apierrtest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -27,12 +27,6 @@ func postPayment(t *testing.T, srv *httptest.Server, session, practiceID, invoic
 		t.Fatalf("marshal request: %v", err)
 	}
 	return postPaymentBody(t, srv, session, practiceID, invoiceID, string(body))
-}
-
-func postInvoiceTransition(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, action string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/"+action, reqtest.RawJSON([]byte("{}")), reqtest.Session(session))
-	return resp
 }
 
 // seedByHandInvoiceAmountCents is the fixed amount every caller of
@@ -71,165 +65,127 @@ func todayInSeededZone(t *testing.T) string {
 	return isoDate(time.Now().In(zone))
 }
 
+// byHandInvoice seeds an Engagement at the Practice with a signed Contract
+// and an open by-hand Invoice against it.
+func (e *env) byHandInvoice() (engagementID, invoiceID string) {
+	e.t.Helper()
+	engagementID, contractID := e.signedContract()
+	return engagementID, seedByHandInvoice(e.t, e.db, e.Practice.ID, contractID)
+}
+
+// signedContract seeds an Engagement at the Practice with a signed Contract.
+func (e *env) signedContract() (engagementID, contractID string) {
+	e.t.Helper()
+	engagementID = fixture.Engagement(e.t, e.db, e.Practice).ID
+	return engagementID, seedSignedContract(e.t, e.db, engagementID)
+}
+
+// stripeInvoice seeds the same, with an open Invoice that Stripe issued,
+// and gives the Practice a Stripe Connect account when accountID is not
+// empty.
+func (e *env) stripeInvoice(stripeInvoiceID, accountID string) (invoiceID string) {
+	e.t.Helper()
+	_, contractID := e.signedContract()
+	if accountID != "" {
+		seedConnectAccount(e.t, e.db, e.Practice.ID, accountID)
+	}
+	return seedInvoice(e.t, e.db, e.Practice.ID, contractID, stripeInvoiceID, invoiceStatusOpen, 15000, time.Now())
+}
+
+func (e *env) activityCount(action, engagementID string) int {
+	e.t.Helper()
+	return testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE action = $1 AND subject_id = $2`, action, engagementID)
+}
+
+// paymentRequest is the body recording a Payment sends.
+func paymentRequest(method payments.PaymentMethod, note, paidOn string) reqtest.Option {
+	return reqtest.JSON(payments.RecordPaymentRequest{Method: method, Note: note, PaidOn: paidOn})
+}
+
+func paymentsPath(invoiceID string) string { return "/invoices/" + invoiceID + "/payments" }
+
 // TestPostManualPaymentHandler_ByHandCheckHappyPath proves the core path:
 // an Owner records a check against an open by-hand Invoice for its full
 // amount, the Invoice flips to paid, and the Activity log carries who and
 // when.
 func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-happy"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	engagementID, invoiceID := e.byHandInvoice()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #204", todayInSeededZone(t))
-	defer resp.Body.Close()
+	out := reqtest.Expect[payments.PaymentView](t, http.MethodPost, e.url(paymentsPath(invoiceID)), http.StatusCreated,
+		e.signedIn, paymentRequest(payments.PaymentMethodCheck, "check #204", todayInSeededZone(t)))
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.PaymentView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.AmountCents != 15000 {
 		t.Fatalf("payment.amountCents = %d, want 15000", out.AmountCents)
 	}
 	if out.Note == nil || *out.Note != "check #204" {
 		t.Fatalf("payment.note = %v, want %q", out.Note, "check #204")
 	}
-
-	status := invoiceStatusFor(t, db, invoiceID)
-	if status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
-
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'payment_recorded' AND subject_id = $1`, engagementID)
-	if actionCount != 1 {
-		t.Fatalf("payment_recorded activity rows = %d, want 1", actionCount)
+	if got := e.activityCount("payment_recorded", engagementID); got != 1 {
+		t.Fatalf("payment_recorded activity rows = %d, want 1", got)
 	}
 }
 
-// TestPostManualPaymentHandler_OtherMethodRequiresNote proves "other"
-// without a note is refused.
-func TestPostManualPaymentHandler_OtherMethodRequiresNote(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-other-no-note"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPostManualPaymentHandler_AcceptsTheRequest proves the positive cases
+// beside the refusals below: "other" with a note, and a deposit that
+// arrived before the Invoice was raised (#271 sets no lower bound).
+func TestPostManualPaymentHandler_AcceptsTheRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		method payments.PaymentMethod
+		note   string
+		paidOn string
+	}{
+		{"other with a note", payments.PaymentMethodOther, "Venmo, screenshot on file", todayInSeededZone(t)},
+		{"a date preceding the Invoice", payments.PaymentMethodBankTransfer, "", "2020-01-01"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			_, invoiceID := e.byHandInvoice()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	// docs/api-design.md section 7 rule 4 (#1037): a refusal a person
-	// causes by filling in a form names the field at fault, keyed by the
-	// request DTO's own JSON tag.
-	var out struct {
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if want := `Enter a note for "Other"`; out.Details["note"] != want {
-		t.Fatalf("details[note] = %q, want %q", out.Details["note"], want)
-	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
-		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
+			e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusCreated, paymentRequest(tc.method, tc.note, tc.paidOn))
+		})
 	}
 }
 
-// TestPostManualPaymentHandler_OtherMethodWithNoteSucceeds is the
-// positive case beside the refusal above.
-func TestPostManualPaymentHandler_OtherMethodWithNoteSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-other-with-note"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPostManualPaymentHandler_FieldRefusals proves a request a person
+// causes by filling in a form is refused with the field at fault named,
+// keyed by the request DTO's own JSON tag (docs/api-design.md section 7
+// rule 4, #1037), and that nothing is recorded.
+func TestPostManualPaymentHandler_FieldRefusals(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		body  reqtest.Option
+		field string
+		want  string
+	}{
+		{"other without a note", paymentRequest(payments.PaymentMethodOther, "", todayInSeededZone(t)), "note", `Enter a note for "Other"`},
+		{"a method outside the closed enum", paymentRequest("venmo", "", todayInSeededZone(t)), "method", "Select how the payment was made"},
+		// No "method" key at all, the body a form with nothing chosen would
+		// send (#1913): the form's Method opens with nothing chosen, so a
+		// send that skips it is refused here as well as on the page.
+		{"no method at all", reqtest.RawJSON([]byte(`{"paidOn":"` + todayInSeededZone(t) + `"}`)), "method", "Select how the payment was made"},
+		{"a date that does not parse", paymentRequest(payments.PaymentMethodCash, "", "not-a-date"), "paidOn", "Enter the date received as a real date, like 2027-04-23"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			_, invoiceID := e.byHandInvoice()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodOther, "Venmo, screenshot on file", todayInSeededZone(t))
-	defer resp.Body.Close()
+			out := e.postRefused(paymentsPath(invoiceID), http.StatusBadRequest, tc.body)
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-}
-
-// TestPostManualPaymentHandler_InvalidMethodRefused proves a method
-// outside the closed enum 400s.
-func TestPostManualPaymentHandler_InvalidMethodRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-invalid-method"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethod("venmo"), "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	var out struct {
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if want := "Select how the payment was made"; out.Details["method"] != want {
-		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
-	}
-}
-
-// TestPostManualPaymentHandler_MissingMethodRefused proves a request
-// with no method at all 400s with the same field-level words the
-// payment form shows (#1913): the form's Method opens with nothing
-// chosen, so a send that skips it is refused here as well as on the page.
-func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-missing-method"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	// No "method" key at all, the body a form with nothing chosen would send.
-	resp := postPaymentBody(t, srv, session, practiceID, invoiceID, `{"paidOn":"`+todayInSeededZone(t)+`"}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	var out struct {
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if want := "Select how the payment was made"; out.Details["method"] != want {
-		t.Fatalf("details[method] = %q, want %q", out.Details["method"], want)
-	}
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payments WHERE invoice_id = $1`, invoiceID)
-	if count != 0 {
-		t.Fatalf("payments = %d, want 0", count)
+			if out.Details[tc.field] != tc.want {
+				t.Fatalf("details[%s] = %q, want %q", tc.field, out.Details[tc.field], tc.want)
+			}
+			if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
+				t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
+			}
+			if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
+				t.Fatalf("payments = %d, want 0", len(got))
+			}
+		})
 	}
 }
 
@@ -242,22 +198,12 @@ func TestPostManualPaymentHandler_MissingMethodRefused(t *testing.T) {
 // two read differently now that the details value opens with "The date"
 // rather than "paidOn", the wire's own name for the field.
 func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-future-date"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	_, invoiceID := e.byHandInvoice()
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", isoDate(time.Now().UTC().AddDate(0, 0, 1)))
-	defer resp.Body.Close()
+	out := e.postRefused(paymentsPath(invoiceID), http.StatusBadRequest,
+		paymentRequest(payments.PaymentMethodCash, "", isoDate(time.Now().UTC().AddDate(0, 0, 1))))
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	out := apierrtest.Decode(t, resp)
 	const wantMessage = "paidOn cannot be in the future"
 	const wantDetail = "The date cannot be in the future"
 	if out.Details["paidOn"] != wantDetail {
@@ -278,129 +224,49 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 // falling back to UTC would reintroduce exactly the misplacement #953 and
 // #1166 exist to end, and say nothing about it.
 func TestPostManualPaymentHandler_UnloadablePracticeZoneIsAnError(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-bad-zone"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	testdb.SetPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	_, invoiceID := e.byHandInvoice()
+	testdb.SetPracticeTimezone(t, e.db, e.Practice.ID, "Nowhere/Atlantis")
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d for a Practice zone that will not load", resp.StatusCode, http.StatusInternalServerError)
-	}
-}
-
-// TestPostManualPaymentHandler_MalformedDateRefused proves a paidOn that
-// does not parse as YYYY-MM-DD 400s.
-func TestPostManualPaymentHandler_MalformedDateRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-bad-date"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", "not-a-date")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	var out struct {
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if want := "Enter the date received as a real date, like 2027-04-23"; out.Details["paidOn"] != want {
-		t.Fatalf("details[paidOn] = %q, want %q", out.Details["paidOn"], want)
-	}
-}
-
-// TestPostManualPaymentHandler_DatePrecedingInvoiceCreationAllowed proves
-// a deposit that arrived before the Invoice was raised is accepted --
-// #271 sets no lower bound.
-func TestPostManualPaymentHandler_DatePrecedingInvoiceCreationAllowed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-early-date"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", "2020-01-01")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusInternalServerError, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)))
 }
 
 // TestPostManualPaymentHandler_NotOpenInvoiceRefused proves draft, void,
 // uncollectible, and already-paid all refuse.
 func TestPostManualPaymentHandler_NotOpenInvoiceRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-not-open"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	_, contractID := e.signedContract()
 
 	for _, status := range []string{invoiceStatusDraft, invoiceStatusVoid, invoiceStatusUncollectible, invoiceStatusPaid} {
-		invoiceID := seedInvoice(t, db, practiceID, contractID, "in_not_open_"+status, status, 15000, time.Now())
-		resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
-		if resp.StatusCode != http.StatusConflict {
-			t.Fatalf("status=%q: status = %d, want %d", status, resp.StatusCode, http.StatusConflict)
-		}
-		_ = resp.Body.Close()
+		invoiceID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_not_open_"+status, status, 15000, time.Now())
+
+		e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusConflict, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)))
 	}
 }
 
-// TestPostManualPaymentHandler_DoulaForbidden proves only Owner and Admin
-// may record a Payment.
-func TestPostManualPaymentHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-doula-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPostManualPaymentHandler_RefusesTheRequest proves an Invoice id that
+// is no uuid or names no Invoice (nor another Practice's), and a body that
+// is not JSON, are refused.
+func TestPostManualPaymentHandler_RefusesTheRequest(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		invoiceID string
+		body      reqtest.Option
+		want      int
+	}{
+		{caseInvoiceIDNotUUID, notAUUID, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)), http.StatusBadRequest},
+		{"no such Invoice", unknownID, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)), http.StatusNotFound},
+		{caseBodyNotJSON, "", reqtest.RawJSON([]byte("{not json")), http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			invoiceID := tc.invoiceID
+			if invoiceID == "" {
+				_, invoiceID = e.byHandInvoice()
+			}
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCash, "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-// TestPostManualPaymentHandler_InvoiceNotFound proves a nonexistent (or
-// another Practice's) Invoice id 404s.
-func TestPostManualPaymentHandler_InvoiceNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPayment(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", payments.PaymentMethodCash, "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+			e.expect(http.MethodPost, paymentsPath(invoiceID), tc.want, tc.body)
+		})
 	}
 }
 
@@ -408,30 +274,18 @@ func TestPostManualPaymentHandler_InvoiceNotFound(t *testing.T) {
 // proves recording a Payment against a Stripe-backed Invoice calls
 // PayOutOfBand and, on success, writes the manual Payment locally.
 func TestPostManualPaymentHandler_StripeBackedCallsPayOutOfBandThenRecords(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-stripe-backed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_pay_oob", invoiceStatusOpen, 15000, time.Now())
-	client := payments.NewFakeClient()
-	seedConnectAccount(t, db, practiceID, "acct_pay_oob")
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e := newEnv(t)
+	invoiceID := e.stripeInvoice("in_pay_oob", "acct_pay_oob")
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodBankTransfer, "", todayInSeededZone(t))
-	defer resp.Body.Close()
+	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusCreated, paymentRequest(payments.PaymentMethodBankTransfer, "", todayInSeededZone(t)))
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	if len(e.Stripe.PayOutOfBandCalls) != 1 {
+		t.Fatalf("PayOutOfBand calls = %d, want 1", len(e.Stripe.PayOutOfBandCalls))
 	}
-	if len(client.PayOutOfBandCalls) != 1 {
-		t.Fatalf("PayOutOfBand calls = %d, want 1", len(client.PayOutOfBandCalls))
-	}
-	if got := client.PayOutOfBandCalls[0]; got.AccountID != "acct_pay_oob" || got.InvoiceID != "in_pay_oob" {
+	if got := e.Stripe.PayOutOfBandCalls[0]; got.AccountID != "acct_pay_oob" || got.InvoiceID != "in_pay_oob" {
 		t.Fatalf("PayOutOfBand call = %+v, want account acct_pay_oob invoice in_pay_oob", got)
 	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 }
@@ -440,28 +294,17 @@ func TestPostManualPaymentHandler_StripeBackedCallsPayOutOfBandThenRecords(t *te
 // proves #271's fail-closed rule: a Stripe refusal on the out-of-band
 // call leaves the Invoice open and writes no payments row.
 func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-stripe-fails"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_pay_oob_fail", invoiceStatusOpen, 15000, time.Now())
-	client := payments.NewFakeClient()
-	client.PayOutOfBandErr = errStripeFake
-	seedConnectAccount(t, db, practiceID, "acct_pay_oob_fail")
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	stripe := payments.NewFakeClient()
+	stripe.PayOutOfBandErr = errStripeFake
+	e := newEnv(t, withStripe(stripe))
+	invoiceID := e.stripeInvoice("in_pay_oob_fail", "acct_pay_oob_fail")
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", todayInSeededZone(t))
-	defer resp.Body.Close()
+	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusBadGateway, paymentRequest(payments.PaymentMethodCheck, "", todayInSeededZone(t)))
 
-	if resp.StatusCode != http.StatusBadGateway {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadGateway)
-	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 	}
-	if got := paymentsForInvoice(t, db, invoiceID); len(got) != 0 {
+	if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(got))
 	}
 }
@@ -470,283 +313,120 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 // a bank debit is on its way, a Payment recorded by hand is refused before
 // Stripe is asked, and nothing is written.
 func TestPostManualPaymentHandler_PaymentOnItsWayRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-on-its-way"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_on_its_way", invoiceStatusOpen, 15000, time.Now())
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE invoices SET payment_processing_since = now() WHERE id = $1`, invoiceID,
-	); err != nil {
-		t.Fatalf("mark payment on its way: %v", err)
-	}
-	client := payments.NewFakeClient()
-	seedConnectAccount(t, db, practiceID, "acct_on_its_way")
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e := newEnv(t)
+	invoiceID := e.stripeInvoice("in_on_its_way", "acct_on_its_way")
+	markProcessing(t, e.db, invoiceID)
 
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "", todayInSeededZone(t))
-	defer resp.Body.Close()
+	out := e.postRefused(paymentsPath(invoiceID), http.StatusConflict, paymentRequest(payments.PaymentMethodCheck, "", todayInSeededZone(t)))
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if out := apierrtest.Decode(t, resp); out.Code != apierr.CodeFailedPrecondition || out.Message != payments.MsgPaymentOnItsWay {
+	if out.Code != apierr.CodeFailedPrecondition || out.Message != payments.MsgPaymentOnItsWay {
 		t.Fatalf("refusal = %+v, want %s %q", out, apierr.CodeFailedPrecondition, payments.MsgPaymentOnItsWay)
 	}
-	if len(client.PayOutOfBandCalls) != 0 {
-		t.Fatalf("PayOutOfBand calls = %d, want 0", len(client.PayOutOfBandCalls))
+	if len(e.Stripe.PayOutOfBandCalls) != 0 {
+		t.Fatalf("PayOutOfBand calls = %d, want 0", len(e.Stripe.PayOutOfBandCalls))
 	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 	}
-	if got := paymentsForInvoice(t, db, invoiceID); len(got) != 0 {
+	if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(got))
 	}
 }
 
-// TestPostVoidInvoiceHandler_HappyPath proves an Owner can void an open
-// by-hand Invoice.
-func TestPostVoidInvoiceHandler_HappyPath(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invoice-happy"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// byHandTransitions are the two acts on an open by-hand Invoice that end
+// it without a Payment (#282), which share transitionByHandInvoice and so
+// share their refusals.
+var byHandTransitions = []struct {
+	action   string
+	staff    fixture.StaffOption
+	status   string
+	activity string
+}{
+	{"void", fixture.Admin(), invoiceStatusVoid, "invoice_voided"},
+	{"write-off", fixture.Owner(), invoiceStatusUncollectible, "invoice_written_off"},
+}
 
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "void")
-	defer resp.Body.Close()
+func invoiceActionPath(invoiceID, action string) string {
+	return "/invoices/" + invoiceID + "/" + action
+}
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.InvoiceTransitionView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.Status != "void" {
-		t.Fatalf("status = %q, want %q", out.Status, "void")
-	}
-	if got := invoiceStatusFor(t, db, invoiceID); got != "void" {
-		t.Fatalf("persisted invoice status = %q, want %q", got, "void")
-	}
+// TestPostInvoiceTransitionHandler_HappyPath proves an Owner or Admin can
+// void or write off an open by-hand Invoice, and that the Activity log
+// carries it.
+func TestPostInvoiceTransitionHandler_HappyPath(t *testing.T) {
+	for _, tc := range byHandTransitions {
+		t.Run(tc.action, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff))
+			engagementID, invoiceID := e.byHandInvoice()
 
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'invoice_voided' AND subject_id = $1`, engagementID)
-	if actionCount != 1 {
-		t.Fatalf("invoice_voided activity rows = %d, want 1", actionCount)
+			out := reqtest.Expect[payments.InvoiceTransitionView](t, http.MethodPost, e.url(invoiceActionPath(invoiceID, tc.action)), http.StatusOK,
+				e.signedIn, reqtest.RawJSON([]byte("{}")))
+
+			if out.Status != tc.status {
+				t.Fatalf("status = %q, want %q", out.Status, tc.status)
+			}
+			if got := invoiceStatusFor(t, e.db, invoiceID); got != tc.status {
+				t.Fatalf("persisted invoice status = %q, want %q", got, tc.status)
+			}
+			if got := e.activityCount(tc.activity, engagementID); got != 1 {
+				t.Fatalf("%s activity rows = %d, want 1", tc.activity, got)
+			}
+		})
 	}
 }
 
-// TestPostVoidInvoiceHandler_RefusedOnStripeBacked proves a
-// Stripe-backed Invoice cannot be voided here.
-func TestPostVoidInvoiceHandler_RefusedOnStripeBacked(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invoice-stripe-backed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_void_stripe", invoiceStatusOpen, 15000, time.Now())
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPostInvoiceTransitionHandler_Refusals proves the refusals void and
+// write-off share: a Stripe-backed Invoice cannot be ended here, nor one
+// that is not open, nor one a Doula asks for (AC7's "a test for each
+// refusal" names both acts), and an unknown or malformed Invoice id is
+// refused.
+func TestPostInvoiceTransitionHandler_Refusals(t *testing.T) {
+	for _, tc := range byHandTransitions {
+		for _, refusal := range []struct {
+			name    string
+			staff   fixture.StaffOption
+			invoice func(*env) string
+			id      string
+			want    int
+		}{
+			{"a Stripe-backed Invoice", tc.staff, func(e *env) string { id := e.stripeInvoice("in_"+tc.action+"_stripe", ""); return id }, "", http.StatusConflict},
+			{"an Invoice that is not open", tc.staff, func(e *env) string {
+				_, id := e.byHandInvoice()
+				if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, id); err != nil {
+					e.t.Fatalf("seed paid status: %v", err)
+				}
+				return id
+			}, "", http.StatusConflict},
+			{caseDoula, fixture.Doula(), func(e *env) string { _, id := e.byHandInvoice(); return id }, "", http.StatusForbidden},
+			{"no such Invoice", tc.staff, nil, unknownID, http.StatusNotFound},
+			{caseInvoiceIDNotUUID, tc.staff, nil, notAUUID, http.StatusBadRequest},
+		} {
+			t.Run(tc.action+"/"+refusal.name, func(t *testing.T) {
+				e := newEnv(t, signedInAs(refusal.staff))
+				invoiceID := refusal.id
+				if refusal.invoice != nil {
+					invoiceID = refusal.invoice(e)
+				}
 
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "void")
-	defer resp.Body.Close()
+				e.expect(http.MethodPost, invoiceActionPath(invoiceID, tc.action), refusal.want, reqtest.RawJSON([]byte("{}")))
 
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if got := invoiceStatusFor(t, db, invoiceID); got != invoiceStatusOpen {
-		t.Fatalf("persisted invoice status = %q, want unchanged %q", got, invoiceStatusOpen)
-	}
-}
-
-// TestPostVoidInvoiceHandler_RefusedWhenNotOpen proves an already-paid
-// by-hand Invoice cannot be voided.
-func TestPostVoidInvoiceHandler_RefusedWhenNotOpen(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invoice-not-open"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, invoiceID); err != nil {
-		t.Fatalf("seed paid status: %v", err)
-	}
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "void")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-}
-
-// TestPostVoidInvoiceHandler_DoulaForbidden proves only Owner and Admin
-// may void.
-func TestPostVoidInvoiceHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invoice-doula-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "void")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+				if refusal.invoice != nil && refusal.want == http.StatusConflict {
+					if got := invoiceStatusFor(t, e.db, invoiceID); got == tc.status {
+						t.Fatalf("persisted invoice status = %q, want it not to have changed", got)
+					}
+				}
+			})
+		}
 	}
 }
 
-// TestPostWriteOffInvoiceHandler_HappyPath proves an Owner can write off
-// an open by-hand Invoice.
-func TestPostWriteOffInvoiceHandler_HappyPath(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "write-off-invoice-happy"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPostManualPaymentHandler_DoulaForbidden proves only Owner and Admin
+// may record a Payment.
+func TestPostManualPaymentHandler_DoulaForbidden(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	_, invoiceID := e.byHandInvoice()
 
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "write-off")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := invoiceStatusFor(t, db, invoiceID); got != invoiceStatusUncollectible {
-		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusUncollectible)
-	}
-
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'invoice_written_off' AND subject_id = $1`, engagementID)
-	if actionCount != 1 {
-		t.Fatalf("invoice_written_off activity rows = %d, want 1", actionCount)
-	}
-}
-
-// TestPostWriteOffInvoiceHandler_RefusedOnStripeBacked proves a
-// Stripe-backed Invoice cannot be written off here.
-func TestPostWriteOffInvoiceHandler_RefusedOnStripeBacked(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "write-off-invoice-stripe-backed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_write_off_stripe", invoiceStatusOpen, 15000, time.Now())
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "write-off")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-}
-
-// TestPostWriteOffInvoiceHandler_DoulaForbidden proves the write-off act
-// stays Owner/Admin only under #282: an employed Doula is refused, the
-// same as TestPostVoidInvoiceHandler_DoulaForbidden proves for void --
-// AC7's "a test for each refusal" named write-off separately even though
-// it shares transitionByHandInvoice with void.
-func TestPostWriteOffInvoiceHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "write-off-invoice-doula-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, invoiceID, "write-off")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-// TestPostWriteOffInvoiceHandler_InvoiceNotFound proves a nonexistent
-// Invoice id 404s.
-func TestPostWriteOffInvoiceHandler_InvoiceNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "write-off-invoice-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", "write-off")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
-// TestPostManualPaymentHandler_MalformedInvoiceIDReturns400 proves a
-// non-UUID :invoiceId 400s.
-func TestPostManualPaymentHandler_MalformedInvoiceIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-bad-invoice-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPayment(t, srv, session, practiceID, "not-a-uuid", payments.PaymentMethodCash, "", todayInSeededZone(t))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostManualPaymentHandler_MalformedBodyReturns400 proves invalid
-// JSON 400s.
-func TestPostManualPaymentHandler_MalformedBodyReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "manual-payment-bad-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postPaymentBody(t, srv, session, practiceID, invoiceID, "{not json")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostVoidInvoiceHandler_MalformedInvoiceIDReturns400 proves a
-// non-UUID :invoiceId 400s -- shared code path with write-off.
-func TestPostVoidInvoiceHandler_MalformedInvoiceIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "void-invoice-bad-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceTransition(t, srv, session, practiceID, "not-a-uuid", "void")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusForbidden, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)))
 }
 
 // invoiceStatusFor is invoiceStatus with a name that does not collide

@@ -2,17 +2,11 @@ package payments_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -22,23 +16,7 @@ const connectReturnActionName = "stripe_connect_form_returned"
 // prove the row's time is the clock's (#773), not the database's.
 var connectReturnInstant = time.Date(2026, 10, 20, 14, 5, 0, 0, time.UTC)
 
-// newConnectReturnServer mounts this package's whole surface behind a
-// fixed clock.
-func newConnectReturnServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, payments.NewFakeClient(), tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
-	handler := clock.Middleware(func() time.Time { return connectReturnInstant })(mux)
-	return httptest.NewServer(handler), authntest.SeedSession(t, db.App, uid)
-}
-
-func postConnectReturn(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/payments/connect/return", reqtest.Session(session))
-	return resp
-}
+const connectReturnPath = "/payments/connect/return"
 
 func connectReturnCount(t *testing.T, db *testdb.DB, practiceID string) int {
 	t.Helper()
@@ -50,81 +28,59 @@ func connectReturnCount(t *testing.T, db *testdb.DB, practiceID string) int {
 // criterion: the return names the Practice, the Staff member and the
 // time, on the server.
 func TestPostConnectReturnHandler_RecordsTheOwnerAndTheTime(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-return-owner"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	setConnectAccountID(t, db, practiceID, "acct_returning")
+	e := newEnv(t, atInstant(connectReturnInstant))
+	setConnectAccountID(t, e.db, e.Practice.ID, "acct_returning")
 
-	srv, session := newConnectReturnServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postConnectReturn(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusNoContent {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNoContent)
-	}
+	e.expect(http.MethodPost, connectReturnPath, http.StatusNoContent)
 
 	var subjectKind, subjectID, actorKind, actorStaffID string
 	var createdAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT subject_kind, subject_id, actor_kind::text, actor_staff_id, created_at
-		 FROM activity WHERE practice_id = $1 AND action = $2`, practiceID, connectReturnActionName,
+		 FROM activity WHERE practice_id = $1 AND action = $2`, e.Practice.ID, connectReturnActionName,
 	).Scan(&subjectKind, &subjectID, &actorKind, &actorStaffID, &createdAt); err != nil {
 		t.Fatalf("query activity: %v", err)
 	}
-	if subjectKind != "practice" || subjectID != practiceID {
+	if subjectKind != "practice" || subjectID != e.Practice.ID {
 		t.Fatalf("subject = (%q, %q), want the Practice itself", subjectKind, subjectID)
 	}
-	if actorKind != "staff" || actorStaffID != staffID {
-		t.Fatalf("actor = (%q, %q), want the Owner who came back (%q)", actorKind, actorStaffID, staffID)
+	if actorKind != "staff" || actorStaffID != e.Staff.ID {
+		t.Fatalf("actor = (%q, %q), want the Owner who came back (%q)", actorKind, actorStaffID, e.Staff.ID)
 	}
 	if !createdAt.Equal(connectReturnInstant) {
 		t.Fatalf("created_at = %v, want the server clock's %v", createdAt, connectReturnInstant)
 	}
 }
 
-// TestPostConnectReturnHandler_RefusesAPracticeWithNoAccount: only a
-// hand-typed address reaches the return with no Stripe account, and there
-// is nothing to record.
-func TestPostConnectReturnHandler_RefusesAPracticeWithNoAccount(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-return-no-account"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+// TestPostConnectReturnHandler_Refusals: only a hand-typed address reaches
+// the return with no Stripe account, and there is nothing to record; and
+// only an Owner opens the form, so only an Owner comes back from it.
+func TestPostConnectReturnHandler_Refusals(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		staff       fixture.StaffOption
+		connected   bool
+		want        int
+		wantMessage string
+	}{
+		{"a Practice with no account", fixture.Owner(), false, http.StatusConflict, payments.MsgConnectReturnNoAccount},
+		{"an Admin", fixture.Admin(), true, http.StatusForbidden, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff), atInstant(connectReturnInstant))
+			if tc.connected {
+				setConnectAccountID(t, e.db, e.Practice.ID, "acct_admin_return")
+			}
 
-	srv, session := newConnectReturnServer(t, db, uid)
-	defer srv.Close()
+			out := e.postRefused(connectReturnPath, tc.want)
 
-	resp := postConnectReturn(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if got := nudgeRefusalMessage(t, resp); got != payments.MsgConnectReturnNoAccount {
-		t.Fatalf("message = %q, want %q", got, payments.MsgConnectReturnNoAccount)
-	}
-	if got := connectReturnCount(t, db, practiceID); got != 0 {
-		t.Fatalf("return rows = %d, want 0", got)
-	}
-}
-
-// TestPostConnectReturnHandler_RefusesAnAdmin: only an Owner opens the
-// form, so only an Owner comes back from it.
-func TestPostConnectReturnHandler_RefusesAnAdmin(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "connect-return-admin"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	setConnectAccountID(t, db, practiceID, "acct_admin_return")
-
-	srv, session := newConnectReturnServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postConnectReturn(t, srv, session, practiceID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	if got := connectReturnCount(t, db, practiceID); got != 0 {
-		t.Fatalf("return rows = %d, want 0", got)
+			if tc.wantMessage != "" && out.Message != tc.wantMessage {
+				t.Fatalf("message = %q, want %q", out.Message, tc.wantMessage)
+			}
+			if got := connectReturnCount(t, e.db, e.Practice.ID); got != 0 {
+				t.Fatalf("return rows = %d, want 0", got)
+			}
+		})
 	}
 }
 

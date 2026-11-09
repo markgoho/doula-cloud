@@ -1,48 +1,38 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
-func getBillingMode(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.Session(session))
-	return resp
+const billingModePath = "/payments/billing-mode"
+
+func (e *env) billingMode() payments.BillingModeView {
+	e.t.Helper()
+	return reqtest.Expect[payments.BillingModeView](e.t, http.MethodGet, e.url(billingModePath), http.StatusOK, e.signedIn)
 }
 
-func putBillingMode(t *testing.T, srv *httptest.Server, session, practiceID, mode string) *http.Response {
-	t.Helper()
-	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.JSON(payments.PutBillingModeRequest{BillingMode: mode}), reqtest.Session(session))
-	return resp
+func (e *env) putBillingMode(mode string, want int) {
+	e.t.Helper()
+	e.expect(http.MethodPut, billingModePath, want, reqtest.JSON(payments.PutBillingModeRequest{BillingMode: mode}))
+}
+
+func (e *env) billingModeChangedRows() int {
+	e.t.Helper()
+	return testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`, e.Practice.ID)
 }
 
 // TestGetBillingModeHandler_UnsetReturnsNoValue proves a Practice that
 // has never chosen a billing mode reads back an empty BillingModeView.
 func TestGetBillingModeHandler_UnsetReturnsNoValue(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-unset"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Doula()))
 
-	resp := getBillingMode(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.BillingModeView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.BillingMode != nil {
+	if out := e.billingMode(); out.BillingMode != nil {
 		t.Fatalf("billingMode = %v, want nil", *out.BillingMode)
 	}
 }
@@ -52,24 +42,9 @@ func TestGetBillingModeHandler_UnsetReturnsNoValue(t *testing.T) {
 // one Practice-level fact, per #270's own reasoning for the sibling
 // "whether the Practice can raise an Invoice at all" row.
 func TestGetBillingModeHandler_AnyStaffCanRead(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-doula-read"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeByHand))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Doula()), withBillingMode(payments.BillingModeByHand))
 
-	resp := getBillingMode(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.BillingModeView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.BillingMode == nil || *out.BillingMode != string(payments.BillingModeByHand) {
+	if out := e.billingMode(); out.BillingMode == nil || *out.BillingMode != string(payments.BillingModeByHand) {
 		t.Fatalf("billingMode = %v, want %q", out.BillingMode, payments.BillingModeByHand)
 	}
 }
@@ -78,28 +53,16 @@ func TestGetBillingModeHandler_AnyStaffCanRead(t *testing.T) {
 // Owner may change an already-established billing_mode, and the change
 // is recorded to the Activity log.
 func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-owner-change"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
 
-	resp := putBillingMode(t, srv, session, practiceID, string(payments.BillingModeByHand))
-	defer resp.Body.Close()
+	e.putBillingMode(string(payments.BillingModeByHand), http.StatusOK)
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	mode, ok := billingModeOfPractice(t, db, practiceID)
+	mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}
-
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
-		practiceID)
-	if actionCount != 1 {
-		t.Fatalf("billing_mode_changed activity rows = %d, want 1", actionCount)
+	if got := e.billingModeChangedRows(); got != 1 {
+		t.Fatalf("billing_mode_changed activity rows = %d, want 1", got)
 	}
 }
 
@@ -109,89 +72,42 @@ func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
 // press with nothing changed is ordinary, and the ledger must not say the
 // billing mode changed when it did not.
 func TestPutBillingModeHandler_SameModeRecordsNothing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-owner-same"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
 
-	resp := putBillingMode(t, srv, session, practiceID, string(payments.BillingModeStripe))
-	defer resp.Body.Close()
+	out := reqtest.Expect[payments.BillingModeView](t, http.MethodPut, e.url(billingModePath), http.StatusOK,
+		e.signedIn, reqtest.JSON(payments.PutBillingModeRequest{BillingMode: string(payments.BillingModeStripe)}))
 
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.BillingModeView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.BillingMode == nil || *out.BillingMode != string(payments.BillingModeStripe) {
 		t.Fatalf("billingMode = %v, want %q", out.BillingMode, payments.BillingModeStripe)
 	}
-
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`,
-		practiceID)
-	if actionCount != 0 {
-		t.Fatalf("billing_mode_changed activity rows = %d, want 0 for a save that changed nothing", actionCount)
+	if got := e.billingModeChangedRows(); got != 0 {
+		t.Fatalf("billing_mode_changed activity rows = %d, want 0 for a save that changed nothing", got)
 	}
 }
 
-// TestPutBillingModeHandler_NonOwnerForbidden proves an Admin -- who may
-// read this fact -- may not change it once established; only an Owner
-// may (#271, by analogy to Connect onboarding).
-func TestPutBillingModeHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-admin-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+// TestPutBillingModeHandler_Refusals proves an Admin -- who may read this
+// fact -- may not change it once established; only an Owner may (#271, by
+// analogy to Connect onboarding). It also proves a body that is not JSON
+// and a nonsense billingMode value 400 rather than being written.
+func TestPutBillingModeHandler_Refusals(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		staff fixture.StaffOption
+		body  reqtest.Option
+		want  int
+	}{
+		{"an Admin", fixture.Admin(), reqtest.JSON(payments.PutBillingModeRequest{BillingMode: string(payments.BillingModeByHand)}), http.StatusForbidden},
+		{caseBodyNotJSON, fixture.Owner(), reqtest.RawJSON([]byte("{not json")), http.StatusBadRequest},
+		{"an invalid value", fixture.Owner(), reqtest.JSON(payments.PutBillingModeRequest{BillingMode: "cash_app"}), http.StatusBadRequest},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.staff), withBillingMode(payments.BillingModeStripe))
 
-	resp := putBillingMode(t, srv, session, practiceID, string(payments.BillingModeByHand))
-	defer resp.Body.Close()
+			e.expect(http.MethodPut, billingModePath, tc.want, tc.body)
 
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-	mode, _ := billingModeOfPractice(t, db, practiceID)
-	if mode != string(payments.BillingModeStripe) {
-		t.Fatalf("billing_mode = %q, want unchanged %q", mode, payments.BillingModeStripe)
-	}
-}
-
-// TestPutBillingModeHandler_MalformedBodyRefused proves invalid JSON
-// 400s.
-func TestPutBillingModeHandler_MalformedBodyRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-malformed-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := reqtest.Put(t, srv.URL+"/api/practices/"+practiceID+"/payments/billing-mode", reqtest.RawJSON([]byte("{not json")), reqtest.Session(session))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPutBillingModeHandler_InvalidValueRefused proves a nonsense
-// billingMode value 400s rather than being written.
-func TestPutBillingModeHandler_InvalidValueRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "billing-mode-invalid-put"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := putBillingMode(t, srv, session, practiceID, "cash_app")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			if mode, _ := billingModeOfPractice(t, e.db, e.Practice.ID); mode != string(payments.BillingModeStripe) {
+				t.Fatalf("billing_mode = %q, want unchanged %q", mode, payments.BillingModeStripe)
+			}
+		})
 	}
 }

@@ -5,9 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -55,31 +54,36 @@ func paymentRowByID(t *testing.T, db *testdb.DB, paymentID string) reversalRow {
 	return row
 }
 
+// record records a manual check Payment for the whole amount against
+// invoiceID as the Staff member at the screen and returns its id.
+func (e *env) record(invoiceID string) (paymentID string) {
+	e.t.Helper()
+	return reqtest.Expect[payments.PaymentView](e.t, http.MethodPost, e.url(paymentsPath(invoiceID)), http.StatusCreated,
+		e.signedIn, paymentRequest(payments.PaymentMethodCheck, "check #1", todayInSeededZone(e.t))).ID
+}
+
+func reversalPath(invoiceID, paymentID string) string {
+	return paymentsPath(invoiceID) + "/" + paymentID + "/reverse"
+}
+
+// reverse reverses paymentID as the Staff member at the screen.
+func (e *env) reverse(invoiceID, paymentID, reason string) payments.PaymentView {
+	e.t.Helper()
+	return reqtest.Expect[payments.PaymentView](e.t, http.MethodPost, e.url(reversalPath(invoiceID, paymentID)), http.StatusCreated,
+		e.signedIn, reqtest.JSON(payments.ReversePaymentRequest{Reason: reason}))
+}
+
 // TestPostReversePaymentHandler_ByHandHappyPath proves the core path: an
 // Owner reverses a manually recorded Payment against a by-hand Invoice,
 // netting it to zero, returning the Invoice to 'open', and recording who
 // and why in the Activity log.
 func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-happy"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
+	e := newEnv(t)
+	engagementID, invoiceID := e.byHandInvoice()
+	paymentID := e.record(invoiceID)
 
-	resp := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "logged against the wrong invoice")
-	defer resp.Body.Close()
+	out := e.reverse(invoiceID, paymentID, "logged against the wrong invoice")
 
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.PaymentView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.AmountCents != -seedByHandInvoiceAmountCents {
 		t.Fatalf("reversal.amountCents = %d, want %d", out.AmountCents, -seedByHandInvoiceAmountCents)
 	}
@@ -89,261 +93,145 @@ func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
 	if out.Reason == nil || *out.Reason != "logged against the wrong invoice" {
 		t.Fatalf("reversal.reason = %v, want the given reason", out.Reason)
 	}
-
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
-
-	row := paymentRowByID(t, db, out.ID)
+	row := paymentRowByID(t, e.db, out.ID)
 	if row.kind != "reversal" || row.amountCents != -seedByHandInvoiceAmountCents {
 		t.Fatalf("reversal row = %+v, want kind reversal amount %d", row, -seedByHandInvoiceAmountCents)
 	}
-
-	actionCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE action = 'payment_reversed' AND subject_id = $1`, engagementID)
-	if actionCount != 1 {
-		t.Fatalf("payment_reversed activity rows = %d, want 1", actionCount)
+	if got := e.activityCount("payment_reversed", engagementID); got != 1 {
+		t.Fatalf("payment_reversed activity rows = %d, want 1", got)
 	}
 }
 
-// TestPostReversePaymentHandler_RefusedOnStripeBacked proves a Payment
-// against a Stripe-backed Invoice cannot be reversed here -- Stripe's own
-// detach_payment call cannot undo a paid_out_of_band mark (verified in
-// the Sandbox, #945's own issue comment).
-func TestPostReversePaymentHandler_RefusedOnStripeBacked(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-stripe-backed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_reverse_stripe", invoiceStatusPaid, 15000, time.Now())
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check')`,
-		invoiceID,
-	); err != nil {
-		t.Fatalf("seed manual payment on stripe-backed invoice: %v", err)
+// TestPostReversePaymentHandler_Refusals proves what a reversal refuses
+// and that the Invoice is left as it was.
+func TestPostReversePaymentHandler_Refusals(t *testing.T) {
+	// paidThenReversedAndPaidAgain leaves the Invoice 'paid' once more: the
+	// state PostReversePaymentHandler requires before it will even look at
+	// the target payment id, since otherwise the second call would 409 on
+	// MsgInvoiceNotPaid before reaching the check a row targets.
+	paidThenReversedAndPaidAgain := func(e *env) (invoiceID, paymentID, reversalID string) {
+		_, invoiceID = e.byHandInvoice()
+		paymentID = e.record(invoiceID)
+		reversalID = e.reverse(invoiceID, paymentID, "first reversal").ID
+		e.record(invoiceID)
+		return invoiceID, paymentID, reversalID
 	}
-	paymentID := testdb.Scalar[string](t, db.Admin, `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "wrong invoice")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusPaid {
-		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusPaid)
-	}
-}
-
-// TestPostReversePaymentHandler_RefusedWhenNotPaid proves an open by-hand
-// Invoice has nothing to reverse.
-func TestPostReversePaymentHandler_RefusedWhenNotPaid(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-not-paid"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postReversal(t, srv, session, practiceID, invoiceID, "00000000-0000-0000-0000-000000000000", "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-}
-
-// TestPostReversePaymentHandler_UnknownPaymentNotFound proves a payment
-// id that does not belong to the Invoice 404s.
-func TestPostReversePaymentHandler_UnknownPaymentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-unknown"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	_ = recordPayment(t, srv, session, practiceID, invoiceID)
-
-	resp := postReversal(t, srv, session, practiceID, invoiceID, "00000000-0000-0000-0000-000000000000", "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
-// TestPostReversePaymentHandler_ReversalCannotBeReversed proves a
-// reversal row itself can never be the target of another reversal --
-// #945's own acceptance criterion.
-func TestPostReversePaymentHandler_ReversalCannotBeReversed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-double"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
-
-	firstReversal := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "first reversal")
-	defer firstReversal.Body.Close()
-	if firstReversal.StatusCode != http.StatusCreated {
-		t.Fatalf("first reversal status = %d, want %d", firstReversal.StatusCode, http.StatusCreated)
-	}
-	var reversal payments.PaymentView
-	if err := json.UnmarshalRead(firstReversal.Body, &reversal); err != nil {
-		t.Fatalf("decode first reversal: %v", err)
+	paid := func(e *env) (string, string) {
+		_, invoiceID := e.byHandInvoice()
+		return invoiceID, e.record(invoiceID)
 	}
 
-	// The Invoice is 'open' again, so a fresh Payment restores 'paid' --
-	// the state PostReversePaymentHandler requires before it will even
-	// look at the target payment id.
-	_ = recordPayment(t, srv, session, practiceID, invoiceID)
+	for _, tc := range []struct {
+		name string
+		// setup returns the Invoice and Payment ids the request names.
+		setup func(e *env) (invoiceID, paymentID string)
+		as    []fixture.StaffOption
+		// reason is what the reversal states; body, when set, replaces it.
+		reason string
+		body   reqtest.Option
+		want   int
+		// invoiceStays is the status the Invoice must still have, when the
+		// request names a real one.
+		invoiceStays string
+	}{
+		{
+			// Stripe's own detach_payment call cannot undo a paid_out_of_band
+			// mark (verified in the Sandbox, #945's own issue comment).
+			name: "a Payment against a Stripe-backed Invoice",
+			setup: func(e *env) (string, string) {
+				invoiceID := e.stripeInvoice("in_reverse_stripe", "")
+				if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, invoiceID); err != nil {
+					e.t.Fatalf("seed paid status: %v", err)
+				}
+				if _, err := e.db.Admin.ExecContext(e.t.Context(),
+					`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check')`,
+					invoiceID,
+				); err != nil {
+					e.t.Fatalf("seed manual payment on stripe-backed invoice: %v", err)
+				}
+				return invoiceID, testdb.Scalar[string](e.t, e.db.Admin, `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID)
+			},
+			reason: "wrong invoice", want: http.StatusConflict, invoiceStays: invoiceStatusPaid,
+		},
+		{
+			name: "an open by-hand Invoice with nothing to reverse",
+			setup: func(e *env) (string, string) {
+				_, invoiceID := e.byHandInvoice()
+				return invoiceID, unknownID
+			},
+			reason: reasonGiven, want: http.StatusConflict, invoiceStays: invoiceStatusOpen,
+		},
+		{
+			name: "a payment id that does not belong to the Invoice",
+			setup: func(e *env) (string, string) {
+				invoiceID, _ := paid(e)
+				return invoiceID, unknownID
+			},
+			reason: reasonGiven, want: http.StatusNotFound, invoiceStays: invoiceStatusPaid,
+		},
+		{
+			// A reversal row itself can never be the target of another
+			// reversal -- #945's own acceptance criterion.
+			name: "a reversal row as the target",
+			setup: func(e *env) (string, string) {
+				invoiceID, _, reversalID := paidThenReversedAndPaidAgain(e)
+				return invoiceID, reversalID
+			},
+			reason: "reversing a reversal", want: http.StatusNotFound, invoiceStays: invoiceStatusPaid,
+		},
+		{
+			name: "the same Payment twice",
+			setup: func(e *env) (string, string) {
+				invoiceID, paymentID, _ := paidThenReversedAndPaidAgain(e)
+				return invoiceID, paymentID
+			},
+			reason: "second", want: http.StatusConflict, invoiceStays: invoiceStatusPaid,
+		},
+		{name: "a blank reason", setup: paid, reason: "", want: http.StatusBadRequest, invoiceStays: invoiceStatusPaid},
+		{name: caseDoula, setup: paid, as: []fixture.StaffOption{fixture.Doula()}, reason: reasonGiven, want: http.StatusForbidden, invoiceStays: invoiceStatusPaid},
+		{
+			name:   "an Invoice that does not exist",
+			setup:  func(*env) (string, string) { return unknownID, unknownID },
+			reason: reasonGiven, want: http.StatusNotFound,
+		},
+		{
+			name: "a payment id that is not a uuid",
+			setup: func(e *env) (string, string) {
+				_, invoiceID := e.byHandInvoice()
+				return invoiceID, notAUUID
+			},
+			reason: reasonGiven, want: http.StatusBadRequest,
+		},
+		{
+			name:   caseInvoiceIDNotUUID,
+			setup:  func(*env) (string, string) { return notAUUID, unknownID },
+			reason: reasonGiven, want: http.StatusBadRequest,
+		},
+		{name: caseBodyNotJSON, setup: paid, body: reqtest.RawJSON([]byte("{not json")), want: http.StatusBadRequest, invoiceStays: invoiceStatusPaid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			invoiceID, paymentID := tc.setup(e)
+			who := e.signedIn
+			if len(tc.as) > 0 {
+				who = e.as(e.staff(tc.as...))
+			}
+			body := tc.body
+			if body == nil {
+				body = reqtest.JSON(payments.ReversePaymentRequest{Reason: tc.reason})
+			}
 
-	secondReversal := postReversal(t, srv, session, practiceID, invoiceID, reversal.ID, "reversing a reversal")
-	defer secondReversal.Body.Close()
-	if secondReversal.StatusCode != http.StatusNotFound {
-		t.Fatalf("reversing a reversal row: status = %d, want %d", secondReversal.StatusCode, http.StatusNotFound)
-	}
-}
+			reqtest.ExpectStatus(t, http.MethodPost, e.url(reversalPath(invoiceID, paymentID)), tc.want, who, body)
 
-// TestPostReversePaymentHandler_AlreadyReversedRefused proves the same
-// Payment cannot be reversed twice.
-func TestPostReversePaymentHandler_AlreadyReversedRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-twice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
-
-	first := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "first")
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first reversal status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-
-	// Pay it again so the Invoice is 'paid' once more -- otherwise the
-	// second call would 409 on MsgInvoiceNotPaid before ever reaching the
-	// already-reversed check this test targets.
-	_ = recordPayment(t, srv, session, practiceID, invoiceID)
-
-	second := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "second")
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusConflict {
-		t.Fatalf("second reversal status = %d, want %d", second.StatusCode, http.StatusConflict)
-	}
-}
-
-// TestPostReversePaymentHandler_BlankReasonRefused proves a reversal
-// always needs a stated why.
-func TestPostReversePaymentHandler_BlankReasonRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-blank-reason"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
-
-	resp := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if status := invoiceStatusFor(t, db, invoiceID); status != invoiceStatusPaid {
-		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusPaid)
-	}
-}
-
-// TestPostReversePaymentHandler_DoulaForbidden proves only Owner and
-// Admin may reverse a Payment.
-func TestPostReversePaymentHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "reverse-payment-owner"
-	const doulaUID = "reverse-payment-doula-forbidden"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{ownerRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, doulaUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, ownerSession := newInvoiceServer(t, db, ownerUID, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, ownerSession, practiceID, invoiceID)
-
-	doulaSession := authntest.SeedSession(t, db.App, doulaUID)
-	resp := postReversal(t, srv, doulaSession, practiceID, invoiceID, paymentID, "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-// TestPostReversePaymentHandler_InvoiceNotFound proves a nonexistent
-// Invoice id 404s.
-func TestPostReversePaymentHandler_InvoiceNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-invoice-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postReversal(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", "00000000-0000-0000-0000-000000000000", "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
-// TestPostReversePaymentHandler_MalformedPaymentIDReturns400 proves a
-// non-UUID :paymentId 400s.
-func TestPostReversePaymentHandler_MalformedPaymentIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-bad-payment-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postReversal(t, srv, session, practiceID, invoiceID, "not-a-uuid", "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostReversePaymentHandler_MalformedInvoiceIDReturns400 proves a
-// non-UUID :invoiceId 400s.
-func TestPostReversePaymentHandler_MalformedInvoiceIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-bad-invoice-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postReversal(t, srv, session, practiceID, "not-a-uuid", "00000000-0000-0000-0000-000000000000", "reason")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			if tc.invoiceStays != "" {
+				if status := invoiceStatusFor(t, e.db, invoiceID); status != tc.invoiceStays {
+					t.Fatalf("invoice status = %q, want unchanged %q", status, tc.invoiceStays)
+				}
+			}
+		})
 	}
 }
 
@@ -352,72 +240,27 @@ func TestPostReversePaymentHandler_MalformedInvoiceIDReturns400(t *testing.T) {
 // while the Invoice is paid, and goes away once it is reversed -- what
 // the frontend needs to know which Payment a "reverse" action targets.
 func TestGetInvoicesHandler_ActivePaymentIDTracksReversal(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-active-payment"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	engagementID, invoiceID := e.byHandInvoice()
+	items := func() []payments.InvoiceView {
+		return reqtest.Expect[payments.ListInvoicesResponse](t, http.MethodGet,
+			e.url("/engagements/"+engagementID+"/contract/invoices"), http.StatusOK, e.signedIn).Items
+	}
 
 	// Before any Payment: no active one.
-	beforeResp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer beforeResp.Body.Close()
-	var before payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(beforeResp.Body, &before); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(before.Items) != 1 || before.Items[0].ActivePaymentID != nil {
-		t.Fatalf("items = %+v, want one item with no active payment", before.Items)
+	if before := items(); len(before) != 1 || before[0].ActivePaymentID != nil {
+		t.Fatalf("items = %+v, want one item with no active payment", before)
 	}
 
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
+	paymentID := e.record(invoiceID)
 
-	afterPaymentResp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer afterPaymentResp.Body.Close()
-	var afterPayment payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(afterPaymentResp.Body, &afterPayment); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(afterPayment.Items) != 1 || afterPayment.Items[0].ActivePaymentID == nil || *afterPayment.Items[0].ActivePaymentID != paymentID {
-		t.Fatalf("items = %+v, want activePaymentId %q", afterPayment.Items, paymentID)
+	if afterPayment := items(); len(afterPayment) != 1 || afterPayment[0].ActivePaymentID == nil || *afterPayment[0].ActivePaymentID != paymentID {
+		t.Fatalf("items = %+v, want activePaymentId %q", afterPayment, paymentID)
 	}
 
-	reversalResp := postReversal(t, srv, session, practiceID, invoiceID, paymentID, "wrong invoice")
-	defer reversalResp.Body.Close()
-	if reversalResp.StatusCode != http.StatusCreated {
-		t.Fatalf("reversal status = %d, want %d", reversalResp.StatusCode, http.StatusCreated)
-	}
+	e.reverse(invoiceID, paymentID, "wrong invoice")
 
-	afterReversalResp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer afterReversalResp.Body.Close()
-	var afterReversal payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(afterReversalResp.Body, &afterReversal); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(afterReversal.Items) != 1 || afterReversal.Items[0].ActivePaymentID != nil {
-		t.Fatalf("items = %+v, want no active payment after reversal", afterReversal.Items)
-	}
-}
-
-// TestPostReversePaymentHandler_MalformedBodyReturns400 proves invalid
-// JSON 400s.
-func TestPostReversePaymentHandler_MalformedBodyReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "reverse-payment-bad-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-	paymentID := recordPayment(t, srv, session, practiceID, invoiceID)
-
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", reqtest.RawJSON([]byte("{not json")), reqtest.Session(session))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	if afterReversal := items(); len(afterReversal) != 1 || afterReversal[0].ActivePaymentID != nil {
+		t.Fatalf("items = %+v, want no active payment after reversal", afterReversal)
 	}
 }

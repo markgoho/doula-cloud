@@ -1,18 +1,24 @@
 package payments_test
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
 
 const (
+	payoutOutboxTable  = "payout_outbox"
+	paymentOutboxTable = "payment_received_outbox"
+
 	testPayoutStatusPending = "pending"
 	testPayoutStatusSent    = "sent"
 	testPayoutAppBaseURL    = "https://app.example.test" //nolint:gosec // test fixture URL, not a credential
@@ -45,10 +51,15 @@ func seedPayoutOutboxRow(t *testing.T, db *testdb.DB, practiceID string, attempt
 	return id
 }
 
-// runPayoutWorker begins a tx on db.App, sets the trusted session var
-// outbox.ProcessHandler would otherwise set after its own secret
-// check, runs ProcessPending, and commits.
-func runPayoutWorker(t *testing.T, db *testdb.DB, w payments.Worker) {
+// worker is what an outbox worker in this package offers the test.
+type worker interface {
+	ProcessPending(ctx context.Context, tx *sql.Tx) error
+}
+
+// runWorker begins a tx on db.App, sets the trusted session var
+// outbox.ProcessHandler would otherwise set after its own secret check,
+// runs ProcessPending, and commits.
+func runWorker(t *testing.T, db *testdb.DB, w worker) {
 	t.Helper()
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
@@ -66,12 +77,13 @@ func runPayoutWorker(t *testing.T, db *testdb.DB, w payments.Worker) {
 	}
 }
 
-func payoutOutboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int) {
+// outboxRowState reads a row of one of the outbox tables directly.
+func outboxRowState(t *testing.T, db *testdb.DB, table, id string) (status string, attemptCount int) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count FROM payout_outbox WHERE id = $1`, id,
+		`SELECT status, attempt_count FROM `+table+` WHERE id = $1`, id,
 	).Scan(&status, &attemptCount); err != nil {
-		t.Fatalf("query payout_outbox row: %v", err)
+		t.Fatalf("query %s row: %v", table, err)
 	}
 	return status, attemptCount
 }
@@ -148,7 +160,7 @@ func TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend(t *testing.T
 	}
 
 	sender := &mail.FakeSender{}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
+	runWorker(t, db, newTestPayoutWorker(sender))
 
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("expected no mail sent immediately after queuing, got %d", len(sender.Sent()))
@@ -193,9 +205,9 @@ func TestPayoutWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T) {
 	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
 
 	sender := &mail.FakeSender{}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
+	runWorker(t, db, newTestPayoutWorker(sender))
 
-	status, _ := payoutOutboxRowState(t, db, outboxID)
+	status, _ := outboxRowState(t, db, payoutOutboxTable, outboxID)
 	if status != testPayoutStatusSent {
 		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
 	}
@@ -224,95 +236,56 @@ func TestPayoutWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T) {
 	}
 }
 
-func TestPayoutWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-not-due", []string{ownerRole}, "employee")
-	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
-	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(time.Hour))
+// TestPayoutWorker_ProcessPending_Outcomes proves what the worker does to
+// a row it finds: it leaves one not yet due; marks one sent with no mail
+// when the Practice has no Owner, or when the requirements cleared before
+// the row came due (the grace-window recheck: an Owner who finishes
+// onboarding is never mailed at all); retries on a send failure; and
+// dead-letters on the final attempt.
+func TestPayoutWorker_ProcessPending_Outcomes(t *testing.T) {
+	errMailgun := errors.New("mailgun unavailable")
+	for _, tc := range []struct {
+		name         string
+		noOwner      bool
+		requirements []string
+		attemptCount int
+		due          time.Duration
+		sendErr      error
+		wantStatus   string
+		wantAttempts int
+	}{
+		{name: "a row not yet due is skipped", due: time.Hour, requirements: []string{testRequirementDOB}, wantStatus: testPayoutStatusPending},
+		{name: "a Practice with no Owner is marked sent with no mail", noOwner: true, requirements: []string{testRequirementDOB}, due: -time.Minute, wantStatus: testPayoutStatusSent},
+		{name: "requirements already cleared skip the mail", requirements: []string{}, due: -time.Minute, wantStatus: testPayoutStatusSent},
+		{name: "a send failure retries", requirements: []string{testRequirementDOB}, due: -time.Minute, sendErr: errMailgun, wantStatus: testPayoutStatusPending, wantAttempts: 1},
+		// One attempt short of the schedule's length -- this failure is the
+		// last one before dead-letter.
+		{name: "the final attempt dead-letters", requirements: []string{testRequirementDOB}, attemptCount: 4, due: -time.Minute, sendErr: errMailgun, wantStatus: statusDeadLettered, wantAttempts: 5},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			staff := fixture.Owner()
+			if tc.noOwner {
+				staff = fixture.NoRole()
+			}
+			e := newEnv(t, signedInAs(staff))
+			setRequirementsDue(t, e.db, e.Practice.ID, tc.requirements)
+			outboxID := seedPayoutOutboxRow(t, e.db, e.Practice.ID, tc.attemptCount, time.Now().Add(tc.due))
 
-	sender := &mail.FakeSender{}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
+			sender := &mail.FakeSender{Err: tc.sendErr}
+			runWorker(t, e.db, newTestPayoutWorker(sender))
 
-	status, _ := payoutOutboxRowState(t, db, outboxID)
-	if status != testPayoutStatusPending {
-		t.Fatalf("status = %q, want %s (not due yet)", status, testPayoutStatusPending)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no send for a not-yet-due row")
-	}
-}
-
-func TestPayoutWorker_ProcessPending_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Ownerless Practice")
-	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
-	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
-
-	status, _ := payoutOutboxRowState(t, db, outboxID)
-	if status != testPayoutStatusSent {
-		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent when the Practice has no Owner")
-	}
-}
-
-// TestPayoutWorker_ProcessPending_RequirementsAlreadyClearedSkipsMail
-// proves the grace-window recheck: an Owner who finishes onboarding
-// before the row comes due is never mailed at all, even though a row is
-// still sitting there pending.
-func TestPayoutWorker_ProcessPending_RequirementsAlreadyClearedSkipsMail(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-cleared", []string{ownerRole}, "employee")
-	setRequirementsDue(t, db, practiceID, []string{})
-	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
-
-	status, _ := payoutOutboxRowState(t, db, outboxID)
-	if status != testPayoutStatusSent {
-		t.Fatalf("status = %q, want %s", status, testPayoutStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent once requirements cleared before the row came due")
-	}
-}
-
-func TestPayoutWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-retry", []string{ownerRole}, "employee")
-	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
-	outboxID := seedPayoutOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
-
-	status, attemptCount := payoutOutboxRowState(t, db, outboxID)
-	if status != testPayoutStatusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want %s/1", status, attemptCount, testPayoutStatusPending)
-	}
-}
-
-func TestPayoutWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-dead-letter", []string{ownerRole}, "employee")
-	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
-	// One attempt short of the schedule's length -- this failure is the
-	// last one before dead-letter.
-	outboxID := seedPayoutOutboxRow(t, db, practiceID, 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runPayoutWorker(t, db, newTestPayoutWorker(sender))
-
-	status, attemptCount := payoutOutboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if got := testdb.DeadLetterReason(t, db, "payout_outbox", outboxID); got != "retries_exhausted" {
-		t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+			status, attemptCount := outboxRowState(t, e.db, payoutOutboxTable, outboxID)
+			if status != tc.wantStatus || attemptCount != tc.wantAttempts {
+				t.Fatalf("status/attempt_count = %q/%d, want %s/%d", status, attemptCount, tc.wantStatus, tc.wantAttempts)
+			}
+			if len(sender.Sent()) != 0 {
+				t.Fatalf("sent %d messages, want none", len(sender.Sent()))
+			}
+			if tc.wantStatus == statusDeadLettered {
+				if got := testdb.DeadLetterReason(t, e.db, "payout_outbox", outboxID); got != "retries_exhausted" {
+					t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+				}
+			}
+		})
 	}
 }

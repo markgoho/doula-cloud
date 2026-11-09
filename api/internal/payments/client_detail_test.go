@@ -130,7 +130,7 @@ func TestClientGetInvoice_RefusesWhatIsNotHers(t *testing.T) {
 
 	srv := newClientMoneyServer(t, db)
 	session := portalSession(t, db, uid)
-	for name, id := range map[string]string{invoiceStatusDraft: draft, "another Client's": theirs, "another Engagement's": elsewhere, "malformed": "not-a-uuid"} {
+	for name, id := range map[string]string{invoiceStatusDraft: draft, "another Client's": theirs, "another Engagement's": elsewhere, "malformed": notAUUID} {
 		status, body := getPortal(t, srv, session, clientInvoicesPath(me.engagementID, "/"+id))
 		if status != http.StatusNotFound {
 			t.Errorf("%s: status = %d, want 404; body %s", name, status, body)

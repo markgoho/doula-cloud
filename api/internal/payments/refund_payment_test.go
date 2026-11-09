@@ -314,12 +314,12 @@ func TestPostRefundPaymentHandler_MalformedInputs(t *testing.T) {
 	f := newByHandPaidInvoice(t, "refund-malformed", []string{ownerRole}).withRecordedPayment(t)
 	req := payments.RefundPaymentRequest{AmountCents: 100, Method: payments.PaymentMethodCheck}
 
-	badInvoice := postRefund(t, f.srv, f.session, f.practiceID, "not-a-uuid", f.paymentID, req)
+	badInvoice := postRefund(t, f.srv, f.session, f.practiceID, notAUUID, f.paymentID, req)
 	defer badInvoice.Body.Close()
 	if badInvoice.StatusCode != http.StatusBadRequest {
 		t.Fatalf("malformed invoice id status = %d, want %d", badInvoice.StatusCode, http.StatusBadRequest)
 	}
-	badPayment := postRefund(t, f.srv, f.session, f.practiceID, f.invoiceID, "not-a-uuid", req)
+	badPayment := postRefund(t, f.srv, f.session, f.practiceID, f.invoiceID, notAUUID, req)
 	defer badPayment.Body.Close()
 	if badPayment.StatusCode != http.StatusBadRequest {
 		t.Fatalf("malformed payment id status = %d, want %d", badPayment.StatusCode, http.StatusBadRequest)
