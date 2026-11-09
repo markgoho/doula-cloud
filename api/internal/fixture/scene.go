@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
@@ -46,6 +47,8 @@ type Scene struct {
 	// AsClient signs a request in as the Engagement's Client, set only when
 	// she was seeded WithPortalLogin.
 	AsClient reqtest.Option
+
+	at time.Time
 }
 
 type sceneSpec struct {
@@ -127,7 +130,7 @@ func NewScene(t *testing.T, mount Mount, opts ...SceneOption) *Scene {
 		opt(&spec)
 	}
 	db := testdb.New(t)
-	s := &Scene{T: t, DB: db, Practice: Practice(t, db, spec.practice...)}
+	s := &Scene{T: t, DB: db, Practice: Practice(t, db, spec.practice...), at: spec.at}
 	if !spec.nobody {
 		s.Staff = Staff(t, db, s.Practice, spec.staff...)
 		s.SignedIn = s.As(s.Staff)
@@ -162,10 +165,14 @@ func NewScene(t *testing.T, mount Mount, opts ...SceneOption) *Scene {
 }
 
 // As signs a request in as who, a Staff member or a Client with a portal
-// login.
+// login. Under At the session is minted at that instant, so the fixed
+// clock does not read it as expired or not yet begun.
 func (s *Scene) As(who Signer) reqtest.Option {
 	s.T.Helper()
-	return reqtest.Session(Session(s.T, s.DB, who))
+	if s.at.IsZero() {
+		return reqtest.Session(Session(s.T, s.DB, who))
+	}
+	return reqtest.Session(authntest.SeedSessionAt(s.T, s.DB.App, who.identity(), s.at))
 }
 
 // Colleague is another Staff member at the Practice.

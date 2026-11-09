@@ -14,7 +14,7 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// whoAmI mounts GET /api/whoami behind staffauth.Middleware and answers
+// whoAmI mounts GET /api/practices/{practiceId}/whoami behind staffauth.Middleware and answers
 // with the instant the request was served at.
 func whoAmI(g *staffauth.GatedRouter, _ *idempotency.Router, _ *sql.DB) {
 	g.Get("/api/practices/{practiceId}/whoami", staffauth.AnyStaff, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +83,17 @@ func TestScene_SeedsAnEngagementOnlyWhenAsked(t *testing.T) {
 	if n := testdb.Scalar[int](t, portal.DB.Admin, attachments, portal.Engagement.ID); n != 1 {
 		t.Fatalf("attachments = %d, want the Staff member's one", n)
 	}
+}
+
+// TestScene_MintsSessionsAtTheFixedInstant proves a clock far from the real
+// one still finds the sessions live: they are minted at the instant, for
+// the Staff member at the screen and for any other person she signs in as.
+func TestScene_MintsSessionsAtTheFixedInstant(t *testing.T) {
+	at := time.Now().AddDate(5, 0, 0).UTC()
+	s := fixture.NewScene(t, whoAmI, fixture.At(at))
+
+	reqtest.ExpectStatus(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusOK, s.SignedIn)
+	reqtest.ExpectStatus(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusOK, s.As(s.Colleague()))
 }
 
 func TestScene_NobodySignedInSeedsNoStaff(t *testing.T) {
