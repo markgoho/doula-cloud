@@ -3,10 +3,10 @@ package payments_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -14,24 +14,17 @@ import (
 
 const paymentTermsPath = "/payments/payment-terms"
 
-func requestPaymentTerms(t *testing.T, srv *httptest.Server, session, practiceID, method, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Do(t, method, srv.URL+"/api/practices/"+practiceID+paymentTermsPath, reqtest.RawJSON([]byte(body)), reqtest.Session(session))
-	return resp
+// termsBody is a raw JSON body for the payment-terms route.
+func termsBody(body string) reqtest.Option { return reqtest.RawJSON([]byte(body)) }
+
+func (e *env) readTerms() payments.PaymentTermsResponse {
+	e.t.Helper()
+	return reqtest.Expect[payments.PaymentTermsResponse](e.t, http.MethodGet, e.url(paymentTermsPath), http.StatusOK, e.signedIn)
 }
 
-func readPaymentTerms(t *testing.T, srv *httptest.Server, session, practiceID, method, body string) payments.PaymentTermsResponse {
-	t.Helper()
-	resp := requestPaymentTerms(t, srv, session, practiceID, method, body)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.PaymentTermsResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return out
+func (e *env) setTerms(body string) payments.PaymentTermsResponse {
+	e.t.Helper()
+	return reqtest.Expect[payments.PaymentTermsResponse](e.t, http.MethodPut, e.url(paymentTermsPath), http.StatusOK, e.signedIn, termsBody(body))
 }
 
 // TestGetPaymentTermsHandler_DefaultsWithoutARow proves #768's decision
@@ -39,14 +32,10 @@ func readPaymentTerms(t *testing.T, srv *httptest.Server, session, practiceID, m
 // -- the absent row is a documented default, not an unset value a caller
 // has to interpret.
 func TestGetPaymentTermsHandler_DefaultsWithoutARow(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-default"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	out := e.readTerms()
 
-	out := readPaymentTerms(t, srv, session, practiceID, http.MethodGet, "")
 	if out.NetDays != payments.DefaultPaymentTermsDays || !out.IsDefault {
 		t.Fatalf("terms = (%d, isDefault %v), want (%d, true)", out.NetDays, out.IsDefault, payments.DefaultPaymentTermsDays)
 	}
@@ -56,31 +45,26 @@ func TestGetPaymentTermsHandler_DefaultsWithoutARow(t *testing.T) {
 // audit-trail expectation for this setting: the change is readable back,
 // and the Activity log says who made it and when.
 func TestPutPaymentTermsHandler_SetsAndRecordsWhoChangedIt(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-set"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	out := readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":45}`)
+	out := e.setTerms(`{"netDays":45}`)
 	if out.NetDays != 45 || out.IsDefault {
 		t.Fatalf("terms = (%d, isDefault %v), want (45, false)", out.NetDays, out.IsDefault)
 	}
-	if got := readPaymentTerms(t, srv, session, practiceID, http.MethodGet, ""); got.NetDays != 45 || got.IsDefault {
+	if got := e.readTerms(); got.NetDays != 45 || got.IsDefault {
 		t.Fatalf("read back = (%d, isDefault %v), want (45, false)", got.NetDays, got.IsDefault)
 	}
 
 	var actor string
 	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT actor_staff_id, diff FROM activity
-		 WHERE practice_id = $1 AND action = 'payment_terms_changed'`, practiceID,
+		 WHERE practice_id = $1 AND action = 'payment_terms_changed'`, e.Practice.ID,
 	).Scan(&actor, &diff); err != nil {
 		t.Fatalf("read activity row: %v", err)
 	}
-	if actor != staffID {
-		t.Fatalf("actor = %q, want %q", actor, staffID)
+	if actor != e.Staff.ID {
+		t.Fatalf("actor = %q, want %q", actor, e.Staff.ID)
 	}
 	var recorded struct {
 		NetDaysBefore *int `json:"netDaysBefore"`
@@ -98,17 +82,12 @@ func TestPutPaymentTermsHandler_SetsAndRecordsWhoChangedIt(t *testing.T) {
 // practicerate.PutRateHandler already has: a retry with the same body is
 // not a second change, so it writes no second Activity row.
 func TestPutPaymentTermsHandler_RepeatRecordsNothingNew(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-repeat"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e.setTerms(`{"netDays":15}`)
+	e.setTerms(`{"netDays":15}`)
 
-	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":15}`)
-	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":15}`)
-
-	rows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, practiceID)
+	rows := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, e.Practice.ID)
 	if rows != 1 {
 		t.Fatalf("activity rows = %d, want 1", rows)
 	}
@@ -118,34 +97,22 @@ func TestPutPaymentTermsHandler_RepeatRecordsNothingNew(t *testing.T) {
 // the bound the migration's CHECK also carries, so a typo cannot put an
 // Invoice's due date past any horizon a Practice would notice.
 func TestPutPaymentTermsHandler_RefusesAnImpossibleTerm(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-invalid"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
 
 	for _, body := range []string{`{"netDays":0}`, `{"netDays":-5}`, `{"netDays":400}`} {
-		func() {
-			resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, body)
-			defer func() { _ = resp.Body.Close() }()
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("%s status = %d, want %d", body, resp.StatusCode, http.StatusBadRequest)
-			}
+		t.Run(body, func(t *testing.T) {
+			out := reqtest.Expect[struct {
+				Details map[string]string `json:"details"`
+			}](t, http.MethodPut, e.url(paymentTermsPath), http.StatusBadRequest, e.signedIn, termsBody(body))
+
 			// docs/api-design.md section 7 rule 4: a refusal a person
 			// causes by filling in a form names the field at fault, keyed
 			// by the request DTO's own JSON tag, so the app maps it onto a
 			// control with no translation table.
-			var out struct {
-				Details map[string]string `json:"details"`
-			}
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("%s decode response: %v", body, err)
-			}
 			if out.Details["netDays"] != payments.MsgNetDaysOutOfRange {
-				t.Fatalf("%s details[netDays] = %q, want %q", body, out.Details["netDays"], payments.MsgNetDaysOutOfRange)
+				t.Fatalf("details[netDays] = %q, want %q", out.Details["netDays"], payments.MsgNetDaysOutOfRange)
 			}
-		}()
+		})
 	}
 }
 
@@ -153,18 +120,9 @@ func TestPutPaymentTermsHandler_RefusesAnImpossibleTerm(t *testing.T) {
 // refusal ahead of the range check: a body that is not JSON at all is
 // answered before anything reads a number out of it.
 func TestPutPaymentTermsHandler_RefusesAMalformedBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-malformed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":`)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	e.expect(http.MethodPut, paymentTermsPath, http.StatusBadRequest, termsBody(`{"netDays":`))
 }
 
 // TestPutPaymentTermsHandler_RefusesADoula proves the write side is
@@ -172,22 +130,13 @@ func TestPutPaymentTermsHandler_RefusesAMalformedBody(t *testing.T) {
 // an Owner or Admin sets them (#282's write table). The refusal comes
 // from the mount, not the handler (#990).
 func TestPutPaymentTermsHandler_RefusesADoula(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "payment-terms-doula"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"doula"}, "employee")
+	e := newEnv(t, signedInAs(fixture.Doula()))
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := requestPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":45}`)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
+	e.expect(http.MethodPut, paymentTermsPath, http.StatusForbidden, termsBody(`{"netDays":45}`))
 
 	// She still reads it: a Doula meets the due date on every Invoice she
 	// looks at.
-	if got := readPaymentTerms(t, srv, session, practiceID, http.MethodGet, ""); got.NetDays != payments.DefaultPaymentTermsDays {
+	if got := e.readTerms(); got.NetDays != payments.DefaultPaymentTermsDays {
 		t.Fatalf("doula read = %d, want the default %d", got.NetDays, payments.DefaultPaymentTermsDays)
 	}
 }

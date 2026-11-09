@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -16,13 +17,12 @@ import (
 
 // seedClientCustomer writes one mapping row directly, for the Client the
 // Engagement is for.
-func seedClientCustomer(t *testing.T, db *testdb.DB, practiceID, engagementID, accountID, customerID string) {
+func seedClientCustomer(t *testing.T, db *testdb.DB, engagement fixture.EngagementRecord, accountID, customerID string) {
 	t.Helper()
-	clientID := clientOfEngagement(t, db, engagementID)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
 		 VALUES ($1, $2, $3, $4)`,
-		practiceID, clientID, accountID, customerID,
+		engagement.PracticeID, engagement.Client.ID, accountID, customerID,
 	); err != nil {
 		t.Fatalf("seed client_stripe_customers: %v", err)
 	}
@@ -32,9 +32,7 @@ func seedClientCustomer(t *testing.T, db *testdb.DB, practiceID, engagementID, a
 // mapping denies all rows when app.current_practice_id is unset.
 func TestRLS_ClientStripeCustomersFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Mapping Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedClientCustomer(t, db, practiceID, engagementID, "acct_rls_closed", "cus_rls_closed")
+	seedClientCustomer(t, db, fixture.Engagement(t, db, fixture.Practice(t, db)), "acct_rls_closed", "cus_rls_closed")
 
 	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM client_stripe_customers`)
 	if count != 0 {
@@ -46,24 +44,11 @@ func TestRLS_ClientStripeCustomersFailsClosedWithNoSessionVarSet(t *testing.T) {
 // A's session sees only Practice A's mappings.
 func TestRLS_ClientStripeCustomersIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Mapping Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Mapping Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	seedClientCustomer(t, db, practiceA, engagementA, "acct_rls_a", "cus_rls_a")
-	seedClientCustomer(t, db, practiceB, engagementB, "acct_rls_b", "cus_rls_b")
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	seedClientCustomer(t, db, fixture.Engagement(t, db, practiceA), "acct_rls_a", "cus_rls_a")
+	seedClientCustomer(t, db, fixture.Engagement(t, db, practiceB), "acct_rls_b", "cus_rls_b")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 	visible := testdb.Column[string](t, tx, `SELECT stripe_customer_id FROM client_stripe_customers`)
 
 	if len(visible) != 1 || visible[0] != "cus_rls_a" {
@@ -76,26 +61,14 @@ func TestRLS_ClientStripeCustomersIsScopedToCurrentPractice(t *testing.T) {
 // session cannot claim a Customer for Practice A's Client.
 func TestRLS_ClientStripeCustomersCannotInsertForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Mapping Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Mapping Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	clientA := clientOfEngagement(t, db, engagementA)
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	engagementA := fixture.Engagement(t, db, practiceA)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceB); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceB.ID))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
 		 VALUES ($1, $2, $3, $4)`,
-		practiceA, clientA, "acct_rls_cross", "cus_rls_cross")
+		practiceA.ID, engagementA.Client.ID, "acct_rls_cross", "cus_rls_cross")
 	if err == nil {
 		t.Fatal("expected the cross-practice INSERT to be rejected, got no error")
 	}
@@ -111,9 +84,7 @@ func TestRLS_ClientStripeCustomersCannotInsertForAnotherPractice(t *testing.T) {
 // existed.
 func TestGrant_ClientStripeCustomersHasNoUpdateOrDelete(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Mapping Grant Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedClientCustomer(t, db, practiceID, engagementID, "acct_grant", "cus_grant")
+	seedClientCustomer(t, db, fixture.Engagement(t, db, fixture.Practice(t, db)), "acct_grant", "cus_grant")
 
 	if _, err := db.App.ExecContext(t.Context(),
 		`UPDATE client_stripe_customers SET stripe_customer_id = 'cus_other'`,

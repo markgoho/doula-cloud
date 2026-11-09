@@ -61,17 +61,11 @@ func TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			db := testdb.New(t)
-			const uid = "practice-invoices-due-on-boundary"
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-			_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-			contractID := seedDraftContract(t, db, engagementID)
-			invoiceID := seedInvoiceDue(t, db, practiceID, contractID, "in_due_on_boundary", invoiceStatusOpen, 15000, createdAt, dueAt)
+			e := newEnv(t, atInstant(tt.now))
+			_, contractID := e.contractWithStatus("draft")
+			invoiceID := seedInvoiceDue(t, e.db, e.Practice.ID, contractID, "in_due_on_boundary", invoiceStatusOpen, 15000, createdAt, dueAt)
 
-			srv, session := newPracticeInvoiceServerAt(t, db, uid, tt.now)
-			defer srv.Close()
-
-			whole := readPracticeInvoices(t, srv, session, practiceID, "", false)
+			whole := e.practiceInvoices()
 			if whole.OverdueCount != tt.wantOverdue || whole.OverdueCents != int64(tt.wantOverdue)*15000 {
 				t.Fatalf("overdue totals = (%d, %d), want (%d, %d)", whole.OverdueCents, whole.OverdueCount, int64(tt.wantOverdue)*15000, tt.wantOverdue)
 			}
@@ -83,7 +77,7 @@ func TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn(t *testing.T) {
 			}
 
 			// The narrowing spends the same boundary as the figure above it.
-			narrowed := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "", "overdue=true")
+			narrowed := e.practiceInvoices("overdue=true")
 			if len(narrowed.Items) != tt.wantOverdue {
 				t.Fatalf("overdue items = %d, want %d", len(narrowed.Items), tt.wantOverdue)
 			}
@@ -100,19 +94,14 @@ func TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn(t *testing.T) {
 // Nov 23 in Los Angeles: not overdue. The zone that decides is the
 // Practice's, not New York's, UTC's or the server's.
 func TestGetPracticeInvoicesHandler_OverdueBoundaryIsThePracticesZone(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-due-on-zone"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	testdb.SetPracticeTimezone(t, db, practiceID, "America/Los_Angeles")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	seedInvoiceDue(t, db, practiceID, contractID, "in_due_on_zone", invoiceStatusOpen, 15000,
+	e := newEnv(t, atInstant(time.Date(2026, 11, 24, 5, 0, 0, 0, time.UTC)))
+	testdb.SetPracticeTimezone(t, e.db, e.Practice.ID, "America/Los_Angeles")
+	_, contractID := e.contractWithStatus("draft")
+	seedInvoiceDue(t, e.db, e.Practice.ID, contractID, "in_due_on_zone", invoiceStatusOpen, 15000,
 		time.Date(2026, 10, 25, 15, 0, 0, 0, time.UTC), time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC))
 
-	srv, session := newPracticeInvoiceServerAt(t, db, uid, time.Date(2026, 11, 24, 5, 0, 0, 0, time.UTC))
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if out.OverdueCount != 0 || len(out.Items) != 1 || out.Items[0].DaysOverdue != 0 || out.Items[0].DueOn != "2026-11-23" {
 		t.Fatalf("response = %+v, want one Invoice due 2026-11-23 and not yet overdue in Los Angeles", out)
 	}
@@ -123,49 +112,22 @@ func TestGetPracticeInvoicesHandler_OverdueBoundaryIsThePracticesZone(t *testing
 // 2026-10-26T00:00Z. Both Staff lists send paidOn 2026-10-25, and the
 // row still records the instant, which is what the audit trail keeps.
 func TestInvoicePaid_8pmEasternIsPaidOnThatDay(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-paid-8pm-eastern"
-	const accountID = "acct_paid_8pm"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, practiceID,
-	); err != nil {
-		t.Fatalf("seed connect account id: %v", err)
-	}
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_8pm", invoiceStatusOpen, 5000,
-		time.Date(2026, 10, 1, 15, 0, 0, 0, time.UTC))
-
-	hook := newConnectWebhookServerWith(db, &referenceClient{
-		StripeAPIClient: payments.NewStripeAPIClient("sk_test_unused", "https://app.test"),
-		reference:       "pi_paid_8pm",
-	})
-	defer hook.Close()
+	e := newEnv(t, connected())
+	engagementID, invoiceID := e.seedStripeInvoice("in_paid_8pm", invoiceStatusOpen, 5000)
+	hook := e.connectHook(newReferenceClient("pi_paid_8pm"))
 	paidAt := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC) // 8pm EDT, Oct 25
-	resp := postConnectWebhook(t, hook, invoicePaidPayload(t, "evt_paid_8pm", accountID, "in_paid_8pm", paidAt), stripeConnectWebhookSecret)
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	deliverConnect(t, hook, invoicePaidPayload(t, "evt_paid_8pm", e.AccountID, "in_paid_8pm", paidAt))
 
-	if _, stored := invoiceStatusAndPaidAt(t, db, invoiceID); stored == nil || !stored.Equal(paidAt) {
+	if _, stored := invoiceStatusAndPaidAt(t, e.db, invoiceID); stored == nil || !stored.Equal(paidAt) {
 		t.Fatalf("stored paid_at = %v, want the instant %v", stored, paidAt)
 	}
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-	book := readPracticeInvoices(t, srv, session, practiceID, "", false)
+	book := e.practiceInvoices()
 	if len(book.Items) != 1 || book.Items[0].PaidOn == nil || *book.Items[0].PaidOn != dayOct25 {
 		t.Fatalf("Practice list items = %+v, want paidOn 2026-10-25", book.Items)
 	}
 
-	listResp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer listResp.Body.Close()
-	var section payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(listResp.Body, &section); err != nil {
-		t.Fatalf("decode engagement invoices: %v", err)
-	}
+	section := e.listInvoices(engagementID)
 	if len(section.Items) != 1 || section.Items[0].PaidOn == nil || *section.Items[0].PaidOn != dayOct25 {
 		t.Fatalf("Engagement list items = %+v, want paidOn 2026-10-25", section.Items)
 	}
@@ -231,9 +193,9 @@ func TestInvoiceReads_RefuseAZoneThatWillNotLoad(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	book := getPracticeInvoicesNarrowed(t, srv, session, me.practiceID, "", "")
+	book := getPracticeInvoicesNarrowed(t, srv, session, me.practiceID, "")
 	_ = book.Body.Close()
-	section := getInvoices(t, srv, session, me.practiceID, me.engagementID, "")
+	section := getInvoices(t, srv, session, me.practiceID, me.engagementID)
 	_ = section.Body.Close()
 	raised := postInvoice(t, srv, session, me.practiceID, me.engagementID)
 	_ = raised.Body.Close()

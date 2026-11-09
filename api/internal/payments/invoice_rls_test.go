@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -12,14 +13,32 @@ import (
 // pattern in billing/rls_test.go (credit_ledger's own direct-column
 // practice_id policy, the shape invoices reuses).
 
+// billed is what seedBilled leaves at a Practice: a Client with an
+// Engagement, a signed Contract and one Invoice.
+type billed struct {
+	clientID   string
+	contractID string
+	invoiceID  string
+}
+
+// seedBilled seeds a new Client at p with an Engagement, a signed Contract
+// and one Invoice in status.
+func seedBilled(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, stripeInvoiceID, status string, amountCents int64) billed {
+	t.Helper()
+	engagement := fixture.Engagement(t, db, p)
+	contractID := seedSignedContract(t, db, engagement.ID)
+	return billed{
+		clientID:   engagement.Client.ID,
+		contractID: contractID,
+		invoiceID:  seedInvoice(t, db, p.ID, contractID, stripeInvoiceID, status, amountCents, time.Now()),
+	}
+}
+
 // TestRLS_InvoicesFailsClosedWithNoSessionVarSet proves invoices denies
 // all rows when app.current_practice_id is unset.
 func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Some Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	seedInvoice(t, db, practiceID, contractID, "in_rls_closed", invoiceStatusOpen, 5000, time.Now())
+	seedBilled(t, db, fixture.Practice(t, db), "in_rls_closed", invoiceStatusOpen, 5000)
 
 	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM invoices`)
 	if count != 0 {
@@ -31,16 +50,11 @@ func TestRLS_InvoicesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // session sees only Practice A's invoices -- Practice B's stay invisible.
 func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	contractA := seedDraftContract(t, db, engagementA)
-	contractB := seedDraftContract(t, db, engagementB)
-	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", invoiceStatusOpen, 5000, time.Now())
-	seedInvoice(t, db, practiceB, contractB, "in_rls_b", invoiceStatusOpen, 7000, time.Now())
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	invoiceA := seedBilled(t, db, practiceA, "in_rls_a", invoiceStatusOpen, 5000).invoiceID
+	seedBilled(t, db, practiceB, "in_rls_b", invoiceStatusOpen, 7000)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM invoices`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != invoiceA {
@@ -53,15 +67,13 @@ func TestRLS_InvoicesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // side of the policy, derived from the same USING clause, rejects it.
 func TestRLS_InvoicesCannotInsertForAnotherPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	contractA := seedDraftContract(t, db, engagementA)
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	contractA := seedDraftContract(t, db, fixture.Engagement(t, db, practiceA).ID)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceB))
+	tx := db.BeginAs(t, testdb.Practice(practiceB.ID))
 	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, amount_cents, reference, due_at) VALUES ($1, $2, 'in_rls_insert', 5000, 'in_rls_insert', now())`,
-		practiceA, contractA,
+		practiceA.ID, contractA,
 	)
 	if err == nil {
 		t.Fatal("expected inserting an invoices row for another Practice to be rejected by RLS, got no error")

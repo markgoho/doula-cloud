@@ -1,9 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/fixture"
@@ -11,28 +9,6 @@ import (
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
-
-func postReversal(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, paymentID, reason string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments/"+paymentID+"/reverse", reqtest.JSON(payments.ReversePaymentRequest{Reason: reason}), reqtest.Session(session))
-	return resp
-}
-
-// recordPayment records a manual Payment against invoiceID and returns
-// its id, failing the test on anything but 201.
-func recordPayment(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID string) (paymentID string) {
-	t.Helper()
-	resp := postPayment(t, srv, session, practiceID, invoiceID, payments.PaymentMethodCheck, "check #1", todayInSeededZone(t))
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("record payment: status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.PaymentView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode recorded payment: %v", err)
-	}
-	return out.ID
-}
 
 // reversalRow is a payments row read directly via the superuser Admin
 // connection, carrying only the columns #945's reversal tests need.

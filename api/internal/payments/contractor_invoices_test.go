@@ -3,16 +3,25 @@ package payments_test
 import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/reqtest"
 )
+
+// attachedContractor is a contractor Doula at the Practice who holds a
+// granted attachment on a signed-Contract Engagement.
+func attachedContractor(t *testing.T) (e *env, engagementID, contractID string) {
+	t.Helper()
+	e = newEnv(t, signedInAs(fixture.Contractor()))
+	engagementID, contractID = e.signedContract(fixture.WithDoula(e.Staff))
+	return e, engagementID, contractID
+}
 
 // The money a contractor's Invoice list must never carry (#2094). Each
 // figure is one no other value in the fixture can produce by chance, so
@@ -45,12 +54,8 @@ var contractorInvoiceKeys = map[string]bool{
 // the Owner's list carries: an Invoice amount, a Payment that covers it,
 // and a Refund against that Payment.
 func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-contractor-rows"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	contractID := seedSignedContract(t, db, engagementID)
+	e, engagementID, contractID := attachedContractor(t)
+	db, practiceID := e.db, e.Practice.ID
 
 	base := time.Now().Add(-90 * 24 * time.Hour)
 	overdueID := seedInvoiceDue(t, db, practiceID, contractID, "in_ctr_overdue", invoiceStatusOpen, leakInvoiceCents, base, base.Add(24*time.Hour))
@@ -67,18 +72,7 @@ func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.
 	voidID := seedInvoice(t, db, practiceID, contractID, "in_ctr_void", invoiceStatusVoid, leakInvoiceCents, base.Add(2*time.Minute))
 	openID := seedInvoice(t, db, practiceID, contractID, "in_ctr_open", invoiceStatusOpen, leakInvoiceCents, time.Now())
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
+	raw := reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
 	body := string(raw)
 
 	for _, figure := range []int{leakInvoiceCents, leakPaymentCents, leakRefundCents} {
@@ -143,56 +137,29 @@ func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.
 // Engagement is told it is not found, the same answer an Engagement at
 // another Practice gets, so she cannot learn that it exists.
 func TestGetInvoicesHandler_AnUnattachedContractorGets404(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	seedInvoice(t, db, practiceID, contractID, "in_ctr_unattached", invoiceStatusOpen, leakInvoiceCents, time.Now())
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	engagementID, contractID := e.signedContract()
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_ctr_unattached", invoiceStatusOpen, leakInvoiceCents, time.Now())
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
+	e.expect(http.MethodGet, invoicesPath(engagementID), http.StatusNotFound)
 }
 
 // TestGetInvoicesHandler_AContractorPages proves her list pages the same
 // way the Owner's does, so a long billing history is not cut off for her.
 func TestGetInvoicesHandler_AContractorPages(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-contractor-pages"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	contractID := seedSignedContract(t, db, engagementID)
+	e, engagementID, contractID := attachedContractor(t)
 	base := time.Now().Add(-time.Hour)
 	for i := range 31 {
-		seedInvoice(t, db, practiceID, contractID, "in_ctr_page_"+strconv.Itoa(i), invoiceStatusOpen, 1000, base.Add(time.Duration(i)*time.Second))
+		seedInvoice(t, e.db, e.Practice.ID, contractID, "in_ctr_page_"+strconv.Itoa(i), invoiceStatusOpen, 1000, base.Add(time.Duration(i)*time.Second))
 	}
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	first := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer first.Body.Close()
-	var page payments.ContractorInvoicesResponse
-	if err := json.UnmarshalRead(first.Body, &page); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	page := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
 	if !page.HasMore || page.NextCursor == nil || len(page.Items) != 30 {
 		t.Fatalf("first page = %d items, hasMore %v, cursor %v; want 30, true, a cursor", len(page.Items), page.HasMore, page.NextCursor)
 	}
 
-	second := getInvoices(t, srv, session, practiceID, engagementID, *page.NextCursor)
-	defer second.Body.Close()
-	var next payments.ContractorInvoicesResponse
-	if err := json.UnmarshalRead(second.Body, &next); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	next := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet,
+		e.url(invoicesPath(engagementID)+"?cursor="+*page.NextCursor), http.StatusOK, e.signedIn)
 	if next.HasMore || len(next.Items) != 1 {
 		t.Fatalf("second page = %d items, hasMore %v; want 1, false", len(next.Items), next.HasMore)
 	}

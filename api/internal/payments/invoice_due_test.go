@@ -1,37 +1,12 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
-	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
-
-// raiseInvoice raises an Invoice and returns the view the caller was
-// told about, so the due date in the response can be compared against
-// the one the row and Stripe both hold.
-func raiseInvoice(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) payments.InvoiceView {
-	t.Helper()
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode invoice: %v", err)
-	}
-	return out
-}
 
 // seededPracticeDay is the day at falls on in the zone testdb seeds every
 // Practice with, the zone the BFF reads an Invoice's days in (#1965).
@@ -50,27 +25,19 @@ func seededPracticeDay(t *testing.T, at time.Time) string {
 // got days_until_due=30 and derived its own date, which never came home
 // to the row -- two dates, either of which could be a day off the other.
 func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-due-stripe"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	seedConnectAccount(t, db, practiceID, "acct_due_stripe")
-	client := payments.NewFakeClient()
+	e := newEnv(t, connected())
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	view := e.raise(engagementID)
 
-	view := raiseInvoice(t, srv, session, practiceID, engagementID)
-
-	stored := invoiceDueAtOf(t, db, view.ID)
-	if len(client.CreateInvoiceCalls) != 1 {
-		t.Fatalf("CreateInvoice calls = %d, want 1", len(client.CreateInvoiceCalls))
+	stored := invoiceDueAtOf(t, e.db, view.ID)
+	if len(e.Stripe.CreateInvoiceCalls) != 1 {
+		t.Fatalf("CreateInvoice calls = %d, want 1", len(e.Stripe.CreateInvoiceCalls))
 	}
 	// Stripe is told the same instant the row holds, to the second --
 	// StripeAPIClient sends it as a Unix timestamp, which is the
 	// resolution Stripe's due_date carries.
-	sent := client.CreateInvoiceCalls[0].DueAt
+	sent := e.Stripe.CreateInvoiceCalls[0].DueAt
 	if sent.Unix() != stored.Unix() {
 		t.Fatalf("due date sent to Stripe = %v, stored = %v; want the same instant", sent, stored)
 	}
@@ -91,20 +58,12 @@ func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
 // never reaches Stripe, so before #768 it had no due date anywhere, in
 // any system.
 func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-due-by-hand"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeByHand))
-	client := payments.NewFakeClient()
+	e := newEnv(t, withBillingMode(payments.BillingModeByHand))
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	view := e.raise(engagementID)
 
-	view := raiseInvoice(t, srv, session, practiceID, engagementID)
-
-	stored := invoiceDueAtOf(t, db, view.ID)
+	stored := invoiceDueAtOf(t, e.db, view.ID)
 	if want := seededPracticeDay(t, stored); view.DueOn != want {
 		t.Fatalf("returned dueOn = %q, stored due_at = %v; want %q", view.DueOn, stored, want)
 	}
@@ -113,8 +72,8 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 	if want := seededPracticeDay(t, view.CreatedAt); view.RaisedOn != want {
 		t.Fatalf("returned raisedOn = %q, created_at = %v; want %q", view.RaisedOn, view.CreatedAt, want)
 	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 on the by-hand rail", len(client.CreateInvoiceCalls))
+	if len(e.Stripe.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 on the by-hand rail", len(e.Stripe.CreateInvoiceCalls))
 	}
 	wantDue := payments.DueAfterTerms(view.CreatedAt, payments.DefaultPaymentTermsDays)
 	if !stored.Equal(wantDue) {
@@ -128,26 +87,16 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 // the terms counted from it -- the clock the overdue reads judge due_at
 // against, not the database's own now().
 func TestPostInvoiceHandler_RaisesOnTheRequestClock(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-due-fixed-clock"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeByHand))
-
 	now := time.Now().Add(-90 * time.Minute).Truncate(time.Second).Add(123_456_789).UTC()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	payments.Mount(g, idempotency.NewRouter(g, db.App), payments.NewFakeClient(), tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
-	srv := httptest.NewServer(clock.Middleware(func() time.Time { return now })(mux))
-	defer srv.Close()
+	e := newEnv(t, withBillingMode(payments.BillingModeByHand), atInstant(now))
+	engagementID, _ := e.signedContract()
 
-	view := raiseInvoice(t, srv, authntest.SeedSessionAt(t, db.App, uid, now), practiceID, engagementID)
+	view := e.raise(engagementID)
 
 	if want := now.Truncate(time.Microsecond); !view.CreatedAt.Equal(want) {
 		t.Fatalf("createdAt = %v, want the request clock %v", view.CreatedAt, want)
 	}
-	if stored, want := invoiceDueAtOf(t, db, view.ID), payments.DueAfterTerms(now, payments.DefaultPaymentTermsDays); !stored.Equal(want) {
+	if stored, want := invoiceDueAtOf(t, e.db, view.ID), payments.DueAfterTerms(now, payments.DefaultPaymentTermsDays); !stored.Equal(want) {
 		t.Fatalf("due date = %v, want %v", stored, want)
 	}
 }
@@ -156,20 +105,12 @@ func TestPostInvoiceHandler_RaisesOnTheRequestClock(t *testing.T) {
 // setting is what an Invoice is actually raised against, rather than the
 // 30-day default being applied everywhere regardless.
 func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-due-own-terms"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeByHand))
+	e := newEnv(t, withBillingMode(payments.BillingModeByHand))
+	engagementID, _ := e.signedContract()
+	e.setTerms(`{"netDays":7}`)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":7}`)
-
-	view := raiseInvoice(t, srv, session, practiceID, engagementID)
-	stored := invoiceDueAtOf(t, db, view.ID)
+	view := e.raise(engagementID)
+	stored := invoiceDueAtOf(t, e.db, view.ID)
 	wantDue := payments.DueAfterTerms(view.CreatedAt, 7)
 	if !stored.Equal(wantDue) {
 		t.Fatalf("due date = %v, want %v (the Practice's own net-7 terms)", stored, wantDue)
@@ -178,8 +119,8 @@ func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
 	// Changing the terms afterwards must not move an Invoice already
 	// raised: the row carries the terms it was billed under, the same way
 	// it carries the rail it was born on.
-	readPaymentTerms(t, srv, session, practiceID, http.MethodPut, `{"netDays":60}`)
-	if again := invoiceDueAtOf(t, db, view.ID); again.Unix() != stored.Unix() {
+	e.setTerms(`{"netDays":60}`)
+	if again := invoiceDueAtOf(t, e.db, view.ID); again.Unix() != stored.Unix() {
 		t.Fatalf("due date after a terms change = %v, want the unchanged %v", again, stored)
 	}
 }

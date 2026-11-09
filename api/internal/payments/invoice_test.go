@@ -13,13 +13,9 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -146,15 +142,6 @@ func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 	return status
 }
 
-func newInvoiceServer(t *testing.T, db *testdb.DB, uid string, client payments.Client) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, client, tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
 func postInvoiceBody(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, body string) *http.Response {
 	t.Helper()
 	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
@@ -170,14 +157,64 @@ func postInvoice(t *testing.T, srv *httptest.Server, session string, practiceID,
 	return postInvoiceBody(t, srv, session, practiceID, engagementID, string(body))
 }
 
-func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, cursor string) *http.Response {
+func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
 	t.Helper()
-	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/invoices"
-	if cursor != "" {
-		url += "?cursor=" + cursor
+	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", reqtest.Session(session))
+}
+
+func invoicesPath(engagementID string) string {
+	return "/engagements/" + engagementID + "/contract/invoices"
+}
+
+// janeClient is the Client whose name and email the Invoice tests assert
+// reach Stripe.
+var janeClient = fixture.NewClient(fixture.ClientName("Jane Client"), fixture.ClientEmail("jane@example.com"))
+
+// contractWithStatus seeds an Engagement at the Practice with a Contract
+// in status.
+func (e *env) contractWithStatus(status string, opts ...fixture.EngagementOption) (engagementID, contractID string) {
+	e.t.Helper()
+	engagementID = fixture.Engagement(e.t, e.db, e.Practice, opts...).ID
+	return engagementID, seedContractWithStatus(e.t, e.db, engagementID, status)
+}
+
+// raise raises an Invoice as the Staff member at the screen and returns
+// the 201 view.
+func (e *env) raise(engagementID string) payments.InvoiceView {
+	e.t.Helper()
+	return reqtest.Expect[payments.InvoiceView](e.t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
+		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{}))
+}
+
+// raiseWithMode is raise with the billing-mode answer (#271) on the request.
+func (e *env) raiseWithMode(engagementID, billingMode string) payments.InvoiceView {
+	e.t.Helper()
+	return reqtest.Expect[payments.InvoiceView](e.t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
+		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &billingMode}))
+}
+
+// refuseRaise raises an Invoice, requires the status want, and returns the
+// error envelope it carries.
+func (e *env) refuseRaise(engagementID string, want int, opts ...reqtest.Option) apierr.APIError {
+	e.t.Helper()
+	return e.postRefused(invoicesPath(engagementID), want, append([]reqtest.Option{reqtest.JSON(payments.CreateInvoiceRequest{})}, opts...)...)
+}
+
+func (e *env) listInvoices(engagementID string) payments.ListInvoicesResponse {
+	e.t.Helper()
+	return reqtest.Expect[payments.ListInvoicesResponse](e.t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
+}
+
+// requireNothingRaised proves a refusal reached neither Stripe nor the
+// invoices table.
+func (e *env) requireNothingRaised() {
+	e.t.Helper()
+	if got := len(e.Stripe.CreateInvoiceCalls); got != 0 {
+		e.t.Fatalf("CreateInvoice calls = %d, want 0 -- nothing must reach Stripe", got)
 	}
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	return resp
+	if got := invoiceCount(e.t, e.db); got != 0 {
+		e.t.Fatalf("invoices row count = %d, want 0", got)
+	}
 }
 
 // TestPostInvoiceHandler_NotConnectedRefuses proves an Invoice attempted
@@ -189,36 +226,18 @@ func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID,
 // itself from EngagementDetail.ClientsCanPay before the form is ever
 // shown.
 func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-gate-not-connected"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	client := payments.NewFakeClient()
+	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.refuseRaise(engagementID, http.StatusConflict)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
 	}
 	if out.Message != payments.MsgClientsCannotPay {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgClientsCannotPay)
 	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
+	e.requireNothingRaised()
 }
 
 // TestPostInvoiceHandler_RestrictedCardPaymentsRefuses proves the gate bug
@@ -230,37 +249,12 @@ func TestPostInvoiceHandler_NotConnectedRefuses(t *testing.T) {
 // let anyone pay it. The tightened gate refuses it the same way an
 // unconnected Practice is refused.
 func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-gate-restricted"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccountWithCardStatus(t, db, practiceID, accountID, "restricted")
+	e := newEnv(t, connectedWithCardStatus("restricted"))
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.refuseRaise(engagementID, http.StatusConflict)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
+	e.requireNothingRaised()
 }
 
 // TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500 proves
@@ -271,26 +265,14 @@ func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
 // existing account id, but not through a bare UPDATE -- 500s rather than
 // calling Stripe with an empty account id.
 func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-active-no-account"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedClientsCanPay(t, db, practiceID)
-	testdb.SeedBillingMode(t, db, practiceID, string(payments.BillingModeStripe))
-	client := payments.NewFakeClient()
+	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
+	testdb.SeedClientsCanPay(t, e.db, e.Practice.ID)
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.refuseRaise(engagementID, http.StatusInternalServerError)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never reach Stripe with an empty account id", len(client.CreateInvoiceCalls))
+	if got := len(e.Stripe.CreateInvoiceCalls); got != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never reach Stripe with an empty account id", got)
 	}
 }
 
@@ -301,35 +283,11 @@ func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing
 // else -- and the persisted row lands in 'open' status (Draft then
 // finalized).
 func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-create"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // any Staff with practice access, no owner gating
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected()) // any Staff with practice access, no owner gating
+	engagementID, contractID := e.signedContract(janeClient)
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.raise(engagementID)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.ContractID != contractID {
 		t.Fatalf("invoice.contractId = %q, want %q", out.ContractID, contractID)
 	}
@@ -346,12 +304,13 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("invoice.paidOn = %v, want nil", *out.PaidOn)
 	}
 
+	client := e.Stripe
 	if len(client.CreateInvoiceCalls) != 1 {
 		t.Fatalf("CreateInvoice calls = %d, want 1", len(client.CreateInvoiceCalls))
 	}
 	call := client.CreateInvoiceCalls[0]
-	if call.AccountID != accountID {
-		t.Fatalf("CreateInvoice accountID = %q, want %q", call.AccountID, accountID)
+	if call.AccountID != e.AccountID {
+		t.Fatalf("CreateInvoice accountID = %q, want %q", call.AccountID, e.AccountID)
 	}
 	// The Customer is resolved before the Invoice is raised (#780), and
 	// her name and email -- and nothing else, no clinical field -- are all
@@ -360,8 +319,8 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("CreateCustomer calls = %d, want 1", len(client.CreateCustomerCalls))
 	}
 	cust := client.CreateCustomerCalls[0]
-	if cust.AccountID != accountID {
-		t.Fatalf("CreateCustomer accountID = %q, want %q", cust.AccountID, accountID)
+	if cust.AccountID != e.AccountID {
+		t.Fatalf("CreateCustomer accountID = %q, want %q", cust.AccountID, e.AccountID)
 	}
 	if cust.CustomerEmail != "jane@example.com" || cust.CustomerName != "Jane Client" {
 		t.Fatalf("CreateCustomer customer = (%q, %q), want (%q, %q)", cust.CustomerName, cust.CustomerEmail, "Jane Client", "jane@example.com")
@@ -379,7 +338,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("FinalizeInvoice calls = %d, want 1", len(client.FinalizeInvoiceIDs))
 	}
 
-	if got := invoiceStatus(t, db, out.ID); got != invoiceStatusOpen {
+	if got := invoiceStatus(t, e.db, out.ID); got != invoiceStatusOpen {
 		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusOpen)
 	}
 }
@@ -393,49 +352,18 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 func TestPostInvoiceHandler_UnbillableContractRefused(t *testing.T) {
 	for _, status := range []string{"draft", "sent", "voided"} {
 		t.Run(status, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "invoice-unbillable-" + status
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-			seedContractWithStatus(t, db, engagementID, status)
-			client := payments.NewFakeClient()
-			accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-				PracticeID:   practiceID,
-				PracticeName: fixturePracticeName,
-				BusinessURL:  fixtureOwnSiteURL,
-			})
-			if err != nil {
-				t.Fatalf("fixture CreateAccount: %v", err)
-			}
-			seedConnectAccount(t, db, practiceID, accountID)
+			e := newEnv(t, signedInAs(fixture.Doula()), connected())
+			engagementID, _ := e.contractWithStatus(status)
 
-			srv, session := newInvoiceServer(t, db, uid, client)
-			defer srv.Close()
+			out := e.refuseRaise(engagementID, http.StatusConflict)
 
-			resp := postInvoice(t, srv, session, practiceID, engagementID)
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusConflict {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-			}
-			var out struct {
-				Message string `json:"message"`
-			}
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
 			if !strings.Contains(out.Message, status) {
 				t.Errorf("refusal message = %q, want it to name the actual status %q", out.Message, status)
 			}
-			if len(client.CreateInvoiceCalls) != 0 {
-				t.Fatalf("CreateInvoice calls = %d, want 0 -- nothing must reach Stripe", len(client.CreateInvoiceCalls))
+			if len(e.Stripe.CreateCustomerCalls) != 0 {
+				t.Fatalf("CreateCustomer calls = %d, want 0 -- nothing must reach Stripe", len(e.Stripe.CreateCustomerCalls))
 			}
-			if len(client.CreateCustomerCalls) != 0 {
-				t.Fatalf("CreateCustomer calls = %d, want 0 -- nothing must reach Stripe", len(client.CreateCustomerCalls))
-			}
-			if got := invoiceCount(t, db); got != 0 {
-				t.Fatalf("invoices row count = %d, want 0", got)
-			}
+			e.requireNothingRaised()
 		})
 	}
 }
@@ -444,103 +372,52 @@ func TestPostInvoiceHandler_UnbillableContractRefused(t *testing.T) {
 // ride-along: invoicing a Client with no email on file refuses rather
 // than sending an empty string to Stripe.
 func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-no-email"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
-	seedSignedContract(t, db, engagementID)
-	fakeClient := payments.NewFakeClient()
-	accountID, err := fakeClient.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected())
+	engagementID, _ := e.signedContract(fixture.NewClient(fixture.NoEmail()))
 
-	srv, session := newInvoiceServer(t, db, uid, fakeClient)
-	defer srv.Close()
+	out := e.refuseRaise(engagementID, http.StatusUnprocessableEntity)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
-	}
-	var out struct {
-		Message string `json:"message"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Message != payments.MsgClientNoEmail {
 		t.Errorf("message = %q, want %q", out.Message, payments.MsgClientNoEmail)
 	}
-	if len(fakeClient.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never send an empty string to Stripe", len(fakeClient.CreateInvoiceCalls))
+	if len(e.Stripe.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- must never send an empty string to Stripe", len(e.Stripe.CreateInvoiceCalls))
 	}
 }
 
 // TestPostInvoiceHandler_NoContractReturns404 proves an Engagement with no
 // Contract yet 404s rather than creating an Invoice against nothing.
 func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	engagementID := fixture.Engagement(t, e.db, e.Practice).ID
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.refuseRaise(engagementID, http.StatusNotFound)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
+	if len(e.Stripe.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0", len(e.Stripe.CreateInvoiceCalls))
 	}
 }
 
-// TestPostInvoiceHandler_MalformedEngagementIDReturns400 proves a
-// syntactically invalid :engagementId is rejected before any DB lookup.
-func TestPostInvoiceHandler_MalformedEngagementIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-malformed-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoice(t, srv, session, practiceID, notAUUID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+// TestInvoiceHandlers_RefuseABadEngagementID proves a syntactically
+// invalid :engagementId is rejected before any DB lookup, and a
+// well-formed but unknown one 404s, on both the raise and the list.
+func TestInvoiceHandlers_RefuseABadEngagementID(t *testing.T) {
+	cases := []struct {
+		name         string
+		method       string
+		engagementID string
+		want         int
+	}{
+		{"raising on an id that is not a uuid", http.MethodPost, notAUUID, http.StatusBadRequest},
+		{"raising on an unknown Engagement", http.MethodPost, unknownID, http.StatusNotFound},
+		{"listing on an id that is not a uuid", http.MethodGet, notAUUID, http.StatusBadRequest},
+		{"listing on an unknown Engagement", http.MethodGet, unknownID, http.StatusNotFound},
 	}
-}
-
-// TestPostInvoiceHandler_EngagementNotFoundReturns404 proves a
-// well-formed but unknown :engagementId 404s.
-func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-unknown-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoice(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.expect(tc.method, invoicesPath(tc.engagementID), tc.want)
+		})
 	}
 }
 
@@ -554,28 +431,12 @@ func TestPostInvoiceHandler_EngagementNotFoundReturns404(t *testing.T) {
 // that let the handler run and fail some other way wouldn't pass this
 // test by accident.
 func TestPostInvoiceHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-contractor-unattached"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.refuseRaise(engagementID, http.StatusNotFound)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 -- the reach test must refuse before the handler runs", len(client.CreateInvoiceCalls))
-	}
+	e.requireNothingRaised()
 }
 
 // TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds proves
@@ -584,24 +445,14 @@ func TestPostInvoiceHandler_ContractorWithoutAttachmentNotFound(t *testing.T) {
 // as anyone else -- reach, not role, is what #68 and this route's own
 // AttachingWrite gate on.
 func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-contractor-attached"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	engagementID, _ := e.signedContract(fixture.WithDoula(e.Staff))
+	byHand := string(payments.BillingModeByHand)
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	body := reqtest.ExpectBody(t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
+		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &byHand}))
 
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	if got := invoiceCount(t, db); got != 1 {
+	if got := invoiceCount(t, e.db); got != 1 {
 		t.Fatalf("invoices row count = %d, want 1", got)
 	}
 
@@ -610,7 +461,7 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	// agreed fee only -- never the Practice's price"). The 201 says the
 	// Invoice exists and which rail it went on, and names no amount.
 	var fields map[string]jsontext.Value
-	if err := json.UnmarshalRead(resp.Body, &fields); err != nil {
+	if err := json.Unmarshal(body, &fields); err != nil {
 		t.Fatalf("decode response: %v", err)
 	}
 	for _, key := range []string{"amountCents", "currency", "refundedCents", "activePaymentId"} {
@@ -619,23 +470,12 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 		}
 	}
 	var raised payments.RaisedInvoice
-	if err := json.Unmarshal(mustMarshal(t, fields), &raised); err != nil {
+	if err := json.Unmarshal(body, &raised); err != nil {
 		t.Fatalf("decode raised invoice: %v", err)
 	}
-	if raised.ID == "" || raised.BillingMode != string(payments.BillingModeByHand) {
-		t.Fatalf("raised = %+v, want an id and billingMode %q", raised, payments.BillingModeByHand)
+	if raised.ID == "" || raised.BillingMode != byHand {
+		t.Fatalf("raised = %+v, want an id and billingMode %q", raised, byHand)
 	}
-}
-
-// mustMarshal re-encodes a decoded JSON object, so one response body can
-// be read both as raw keys and as a typed value.
-func mustMarshal(t *testing.T, v any) []byte {
-	t.Helper()
-	out, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	return out
 }
 
 // TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody proves
@@ -648,43 +488,20 @@ func mustMarshal(t *testing.T, v any) []byte {
 // never reach the created Invoice, Stripe's own CreateInvoice call, or
 // the invoice_raised activity entry.
 func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-amount-from-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected())
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
+		e.signedIn, reqtest.RawJSON([]byte(`{"amountCents": 999}`)))
 
-	resp := postInvoiceBody(t, srv, session, practiceID, engagementID, `{"amountCents": 999}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.AmountCents != 15000 {
 		t.Fatalf("invoice.amountCents = %d, want 15000 (the Contract's, not the attempted 999)", out.AmountCents)
 	}
-	if len(client.CreateInvoiceCalls) != 1 || client.CreateInvoiceCalls[0].AmountCents != 15000 {
-		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", client.CreateInvoiceCalls)
+	if calls := e.Stripe.CreateInvoiceCalls; len(calls) != 1 || calls[0].AmountCents != 15000 {
+		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", calls)
 	}
 
-	diff := testdb.Scalar[[]byte](t, db.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
+	diff := testdb.Scalar[[]byte](t, e.db.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
 	var decoded struct {
 		AmountCents int64 `json:"amountCents"`
 	}
@@ -699,106 +516,47 @@ func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) 
 // TestPostInvoiceHandler_InvalidBodyReturns400 proves malformed JSON is
 // rejected.
 func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-invalid-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected())
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoiceBody(t, srv, session, practiceID, engagementID, `not-json`)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
+	e.refuseRaise(engagementID, http.StatusBadRequest, reqtest.RawJSON([]byte(`not-json`)))
 }
 
-// TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing
-// proves a Stripe failure while creating the draft Invoice surfaces as an
-// internal error and never persists a row (the port failed before any
-// insert happened).
-func TestPostInvoiceHandler_CreateInvoiceFailureReturns500AndPersistsNothing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-create-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
+// TestPostInvoiceHandler_StripeFailureLeavesTheRightRows proves what a
+// Stripe failure leaves behind. A failure creating the draft surfaces as
+// an internal error and never persists a row (the port failed before any
+// insert happened). A failure finalizing it, after the draft was created
+// on Stripe and inserted locally, still leaves the draft row committed --
+// DoulaCloud never loses track of an Invoice that exists on Stripe.
+func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
+	cases := []struct {
+		name       string
+		fail       func(*payments.FakeClient)
+		wantRows   int
+		wantStatus string
+	}{
+		{"creating the draft", func(c *payments.FakeClient) { c.CreateInvoiceErr = errStripeFake }, 0, ""},
+		{"finalizing the draft", func(c *payments.FakeClient) { c.FinalizeInvoiceErr = errStripeFake }, 1, invoiceStatusDraft},
 	}
-	seedConnectAccount(t, db, practiceID, accountID)
-	client.CreateInvoiceErr = errStripeFake
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stripe := payments.NewFakeClient()
+			tc.fail(stripe)
+			e := newEnv(t, signedInAs(fixture.Doula()), withStripe(stripe), connected())
+			engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+			e.refuseRaise(engagementID, http.StatusInternalServerError)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
-}
-
-// TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft
-// proves that if FinalizeInvoice fails after the draft Invoice was
-// already created on Stripe and inserted locally, the 500 response still
-// leaves the draft row committed -- DoulaCloud never loses track of an
-// Invoice that exists on Stripe.
-func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-finalize-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
-	client.FinalizeInvoiceErr = errStripeFake
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if got := invoiceCount(t, db); got != 1 {
-		t.Fatalf("invoices row count = %d, want 1", got)
-	}
-	status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM invoices LIMIT 1`)
-	if status != invoiceStatusDraft {
-		t.Fatalf("persisted invoice status = %q, want %q", status, invoiceStatusDraft)
+			if got := invoiceCount(t, e.db); got != tc.wantRows {
+				t.Fatalf("invoices row count = %d, want %d", got, tc.wantRows)
+			}
+			if tc.wantRows == 0 {
+				return
+			}
+			if status := testdb.Scalar[string](t, e.db.Admin, `SELECT status FROM invoices LIMIT 1`); status != tc.wantStatus {
+				t.Fatalf("persisted invoice status = %q, want %q", status, tc.wantStatus)
+			}
+		})
 	}
 }
 
@@ -808,31 +566,16 @@ func TestPostInvoiceHandler_FinalizeInvoiceFailureReturns500ButPersistsDraft(t *
 // that replaced it -- listing is scoped to the Engagement, not just "the
 // current Contract row".
 func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-across-void"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	voidedContractID := seedContractWithStatus(t, db, engagementID, "voided")
-	currentContractID := seedDraftContract(t, db, engagementID)
+	e := newEnv(t)
+	engagementID, voidedContractID := e.contractWithStatus("voided")
+	currentContractID := seedDraftContract(t, e.db, engagementID)
 
 	base := time.Now().Add(-time.Hour)
-	oldInvoiceID := seedInvoice(t, db, practiceID, voidedContractID, "in_old", invoiceStatusPaid, 10000, base)
-	newInvoiceID := seedInvoice(t, db, practiceID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
+	oldInvoiceID := seedInvoice(t, e.db, e.Practice.ID, voidedContractID, "in_old", invoiceStatusPaid, 10000, base)
+	newInvoiceID := seedInvoice(t, e.db, e.Practice.ID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
 
-	client := payments.NewFakeClient()
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.listInvoices(engagementID)
 
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.HasMore {
 		t.Fatal("hasMore = true, want false")
 	}
@@ -853,28 +596,16 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 // the evening of Oct 24 in the Practice's New York; read as an instant it
 // would be a day early.
 func TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-paid-at"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
-	seedManualPayment(t, db, invoiceID, methodCheck, "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
+	e := newEnv(t)
+	engagementID, contractID := e.contractWithStatus("draft")
+	invoiceID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
+	seedManualPayment(t, e.db, invoiceID, methodCheck, "")
+	if _, err := e.db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
 		t.Fatalf("seed paid_at: %v", err)
 	}
 
-	client := payments.NewFakeClient()
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.listInvoices(engagementID)
 
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-
-	var out payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if len(out.Items) != 1 || out.Items[0].PaidOn == nil {
 		t.Fatalf("items = %+v, want one item with paidOn set", out.Items)
 	}
@@ -883,91 +614,28 @@ func TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	}
 }
 
-// TestGetInvoicesHandler_MalformedEngagementIDReturns400 proves a
-// syntactically invalid :engagementId is rejected before any DB lookup.
-func TestGetInvoicesHandler_MalformedEngagementIDReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-malformed-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, notAUUID, "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestGetInvoicesHandler_EngagementNotFoundReturns404 proves a
-// well-formed but unknown :engagementId 404s.
-func TestGetInvoicesHandler_EngagementNotFoundReturns404(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-unknown-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000", "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
 // TestGetInvoicesHandler_EmptyBeforeAnyContract proves an Engagement with
 // no Contract (and therefore no Invoices) yet returns an empty list, not
-// a 404 -- listing tolerates "nothing yet" the way creation doesn't.
+// a 404 -- listing tolerates "nothing yet" the way creation doesn't. An
+// employed Doula reaches the per-Engagement Invoice history the same as
+// an Owner or Admin (ADR-0008's money row as amended by #282).
 func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-no-contract"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	cases := []struct {
+		name string
+		who  fixture.StaffOption
+	}{
+		{"an Owner", fixture.Owner()},
+		{caseDoula, fixture.Doula()},
 	}
-	var out payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if len(out.Items) != 0 {
-		t.Fatalf("items = %d, want 0", len(out.Items))
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.who))
+			engagementID := fixture.Engagement(t, e.db, e.Practice).ID
 
-// TestGetInvoicesHandler_EmployedDoulaSees proves ADR-0008's money row
-// as amended by #282: an employed Doula reaches the per-Engagement
-// Invoice history the same as an Owner or Admin. Filed alongside #969:
-// no test previously asserted this route's role rule at all.
-func TestGetInvoicesHandler_EmployedDoulaSees(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-employee"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+			if out := e.listInvoices(engagementID); len(out.Items) != 0 {
+				t.Fatalf("items = %d, want 0", len(out.Items))
+			}
+		})
 	}
 }
 
@@ -975,29 +643,17 @@ func TestGetInvoicesHandler_EmployedDoulaSees(t *testing.T) {
 // invoicePageSize (30) sets hasMore/nextCursor, and that cursor correctly
 // resumes on the next page.
 func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-paginate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
+	e := newEnv(t)
+	engagementID, contractID := e.contractWithStatus("draft")
 
 	const total = 31
 	base := time.Now().Add(-time.Hour)
 	ids := make([]string, total)
 	for i := range total {
-		ids[i] = seedInvoice(t, db, practiceID, contractID, "in_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
+		ids[i] = seedInvoice(t, e.db, e.Practice.ID, contractID, "in_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
 	}
 
-	client := payments.NewFakeClient()
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	first := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer first.Body.Close()
-	var firstPage payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(first.Body, &firstPage); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	firstPage := e.listInvoices(engagementID)
 	if !firstPage.HasMore {
 		t.Fatal("hasMore = false on first page, want true")
 	}
@@ -1012,12 +668,8 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 		t.Fatalf("first page items[0] = %q, want %q (newest)", firstPage.Items[0].ID, ids[total-1])
 	}
 
-	second := getInvoices(t, srv, session, practiceID, engagementID, *firstPage.NextCursor)
-	defer second.Body.Close()
-	var secondPage payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(second.Body, &secondPage); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	secondPage := reqtest.Expect[payments.ListInvoicesResponse](t, http.MethodGet,
+		e.url(invoicesPath(engagementID)+"?cursor="+*firstPage.NextCursor), http.StatusOK, e.signedIn)
 	if secondPage.HasMore {
 		t.Fatal("hasMore = true on second page, want false")
 	}
@@ -1029,45 +681,28 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	}
 }
 
+// invalidCursors are the ways a caller-supplied cursor can fail to decode.
+var invalidCursors = map[string]string{
+	// '!' is outside the URL-safe base64 alphabet and has no special
+	// meaning in a query string (unlike '%'), so this fails to decode
+	// without confusing percent-encoding.
+	"not valid base64":            "!!!not-valid-base64!!!",
+	"valid base64, no separator":  base64.URLEncoding.EncodeToString([]byte("nosep")),
+	"valid base64, bad timestamp": base64.URLEncoding.EncodeToString([]byte("not-a-time|some-id")),
+}
+
 // TestGetInvoicesHandler_InvalidCursorReturns400 proves every way a
 // caller-supplied cursor can fail to decode is rejected with 400, rather
 // than a panic or a silently wrong page.
 func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-bad-cursor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	client := payments.NewFakeClient()
+	e := newEnv(t)
+	engagementID := fixture.Engagement(t, e.db, e.Practice).ID
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	cases := map[string]string{
-		// '!' is outside the URL-safe base64 alphabet and has no special
-		// meaning in a query string (unlike '%'), so this fails to decode
-		// without confusing percent-encoding.
-		"not valid base64":            "!!!not-valid-base64!!!",
-		"valid base64, no separator":  base64.URLEncoding.EncodeToString([]byte("nosep")),
-		"valid base64, bad timestamp": base64.URLEncoding.EncodeToString([]byte("not-a-time|some-id")),
+	for name, cursor := range invalidCursors {
+		t.Run(name, func(*testing.T) {
+			e.expect(http.MethodGet, invoicesPath(engagementID)+"?cursor="+cursor, http.StatusBadRequest)
+		})
 	}
-	for name, cursor := range cases {
-		resp := getInvoices(t, srv, session, practiceID, engagementID, cursor)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, want %d", name, resp.StatusCode, http.StatusBadRequest)
-		}
-	}
-}
-
-// postInvoiceWithBillingMode is postInvoiceBody with a billingMode field
-// set on the request, for #271's "ask once, inline" path.
-func postInvoiceWithBillingMode(t *testing.T, srv *httptest.Server, session, practiceID, engagementID, billingMode string) *http.Response {
-	t.Helper()
-	body, err := json.Marshal(payments.CreateInvoiceRequest{BillingMode: &billingMode})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	return postInvoiceBody(t, srv, session, practiceID, engagementID, string(body))
 }
 
 // billingModeOfPractice reads practiceID's raw billing_mode column.
@@ -1081,29 +716,11 @@ func billingModeOfPractice(t *testing.T, db *testdb.DB, practiceID string) (mode
 // refusal when a Practice has never chosen a billing mode and the request
 // raising its first Invoice supplies none either.
 func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-billing-mode-required"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
+	e := newEnv(t)
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.refuseRaise(engagementID, http.StatusUnprocessableEntity)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
-	}
-	var out struct {
-		Message string            `json:"message"`
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Message != payments.MsgBillingModeRequired {
 		t.Fatalf("message = %q, want %q", out.Message, payments.MsgBillingModeRequired)
 	}
@@ -1112,110 +729,49 @@ func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
 	if got := out.Details["billingMode"]; got != payments.DetailBillingModeRequired {
 		t.Fatalf("details.billingMode = %q, want %q", got, payments.DetailBillingModeRequired)
 	}
-	if got := invoiceCount(t, db); got != 0 {
+	if got := invoiceCount(t, e.db); got != 0 {
 		t.Fatalf("invoices row count = %d, want 0", got)
 	}
 }
 
-// TestPostInvoiceHandler_BillingModeInvalidValueRefused proves a
-// nonsense billingMode value 400s rather than being written.
-func TestPostInvoiceHandler_BillingModeInvalidValueRefused(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-billing-mode-invalid"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, "cash_app")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	mode, ok := billingModeOfPractice(t, db, practiceID)
-	if ok {
-		t.Fatalf("billing_mode = %q, want unset after a rejected value", mode)
-	}
-}
-
-// TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode
+// TestPostInvoiceHandler_RefusedFirstInvoiceDoesNotLockInBillingMode
 // proves a Practice's first-ever billing_mode choice is not persisted
-// when the Invoice it was named on then fails downstream --
-// staffauth.Middleware commits this package's tx even on a non-2xx
-// response, so a naive "persist as soon as chosen" would durably lock in
-// a mode nobody's Invoice ever actually used.
-func TestPostInvoiceHandler_FailedFirstInvoiceDoesNotLockInBillingMode(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-billing-mode-not-locked-in"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
-	seedSignedContract(t, db, engagementID)
-	fakeClient := payments.NewFakeClient()
-	accountID, err := fakeClient.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
+// when the Invoice it was named on is refused -- staffauth.Middleware
+// commits this package's tx even on a non-2xx response, so a naive
+// "persist as soon as chosen" would durably lock in a mode nobody's
+// Invoice ever actually used. #1590's case is the 409 for a Practice with
+// no Stripe account: the next visit asks the question again.
+func TestPostInvoiceHandler_RefusedFirstInvoiceDoesNotLockInBillingMode(t *testing.T) {
+	cases := []struct {
+		name       string
+		opts       []envOption
+		client     []fixture.ClientOption
+		mode       string
+		wantStatus int
+	}{
+		{"a value that is not a billing mode", nil, nil, "cash_app", http.StatusBadRequest},
+		{
+			"a Client with no email, on a connected Practice",
+			[]envOption{signedInAs(fixture.Doula()), connectedBillingUnset()},
+			[]fixture.ClientOption{fixture.NoEmail()},
+			string(payments.BillingModeStripe), http.StatusUnprocessableEntity,
+		},
+		{"a Practice with no Stripe account", []envOption{signedInAs(fixture.Doula())}, nil, string(payments.BillingModeStripe), http.StatusConflict},
 	}
-	// Connected and card-payments-active, but billing_mode left unset --
-	// unlike seedConnectAccount, which stands in a billing_mode=stripe
-	// row for every other test's convenience.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET stripe_connect_account_id = $1, stripe_connect_card_payments_status = 'active' WHERE id = $2`,
-		accountID, practiceID,
-	); err != nil {
-		t.Fatalf("seed connect account: %v", err)
-	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, tc.opts...)
+			engagementID, _ := e.signedContract(fixture.NewClient(tc.client...))
 
-	srv, session := newInvoiceServer(t, db, uid, fakeClient)
-	defer srv.Close()
+			e.refuseRaise(engagementID, tc.wantStatus, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &tc.mode}))
 
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusUnprocessableEntity {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusUnprocessableEntity)
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
-	_, ok := billingModeOfPractice(t, db, practiceID)
-	if ok {
-		t.Fatalf("billing_mode was persisted even though the Invoice it was chosen for failed -- want it left unset")
-	}
-}
-
-// TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode
-// is #1590's case: a first Invoice refused because the Practice has no
-// Stripe account (409) saves no billing mode, so the next visit asks the
-// question again.
-func TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-no-stripe-account-not-locked-in"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Has Email Client", "client@example.test")
-	seedSignedContract(t, db, engagementID)
-
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
-
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-	if got := invoiceCount(t, db); got != 0 {
-		t.Fatalf("invoices row count = %d, want 0", got)
-	}
-	if _, ok := billingModeOfPractice(t, db, practiceID); ok {
-		t.Fatalf("billing_mode is set, want it left unset")
+			if got := invoiceCount(t, e.db); got != 0 {
+				t.Fatalf("invoices row count = %d, want 0", got)
+			}
+			if mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID); ok {
+				t.Fatalf("billing_mode = %q, want it left unset after a refused first Invoice", mode)
+			}
+		})
 	}
 }
 
@@ -1224,26 +780,11 @@ func TestPostInvoiceHandler_RefusedForNoStripeAccountDoesNotLockInBillingMode(t 
 // a sequence-derived reference, and the Practice's billing_mode is
 // persisted from the request's first-ever value.
 func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-by-hand-create"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	engagementID, contractID := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
 
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.ContractID != contractID {
 		t.Fatalf("invoice.contractId = %q, want %q", out.ContractID, contractID)
 	}
@@ -1256,13 +797,13 @@ func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
 	if out.Reference != "INV-0001" {
 		t.Fatalf("invoice.reference = %q, want %q", out.Reference, "INV-0001")
 	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 -- a by-hand Invoice must never reach Stripe", len(client.CreateInvoiceCalls))
+	if len(e.Stripe.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- a by-hand Invoice must never reach Stripe", len(e.Stripe.CreateInvoiceCalls))
 	}
-	if len(client.FinalizeInvoiceIDs) != 0 {
-		t.Fatalf("FinalizeInvoice calls = %d, want 0", len(client.FinalizeInvoiceIDs))
+	if len(e.Stripe.FinalizeInvoiceIDs) != 0 {
+		t.Fatalf("FinalizeInvoice calls = %d, want 0", len(e.Stripe.FinalizeInvoiceIDs))
 	}
-	mode, ok := billingModeOfPractice(t, db, practiceID)
+	mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}
@@ -1272,37 +813,19 @@ func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
 // proves the per-Practice reference sequence claims a distinct number for
 // each by-hand Invoice, in order.
 func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-by-hand-sequence"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	first := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
-	var firstOut payments.InvoiceView
-	if err := json.UnmarshalRead(first.Body, &firstOut); err != nil {
-		t.Fatalf("decode first response: %v", err)
-	}
-	_ = first.Body.Close()
-
+	first := e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
 	// The mode is already set now, so the second request need not (and,
 	// per #271, must not have its own value honored) repeat billingMode.
-	second := postInvoice(t, srv, session, practiceID, engagementID)
-	var secondOut payments.InvoiceView
-	if err := json.UnmarshalRead(second.Body, &secondOut); err != nil {
-		t.Fatalf("decode second response: %v", err)
-	}
-	_ = second.Body.Close()
+	second := e.raise(engagementID)
 
-	if firstOut.Reference != "INV-0001" {
-		t.Fatalf("first reference = %q, want %q", firstOut.Reference, "INV-0001")
+	if first.Reference != "INV-0001" {
+		t.Fatalf("first reference = %q, want %q", first.Reference, "INV-0001")
 	}
-	if secondOut.Reference != "INV-0002" {
-		t.Fatalf("second reference = %q, want %q", secondOut.Reference, "INV-0002")
+	if second.Reference != "INV-0002" {
+		t.Fatalf("second reference = %q, want %q", second.Reference, "INV-0002")
 	}
 }
 
@@ -1312,32 +835,19 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 // Invoice-raise request naming a different mode is silently ignored
 // (the established mode governs), never silently switched.
 func TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-by-hand-ignore-later-mode"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	first := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
-	_ = first.Body.Close()
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	engagementID, _ := e.signedContract()
+	e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
 
 	// This request names "stripe", but the Practice already chose
 	// by_hand -- it must be ignored, and this Invoice raised by hand too.
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeStripe))
-	defer resp.Body.Close()
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+	out := e.raiseWithMode(engagementID, string(payments.BillingModeStripe))
+
 	if out.BillingMode != string(payments.BillingModeByHand) {
 		t.Fatalf("invoice.billingMode = %q, want %q (the already-established mode)", out.BillingMode, payments.BillingModeByHand)
 	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0 -- billingMode=stripe must be ignored once a mode is set", len(client.CreateInvoiceCalls))
+	if len(e.Stripe.CreateInvoiceCalls) != 0 {
+		t.Fatalf("CreateInvoice calls = %d, want 0 -- billingMode=stripe must be ignored once a mode is set", len(e.Stripe.CreateInvoiceCalls))
 	}
 }
 
@@ -1345,22 +855,10 @@ func TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest(t *testi
 // amends #430's refusal (errClientNoEmail): a by-hand Invoice mails
 // nothing, so an absent Client email must not block it.
 func TestPostInvoiceHandler_ByHandInvoiceClientWithNoEmailStillSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-by-hand-no-email"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
+	e := newEnv(t, signedInAs(fixture.Doula()))
+	engagementID, _ := e.signedContract(fixture.NewClient(fixture.NoEmail()))
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	resp := postInvoiceWithBillingMode(t, srv, session, practiceID, engagementID, string(payments.BillingModeByHand))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
+	e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
 }
 
 // TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference proves
@@ -1368,31 +866,11 @@ func TestPostInvoiceHandler_ByHandInvoiceClientWithNoEmailStillSucceeds(t *testi
 // persisted Invoice's reference is Stripe's own `number`, not its
 // internal invoice id.
 func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-stripe-reference"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	client := payments.NewFakeClient()
-	accountID, err := client.CreateAccount(t.Context(), payments.AccountProfile{
-		PracticeID:   practiceID,
-		PracticeName: fixturePracticeName,
-		BusinessURL:  fixtureOwnSiteURL,
-	})
-	if err != nil {
-		t.Fatalf("fixture CreateAccount: %v", err)
-	}
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, connected())
+	engagementID, _ := e.signedContract()
 
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	out := e.raise(engagementID)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.BillingMode != string(payments.BillingModeStripe) {
 		t.Fatalf("invoice.billingMode = %q, want %q", out.BillingMode, payments.BillingModeStripe)
 	}
@@ -1405,22 +883,12 @@ func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.
 // listed by-hand Invoice (NULL stripe_invoice_id) reports
 // billingMode="by_hand" -- billingModeOf's NULL branch.
 func TestGetInvoicesHandler_ByHandInvoiceReportsByHandBillingMode(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-list-by-hand-mode"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	seedByHandInvoice(t, db, practiceID, contractID)
+	e := newEnv(t)
+	engagementID, contractID := e.signedContract()
+	seedByHandInvoice(t, e.db, e.Practice.ID, contractID)
 
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	out := e.listInvoices(engagementID)
 
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-	var out payments.ListInvoicesResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(out.Items))
 	}
