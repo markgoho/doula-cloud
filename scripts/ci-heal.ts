@@ -46,13 +46,10 @@ function readRun(): Run {
       fail(`REPLAY_RUN_ID must be a run id (digits only), got "${replayId}"`);
     }
     const replayed = JSON.parse(
-      gh(['api', `repos/${repo}/actions/runs/${replayId}`])
+      gh(['api', `repos/${repo}/actions/runs/${replayId}/attempts/1`])
     ) as Run;
     // A replay asks what would happen on the first attempt; a run that
-    // was healed or rerun by hand is at a later attempt by now.
-    console.log(
-      `replay: the run is at attempt ${replayed.run_attempt ?? 1}; reading attempt 1`
-    );
+    // was healed or rerun by hand has a later conclusion by now.
     return { ...replayed, run_attempt: 1 };
   }
   const event = JSON.parse(

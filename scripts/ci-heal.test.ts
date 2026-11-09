@@ -54,7 +54,7 @@ function standIn(jobs: object[], logs: Record<number, string>, run = {}) {
       'const log = endpoint.match(/\\/jobs\\/(\\d+)\\/logs$/);',
       "if (log) console.log(f.logs[log[1]] ?? '');",
       'else if (/\\/attempts\\/\\d+\\/jobs/.test(endpoint)) console.log(JSON.stringify({ jobs: f.jobs }));',
-      'else if (/\\/actions\\/runs\\/\\d+$/.test(endpoint)) console.log(JSON.stringify(f.run));',
+      'else if (/\\/actions\\/runs\\/\\d+(\\/attempts\\/1)?$/.test(endpoint)) console.log(JSON.stringify(f.run));',
       "else console.log('{}');",
       '',
     ].join('\n'),
