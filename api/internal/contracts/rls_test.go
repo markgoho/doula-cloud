@@ -8,20 +8,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// updatedRows runs an UPDATE on tx and returns how many rows it touched.
-func updatedRows(t *testing.T, tx *sql.Tx, query string, args ...any) int64 {
-	t.Helper()
-	result, err := tx.ExecContext(t.Context(), query, args...)
-	if err != nil {
-		t.Fatalf("update contracts: %v", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		t.Fatalf("rows affected: %v", err)
-	}
-	return rows
-}
-
 // clientsContract is a Client with a Contract at status on her own
 // Engagement, and the Engagement of another Client of the same Practice
 // with a Contract at the same status.
@@ -62,10 +48,7 @@ func TestRLS_ContractTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Some Practice")
 	seedContractTemplate(t, db, practiceID, "Some prose")
 
-	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM contract_templates`)
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, db, "contract_templates")
 }
 
 // TestRLS_ContractTemplatesVisibilityIsScopedToCurrentPractice proves the
@@ -100,7 +83,7 @@ func TestRLS_ContractTemplatesUpdateRejectedAcrossPractice(t *testing.T) {
 
 	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	rows := updatedRows(t, tx, `UPDATE contract_templates SET prose = 'hacked' WHERE practice_id = $1`, practiceB)
+	rows := testdb.RowsAffected(t, tx, `UPDATE contract_templates SET prose = 'hacked' WHERE practice_id = $1`, practiceB)
 	if rows != 0 {
 		t.Fatalf("expected 0 rows affected editing a Contract Template at a different Practice, got %d", rows)
 	}
@@ -119,10 +102,7 @@ func TestRLS_ContractsFailsClosedWithNoSessionVarSet(t *testing.T) {
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	seedContract(t, db, engagementID, statusDraft, "Some prose")
 
-	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM contracts`)
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, db, "contracts")
 }
 
 // TestRLS_ContractsSelectIsScopedViaEngagementsExistsSubquery proves the
@@ -160,7 +140,7 @@ func TestRLS_ContractsUpdateRejectedAcrossPractice(t *testing.T) {
 
 	tx := db.BeginAs(t, testdb.Practice(practiceA))
 
-	rows := updatedRows(t, tx, `UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`, engagementB)
+	rows := testdb.RowsAffected(t, tx, `UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`, engagementB)
 	if rows != 0 {
 		t.Fatalf("expected 0 rows affected editing a Contract at a different Practice, got %d", rows)
 	}
@@ -237,7 +217,7 @@ func TestRLS_ContractsClientSignsOnlyHerOwnSentContract(t *testing.T) {
 			}
 			tx := seeded.asClient(t)
 
-			rows := updatedRows(t, tx, `UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`, engagementID)
+			rows := testdb.RowsAffected(t, tx, `UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`, engagementID)
 			if rows != c.want {
 				t.Fatalf("signing: %d rows affected, want %d", rows, c.want)
 			}

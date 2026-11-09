@@ -200,3 +200,23 @@ func ExpectStatus(t *testing.T, method, url string, want int, opts ...Option) {
 	defer func() { _ = resp.Body.Close() }()
 	RequireStatus(t, resp, want)
 }
+
+// PDF is what a route that serves a PDF answered: the name it offers the
+// download under, and the bytes.
+type PDF struct {
+	Disposition string
+	Body        []byte
+}
+
+// ExpectPDF sends one request and requires a 200 whose Content-Type is
+// application/pdf, for a test whose subject is the document served.
+func ExpectPDF(t *testing.T, method, url string, opts ...Option) PDF {
+	t.Helper()
+	resp := Do(t, method, url, opts...) //nolint:bodyclose // ReadBody closes the body
+	RequireStatus(t, resp, http.StatusOK)
+	if ct := resp.Header.Get("Content-Type"); ct != "application/pdf" {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("Content-Type = %q, want application/pdf", ct)
+	}
+	return PDF{Disposition: resp.Header.Get("Content-Disposition"), Body: ReadBody(t, resp)}
+}

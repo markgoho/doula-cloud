@@ -12,40 +12,22 @@ import (
 // sent, nothing for a Draft her RLS hides, and the newest she may see,
 // with when she signed it, once there is one.
 func TestClientContractGlance(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Riverside Doulas")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	read := func(t *testing.T) (contracts.ClientGlance, bool) {
-		t.Helper()
-		tx := db.BeginAs(t, testdb.Client(clientID))
-		defer func() { _ = tx.Rollback() }()
-		glance, found, err := contracts.ClientContractGlance(t.Context(), tx, engagementID)
-		if err != nil {
-			t.Fatalf("glance: %v", err)
-		}
-		return glance, found
+	e := newEnv(t)
+	read := func() (contracts.ClientGlance, bool) {
+		return testdb.ReadAs(t, e.db, testdb.Client(e.Engagement.Client.ID), e.Engagement.ID, contracts.ClientContractGlance)
 	}
 
-	if _, found := read(t); found {
+	if _, found := read(); found {
 		t.Fatalf("found a Contract before any exists")
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'draft', 'Test prose', 15000)`,
-		engagementID); err != nil {
-		t.Fatalf("seed draft: %v", err)
-	}
-	if _, found := read(t); found {
+	e.seedDraft()
+	if _, found := read(); found {
 		t.Fatalf("found a Draft, want it hidden from her")
 	}
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE contracts SET status = 'signed', signed_at = '2026-08-14T15:00:00Z' WHERE engagement_id = $1`,
-		engagementID); err != nil {
-		t.Fatalf("sign contract: %v", err)
-	}
-	glance, found := read(t)
+	e.exec(`UPDATE contracts SET status = 'signed', signed_at = '2026-08-14T15:00:00Z' WHERE engagement_id = $1`, e.Engagement.ID)
+	glance, found := read()
 	if !found || glance.Status != statusSigned {
 		t.Fatalf("glance = %+v, found = %v, want a signed Contract", glance, found)
 	}

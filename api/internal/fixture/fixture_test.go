@@ -229,3 +229,19 @@ func TestSession_SignsAStaffMemberAndAClientIn(t *testing.T) {
 		t.Fatalf("client identity = %q, want %q", seen, c.PortalUID)
 	}
 }
+
+func TestRefusesEngagementsItCannotReach_ChecksBothRefusals(t *testing.T) {
+	db := testdb.New(t)
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /engagements/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.PathValue("id") == "not-a-uuid" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	fixture.RefusesEngagementsItCannotReach(t, db, http.MethodPut, func(id string) string { return srv.URL + "/engagements/" + id })
+}

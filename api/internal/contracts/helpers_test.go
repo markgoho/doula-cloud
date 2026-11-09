@@ -241,19 +241,7 @@ func (e *env) seedDraft() {
 // what follows "/contract", and opts carry the body the route reads.
 func (e *env) refusesEngagementsItCannotReach(method, path string, opts ...reqtest.Option) {
 	e.t.Helper()
-	other := testdb.SeedPractice(e.t, e.db, "Other Practice")
-	_, otherEngagementID := testdb.SeedEngagement(e.t, e.db, other)
-	cases := []struct {
-		name         string
-		engagementID string
-		want         int
-	}{
-		{"id is not a uuid", "not-a-uuid", http.StatusBadRequest},
-		{"engagement of another Practice", otherEngagementID, http.StatusNotFound},
-	}
-	for _, c := range cases {
-		e.t.Run(c.name, func(t *testing.T) {
-			reqtest.ExpectStatus(t, method, e.contractURLOf(c.engagementID, path), c.want, append([]reqtest.Option{e.signedIn}, opts...)...)
-		})
-	}
+	fixture.RefusesEngagementsItCannotReach(e.t, e.db, method, func(engagementID string) string {
+		return e.contractURLOf(engagementID, path)
+	}, append([]reqtest.Option{e.signedIn}, opts...)...)
 }

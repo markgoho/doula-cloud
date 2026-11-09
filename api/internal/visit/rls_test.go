@@ -3,6 +3,7 @@ package visit_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -12,49 +13,24 @@ import (
 // the handlers happen to agree with it.
 
 func TestRLS_VisitsFailsClosedWithNoPracticeSet(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "fail-closed-doula", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedVisit(t, db, engagementID, staffID)
+	e := newEnv(t)
+	seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
 
-	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM visits`)
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variables set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, e.db, "visits")
 }
 
 // TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery proves the
 // visits_practice_visibility policy narrows to Visits whose Engagement
 // belongs to app.current_practice_id, not to every Visit row globally.
 func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
-	db := testdb.New(t)
-	practiceA, staffA := testdb.SeedStaffAtNewPractice(t, db, "staff-visits-a", []string{doulaRole}, "employee")
-	practiceB, staffB := testdb.SeedStaffAtNewPractice(t, db, "staff-visits-b", []string{doulaRole}, "employee")
-	_, engagementA := testdb.SeedEngagement(t, db, practiceA)
-	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
-	visitAtA := seedVisit(t, db, engagementA, staffA)
-	seedVisit(t, db, engagementB, staffB)
+	a := newEnv(t)
+	practiceB := fixture.Practice(t, a.db)
+	visitAtA := seedVisit(t, a.db, a.Engagement.ID, a.Staff.ID)
+	seedVisit(t, a.db, fixture.Engagement(t, a.db, practiceB).ID, fixture.Staff(t, a.db, practiceB).ID)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := a.db.BeginAs(t, testdb.Practice(a.Practice.ID))
 
-	var visibleIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM visits`)
-	if err != nil {
-		t.Fatalf("query visits: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visibleIDs = append(visibleIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
-
-	if len(visibleIDs) != 1 || visibleIDs[0] != visitAtA {
+	if visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM visits`); len(visibleIDs) != 1 || visibleIDs[0] != visitAtA {
 		t.Fatalf("visible visits = %v, want only %q", visibleIDs, visitAtA)
 	}
 }
@@ -64,22 +40,13 @@ func TestRLS_VisitsSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 // Visit that belongs to Practice B's Engagement, even with the correct
 // visit id, because the row isn't visible to update in the first place.
 func TestRLS_VisitsUpdateRejectedAcrossPractice(t *testing.T) {
-	db := testdb.New(t)
-	practiceA, staffA := testdb.SeedStaffAtNewPractice(t, db, "staff-update-a", []string{doulaRole}, "employee")
-	practiceB, staffB := testdb.SeedStaffAtNewPractice(t, db, "staff-update-b", []string{doulaRole}, "employee")
-	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
-	visitAtB := seedVisit(t, db, engagementB, staffB)
+	a := newEnv(t)
+	practiceB := fixture.Practice(t, a.db)
+	visitAtB := seedVisit(t, a.db, fixture.Engagement(t, a.db, practiceB).ID, fixture.Staff(t, a.db, practiceB).ID)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := a.db.BeginAs(t, testdb.Practice(a.Practice.ID))
 
-	result, err := tx.ExecContext(t.Context(), `UPDATE visits SET staff_id = $1 WHERE id = $2`, staffA, visitAtB)
-	if err != nil {
-		t.Fatalf("update visits: %v", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		t.Fatalf("rows affected: %v", err)
-	}
+	rows := testdb.RowsAffected(t, tx, `UPDATE visits SET staff_id = $1 WHERE id = $2`, a.Staff.ID, visitAtB)
 	if rows != 0 {
 		t.Fatalf("expected 0 rows affected reassigning a Visit at a different Practice, got %d", rows)
 	}

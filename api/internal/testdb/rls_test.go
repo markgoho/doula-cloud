@@ -1,6 +1,8 @@
 package testdb_test
 
 import (
+	"context"
+	"database/sql"
 	"slices"
 	"testing"
 
@@ -53,5 +55,52 @@ func TestColumn_ReturnsNilForNoRows(t *testing.T) {
 
 	if got := testdb.Column[string](t, db.Admin, `SELECT id FROM engagements`); got != nil {
 		t.Fatalf("rows = %v, want none", got)
+	}
+}
+
+func TestRowsAffected_CountsTheRowsAWriteTouched(t *testing.T) {
+	db := testdb.New(t)
+	practice := testdb.SeedPractice(t, db, "Practice A")
+	_, engagement := testdb.SeedEngagement(t, db, practice)
+
+	tx := db.BeginAs(t, testdb.Practice(practice))
+	if got := testdb.RowsAffected(t, tx, `UPDATE engagements SET kind = kind WHERE id = $1`, engagement); got != 1 {
+		t.Fatalf("rows affected = %d, want 1", got)
+	}
+}
+
+func TestRowsAffected_IsZeroForRowsTheSessionCannotSee(t *testing.T) {
+	db := testdb.New(t)
+	_, engagement := testdb.SeedEngagement(t, db, testdb.SeedPractice(t, db, "Practice A"))
+	other := testdb.SeedPractice(t, db, "Practice B")
+
+	tx := db.BeginAs(t, testdb.Practice(other))
+	if got := testdb.RowsAffected(t, tx, `UPDATE engagements SET kind = kind WHERE id = $1`, engagement); got != 0 {
+		t.Fatalf("rows affected = %d, want 0", got)
+	}
+}
+
+func TestRequireFailsClosed_PassesWhenNoRowIsVisible(t *testing.T) {
+	db := testdb.New(t)
+	testdb.SeedEngagement(t, db, testdb.SeedPractice(t, db, "Practice A"))
+
+	testdb.RequireFailsClosed(t, db, "engagements")
+}
+
+func TestReadAs_ReadsInATransactionScopedToWho(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Practice A")
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	read := func(ctx context.Context, tx *sql.Tx, id string) (string, bool, error) {
+		var found string
+		err := tx.QueryRowContext(ctx, `SELECT id FROM engagements WHERE id = $1`, id).Scan(&found)
+		return found, err == nil, nil
+	}
+
+	if got, found := testdb.ReadAs(t, db, testdb.Client(clientID), engagementID, read); !found || got != engagementID {
+		t.Fatalf("the Client read %q, found = %v, want her own Engagement", got, found)
+	}
+	if _, found := testdb.ReadAs(t, db, testdb.Client("00000000-0000-0000-0000-000000000000"), engagementID, read); found {
+		t.Fatalf("a stranger found the Engagement, want it hidden")
 	}
 }

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierrtest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
@@ -96,124 +98,107 @@ func visitsURL(srvURL, practiceID, engagementID string) string {
 	return srvURL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/visits"
 }
 
-// The headline of #268: an Owner books a colleague onto a birth in one
-// request, with no reassign step after it.
-func TestCreateHandler_AssignsToTheNamedColleague(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-booking"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-booked", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+// create books a Visit on the Engagement as the Staff member at the
+// screen.
+func (e *env) create(request visit.CreateRequest, opts ...reqtest.Option) visit.CreateResponse {
+	e.t.Helper()
+	return reqtest.Expect[visit.CreateResponse](e.t, http.MethodPost, e.visitsURL(""), http.StatusCreated, append([]reqtest.Option{e.signedIn, reqtest.JSON(request)}, opts...)...)
+}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-	defer resp.Body.Close()
-	if out := decodeCreate(t, resp); out.StaffID != targetStaffID {
-		t.Fatalf("staffId = %q, want the named colleague %q", out.StaffID, targetStaffID)
+// refuseCreate proves a create is refused with want and writes no row.
+func (e *env) refuseCreate(request visit.CreateRequest, want int) {
+	e.t.Helper()
+	reqtest.ExpectStatus(e.t, http.MethodPost, e.visitsURL(""), want, e.signedIn, reqtest.JSON(request))
+	if got := countVisits(e.t, e.db, e.Engagement.ID); got != 0 {
+		e.t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
 	}
 }
 
-// The rule the Add-a-Visit picker leans on, guarded here so it cannot
-// move under the screen (#909): a request that names nobody is a Visit
-// for the caller. It is why a plain Doula is never asked the question at
-// all, and therefore why a Doula who owns her Practice is offered her own
-// name as a standing answer rather than an empty required field.
-func TestCreateHandler_AnAbsentAssigneeIsTheCaller(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-logging-her-own"
-	practiceID, callerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+// reassign hands a Visit to staffID as the Staff member at the screen and
+// requires want.
+func (e *env) reassign(visitID, staffID string, want int) {
+	e.t.Helper()
+	reqtest.ExpectStatus(e.t, http.MethodPatch, e.visitsURL("/"+visitID), want, e.signedIn, reqtest.JSON(visit.ReassignRequest{StaffID: staffID}))
+}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+// requireAttachment proves staffID holds an open granted Attachment on the
+// Engagement, attached by attachedBy.
+func (e *env) requireAttachment(staffID, attachedBy, who string) {
+	e.t.Helper()
+	origin, got, exists := attachment(e.t, e.db, e.Engagement.ID, staffID)
+	if !exists {
+		e.t.Fatalf("no attachment for %s", who)
+	}
+	if origin != grantedOrigin || got != attachedBy {
+		e.t.Fatalf("attachment = %s by %s, want granted by %s", origin, got, attachedBy)
+	}
+}
 
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
-	defer resp.Body.Close()
-	if out := decodeCreate(t, resp); out.StaffID != callerStaffID {
-		t.Fatalf("staffId = %q, want the caller %q", out.StaffID, callerStaffID)
+// The headline of #268: an Owner books a colleague onto a birth in one
+// request, with no reassign step after it. The rule the Add-a-Visit picker
+// leans on is guarded here too so it cannot move under the screen (#909):
+// a request that names nobody is a Visit for the caller, which is why a
+// plain Doula is never asked the question at all and a Doula who owns her
+// Practice is offered her own name as a standing answer rather than an
+// empty required field. Naming *herself* is the self path, so a plain
+// Doula still logs her own Visit through the field without tripping the
+// Owner/Admin rule.
+func TestCreateHandler_AssignsTheVisit(t *testing.T) {
+	cases := []struct {
+		name   string
+		caller []fixture.StaffOption
+		// request names who the Visit is for; it returns the request and
+		// the Staff member the Visit should land on.
+		request func(e *env) (visit.CreateRequest, string)
+	}{
+		{"the named colleague", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) (visit.CreateRequest, string) {
+			colleague := e.staff().ID
+			return visit.CreateRequest{StaffID: &colleague}, colleague
+		}},
+		{"the caller when nobody is named", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}, func(e *env) (visit.CreateRequest, string) {
+			return visit.CreateRequest{}, e.Staff.ID
+		}},
+		{"a plain Doula who names herself", []fixture.StaffOption{fixture.Doula()}, func(e *env) (visit.CreateRequest, string) {
+			return visit.CreateRequest{StaffID: &e.Staff.ID}, e.Staff.ID
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.caller...))
+			request, want := tc.request(e)
+
+			if out := e.create(request); out.StaffID != want {
+				t.Fatalf("staffId = %q, want %q", out.StaffID, want)
+			}
+		})
 	}
 }
 
 // A plain Doula may log her own Visit and nobody else's: she cannot read
 // the Staff roster at all (ADR-0008), so she has no colleague to pick.
 func TestCreateHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-naming-someone-else"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-named-by-peer", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t)
+	colleague := e.staff().ID
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-	if got := countVisits(t, db, engagementID); got != 0 {
-		t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
-	}
-}
-
-// Naming *herself* is the self path, so the same plain Doula still logs
-// her own Visit through the new field without tripping the Owner/Admin
-// rule.
-func TestCreateHandler_APlainDoulaMayNameHerself(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-naming-herself"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &staffID})
-	defer resp.Body.Close()
-	if out := decodeCreate(t, resp); out.StaffID != staffID {
-		t.Fatalf("staffId = %q, want her own %q", out.StaffID, staffID)
-	}
+	e.refuseCreate(visit.CreateRequest{StaffID: &colleague}, http.StatusForbidden)
 }
 
 // The Admin who is not a Doula, end to end: she names a colleague at
 // create, she reassigns, and a create with no assignee refuses her rather
 // than quietly putting her on a birth she is not attending.
 func TestCreateHandler_AdminWhoIsNotADoulaNamesAColleague(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "admin-not-a-doula"
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	adminStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
-	firstStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-first", []string{doulaRole}, "employee")
-	secondStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-second", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
+	first, second := e.staff().ID, e.staff().ID
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	url := visitsURL(srv.URL, practiceID, engagementID)
-
-	created := createVisit(t, session, url, "", visit.CreateRequest{StaffID: &firstStaffID})
-	defer created.Body.Close()
-	out := decodeCreate(t, created)
-	if out.StaffID != firstStaffID {
-		t.Fatalf("staffId = %q, want %q", out.StaffID, firstStaffID)
+	out := e.create(visit.CreateRequest{StaffID: &first})
+	if out.StaffID != first {
+		t.Fatalf("staffId = %q, want %q", out.StaffID, first)
 	}
 
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: secondStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	reassigned := authedPatch(t, session, url+"/"+out.VisitID, body)
-	defer reassigned.Body.Close()
-	if reassigned.StatusCode != http.StatusOK {
-		t.Fatalf("reassign status = %d, want %d", reassigned.StatusCode, http.StatusOK)
-	}
+	e.reassign(out.VisitID, second, http.StatusOK)
 
-	unnamed := createVisit(t, session, url, "", visit.CreateRequest{})
-	defer unnamed.Body.Close()
-	if unnamed.StatusCode != http.StatusForbidden {
-		t.Fatalf("create with no assignee: status = %d, want %d", unnamed.StatusCode, http.StatusForbidden)
-	}
-	if _, _, exists := attachment(t, db, engagementID, adminStaffID); exists {
+	reqtest.ExpectStatus(t, http.MethodPost, e.visitsURL(""), http.StatusForbidden, e.signedIn, reqtest.JSON(visit.CreateRequest{}))
+	if _, _, exists := attachment(t, e.db, e.Engagement.ID, e.Staff.ID); exists {
 		t.Fatal("the Admin was attached to the Engagement; an Owner or Admin acting is never attached by it (ADR-0008)")
 	}
 }
@@ -226,60 +211,39 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name    string
-		target  func(t *testing.T, db *testdb.DB, practiceID, engagementID string) string
+		target  func(e *env) string
 		wantMsg string
 	}{
 		{
 			name: "not a staff member at this practice",
-			target: func(t *testing.T, db *testdb.DB, _, _ string) string {
-				t.Helper()
-				otherPracticeID := testdb.SeedPractice(t, db, "Another Practice")
-				return testdb.SeedStaffAtPractice(t, db, otherPracticeID, "doula-elsewhere-"+t.Name(), []string{doulaRole}, "employee")
+			target: func(e *env) string {
+				return fixture.Staff(e.t, e.db, fixture.Practice(e.t, e.db, fixture.PracticeName("Another Practice"))).ID
 			},
 			wantMsg: "staff member not found at this practice",
 		},
 		{
-			name: "membership carries no Doula role",
-			target: func(t *testing.T, db *testdb.DB, practiceID, _ string) string {
-				t.Helper()
-				return testdb.SeedStaffAtPractice(t, db, practiceID, "admin-only-"+t.Name(), []string{adminRole}, "employee")
-			},
+			name:    "membership carries no Doula role",
+			target:  func(e *env) string { return e.staff(fixture.Roles(fixture.RoleAdmin)).ID },
 			wantMsg: "staff member does not hold the Doula role at this practice",
 		},
 		{
-			name: "contractor who has accepted no offer",
-			target: func(t *testing.T, db *testdb.DB, practiceID, _ string) string {
-				t.Helper()
-				return testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-unattached-"+t.Name())
-			},
+			name:    "contractor who has accepted no offer",
+			target:  func(e *env) string { return e.staff(fixture.Contractor()).ID },
 			wantMsg: "that contractor has not accepted an offer on this work",
 		},
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
 			t.Parallel()
-			db := testdb.New(t)
-			identityUID := "owner-naming-" + testCase.name
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			targetStaffID := testCase.target(t, db, practiceID, engagementID)
+			e := newEnv(t, signedInAs(fixture.Owner()))
+			target := testCase.target(e)
 
-			srv, session := newServer(t, db, identityUID)
-			defer srv.Close()
+			got := apierrtest.Expect(t, http.MethodPost, e.visitsURL(""), http.StatusBadRequest, e.signedIn, reqtest.JSON(visit.CreateRequest{StaffID: &target}))
 
-			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-			var out struct {
-				Message string `json:"message"`
+			if got.Message != testCase.wantMsg {
+				t.Fatalf("message = %q, want %q", got.Message, testCase.wantMsg)
 			}
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode response: %v", err)
-			}
-			if out.Message != testCase.wantMsg {
-				t.Fatalf("message = %q, want %q", out.Message, testCase.wantMsg)
-			}
-			if got := countVisits(t, db, engagementID); got != 0 {
+			if got := countVisits(t, e.db, e.Engagement.ID); got != 0 {
 				t.Fatalf("visits = %d, want 0 -- a refused create must write no row", got)
 			}
 		})
@@ -289,47 +253,25 @@ func TestCreateHandler_RefusesAnIneligibleAssignee(t *testing.T) {
 // A malformed assignee is a 400 about the id, not a 403 about the role --
 // the caller typo'd, she was not refused.
 func TestCreateHandler_InvalidAssignee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-bad-assignee"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
+	e := newEnv(t, signedInAs(fixture.Owner()))
 	badID := notAUUID
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &badID})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
+
+	e.refuseCreate(visit.CreateRequest{StaffID: &badID}, http.StatusBadRequest)
 }
 
 // A contractor who already holds the granted attachment her own
 // acceptance opened may be named -- and gets no second attachment out of
 // it, because the one she agreed to is already open.
 func TestCreateHandler_AllowsAnAttachedContractorAndGrantsHerNothing(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-naming-attached-contractor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, targetStaffID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.staff(fixture.Contractor()).ID
+	testdb.SeedGrantedAttachment(t, e.db, e.Engagement.ID, target)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-	defer resp.Body.Close()
-	if out := decodeCreate(t, resp); out.StaffID != targetStaffID {
-		t.Fatalf("staffId = %q, want %q", out.StaffID, targetStaffID)
+	if out := e.create(visit.CreateRequest{StaffID: &target}); out.StaffID != target {
+		t.Fatalf("staffId = %q, want %q", out.StaffID, target)
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
-		engagementID, targetStaffID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count attachments: %v", err)
-	}
+	count := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, target)
 	if count != 1 {
 		t.Fatalf("attachments = %d, want the one her acceptance opened and no more", count)
 	}
@@ -337,29 +279,27 @@ func TestCreateHandler_AllowsAnAttachedContractorAndGrantsHerNothing(t *testing.
 
 // ADR-0008's "an Admin scheduling her onto a Visit ... granted, written
 // explicitly": the named employee is attached, and attached_by is the
-// person who did the naming, not the person named.
-func TestCreateHandler_GrantsTheNamedEmployee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "admin-granting-at-create"
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	adminStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-named-employee", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+// person who did the naming, not the person named. The grant decision is
+// one seam (#914), and a seam is only proved shared by exercising it from
+// both callers, create and reassign.
+func TestVisitWrites_GrantTheNamedEmployee(t *testing.T) {
+	t.Run("create", func(t *testing.T) {
+		e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
+		target := e.staff().ID
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
+		e.create(visit.CreateRequest{StaffID: &target})
 
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-	defer resp.Body.Close()
-	decodeCreate(t, resp)
+		e.requireAttachment(target, e.Staff.ID, "the person who named her")
+	})
+	t.Run("reassign", func(t *testing.T) {
+		e := newEnv(t, signedInAs(fixture.Roles(fixture.RoleAdmin)))
+		visitID := seedVisit(t, e.db, e.Engagement.ID, e.staff().ID)
+		target := e.staff().ID
 
-	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
-	if !exists {
-		t.Fatal("no attachment for the named employee")
-	}
-	if origin != grantedOrigin || attachedBy != adminStaffID {
-		t.Fatalf("attachment = %s by %s, want granted by the person who named her", origin, attachedBy)
-	}
+		e.reassign(visitID, target, http.StatusOK)
+
+		e.requireAttachment(target, e.Staff.ID, "the person who handed it over")
+	})
 }
 
 // #1625: the Visit is one of the writers of a granted Attachment that
@@ -372,54 +312,31 @@ func TestCreateHandler_GrantsTheNamedEmployee(t *testing.T) {
 // and TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit still
 // hold her to it.
 func TestCreateHandler_GrantsAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
-	for _, role := range []string{ownerRole, adminRole} {
-		t.Run(role+" logs a Visit for herself", func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := "contractor-" + role + "-logging-her-own"
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{role, doulaRole}, "contractor")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	roles := []struct {
+		name string
+		role fixture.StaffOption
+	}{{ownerRole, fixture.Owner()}, {adminRole, fixture.Admin()}}
+	for _, r := range roles {
+		roleName, role := r.name, r.role
+		t.Run(roleName+" logs a Visit for herself", func(t *testing.T) {
+			e := newEnv(t, signedInAs(role, fixture.Doula(), fixture.Contractor()))
 
-			srv, session := newServer(t, db, identityUID)
-			defer srv.Close()
-
-			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{})
-			defer resp.Body.Close()
-			if out := decodeCreate(t, resp); out.StaffID != staffID {
-				t.Fatalf("staffId = %q, want her own %q", out.StaffID, staffID)
+			if out := e.create(visit.CreateRequest{}); out.StaffID != e.Staff.ID {
+				t.Fatalf("staffId = %q, want her own %q", out.StaffID, e.Staff.ID)
 			}
 
-			origin, attachedBy, exists := attachment(t, db, engagementID, staffID)
-			if !exists {
-				t.Fatal("no attachment for a Doula who holds " + role + " and logged her own Visit")
-			}
-			if origin != grantedOrigin || attachedBy != staffID {
-				t.Fatalf("attachment = %s by %s, want granted by herself", origin, attachedBy)
-			}
+			e.requireAttachment(e.Staff.ID, e.Staff.ID, "herself")
 		})
 
-		t.Run(role+" is named by an Owner", func(t *testing.T) {
-			db := testdb.New(t)
-			identityUID := "owner-naming-contractor-" + role
-			practiceID, namerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-			targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "named-contractor-"+role, []string{role, doulaRole}, "contractor")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		t.Run(roleName+" is named by an Owner", func(t *testing.T) {
+			e := newEnv(t, signedInAs(fixture.Owner()))
+			target := e.staff(role, fixture.Doula(), fixture.Contractor()).ID
 
-			srv, session := newServer(t, db, identityUID)
-			defer srv.Close()
-
-			resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", visit.CreateRequest{StaffID: &targetStaffID})
-			defer resp.Body.Close()
-			if out := decodeCreate(t, resp); out.StaffID != targetStaffID {
-				t.Fatalf("staffId = %q, want %q", out.StaffID, targetStaffID)
+			if out := e.create(visit.CreateRequest{StaffID: &target}); out.StaffID != target {
+				t.Fatalf("staffId = %q, want %q", out.StaffID, target)
 			}
 
-			origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
-			if !exists {
-				t.Fatal("no attachment for the named Doula who holds " + role)
-			}
-			if origin != grantedOrigin || attachedBy != namerStaffID {
-				t.Fatalf("attachment = %s by %s, want granted by the person who named her", origin, attachedBy)
-			}
+			e.requireAttachment(target, e.Staff.ID, "the person who named her")
 		})
 	}
 }
@@ -428,73 +345,31 @@ func TestCreateHandler_GrantsAnOwnerOrAdminWhoIsAContractorDoula(t *testing.T) {
 // same answer: an Admin who is a contractor Doula is handed a Visit with
 // no Offer, and is attached by the person who handed it to her.
 func TestReassignHandler_GrantsAnAdminWhoIsAContractorDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-reassigning-to-contractor-admin"
-	practiceID, ownerStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "contractor-admin-target", []string{adminRole, doulaRole}, "contractor")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
+	target := e.staff(fixture.Admin(), fixture.Doula(), fixture.Contractor()).ID
+	out := e.create(visit.CreateRequest{})
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	url := visitsURL(srv.URL, practiceID, engagementID)
+	e.reassign(out.VisitID, target, http.StatusOK)
 
-	created := createVisit(t, session, url, "", visit.CreateRequest{})
-	defer created.Body.Close()
-	out := decodeCreate(t, created)
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	reassigned := authedPatch(t, session, url+"/"+out.VisitID, body)
-	defer reassigned.Body.Close()
-	if reassigned.StatusCode != http.StatusOK {
-		t.Fatalf("reassign status = %d, want %d", reassigned.StatusCode, http.StatusOK)
-	}
-
-	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
-	if !exists {
-		t.Fatal("no attachment for the Admin who is a contractor Doula")
-	}
-	if origin != grantedOrigin || attachedBy != ownerStaffID {
-		t.Fatalf("attachment = %s by %s, want granted by the person who handed her the Visit", origin, attachedBy)
-	}
+	e.requireAttachment(target, e.Staff.ID, "the person who handed her the Visit")
 }
 
 // Both halves of the audit trail: who acted, who it went to, and when.
 func TestVisitWrites_RecordTheAssignee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-audited"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	firstStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-audited-first", []string{doulaRole}, "employee")
-	secondStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-audited-second", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	first, second := e.staff().ID, e.staff().ID
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	url := visitsURL(srv.URL, practiceID, engagementID)
-
-	created := createVisit(t, session, url, "", visit.CreateRequest{StaffID: &firstStaffID})
-	defer created.Body.Close()
-	out := decodeCreate(t, created)
-	if got := assignedStaffID(t, db, engagementID, "visit_logged", "assignedStaffId"); got != firstStaffID {
-		t.Fatalf("visit_logged assignee = %q, want %q", got, firstStaffID)
+	out := e.create(visit.CreateRequest{StaffID: &first})
+	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_logged", "assignedStaffId"); got != first {
+		t.Fatalf("visit_logged assignee = %q, want %q", got, first)
 	}
 
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: secondStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
+	e.reassign(out.VisitID, second, http.StatusOK)
+	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDAfter); got != second {
+		t.Fatalf("visit_reassigned assignee = %q, want %q", got, second)
 	}
-	reassigned := authedPatch(t, session, url+"/"+out.VisitID, body)
-	defer reassigned.Body.Close()
-	if reassigned.StatusCode != http.StatusOK {
-		t.Fatalf("reassign status = %d, want %d", reassigned.StatusCode, http.StatusOK)
-	}
-	if got := assignedStaffID(t, db, engagementID, "visit_reassigned", activity.DiffKeyAssignedStaffIDAfter); got != secondStaffID {
-		t.Fatalf("visit_reassigned assignee = %q, want %q", got, secondStaffID)
-	}
-	if got := assignedStaffID(t, db, engagementID, "visit_reassigned", activity.DiffKeyAssignedStaffIDBefore); got != firstStaffID {
-		t.Fatalf("visit_reassigned previous assignee = %q, want %q", got, firstStaffID)
+	if got := assignedStaffID(t, e.db, e.Engagement.ID, "visit_reassigned", activity.DiffKeyAssignedStaffIDBefore); got != first {
+		t.Fatalf("visit_reassigned previous assignee = %q, want %q", got, first)
 	}
 }
 
@@ -502,116 +377,37 @@ func TestVisitWrites_RecordTheAssignee(t *testing.T) {
 // retry under the same Idempotency-Key must answer with the same Visit
 // and the same assignee, and must not book a second one.
 func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "owner-replaying"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-replayed", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.staff().ID
+	key := reqtest.Header("Idempotency-Key", "book-once")
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	url := visitsURL(srv.URL, practiceID, engagementID)
-
-	first := createVisit(t, session, url, "book-once", visit.CreateRequest{StaffID: &targetStaffID})
-	defer first.Body.Close()
-	firstOut := decodeCreate(t, first)
-
-	second := createVisit(t, session, url, "book-once", visit.CreateRequest{StaffID: &targetStaffID})
-	defer second.Body.Close()
-	secondOut := decodeCreate(t, second)
+	firstOut := e.create(visit.CreateRequest{StaffID: &target}, key)
+	secondOut := e.create(visit.CreateRequest{StaffID: &target}, key)
 
 	if !reflect.DeepEqual(secondOut, firstOut) {
 		t.Fatalf("replay = %+v, want the stored %+v", secondOut, firstOut)
 	}
-	if got := countVisits(t, db, engagementID); got != 1 {
+	if got := countVisits(t, e.db, e.Engagement.ID); got != 1 {
 		t.Fatalf("visits = %d, want 1 -- a replay must not book a second", got)
 	}
 }
 
-// The reassign half of the same rule, asserted by role alone: whether the
-// screen drew the control or not, a plain Doula cannot hand a Visit to a
-// colleague.
-func TestReassignHandler_RefusesAColleagueNamedByAPlainDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassigning-to-peer"
-	practiceID, ownStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-peer", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, ownStaffID)
+// The reassign half of the rule a plain Doula may name only herself,
+// asserted by role alone: whether the screen drew the control or not, a
+// plain Doula cannot hand a Visit to a colleague, and the refusal leaves
+// it where it was. She may still hand one back to herself -- the self
+// path, the same one create takes with no assignee.
+func TestReassignHandler_APlainDoulaMayNameOnlyHerself(t *testing.T) {
+	e := newEnv(t)
+	peer := e.staff().ID
+	visitID := seedVisit(t, e.db, e.Engagement.ID, e.Staff.ID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
+	e.reassign(visitID, peer, http.StatusForbidden)
+	assignedTo := testdb.Scalar[string](t, e.db.Admin, `SELECT staff_id::text FROM visits WHERE id = $1`, visitID)
+	if assignedTo != e.Staff.ID {
+		t.Fatalf("visit is assigned to %q, want the refusal to have left it on %q", assignedTo, e.Staff.ID)
 	}
-	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 
-	var assignedTo string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT staff_id::text FROM visits WHERE id = $1`, visitID,
-	).Scan(&assignedTo); err != nil {
-		t.Fatalf("read visit: %v", err)
-	}
-	if assignedTo != ownStaffID {
-		t.Fatalf("visit is assigned to %q, want the refusal to have left it on %q", assignedTo, ownStaffID)
-	}
-}
-
-// She may still hand it back to herself -- the self path, the same one
-// create takes with no assignee.
-func TestReassignHandler_APlainDoulaMayNameHerself(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassigning-to-self"
-	practiceID, ownStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	peerStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-holding-it", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, peerStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: ownStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-// The mirror of TestCreateHandler_GrantsTheNamedEmployee on the reassign
-// side: the grant decision is one seam now (#914), and a seam is only
-// proved shared by exercising it from both callers.
-func TestReassignHandler_GrantsTheNamedEmployee(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "admin-granting-at-reassign"
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	adminStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
-	holderStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-holding-the-visit", []string{doulaRole}, "employee")
-	targetStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-handed-the-visit", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, holderStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, visitsURL(srv.URL, practiceID, engagementID)+"/"+visitID, body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	origin, attachedBy, exists := attachment(t, db, engagementID, targetStaffID)
-	if !exists {
-		t.Fatal("no attachment for the employee the Visit was handed to")
-	}
-	if origin != grantedOrigin || attachedBy != adminStaffID {
-		t.Fatalf("attachment = %s by %s, want granted by the person who handed it over", origin, attachedBy)
-	}
+	peerVisit := seedVisit(t, e.db, e.Engagement.ID, peer)
+	e.reassign(peerVisit, e.Staff.ID, http.StatusOK)
 }

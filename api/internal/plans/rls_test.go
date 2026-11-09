@@ -3,24 +3,25 @@ package plans_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
 // These tests exercise the plan_templates_practice_visibility RLS policy
-// from 00011_plan_templates.sql directly via db.App and set_config,
-// bypassing the Go handlers -- the same shape as staffauth's rls_test.go.
+// from 00011_plan_templates.sql and the plan_instances_practice_visibility
+// policy from 00012_plan_instances.sql directly via db.App and set_config,
+// bypassing the Go handlers -- the same shape as staffauth's rls_test.go
+// and visit/rls_test.go's EXISTS-against-engagements policy tests.
 
-// TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet proves plan_templates
-// denies all rows when app.current_practice_id is never set.
-func TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Some Practice")
-	seedPlanTemplate(t, db, practiceID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`)
+// TestRLS_PlanTablesFailClosedWithNoSessionVarSet proves plan_templates and
+// plan_instances deny all rows when app.current_practice_id is never set.
+func TestRLS_PlanTablesFailClosedWithNoSessionVarSet(t *testing.T) {
+	e := newEnv(t)
+	e.seedTemplate(carePlanType, f1Fields)
+	e.seedInstance(carePlanType, f1Fields, `{}`)
 
-	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM plan_templates`)
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, e.db, "plan_templates")
+	testdb.RequireFailsClosed(t, e.db, "plan_instances")
 }
 
 // TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice proves the
@@ -28,36 +29,17 @@ func TestRLS_PlanTemplatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_PlanTemplatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	seedPlanTemplate(t, db, practiceA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`)
-	seedPlanTemplate(t, db, practiceB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`)
+	practiceA := fixture.Practice(t, db)
+	practiceB := fixture.Practice(t, db)
+	seedPlanTemplate(t, db, practiceA.ID, carePlanType, f1Fields)
+	seedPlanTemplate(t, db, practiceB.ID, carePlanType, f1Fields)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 
 	visiblePracticeIDs := testdb.Column[string](t, tx, `SELECT practice_id FROM plan_templates`)
 
-	if len(visiblePracticeIDs) != 1 || visiblePracticeIDs[0] != practiceA {
-		t.Fatalf("visible practice_ids = %v, want only %q", visiblePracticeIDs, practiceA)
-	}
-}
-
-// These tests exercise the plan_instances_practice_visibility RLS policy
-// from 00012_plan_instances.sql directly via db.App and set_config,
-// bypassing the Go handlers -- the same shape as visit/rls_test.go's
-// EXISTS-against-engagements policy tests.
-
-// TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet proves plan_instances
-// denies all rows when app.current_practice_id is never set.
-func TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Some Practice")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedInstance(t, db, engagementID, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
-
-	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM plan_instances`)
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
+	if len(visiblePracticeIDs) != 1 || visiblePracticeIDs[0] != practiceA.ID {
+		t.Fatalf("visible practice_ids = %v, want only %q", visiblePracticeIDs, practiceA.ID)
 	}
 }
 
@@ -66,19 +48,18 @@ func TestRLS_PlanInstancesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_PlanInstancesSelectIsScopedViaEngagementsExistsSubquery(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementA := testdb.SeedEngagement(t, db, practiceA)
-	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
-	seedInstance(t, db, engagementA, carePlanType, `[{"id":"a","type":"short_text","label":"A field","order":0}]`, `{}`)
-	seedInstance(t, db, engagementB, carePlanType, `[{"id":"b","type":"short_text","label":"B field","order":0}]`, `{}`)
+	practiceA := fixture.Practice(t, db)
+	engagementA := fixture.Engagement(t, db, practiceA)
+	engagementB := fixture.Engagement(t, db, fixture.Practice(t, db))
+	seedInstance(t, db, engagementA.ID, carePlanType, f1Fields, `{}`)
+	seedInstance(t, db, engagementB.ID, carePlanType, f1Fields, `{}`)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 
 	visibleEngagementIDs := testdb.Column[string](t, tx, `SELECT engagement_id FROM plan_instances`)
 
-	if len(visibleEngagementIDs) != 1 || visibleEngagementIDs[0] != engagementA {
-		t.Fatalf("visible engagement_ids = %v, want only %q", visibleEngagementIDs, engagementA)
+	if len(visibleEngagementIDs) != 1 || visibleEngagementIDs[0] != engagementA.ID {
+		t.Fatalf("visible engagement_ids = %v, want only %q", visibleEngagementIDs, engagementA.ID)
 	}
 }
 
@@ -89,24 +70,16 @@ func TestRLS_PlanInstancesSelectIsScopedViaEngagementsExistsSubquery(t *testing.
 // the first place.
 func TestRLS_PlanInstancesUpdateRejectedAcrossPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementB := testdb.SeedEngagement(t, db, practiceB)
-	seedInstance(t, db, engagementB, carePlanType, `[{"id":"f1","type":"short_text","label":"Name","order":0}]`, `{}`)
+	practiceA := fixture.Practice(t, db)
+	engagementB := fixture.Engagement(t, db, fixture.Practice(t, db))
+	seedInstance(t, db, engagementB.ID, carePlanType, f1Fields, `{}`)
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 
-	result, err := tx.ExecContext(t.Context(),
+	rows := testdb.RowsAffected(t, tx,
 		`UPDATE plan_instances SET answers = '{"f1":"hacked"}' WHERE engagement_id = $1 AND plan_type = $2`,
-		engagementB, carePlanType,
+		engagementB.ID, carePlanType,
 	)
-	if err != nil {
-		t.Fatalf("update plan_instances: %v", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		t.Fatalf("rows affected: %v", err)
-	}
 	if rows != 0 {
 		t.Fatalf("expected 0 rows affected editing a Plan Instance at a different Practice, got %d", rows)
 	}
