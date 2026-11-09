@@ -48,6 +48,15 @@ func newEnv(t *testing.T, opts ...fixture.SceneOption) *env {
 	return &env{fixture.NewScene(t, mountPortal, all...)}
 }
 
+// newEnvWithOutcome is newEnv for an Engagement due 2027-06-15 whose
+// Practice has recorded outcome, when it has one.
+func newEnvWithOutcome(t *testing.T, outcome, endedOn string) *env {
+	t.Helper()
+	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
+	e.recordOutcome(outcome, endedOn)
+	return e
+}
+
 func (e *env) engagementURL(suffix string) string {
 	return e.URL("/api/portal/engagements/" + e.Engagement.ID + suffix)
 }
@@ -70,6 +79,29 @@ func (e *env) activityPage(query string) activityfeed.ListResponse {
 func (e *env) visitsPage(query string) portal.VisitsResponse {
 	e.T.Helper()
 	return reqtest.Expect[portal.VisitsResponse](e.T, http.MethodGet, e.engagementURL("/visits"+query), http.StatusOK, e.AsClient)
+}
+
+// pageInfo is what a cursor-paginated list says of one page.
+type pageInfo struct {
+	items   int
+	hasMore bool
+	next    *string
+}
+
+// requireFullPageThenLast walks a list that holds one row more than a
+// page: the first page is full and reports more with a cursor, and
+// following that cursor yields the one row left. fetch reads the page at a
+// query string, "" for the first.
+func requireFullPageThenLast(t *testing.T, fetch func(query string) pageInfo) {
+	t.Helper()
+	first := fetch("")
+	if first.items != 30 || !first.hasMore || first.next == nil {
+		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil", first.items, first.hasMore, first.next)
+	}
+	second := fetch("?cursor=" + *first.next)
+	if second.items != 1 || second.hasMore || second.next != nil {
+		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil", second.items, second.hasMore, second.next)
+	}
 }
 
 // seedActivity writes one Activity row per action on the Engagement, by

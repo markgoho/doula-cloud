@@ -31,7 +31,7 @@ func newMagicLinkRedeemServer(db *testdb.DB) *httptest.Server {
 
 func postJSON(t *testing.T, srv *httptest.Server, path, body string) *http.Response {
 	t.Helper()
-	return reqtest.Post(t, srv.URL+path, reqtest.RawJSON([]byte(body)))
+	return reqtest.Do(t, http.MethodPost, srv.URL+path, reqtest.RawJSON([]byte(body)))
 }
 
 func expectPostJSON(t *testing.T, srv *httptest.Server, path, body string, want int) {

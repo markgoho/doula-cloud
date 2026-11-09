@@ -11,19 +11,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-// seedLiveStaff inserts one live staff row and returns its id.
-func seedLiveStaff(t *testing.T, db *testdb.DB, identityUID, name string) string {
-	t.Helper()
-	var id string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, $2, '', $1 || '@example.com', 'NY') RETURNING id`,
-		identityUID, name,
-	).Scan(&id); err != nil {
-		t.Fatalf("seed staff: %v", err)
-	}
-	return id
-}
-
 // TestComposeCode_Refusals runs compose against a vouching Owner and the
 // locked-out colleague a code is for. compose is not a pure function of its
 // row: #892's recheck reads the recipient's and the subject's live rows
@@ -77,8 +64,8 @@ func TestComposeCode_Refusals(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			db := testdb.New(t)
-			subjectID := seedLiveStaff(t, db, "subject", "Priya Raman")
-			ownerID := seedLiveStaff(t, db, "owner-uid", "Renata Alves")
+			subjectID := testdb.SeedStaff(t, db, "subject")
+			ownerID := testdb.SeedStaff(t, db, "owner-uid")
 			accounts := authntest.NewFakeAccountManager()
 			if !tt.noAccount {
 				accounts.Seed("owner-uid", "owner@example.com", true)

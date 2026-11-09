@@ -123,17 +123,10 @@ func TestActivityHandler_PaginatesNewestFirst(t *testing.T) {
 		e.seedActivity(activity.ActionVisitLogged)
 	}
 
-	first := e.activityPage("")
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
-	}
-
-	second := e.activityPage("?cursor=" + *first.NextCursor)
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
-	}
+	requireFullPageThenLast(t, func(query string) pageInfo {
+		page := e.activityPage(query)
+		return pageInfo{len(page.Items), page.HasMore, page.NextCursor}
+	})
 }
 
 // TestActivityHandler_InvalidCursorRejected mirrors

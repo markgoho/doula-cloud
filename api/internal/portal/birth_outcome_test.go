@@ -1,10 +1,6 @@
 package portal_test
 
-import (
-	"testing"
-
-	"doula-cloud/api/internal/fixture"
-)
+import "testing"
 
 // TestDetailHandler_NeverShowsTheBirthOutcome is ADR-0015's "staff-only,
 // never Client-facing" made checkable (#293). Nadia Haddad does not need
@@ -13,8 +9,7 @@ import (
 // are recorded on her Engagement and reach no portal response at all,
 // not even as a null field.
 func TestDetailHandler_NeverShowsTheBirthOutcome(t *testing.T) {
-	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
-	e.recordOutcome(outcomeLoss, "2027-03-04")
+	e := newEnvWithOutcome(t, outcomeLoss, "2027-03-04")
 
 	fields := e.detailFields()
 	for _, key := range []string{"birthOutcome", "pregnancyEndedOn"} {
@@ -55,8 +50,7 @@ func TestDetailHandler_ByBirthOutcome(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
-			e.recordOutcome(tt.outcome, tt.endedOn)
+			e := newEnvWithOutcome(t, tt.outcome, tt.endedOn)
 
 			fields := e.detailFields()
 			if _, present := fields["dueDate"]; present != tt.wantDueDate {

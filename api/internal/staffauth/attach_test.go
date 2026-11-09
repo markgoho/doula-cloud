@@ -1,89 +1,70 @@
 package staffauth_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-// attachFixture is a Practice with an Engagement and one write endpoint
+const (
+	outcomeOK      = "ok"
+	outcomeRefused = "refused"
+
+	originAccrued = "accrued"
+	originGranted = "granted"
+)
+
+// attachEnv is a Practice with an Engagement and one write endpoint
 // mounted behind the seam, so a test can drive a real request through
-// staffauth.Middleware and then read what the seam left behind.
-type attachFixture struct {
-	db           *testdb.DB
-	srv          *httptest.Server
-	practiceID   string
-	engagementID string
+// staffauth.Middleware and then read what the seam left behind. Nobody is
+// signed in: a test names the Staff member who writes.
+type attachEnv struct {
+	*fixture.Scene
 }
 
-// newAttachFixture mounts a stub Engagement-scoped write behind
+// newAttachEnv mounts a stub Engagement-scoped write behind
 // AttachingWrite. The stub answers whatever status the request's
 // X-Test-Status header asks for, which is how the tests below tell a
 // write that happened from one that was refused without needing a real
 // handler's failure mode.
-func newAttachFixture(t *testing.T) attachFixture {
+func newAttachEnv(t *testing.T) attachEnv {
 	t.Helper()
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Attach Test Practice")
-
-	var clientID, engagementID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Attach Client', 'attach@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
+	mount := func(g *staffauth.GatedRouter, _ *idempotency.Router, _ *sql.DB) {
+		g.GatedWrite("POST /api/practices/{practiceId}/engagements/{engagementId}/writes", staffauth.AnyStaff,
+			staffauth.AttachingWrite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Header.Get("X-Test-Status") == outcomeRefused {
+					http.Error(w, outcomeRefused, http.StatusBadRequest)
+					return
+				}
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte(`{}`))
+			})))
 	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`, clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/writes",
-		staffauth.Middleware(db.App)(staffauth.AttachingWrite(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if status := r.Header.Get("X-Test-Status"); status == "refused" {
-				http.Error(w, "refused", http.StatusBadRequest)
-				return
-			}
-			w.WriteHeader(http.StatusCreated)
-			_, _ = w.Write([]byte(`{}`))
-		}))))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	return attachFixture{db: db, srv: srv, practiceID: practiceID, engagementID: engagementID}
+	return attachEnv{fixture.NewScene(t, mount, fixture.NobodySignedIn(), fixture.WithEngagement())}
 }
 
-// write drives one request through the seam as uid, asking the stub for
-// the given outcome ("ok" or "refused").
-func (f attachFixture) write(t *testing.T, uid, outcome string) {
-	t.Helper()
-	resp := f.writeStatus(t, uid, outcome)
+// write drives one request through the seam as who, asking the stub for
+// the given outcome ("ok" or "refused"), and returns the seam's status.
+func (e attachEnv) write(who fixture.StaffRecord, outcome string) int {
+	e.T.Helper()
+	resp := reqtest.Post(e.T, e.PracticeURL("/engagements/"+e.Engagement.ID+"/writes"), e.As(who), reqtest.Header("X-Test-Status", outcome))
 	_ = resp.Body.Close()
-}
-
-// writeStatus is write, but returns the response instead of discarding
-// it, for a test that needs to assert the seam's own status code (the
-// pre-handler refusal) rather than just what the stub left behind.
-func (f attachFixture) writeStatus(t *testing.T, uid, outcome string) *http.Response {
-	t.Helper()
-	session := authntest.SeedSession(t, f.db.App, uid)
-	return reqtest.Post(t, f.srv.URL+"/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/writes", reqtest.Session(session), reqtest.Header("X-Test-Status", outcome))
+	return resp.StatusCode
 }
 
 // attachmentFor reads the open attachment for staffID, if there is one.
-func (f attachFixture) attachmentFor(t *testing.T, staffID string) (origin, attachedBy string, found bool) {
-	t.Helper()
-	err := f.db.Admin.QueryRowContext(t.Context(),
+func (e attachEnv) attachmentFor(staffID string) (origin, attachedBy string, found bool) {
+	e.T.Helper()
+	err := e.DB.Admin.QueryRowContext(e.T.Context(),
 		`SELECT origin::text, attached_by::text FROM engagement_attachments
 		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NULL`,
-		f.engagementID, staffID,
+		e.Engagement.ID, staffID,
 	).Scan(&origin, &attachedBy)
 	if err != nil {
 		return "", "", false
@@ -94,20 +75,19 @@ func (f attachFixture) attachmentFor(t *testing.T, staffID string) (origin, atta
 // A Doula writing under an Engagement accrues an attachment to it, with
 // attached_by equal to her own staff id -- ADR-0008's write-side seam.
 func TestAttachingWrite_AccruesTheActingDoula(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "attach-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
+	e := newAttachEnv(t)
+	doula := e.Colleague()
 
-	f.write(t, "attach-doula", "ok")
+	e.write(doula, outcomeOK)
 
-	origin, attachedBy, found := f.attachmentFor(t, doulaID)
+	origin, attachedBy, found := e.attachmentFor(doula.ID)
 	if !found {
 		t.Fatal("the seam attached nobody")
 	}
-	if origin != "accrued" {
+	if origin != originAccrued {
 		t.Fatalf("origin = %q, want accrued -- the seam must never mint granted", origin)
 	}
-	if attachedBy != doulaID {
+	if attachedBy != doula.ID {
 		t.Fatalf("attached_by = %q, want the actor herself", attachedBy)
 	}
 }
@@ -116,19 +96,17 @@ func TestAttachingWrite_AccruesTheActingDoula(t *testing.T) {
 // even when she also holds the Doula role: attachment answers "who is on
 // this birth", and running the Practice is not being on it.
 func TestAttachingWrite_NeverAttachesAnOwnerOrAdmin(t *testing.T) {
-	f := newAttachFixture(t)
-	ownerID := testdb.SeedStaff(t, f.db, "attach-owner")
-	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner,doula}")
-	adminID := testdb.SeedStaff(t, f.db, "attach-admin")
-	seedMembershipWithRoles(t, f.db, f.practiceID, adminID, "{admin,doula}")
+	e := newAttachEnv(t)
+	owner := e.Colleague(fixture.Owner(), fixture.Doula())
+	admin := e.Colleague(fixture.Admin(), fixture.Doula())
 
-	f.write(t, "attach-owner", "ok")
-	f.write(t, "attach-admin", "ok")
+	e.write(owner, outcomeOK)
+	e.write(admin, outcomeOK)
 
-	if _, _, found := f.attachmentFor(t, ownerID); found {
+	if _, _, found := e.attachmentFor(owner.ID); found {
 		t.Fatal("the seam attached an Owner")
 	}
-	if _, _, found := f.attachmentFor(t, adminID); found {
+	if _, _, found := e.attachmentFor(admin.ID); found {
 		t.Fatal("the seam attached an Admin")
 	}
 }
@@ -136,144 +114,103 @@ func TestAttachingWrite_NeverAttachesAnOwnerOrAdmin(t *testing.T) {
 // A write that was refused attaches nothing: accrual follows work that
 // actually happened.
 func TestAttachingWrite_AttachesNothingOnARefusedWrite(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "attach-refused-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
+	e := newAttachEnv(t)
+	doula := e.Colleague()
 
-	f.write(t, "attach-refused-doula", "refused")
+	e.write(doula, outcomeRefused)
 
-	if _, _, found := f.attachmentFor(t, doulaID); found {
+	if _, _, found := e.attachmentFor(doula.ID); found {
 		t.Fatal("a refused write still attached the caller")
 	}
 }
 
+// TestAttachingWrite_ReachByEmploymentAndAttachment runs one write per
+// kind of Staff member the seam decides about.
+//
 // A contractor Doula with no attachment at all is refused before the
 // wrapped handler ever runs, and the refusal reads as the same 404 a
-// contractor's read gets -- #350, the write-side mirror of #231/#315.
-func TestAttachingWrite_RefusesAnUnattachedContractor(t *testing.T) {
-	f := newAttachFixture(t)
-	contractorID := testdb.SeedStaff(t, f.db, "attach-unattached-contractor")
-	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-
-	resp := f.writeStatus(t, "attach-unattached-contractor", "ok")
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d -- an unattached contractor's write must read as 'not found', not 403, so she can't tell 'doesn't exist' from 'not attached'", resp.StatusCode, http.StatusNotFound)
+// contractor's read gets -- #350, the write-side mirror of #231/#315, so
+// she can't tell "doesn't exist" from "not attached". An accrued-only
+// attachment is a record of work, never a key (#228): a contractor who has
+// merely written here before still can't write again without a granted
+// attachment. A contractor who holds an open, granted attachment -- an
+// accepted Offer -- writes through the seam like anyone else, but once
+// that attachment has ended she is refused again: attachment gates the
+// Engagement live, not once. An employee Doula keeps the ambient write
+// grant #227 decided -- no attachment needed at all.
+func TestAttachingWrite_ReachByEmploymentAndAttachment(t *testing.T) {
+	tests := []struct {
+		name       string
+		contractor bool
+		seeded     string
+		ended      bool
+		want       int
+		wantOpen   bool
+	}{
+		{"an unattached contractor", true, "", false, http.StatusNotFound, false},
+		{"a contractor with only an accrued attachment", true, originAccrued, false, http.StatusNotFound, true},
+		{"a contractor with a granted attachment", true, originGranted, false, http.StatusCreated, true},
+		{"a contractor whose granted attachment has ended", true, originGranted, true, http.StatusNotFound, false},
+		{"an employee Doula with no attachment", false, "", false, http.StatusCreated, true},
 	}
-	if _, _, found := f.attachmentFor(t, contractorID); found {
-		t.Fatal("a refused write must not attach the caller")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newAttachEnv(t)
+			var opts []fixture.StaffOption
+			if tt.contractor {
+				opts = append(opts, fixture.Contractor())
+			}
+			who := e.Colleague(opts...)
+			if tt.seeded != "" {
+				testdb.SeedAttachment(t, e.DB, e.Engagement.ID, who.ID, tt.seeded, tt.ended)
+			}
+
+			if got := e.write(who, outcomeOK); got != tt.want {
+				t.Fatalf("status = %d, want %d", got, tt.want)
+			}
+			if _, _, found := e.attachmentFor(who.ID); found != tt.wantOpen {
+				t.Fatalf("open attachment = %v, want %v", found, tt.wantOpen)
+			}
+		})
 	}
-}
-
-// An accrued-only attachment is a record of work, never a key (#228): a
-// contractor who has merely written here before still can't write again
-// without a granted attachment.
-func TestAttachingWrite_RefusesAContractorWithOnlyAnAccruedAttachment(t *testing.T) {
-	f := newAttachFixture(t)
-	contractorID := testdb.SeedStaff(t, f.db, "attach-accrued-only-contractor")
-	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "accrued", false)
-
-	resp := f.writeStatus(t, "attach-accrued-only-contractor", "ok")
-	defer func() { _ = resp.Body.Close() }()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// A contractor who holds an open, granted attachment -- an accepted Offer
-// -- writes through the seam like anyone else.
-func TestAttachingWrite_AllowsAContractorWithAGrantedAttachment(t *testing.T) {
-	f := newAttachFixture(t)
-	contractorID := testdb.SeedStaff(t, f.db, "attach-granted-contractor")
-	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", false)
-
-	resp := f.writeStatus(t, "attach-granted-contractor", "ok")
-	defer func() { _ = resp.Body.Close() }()
-
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-}
-
-// A contractor whose granted attachment has since ended is refused again
-// -- attachment gates the Engagement live, not once.
-func TestAttachingWrite_RefusesAContractorWhoseAttachmentHasEnded(t *testing.T) {
-	f := newAttachFixture(t)
-	contractorID := testdb.SeedStaff(t, f.db, "attach-ended-contractor")
-	seedContractorMembership(t, f.db, f.practiceID, contractorID)
-	testdb.SeedAttachment(t, f.db, f.engagementID, contractorID, "granted", true)
-
-	resp := f.writeStatus(t, "attach-ended-contractor", "ok")
-	defer func() { _ = resp.Body.Close() }()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-// An employee Doula keeps the ambient write grant #227 decided -- no
-// attachment needed at all.
-func TestAttachingWrite_AllowsAnEmployeeDoulaWithNoAttachment(t *testing.T) {
-	f := newAttachFixture(t)
-	employeeID := testdb.SeedStaff(t, f.db, "attach-employee-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, employeeID, "{doula}")
-
-	resp := f.writeStatus(t, "attach-employee-doula", "ok")
-	defer func() { _ = resp.Body.Close() }()
-
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
 }
 
 // A malformed engagementId is left for the wrapped handler's own
 // staffauth.ParseUUID to reject -- the seam must not turn a typo'd path
 // segment into a 500 by handing it straight to a UUID column.
 func TestAttachingWrite_MalformedEngagementIDReachesTheHandler(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Malformed Engagement Practice")
-	doulaID := testdb.SeedStaff(t, db, "attach-malformed-doula")
-	seedMembershipWithRoles(t, db, practiceID, doulaID, "{doula}")
-
-	mux := http.NewServeMux()
-	mux.Handle("POST /practices/{practiceId}/engagements/{engagementId}/writes",
-		staffauth.Middleware(db.App)(staffauth.AttachingWrite(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			http.Error(w, "invalid engagement id", http.StatusBadRequest)
-		}))))
-	srv := httptest.NewServer(mux)
-	t.Cleanup(srv.Close)
-
-	session := authntest.SeedSession(t, db.App, "attach-malformed-doula")
-	resp := reqtest.Post(t, srv.URL+"/practices/"+practiceID+"/engagements/not-a-uuid/writes", reqtest.Session(session))
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d from the wrapped handler's own validation", resp.StatusCode, http.StatusBadRequest)
+	mount := func(g *staffauth.GatedRouter, _ *idempotency.Router, _ *sql.DB) {
+		g.GatedWrite("POST /api/practices/{practiceId}/engagements/{engagementId}/writes", staffauth.AnyStaff,
+			staffauth.AttachingWrite(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				http.Error(w, "invalid engagement id", http.StatusBadRequest)
+			})))
 	}
+	s := fixture.NewScene(t, mount)
+
+	reqtest.ExpectStatus(t, http.MethodPost, s.PracticeURL("/engagements/not-a-uuid/writes"), http.StatusBadRequest, s.SignedIn)
 }
 
 // Origin travels accrued -> granted and never the reverse: a second
 // write after an Offer's acceptance leaves the granted row, and its
 // copied fee, exactly as they are.
 func TestAttachingWrite_NeverDowngradesAGrantedAttachment(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "attach-granted-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
-	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents)
+	e := newAttachEnv(t)
+	doula := e.Colleague()
+	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents)
 		 VALUES ($1, $2, 'granted', $2, 45000)`,
-		f.engagementID, doulaID,
-	); err != nil {
-		t.Fatalf("seed granted attachment: %v", err)
-	}
+		e.Engagement.ID, doula.ID)
 
-	f.write(t, "attach-granted-doula", "ok")
+	e.write(doula, outcomeOK)
 
 	var origin string
 	var fee *int64
-	if err := f.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT origin::text, fee_amount_cents FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2`, f.engagementID, doulaID,
+		  WHERE engagement_id = $1 AND staff_id = $2`, e.Engagement.ID, doula.ID,
 	).Scan(&origin, &fee); err != nil {
 		t.Fatalf("read attachment: %v", err)
 	}
-	if origin != "granted" || fee == nil || *fee != 45000 {
+	if origin != originGranted || fee == nil || *fee != 45000 {
 		t.Fatalf("attachment = %s/%v, want the granted row and its fee untouched", origin, fee)
 	}
 }
@@ -281,15 +218,14 @@ func TestAttachingWrite_NeverDowngradesAGrantedAttachment(t *testing.T) {
 // Grant upgrades an open accrued attachment in place rather than
 // inserting a second one -- one row per (Engagement, Doula) while open.
 func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "grant-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
-	f.write(t, "grant-doula", "ok")
+	e := newAttachEnv(t)
+	doula := e.Colleague()
+	e.write(doula, outcomeOK)
 
-	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
 	fee := int64(52000)
 	terms := "Two prenatal visits."
-	if err := staffauth.Grant(t.Context(), tx, f.engagementID, doulaID, doulaID, &fee, &terms); err != nil {
+	if err := staffauth.Grant(t.Context(), tx, e.Engagement.ID, doula.ID, doula.ID, &fee, &terms); err != nil {
 		t.Fatalf("Grant: %v", err)
 	}
 
@@ -297,62 +233,63 @@ func TestGrant_UpgradesAnAccruedAttachmentInPlace(t *testing.T) {
 	var origin string
 	if err := tx.QueryRowContext(t.Context(),
 		`SELECT count(*), max(origin::text) FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
-		f.engagementID, doulaID,
+		e.Engagement.ID, doula.ID,
 	).Scan(&count, &origin); err != nil {
 		t.Fatalf("read attachments: %v", err)
 	}
-	if count != 1 || origin != "granted" {
+	if count != 1 || origin != originGranted {
 		t.Fatalf("attachments = %d rows at origin %q, want one granted row", count, origin)
 	}
+}
+
+// newWrittenAttachEnv is an attachEnv in which a Doula has written once,
+// so she holds an accrued attachment, beside an Owner, with a transaction
+// scoped to the Practice.
+func newWrittenAttachEnv(t *testing.T) (e attachEnv, doula, owner fixture.StaffRecord, tx *sql.Tx) {
+	t.Helper()
+	e = newAttachEnv(t)
+	doula = e.Colleague()
+	owner = e.Colleague(fixture.Owner())
+	e.write(doula, outcomeOK)
+	return e, doula, owner, e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
+}
+
+// endedBy is who ended the doula's attachment, read inside tx.
+func endedBy(t *testing.T, tx testdb.Querier, e attachEnv, doula fixture.StaffRecord) string {
+	t.Helper()
+	return testdb.Scalar[string](t, tx, `SELECT ended_by::text FROM engagement_attachments
+		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`, e.Engagement.ID, doula.ID)
 }
 
 // EndGranted ends one person's granted attachment and names who ended it
 // (#2596), leaves an accrued one alone, and says whether it ended any.
 func TestEndGranted_EndsOnlyAGrantedAttachment(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "end-granted-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
-	ownerID := testdb.SeedStaff(t, f.db, "end-granted-owner")
-	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
-	f.write(t, "end-granted-doula", "ok")
+	e, doula, owner, tx := newWrittenAttachEnv(t)
 
-	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
-
-	if ended, err := staffauth.EndGranted(t.Context(), tx, f.engagementID, doulaID, ownerID); err != nil || ended {
+	if ended, err := staffauth.EndGranted(t.Context(), tx, e.Engagement.ID, doula.ID, owner.ID); err != nil || ended {
 		t.Fatalf("EndGranted on an accrued attachment = %v, %v, want false", ended, err)
 	}
-	if err := staffauth.Grant(t.Context(), tx, f.engagementID, doulaID, ownerID, nil, nil); err != nil {
+	if err := staffauth.Grant(t.Context(), tx, e.Engagement.ID, doula.ID, owner.ID, nil, nil); err != nil {
 		t.Fatalf("Grant: %v", err)
 	}
-	if ended, err := staffauth.EndGranted(t.Context(), tx, f.engagementID, doulaID, ownerID); err != nil || !ended {
+	if ended, err := staffauth.EndGranted(t.Context(), tx, e.Engagement.ID, doula.ID, owner.ID); err != nil || !ended {
 		t.Fatalf("EndGranted on a granted attachment = %v, %v, want true", ended, err)
 	}
 
-	endedBy := testdb.Scalar[string](t, tx, `SELECT ended_by::text FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`, f.engagementID, doulaID)
-	if endedBy != ownerID {
-		t.Fatalf("ended_by = %q, want the person who ended it", endedBy)
+	if got := endedBy(t, tx, e, doula); got != owner.ID {
+		t.Fatalf("ended_by = %q, want the person who ended it", got)
 	}
 }
 
 // EndAttachments closes every open attachment and names who closed them,
 // and leaves an already-ended one alone.
 func TestEndAttachments_ClosesOpenRowsOnly(t *testing.T) {
-	f := newAttachFixture(t)
-	doulaID := testdb.SeedStaff(t, f.db, "end-doula")
-	seedMembershipWithRoles(t, f.db, f.practiceID, doulaID, "{doula}")
-	ownerID := testdb.SeedStaff(t, f.db, "end-owner")
-	seedMembershipWithRoles(t, f.db, f.practiceID, ownerID, "{owner}")
-	f.write(t, "end-doula", "ok")
-
-	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
-	if err := staffauth.EndAttachments(t.Context(), tx, f.engagementID, ownerID); err != nil {
+	e, doula, owner, tx := newWrittenAttachEnv(t)
+	if err := staffauth.EndAttachments(t.Context(), tx, e.Engagement.ID, owner.ID); err != nil {
 		t.Fatalf("EndAttachments: %v", err)
 	}
 
-	endedBy := testdb.Scalar[string](t, tx, `SELECT ended_by::text FROM engagement_attachments
-		  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NOT NULL`, f.engagementID, doulaID)
-	if endedBy != ownerID {
-		t.Fatalf("ended_by = %q, want the person who ended it", endedBy)
+	if got := endedBy(t, tx, e, doula); got != owner.ID {
+		t.Fatalf("ended_by = %q, want the person who ended it", got)
 	}
 }

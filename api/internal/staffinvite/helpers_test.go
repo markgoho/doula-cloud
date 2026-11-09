@@ -71,13 +71,7 @@ func newTestWorker(sender mail.Sender) staffinvite.Worker {
 // through HTTP.
 func runWorker(t *testing.T, db *testdb.DB, w staffinvite.Worker) {
 	t.Helper()
-	tx := db.BeginAs(t, testdb.NotificationWorker())
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string, inviteToken sql.NullString) {

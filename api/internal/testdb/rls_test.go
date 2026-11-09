@@ -9,6 +9,8 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+const workerTrusted = "true"
+
 func TestBeginAs_ScopesTheTransactionToTheVars(t *testing.T) {
 	db := testdb.New(t)
 	practiceA := testdb.SeedPractice(t, db, "Practice A")
@@ -54,7 +56,7 @@ func TestSessionVars_NameTheirSettings(t *testing.T) {
 		"app.current_staff_id":     "s",
 		"app.current_identity_uid": "u",
 
-		"app.notification_worker_trusted": "true",
+		"app.notification_worker_trusted": workerTrusted,
 	}
 	for name, v := range cases {
 		if v.Name != name {
@@ -63,6 +65,18 @@ func TestSessionVars_NameTheirSettings(t *testing.T) {
 		if got := testdb.Scalar[string](t, tx, `SELECT current_setting($1)`, name); got != want[name] {
 			t.Fatalf("%s = %q, want %q", name, got, want[name])
 		}
+	}
+}
+
+func TestExecCorrectingOutcome_MovesAFrozenOutcome(t *testing.T) {
+	db := testdb.New(t)
+	_, engagement := testdb.SeedEngagement(t, db, testdb.SeedPractice(t, db, "Practice A"))
+	db.ExecCorrectingOutcome(t, `UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = '2027-03-04'::date WHERE id = $1`, engagement)
+
+	db.ExecCorrectingOutcome(t, `UPDATE engagements SET birth_outcome = 'live_birth' WHERE id = $1`, engagement)
+
+	if got := testdb.Scalar[string](t, db.Admin, `SELECT birth_outcome::text FROM engagements WHERE id = $1`, engagement); got != "live_birth" {
+		t.Fatalf("birth_outcome = %q, want live_birth", got)
 	}
 }
 

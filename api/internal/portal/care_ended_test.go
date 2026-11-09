@@ -3,8 +3,6 @@ package portal_test
 import (
 	"encoding/json/v2"
 	"testing"
-
-	"doula-cloud/api/internal/fixture"
 )
 
 // TestDetailHandler_SaysWhenCareHasEnded is #2217: once the Practice
@@ -27,8 +25,7 @@ func TestDetailHandler_SaysWhenCareHasEnded(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
-			e.recordOutcome(tt.outcome, "2027-03-04")
+			e := newEnvWithOutcome(t, tt.outcome, "2027-03-04")
 			e.Exec(`UPDATE engagements SET status = $2::engagement_status,
 				        ending_reason = CASE WHEN $2 = 'completed' THEN 'care_complete'::engagement_ending_reason END
 				 WHERE id = $1`,

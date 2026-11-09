@@ -1,6 +1,7 @@
 package mfarecoverymail_test
 
 import (
+	"context"
 	"database/sql"
 	"strings"
 	"testing"
@@ -79,13 +80,7 @@ func seedRecovery(t *testing.T, token string) recovery {
 // transaction with the worker trusted, committed.
 func (r recovery) process(t *testing.T) {
 	t.Helper()
-	tx := r.db.BeginAs(t, testdb.NotificationWorker())
-	if err := r.worker.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	r.db.RunAsWorker(t, r.worker.ProcessPending)
 }
 
 func (r recovery) state(t *testing.T) (status string, token sql.NullString) {
@@ -102,13 +97,9 @@ func TestQueueVouchedCodeMail_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
 	subjectID := seedStaffRow(t, db, "subject-queue", "Priya Raman")
 
-	tx := db.BeginAs(t, testdb.NotificationWorker())
-	if err := mfarecoverymail.QueueVouchedCodeMail(t.Context(), tx, "owner-uid-queue", subjectID, "12345678"); err != nil {
-		t.Fatalf("tx func: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		return mfarecoverymail.QueueVouchedCodeMail(ctx, tx, "owner-uid-queue", subjectID, "12345678")
+	})
 
 	var recipientUID, token, status string
 	if err := db.Admin.QueryRowContext(t.Context(),

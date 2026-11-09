@@ -28,25 +28,11 @@ func (e *env) seedBirthPlanHistory() {
 // freeze trigger otherwise refuses.
 func (e *env) setEngagementFacts(kind string, birthOutcome *string) {
 	e.T.Helper()
-	tx, err := e.DB.Admin.BeginTx(e.T.Context(), nil)
-	if err != nil {
-		e.T.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(e.T.Context(),
-		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
-		e.T.Fatalf("open the correction door: %v", err)
-	}
-	if _, err := tx.ExecContext(e.T.Context(),
+	e.DB.ExecCorrectingOutcome(e.T,
 		`UPDATE engagements SET kind = $2::engagement_kind, birth_outcome = $3::birth_outcome,
 		        pregnancy_ended_on = CASE WHEN $3::text IS NULL THEN NULL ELSE '2027-03-04'::date END
 		 WHERE id = $1`,
-		e.Engagement.ID, kind, birthOutcome); err != nil {
-		e.T.Fatalf("set engagement facts: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		e.T.Fatalf("commit engagement facts: %v", err)
-	}
+		e.Engagement.ID, kind, birthOutcome)
 }
 
 // TestActivityHandler_BirthPlanRowsFollowOffersBirthPlan proves #2219 and
@@ -103,17 +89,13 @@ func TestActivityHandler_BirthPlanOmissionKeepsPagesWhole(t *testing.T) {
 	loss := engagement.OutcomeLoss
 	e.setEngagementFacts(string(engagement.KindBirth), &loss)
 
-	first := e.activityPage("")
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v; want 30/true", len(first.Items), first.HasMore)
-	}
-	second := e.activityPage("?cursor=" + *first.NextCursor)
-	if len(second.Items) != 1 || second.HasMore {
-		t.Fatalf("second page = %d items, hasMore=%v; want 1/false", len(second.Items), second.HasMore)
-	}
-	for _, item := range slices.Concat(first.Items, second.Items) {
-		if item.Action != string(activity.ActionVisitLogged) {
-			t.Fatalf("page carried %q after a loss, want only visit_logged", item.Action)
+	requireFullPageThenLast(t, func(query string) pageInfo {
+		page := e.activityPage(query)
+		for _, item := range page.Items {
+			if item.Action != string(activity.ActionVisitLogged) {
+				t.Fatalf("page carried %q after a loss, want only visit_logged", item.Action)
+			}
 		}
-	}
+		return pageInfo{len(page.Items), page.HasMore, page.NextCursor}
+	})
 }

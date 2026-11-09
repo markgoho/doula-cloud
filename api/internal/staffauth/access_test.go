@@ -1,19 +1,39 @@
 package staffauth_test
 
 import (
+	"context"
+	"database/sql"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
-func seedContractorMembership(t *testing.T, db *testdb.DB, practiceID, staffID string) {
+type reachCase struct {
+	name string
+	who  fixture.StaffRecord
+	want bool
+}
+
+// requireReach asks each case's Reader whether it can reach a record, in a
+// transaction scoped to the Practice.
+func requireReach(t *testing.T, db *testdb.DB, practice fixture.PracticeRecord, cases []reachCase,
+	can func(context.Context, staffauth.Reader, *sql.Tx) (bool, error),
+) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{doula}', 'contractor')`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("seed contractor membership: %v", err)
+	tx := db.BeginAs(t, testdb.Practice(practice.ID))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader := staffauth.NewReader(tc.who.ID, tc.who.Roles, tc.who.Employment)
+			got, err := can(t.Context(), reader, tx)
+			if err != nil {
+				t.Fatalf("can access: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("can access = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
@@ -25,62 +45,28 @@ func seedContractorMembership(t *testing.T, db *testdb.DB, practiceID, staffID s
 // attachment never reaches (#228).
 func TestReader_CanAccessEngagement(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Access Test Practice")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	ownerID := testdb.SeedStaff(t, db, "access-owner")
-	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
-
-	adminID := testdb.SeedStaff(t, db, "access-admin")
-	seedMembershipWithRoles(t, db, practiceID, adminID, "{admin}")
-
-	employeeID := testdb.SeedStaff(t, db, "access-employee")
-	seedMembershipWithRoles(t, db, practiceID, employeeID, "{doula}")
-
-	unattachedContractorID := testdb.SeedStaff(t, db, "access-contractor-unattached")
-	seedContractorMembership(t, db, practiceID, unattachedContractorID)
-
-	accruedContractorID := testdb.SeedStaff(t, db, "access-contractor-accrued")
-	seedContractorMembership(t, db, practiceID, accruedContractorID)
-	testdb.SeedAttachment(t, db, engagementID, accruedContractorID, "accrued", false)
-
-	endedContractorID := testdb.SeedStaff(t, db, "access-contractor-ended")
-	seedContractorMembership(t, db, practiceID, endedContractorID)
-	testdb.SeedAttachment(t, db, engagementID, endedContractorID, "granted", true)
-
-	grantedContractorID := testdb.SeedStaff(t, db, "access-contractor-granted")
-	seedContractorMembership(t, db, practiceID, grantedContractorID)
-	testdb.SeedAttachment(t, db, engagementID, grantedContractorID, "granted", false)
-
-	tx := db.BeginAs(t, testdb.Practice(practiceID))
-
-	cases := []struct {
-		name           string
-		staffID        string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerRole, ownerID, []string{ownerRole}, employeeType, true},
-		{adminRole, adminID, []string{adminRole}, employeeType, true},
-		{"employee doula, ambient", employeeID, []string{doulaRole}, employeeType, true},
-		{"contractor, no attachment", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"contractor, accrued only", accruedContractorID, []string{doulaRole}, contractorType, false},
-		{"contractor, granted but ended", endedContractorID, []string{doulaRole}, contractorType, false},
-		{"contractor, granted and open", grantedContractorID, []string{doulaRole}, contractorType, true},
+	practice := fixture.Practice(t, db)
+	engagementID := fixture.Engagement(t, db, practice).ID
+	staff := func(opts ...fixture.StaffOption) fixture.StaffRecord { return fixture.Staff(t, db, practice, opts...) }
+	contractor := func(origin string, ended bool) fixture.StaffRecord {
+		who := staff(fixture.Contractor())
+		if origin != "" {
+			testdb.SeedAttachment(t, db, engagementID, who.ID, origin, ended)
+		}
+		return who
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader := staffauth.NewReader(tc.staffID, tc.roles, tc.employmentType)
-			got, err := reader.CanAccessEngagement(t.Context(), tx, engagementID)
-			if err != nil {
-				t.Fatalf("CanAccessEngagement: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessEngagement() = %v, want %v", got, tc.want)
-			}
-		})
-	}
+
+	requireReach(t, db, practice, []reachCase{
+		{ownerRole, staff(fixture.Roles(ownerRole)), true},
+		{adminRole, staff(fixture.Roles(adminRole)), true},
+		{"employee doula, ambient", staff(), true},
+		{"contractor, no attachment", contractor("", false), false},
+		{"contractor, accrued only", contractor("accrued", false), false},
+		{"contractor, granted but ended", contractor("granted", true), false},
+		{"contractor, granted and open", contractor("granted", false), true},
+	}, func(ctx context.Context, r staffauth.Reader, tx *sql.Tx) (bool, error) {
+		return r.CanAccessEngagement(ctx, tx, engagementID)
+	})
 }
 
 // TestReader_CanAccessClient mirrors TestReader_CanAccessEngagement for
@@ -88,45 +74,18 @@ func TestReader_CanAccessEngagement(t *testing.T) {
 // Client's Engagements, not just one named one.
 func TestReader_CanAccessClient(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Client Access Test Practice")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	clientID := testdb.Scalar[string](t, db.Admin, `SELECT client_id FROM engagements WHERE id = $1`, engagementID)
+	practice := fixture.Practice(t, db)
+	engagement := fixture.Engagement(t, db, practice)
+	attached := fixture.Staff(t, db, practice, fixture.Contractor())
+	testdb.SeedAttachment(t, db, engagement.ID, attached.ID, "granted", false)
 
-	ownerID := testdb.SeedStaff(t, db, "client-access-owner")
-	seedMembershipWithRoles(t, db, practiceID, ownerID, "{owner}")
-
-	unattachedContractorID := testdb.SeedStaff(t, db, "client-access-contractor-unattached")
-	seedContractorMembership(t, db, practiceID, unattachedContractorID)
-
-	attachedContractorID := testdb.SeedStaff(t, db, "client-access-contractor-attached")
-	seedContractorMembership(t, db, practiceID, attachedContractorID)
-	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
-
-	tx := db.BeginAs(t, testdb.Practice(practiceID))
-
-	cases := []struct {
-		name           string
-		staffID        string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerRole, ownerID, []string{ownerRole}, employeeType, true},
-		{"contractor, no attachment", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"contractor, granted and open", attachedContractorID, []string{doulaRole}, contractorType, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader := staffauth.NewReader(tc.staffID, tc.roles, tc.employmentType)
-			got, err := reader.CanAccessClient(t.Context(), tx, clientID)
-			if err != nil {
-				t.Fatalf("CanAccessClient: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessClient() = %v, want %v", got, tc.want)
-			}
-		})
-	}
+	requireReach(t, db, practice, []reachCase{
+		{ownerRole, fixture.Staff(t, db, practice, fixture.Roles(ownerRole)), true},
+		{"contractor, no attachment", fixture.Staff(t, db, practice, fixture.Contractor()), false},
+		{"contractor, granted and open", attached, true},
+	}, func(ctx context.Context, r staffauth.Reader, tx *sql.Tx) (bool, error) {
+		return r.CanAccessClient(ctx, tx, engagement.Client.ID)
+	})
 }
 
 // TestReader_RoleAndEmploymentTypePredicates confirms the axis a Reader
