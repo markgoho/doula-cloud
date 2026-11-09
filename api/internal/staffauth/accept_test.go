@@ -1,7 +1,6 @@
 package staffauth_test
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -37,16 +37,7 @@ func seedInvitationWithToken(t *testing.T, db *testdb.DB, practiceID, invitedBy,
 
 func postAccept(t *testing.T, srv *httptest.Server, body staffauth.AcceptInviteRequest) *http.Response {
 	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return postAcceptRaw(t, srv, payload)
-}
-
-func postAcceptRaw(t *testing.T, srv *httptest.Server, payload []byte) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, srv.URL+"/api/staff/accept-invite", reqtest.RawJSON(payload), reqtest.Header("Authorization", "Bearer any-token"))
+	return reqtest.Post(t, srv.URL+"/api/staff/accept-invite", acceptBody(body)...)
 }
 
 func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
@@ -65,29 +56,80 @@ func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string,
 	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{})
 }
 
+// newInviteeEnv is a Practice whose Owner is at the screen as the inviter,
+// with a Bearer token that verifies as uid at email, whose Identity
+// Platform account already exists unverified -- the same fact
+// authntest.Verifier{UID, Email} asserts for VerifyIDToken -- so
+// accounts.SetEmailVerified (#613) has something to flip.
+func newInviteeEnv(t *testing.T, uid, email string) (*env, *authntest.FakeAccountManager) {
+	t.Helper()
+	accounts := authntest.NewFakeAccountManager()
+	accounts.Seed(uid, email, false)
+	e := newEnv(t, signedInAs(fixture.Owner()), withVerifier(authntest.Verifier{UID: uid, Email: email}), withAccounts(accounts))
+	return e, accounts
+}
+
+// invite seeds a pending Invitation to address from the Owner at the
+// screen, and returns the token to accept it with.
+func (e *env) invite(address, roles, employmentType string, expiresAt time.Time) (invitationID, token string) {
+	e.T.Helper()
+	return seedInvitationWithToken(e.T, e.DB, e.Practice.ID, e.Staff.ID, address, roles, employmentType, expiresAt)
+}
+
+// inviteLive is invite for a Doula whose Invitation lapses in an hour.
+func (e *env) inviteLive(address, employmentType string) (invitationID, token string) {
+	e.T.Helper()
+	return e.invite(address, "{doula}", employmentType, time.Now().Add(time.Hour))
+}
+
+// acceptBody is the acceptance's body and Bearer token. A string is sent
+// as it is written, for a body that is not JSON.
+func acceptBody(body any) []reqtest.Option {
+	payload := reqtest.JSON(body)
+	if raw, ok := body.(string); ok {
+		payload = reqtest.RawJSON([]byte(raw))
+	}
+	return []reqtest.Option{payload, reqtest.Header("Authorization", "Bearer any-token")}
+}
+
+// acceptResponse posts the acceptance and leaves the response to the
+// caller, for a test that reads its cookies.
+func (e *env) acceptResponse(body any) *http.Response {
+	e.T.Helper()
+	return reqtest.Do(e.T, http.MethodPost, e.URL("/api/staff/accept-invite"), acceptBody(body)...)
+}
+
+// accept posts the acceptance and requires the 200.
+func (e *env) accept(body staffauth.AcceptInviteRequest) staffauth.AcceptInviteResponse {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.AcceptInviteResponse](e.T, http.MethodPost, e.URL("/api/staff/accept-invite"), http.StatusOK, acceptBody(body)...)
+}
+
+// refuseAccept posts the acceptance, requires want and returns the
+// refusal's envelope.
+func (e *env) refuseAccept(body any, want int) apierr.APIError {
+	e.T.Helper()
+	return apierrtest.Expect(e.T, http.MethodPost, e.URL("/api/staff/accept-invite"), want, acceptBody(body)...)
+}
+
 // TestAcceptInviteHandler_CreatesStaffAndMembership is the accept half of
 // #226: the staff row appears here, when someone proves she controls the
 // invited address -- not at invite time.
 func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-whose-invite-is-accepted")
-	invitationID, token := seedInvitationWithToken(t, db, practiceID, ownerID, "lena@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
+	e, _ := newInviteeEnv(t, "lena-uid", "Lena@Example.com")
+	invitationID, token := e.inviteLive("lena@example.com", contractorType)
 
-	srv := newAcceptServer(t, db, "lena-uid", "Lena@Example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: leaFirstName, LastName: "Vasquez"})
+	resp := e.acceptResponse(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: leaFirstName, LastName: "Vasquez"})
 	defer resp.Body.Close()
-
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
-	if accepted.PracticeID != practiceID {
-		t.Fatalf("practiceId = %q, want %q", accepted.PracticeID, practiceID)
+
+	if accepted.PracticeID != e.Practice.ID {
+		t.Fatalf("practiceId = %q, want %q", accepted.PracticeID, e.Practice.ID)
 	}
 	// #2239: what the Membership was written with, for the landing to say.
-	wantPracticeName := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
-	if accepted.PracticeName != wantPracticeName || len(accepted.Roles) != 1 || accepted.Roles[0] != doulaRole || accepted.EmploymentType != contractorType {
-		t.Fatalf("accepted = %+v, want %q as doula/contractor", accepted, wantPracticeName)
+	if accepted.PracticeName != e.Practice.Name || len(accepted.Roles) != 1 || accepted.Roles[0] != doulaRole || accepted.EmploymentType != contractorType {
+		t.Fatalf("accepted = %+v, want %q as doula/contractor", accepted, e.Practice.Name)
 	}
 
 	// The session cookie is minted on the accept response itself (#145),
@@ -103,7 +145,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	}
 
 	var name, email string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT name, email FROM staff WHERE id = $1`, accepted.StaffID,
 	).Scan(&name, &email); err != nil {
 		t.Fatalf("read staff row: %v", err)
@@ -115,9 +157,9 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	}
 
 	var roles, employmentType string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT array_to_string(roles, ','), employment_type::text FROM practice_memberships
-		 WHERE practice_id = $1 AND staff_id = $2`, practiceID, accepted.StaffID,
+		 WHERE practice_id = $1 AND staff_id = $2`, e.Practice.ID, accepted.StaffID,
 	).Scan(&roles, &employmentType); err != nil {
 		t.Fatalf("read membership: %v", err)
 	}
@@ -127,7 +169,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 
 	var status, acceptedStaffID string
 	var acceptedAt time.Time
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT status::text, accepted_staff_id, accepted_at FROM practice_invitations WHERE id = $1`, invitationID,
 	).Scan(&status, &acceptedStaffID, &acceptedAt); err != nil {
 		t.Fatalf("read invitation: %v", err)
@@ -137,9 +179,9 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	}
 
 	var eventType, actor string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT action, actor_staff_id FROM activity
-		 WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2`, practiceID, accepted.StaffID,
+		 WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2`, e.Practice.ID, accepted.StaffID,
 	).Scan(&eventType, &actor); err != nil {
 		t.Fatalf("read membership event: %v", err)
 	}
@@ -152,197 +194,130 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 // half of #226: someone who already works at another Practice joins this
 // one on the staff row she already has, not a second one.
 func TestAcceptInviteHandler_ResolvesAnExistingStaffRow(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-inviting-a-known-person")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "known@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
+	e, _ := newInviteeEnv(t, "known-uid", "known@example.com")
+	_, token := e.invite("known@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
+	existingID := seedStaffWithEmail(t, e.DB, "known-uid", "known@example.com")
+	seedMembership(t, e.DB, fixture.Practice(t, e.DB, fixture.PracticeName("Her Other Practice")).ID, existingID)
 
-	existingID := seedStaffWithEmail(t, db, "known-uid", "known@example.com")
-	elsewhere := testdb.SeedPractice(t, db, "Her Other Practice")
-	seedMembership(t, db, elsewhere, existingID)
+	accepted := e.accept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
 
-	srv := newAcceptServer(t, db, "known-uid", "known@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
 	if accepted.StaffID != existingID {
 		t.Fatalf("staffId = %q, want the existing staff row %q", accepted.StaffID, existingID)
 	}
-
-	staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'known@example.com'`)
+	staffRows := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'known@example.com'`)
 	if staffRows != 1 {
 		t.Fatalf("staff rows on that address = %d, want 1 (#291)", staffRows)
 	}
 }
 
-// TestAcceptInviteHandler_AlreadyAMemberIs409 is the AC's named status:
-// the current behavior is a 500 from an unhandled unique violation.
-func TestAcceptInviteHandler_AlreadyAMemberIs409(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-inviting-a-member-again")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "member@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+// TestAcceptInviteHandler_RefusesAMemberTwice is the AC's named status
+// (the old behavior was a 500 from an unhandled unique violation), and
+// the same conflict reached the way staff.email's lack of a unique
+// constraint allows: a second identity provider, a second staff row, one
+// address. Resolving by identity alone would let this through and put two
+// rows for one person on the roster -- LV-G8 (#291) exactly.
+func TestAcceptInviteHandler_RefusesAMemberTwice(t *testing.T) {
+	cases := []struct {
+		name       string
+		memberUID  string
+		inviteeUID string
+	}{
+		{"the same identity", "member-uid", "member-uid"},
+		{"a second identity on one address", "twice-uid-a", "twice-uid-b"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _ := newInviteeEnv(t, tc.inviteeUID, "member@example.com")
+			_, token := e.inviteLive("member@example.com", employeeType)
+			seedMembership(t, e.DB, e.Practice.ID, seedStaffWithEmail(t, e.DB, tc.memberUID, "member@example.com"))
 
-	memberID := seedStaffWithEmail(t, db, "member-uid", "member@example.com")
-	seedMembership(t, db, practiceID, memberID)
+			e.refuseAccept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Twice", LastName: "Over"}, http.StatusConflict)
 
-	srv := newAcceptServer(t, db, "member-uid", "member@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-}
-
-// TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409 is the same
-// conflict reached the way staff.email's lack of a unique constraint
-// allows: a second identity provider, a second staff row, one address.
-// Resolving by identity alone would let this through and put two rows for
-// one person on the roster -- LV-G8 (#291) exactly.
-func TestAcceptInviteHandler_SecondIdentityOnOneAddressIs409(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-and-two-identities")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "twice@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-
-	firstIdentity := seedStaffWithEmail(t, db, "twice-uid-a", "twice@example.com")
-	seedMembership(t, db, practiceID, firstIdentity)
-
-	srv := newAcceptServer(t, db, "twice-uid-b", "twice@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Twice", LastName: "Over"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-
-	memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships pm JOIN staff s ON s.id = pm.staff_id
-		 WHERE pm.practice_id = $1 AND lower(s.email) = 'twice@example.com'`, practiceID)
-	if memberships != 1 {
-		t.Fatalf("memberships on that address = %d, want 1", memberships)
+			memberships := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM practice_memberships pm JOIN staff s ON s.id = pm.staff_id
+				 WHERE pm.practice_id = $1 AND lower(s.email) = 'member@example.com'`, e.Practice.ID)
+			if memberships != 1 {
+				t.Fatalf("memberships on that address = %d, want 1", memberships)
+			}
+		})
 	}
 }
 
-func TestAcceptInviteHandler_WrongAddressForbidden(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-invite-wrong-address")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "invited@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-
-	srv := newAcceptServer(t, db, "someone-else-uid", "someone.else@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Someone", LastName: "Else"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-func TestAcceptInviteHandler_NoVerifiedAddressForbidden(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-invite-no-address")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "someone@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-
-	srv := newAcceptServer(t, db, "address-less-uid", "")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "No", LastName: "Address"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-func TestAcceptInviteHandler_ExpiredIsGoneAndMarked(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-invite-expired")
-	invitationID, token := seedInvitationWithToken(t, db, practiceID, ownerID, "late@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
-
-	srv := newAcceptServer(t, db, "late-uid", "late@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusGone)
-	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
-
-	// The expiry is written down on the way past, so the Owner's Staff
-	// screen stops offering it as pending. It survives the rolled-back
-	// request because nothing else in it succeeded.
-	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID)
-	if status != "expired" {
-		t.Fatalf("status = %q, want expired", status)
+// TestAcceptInviteHandler_Refuses covers each way an acceptance is turned
+// away: an address that is not the invited one, a token with no verified
+// address behind it, an Invitation that lapsed (marked expired on the way
+// past, so the Owner's Staff screen stops offering it as pending -- it
+// survives the rolled-back request because nothing else in it succeeded),
+// a token nobody holds, and one that was revoked.
+func TestAcceptInviteHandler_Refuses(t *testing.T) {
+	const invited = "invited@example.com"
+	cases := []struct {
+		name       string
+		email      string
+		expiresIn  time.Duration
+		revoke     bool
+		unknown    bool
+		want       int
+		code       apierr.Code
+		wantStatus string
+	}{
+		{name: "the wrong address", email: "someone.else@example.com", expiresIn: time.Hour, want: http.StatusForbidden},
+		{name: "no verified address", expiresIn: time.Hour, want: http.StatusForbidden},
+		{name: "an Invitation that lapsed", email: invited, expiresIn: -time.Hour,
+			want: http.StatusGone, code: apierr.CodeLinkUnusable, wantStatus: "expired"},
+		{name: "a token nobody holds", email: invited, unknown: true, want: http.StatusNotFound, code: apierr.CodeLinkUnusable},
+		{name: "a revoked Invitation", email: invited, expiresIn: time.Hour, revoke: true,
+			want: http.StatusNotFound, code: apierr.CodeLinkUnusable},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e, _ := newInviteeEnv(t, "invitee-uid", tc.email)
+			invitationID, token := e.invite(invited, "{doula}", employeeType, time.Now().Add(tc.expiresIn))
+			if tc.unknown {
+				token = "not-a-real-token"
+			}
+			if tc.revoke {
+				e.Exec(`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, invitationID)
+			}
 
-func TestAcceptInviteHandler_UnknownToken(t *testing.T) {
-	db := testdb.New(t)
-	srv := newAcceptServer(t, db, "nobody-uid", "nobody@example.com")
-	defer srv.Close()
+			out := e.refuseAccept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"}, tc.want)
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "not-a-real-token", FirstName: "Nobody", LastName: placeholderLastName})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
-}
-
-func TestAcceptInviteHandler_RevokedTokenIsNotFound(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-revoked-then-accepted")
-	invitationID, token := seedInvitationWithToken(t, db, practiceID, ownerID, "gone@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, invitationID,
-	); err != nil {
-		t.Fatalf("revoke: %v", err)
+			if tc.code != "" && out.Code != tc.code {
+				t.Fatalf("code = %q, want %q", out.Code, tc.code)
+			}
+			if tc.wantStatus != "" {
+				if status := testdb.Scalar[string](t, e.DB.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID); status != tc.wantStatus {
+					t.Fatalf("status = %q, want %s", status, tc.wantStatus)
+				}
+			}
+		})
 	}
-
-	srv := newAcceptServer(t, db, "gone-uid", "gone@example.com")
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"})
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	apierrtest.RequireCode(t, resp, apierr.CodeLinkUnusable)
 }
 
 func TestAcceptInviteHandler_BadRequests(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-invite-bad-requests")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, "nameless@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+	e, _ := newInviteeEnv(t, "nameless-uid", "nameless@example.com")
+	_, token := e.inviteLive("nameless@example.com", employeeType)
 
-	srv := newAcceptServer(t, db, "nameless-uid", "nameless@example.com")
-	defer srv.Close()
-
-	t.Run("invalid body", func(t *testing.T) {
-		resp := postAcceptRaw(t, srv, []byte("not json"))
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
-	t.Run("missing token", func(t *testing.T) {
-		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", FirstName: "Nameless", LastName: placeholderLastName})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
-
-	// A new person must name herself: practice_invitations carries no
-	// name column, so there is nothing to fall back to.
-	t.Run("missing name for a new person", func(t *testing.T) {
-		resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token})
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	})
+	cases := []struct {
+		name string
+		body any
+	}{
+		{"invalid body", "not json"},
+		{"missing token", staffauth.AcceptInviteRequest{WorkState: "NY", FirstName: "Nameless", LastName: placeholderLastName}},
+		// A new person must name herself: practice_invitations carries no
+		// name column, so there is nothing to fall back to.
+		{"missing name for a new person", staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e.refuseAccept(tc.body, http.StatusBadRequest)
+		})
+	}
 }
 
 func TestAcceptInviteHandler_NoCredential(t *testing.T) {
-	db := testdb.New(t)
-	srv := newAcceptServer(t, db, "unused-uid", "unused@example.com")
-	defer srv.Close()
+	e := newEnv(t)
 
-	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/api/staff/accept-invite", http.StatusUnauthorized, reqtest.JSON(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"}))
+	reqtest.ExpectStatus(t, http.MethodPost, e.URL("/api/staff/accept-invite"), http.StatusUnauthorized, reqtest.JSON(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: "whatever"}))
 }
 
 // TestAcceptInviteHandler_BackfillsOfferStaffID is ADR-0008's
@@ -352,38 +327,17 @@ func TestAcceptInviteHandler_NoCredential(t *testing.T) {
 // gets the staff id it was always going to have -- past Offers included,
 // since they are part of the history she reads.
 func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
-	db := testdb.New(t)
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-offering-by-email")
-	invitationID, token := seedInvitationWithToken(t, db, practiceID, ownerID, "renata@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
-
-	var clientID, engagementID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, email) VALUES ($1, 'Offer Client', 'offer-client@example.com') RETURNING id`,
-		practiceID,
-	).Scan(&clientID); err != nil {
-		t.Fatalf("seed client: %v", err)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO engagements (client_id, practice_id, kind) VALUES ($1, $2, 'birth') RETURNING id`, clientID, practiceID,
-	).Scan(&engagementID); err != nil {
-		t.Fatalf("seed engagement: %v", err)
-	}
-	offerID := testdb.Scalar[string](t, db.Admin, `INSERT INTO engagement_offers
+	e, _ := newInviteeEnv(t, "renata-uid", "renata@example.com")
+	invitationID, token := e.inviteLive("renata@example.com", contractorType)
+	engagement := e.AnotherEngagement()
+	offerID := testdb.Scalar[string](t, e.DB.Admin, `INSERT INTO engagement_offers
 		     (engagement_id, invitation_id, employment_type, amount_cents, client_first_initial, client_area, due_date, offered_by, expires_at)
 		 VALUES ($1, $2, 'contractor', 52000, 'R', 'North side', now() + interval '90 days', $3, now() + interval '7 days')
-		 RETURNING id`, engagementID, invitationID, ownerID)
+		 RETURNING id`, engagement.ID, invitationID, e.Staff.ID)
 
-	srv := newAcceptServer(t, db, "renata-uid", "renata@example.com")
-	defer srv.Close()
+	accepted := e.accept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Renata", LastName: "Alvarez"})
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Renata", LastName: "Alvarez"})
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	accepted := reqtest.Decode[staffauth.AcceptInviteResponse](t, resp)
-
-	offerStaffID := testdb.Scalar[*string](t, db.Admin, `SELECT staff_id::text FROM engagement_offers WHERE id = $1`, offerID)
+	offerStaffID := testdb.Scalar[*string](t, e.DB.Admin, `SELECT staff_id::text FROM engagement_offers WHERE id = $1`, offerID)
 	if offerStaffID == nil || *offerStaffID != accepted.StaffID {
 		t.Fatalf("offer staff_id = %v, want the just-accepted %q", offerStaffID, accepted.StaffID)
 	}
@@ -394,19 +348,11 @@ func TestAcceptInviteHandler_BackfillsOfferStaffID(t *testing.T) {
 // flips emailVerified via the Admin SDK and never queues a verification
 // mail the way self-signup does.
 func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
-	db := testdb.New(t)
 	const uid, email = "verified-by-accept-uid", "verified-by-accept@example.com"
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-for-verified-accept")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, email, "{doula}", contractorType, time.Now().Add(time.Hour))
+	e, accounts := newInviteeEnv(t, uid, email)
+	_, token := e.inviteLive(email, contractorType)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, email, false)
-	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
-	defer srv.Close()
-
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verified", LastName: "Person"})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	e.accept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verified", LastName: "Person"})
 
 	account, err := accounts.GetAccount(t.Context(), uid)
 	if err != nil {
@@ -416,7 +362,7 @@ func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
 		t.Fatal("EmailVerified = false, want true after accepting an invitation")
 	}
 
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, uid)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff_token_mail_outbox WHERE identity_uid = $1`, uid)
 	if count != 0 {
 		t.Fatalf("token mail rows = %d, want 0 -- accepting an invitation must queue no verification mail", count)
 	}
@@ -427,22 +373,14 @@ func TestAcceptInviteHandler_SetsEmailVerifiedAndQueuesNoMail(t *testing.T) {
 // than joining the Practice behind an account Identity Platform still
 // calls unverified.
 func TestAcceptInviteHandler_SetEmailVerifiedFailureRollsBackTheMembership(t *testing.T) {
-	db := testdb.New(t)
 	const uid, email = "verify-fail-accept-uid", "verify-fail-accept@example.com"
-	ownerID, practiceID := seedOwnerMembership(t, db, "owner-for-verify-fail-accept")
-	_, token := seedInvitationWithToken(t, db, practiceID, ownerID, email, "{doula}", contractorType, time.Now().Add(time.Hour))
-
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, email, false)
+	e, accounts := newInviteeEnv(t, uid, email)
+	_, token := e.inviteLive(email, contractorType)
 	accounts.Err = errors.New("admin sdk unreachable")
-	srv := newAcceptServerWithAccounts(t, db, uid, email, accounts)
-	defer srv.Close()
 
-	resp := postAccept(t, srv, staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verify", LastName: "Fail Person"})
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
+	e.refuseAccept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Verify", LastName: "Fail Person"}, http.StatusInternalServerError)
 
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid)
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff WHERE identity_uid = $1`, uid)
 	if count != 0 {
 		t.Fatal("expected the whole acceptance to roll back, including the new staff row")
 	}
