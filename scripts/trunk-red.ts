@@ -8,6 +8,9 @@
 //   ran on a commit that issue recorded as failing (#2504). A pass on any
 //   other commit says once that the failure was never reproduced on its
 //   own commit, and leaves the issue open.
+// - A run that failed on infrastructure, on its first attempt, opens
+//   nothing (#2819): `ci-heal.yml` is rerunning it, and the rerun's own
+//   completion is what this acts on.
 // - A canceled run opens nothing (#1207); for a push it says so on the
 //   pull request that the commit came from.
 //
@@ -27,6 +30,7 @@
 // that every session shares.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import { classifyRun } from './ci-transient.ts';
 
 const LABEL = 'trunk-red';
 const ASSIGNEE = 'markgoho';
@@ -449,9 +453,35 @@ function flagCanceled(): void {
   wrote(`commented on #${pr}`);
 }
 
+/**
+ * True when `ci-heal.yml` is rerunning this run: the same verdict, on the
+ * same attempt rule. A verdict that cannot be read opens the alarm, since
+ * a silent red trunk is worse than an alarm for a run that heals.
+ */
+function beingRerun(): boolean {
+  if (run.conclusion !== 'failure' || (run.run_attempt ?? 1) !== 1) {
+    return false;
+  }
+  try {
+    const verdict = classifyRun(repo, run);
+    console.log(
+      `ci-heal verdict: ${verdict.transient ? 'transient' : 'not transient'} - ${verdict.reason}`
+    );
+    return verdict.transient;
+  } catch (error) {
+    console.log(`::warning::${(error as Error).message}`);
+    return false;
+  }
+}
+
 try {
-  if (run.conclusion !== null && RED.has(run.conclusion)) openOrUpdate();
-  else if (run.conclusion === 'success') close();
+  if (run.conclusion !== null && RED.has(run.conclusion)) {
+    if (beingRerun()) {
+      console.log(
+        'no alarm: this failure is transient and is being rerun once; its rerun decides'
+      );
+    } else openOrUpdate();
+  } else if (run.conclusion === 'success') close();
   else if (run.conclusion === CANCELED) flagCanceled();
   else console.log(`nothing to do for the conclusion ${run.conclusion}`);
 } catch (error) {

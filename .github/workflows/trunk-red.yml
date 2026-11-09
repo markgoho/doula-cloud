@@ -84,9 +84,11 @@ jobs:
       # code of the run that is watched.
       - uses: actions/checkout@v7
         with:
-          sparse-checkout: scripts
+          sparse-checkout: |
+            scripts
+            .github/actions
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup-bun
 
       - name: Open, update or close the alarm of the workflow that completed
         env:

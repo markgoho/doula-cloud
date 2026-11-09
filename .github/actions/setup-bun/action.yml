@@ -1,0 +1,33 @@
+name: Set up Bun (cached, with retry)
+description: >-
+  Puts the Bun release named in .bun-version on PATH. The binary comes from
+  a cache keyed on that version; a miss downloads it with five attempts and
+  a backoff of more than 60 seconds (#2819). oven-sh/setup-bun gave up
+  after about 35 seconds of 504s from GitHub Releases, and its own cache is
+  the runner's tool cache, which a fresh hosted runner never has.
+  Needs a checkout that includes .bun-version and scripts/install-bun.sh.
+runs:
+  using: composite
+  steps:
+    - name: Read the pinned Bun version
+      id: version
+      shell: bash
+      run: echo "version=$(tr -d '[:space:]' < "$GITHUB_WORKSPACE/.bun-version")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the Bun binary
+      id: cache
+      uses: actions/cache@v6
+      with:
+        path: ~/.bun-ci
+        key: bun-${{ runner.os }}-${{ runner.arch }}-${{ steps.version.outputs.version }}
+
+    - name: Download Bun
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: bash "$GITHUB_WORKSPACE/scripts/install-bun.sh" "${{ steps.version.outputs.version }}" "$HOME/.bun-ci"
+
+    - name: Put Bun on PATH
+      shell: bash
+      run: |
+        echo "$HOME/.bun-ci/bin" >> "$GITHUB_PATH"
+        "$HOME/.bun-ci/bin/bun" --version

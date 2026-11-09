@@ -59,7 +59,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup-bun
 
       # site/ only: the sync script needs nothing beyond Bun's own SQL
       # client, so the root install would be time spent on nothing.
@@ -176,7 +176,7 @@ jobs:
           id_token_audience: https://doula-api-850855848778.us-central1.run.app
           id_token_include_email: "true"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup-bun
 
       # The root manifest and the root bun.lock hold the `firebase-tools`
       # version every deploy runs (#1624). With no install here, `bunx

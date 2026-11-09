@@ -1,0 +1,76 @@
+# CI heals a transient infrastructure failure (#2819).
+#
+# Trunk went red three times on 2026-11-09 and two of them were not code:
+# `oven-sh/setup-bun` got 504s from GitHub Releases, and the Terraform
+# registry returned one. Each took a manual `gh run rerun --failed`, and
+# while trunk is red its migrate and deploy jobs are skipped. Per-step
+# retries (#2681) need one fix for each download; this is the layer under
+# them.
+#
+# When a watched workflow fails on its first attempt, on trunk or on a pull
+# request, scripts/ci-transient.ts reads the failed jobs. If every one
+# failed in a setup or download step and its log holds the signature of a
+# network or host failure, the failed jobs run once more. A test, a lint
+# or a build step is never rerun, and neither is a second failure.
+#
+# trunk-red.yml runs the same classifier and opens no alarm for a run that
+# is rerun here, so a person hears only about a failure that is real or
+# that survived its one rerun.
+#
+# `workflow_run` runs from the default branch only, so no pull request can
+# exercise this file; scripts/ci-heal.test.ts and
+# scripts/ci-transient.test.ts are the proof in its place. A replay reads
+# the run with this id and prints what would happen on its first attempt,
+# without a write:
+#   gh workflow run ci-heal.yml -f run_id=<id>
+name: CI heal
+
+on:
+  workflow_run:
+    # The workflows that trunk-red.yml watches; scripts/ci-heal.test.ts
+    # fails when the two lists differ.
+    workflows:
+      - CI
+      - Deploy the marketing site to Firebase Hosting on merge
+      - Hosting edge check
+      - Terraform Plan
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: The id of a completed workflow run to replay. Nothing is written.
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  # Reads the jobs and logs of the failed run, and reruns its failed jobs.
+  actions: write
+
+concurrency:
+  group: ci-heal-${{ github.event.workflow_run.id || inputs.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  heal:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # Only a failure on its first attempt can be rerun.
+    if: github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'failure' && github.event.workflow_run.run_attempt == 1)
+    steps:
+      # On `workflow_run` this is the default branch's head, never the
+      # code of the run that failed.
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            scripts
+            .github/actions
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Rerun the failed jobs once when they failed on infrastructure
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          REPLAY_RUN_ID: ${{ inputs.run_id }}
+        run: bun scripts/ci-heal.ts

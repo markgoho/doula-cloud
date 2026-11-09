@@ -12,10 +12,14 @@ on:
     paths:
       - "gcp-dashboard/**"
       - ".github/workflows/gcp-dashboard-ci.yml"
+      - ".github/actions/setup-bun/**"
+      - ".bun-version"
   pull_request:
     paths:
       - "gcp-dashboard/**"
       - ".github/workflows/gcp-dashboard-ci.yml"
+      - ".github/actions/setup-bun/**"
+      - ".bun-version"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -33,7 +37,7 @@ jobs:
       - name: Keep temporary files on disk
         run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
 
-      - uses: oven-sh/setup-bun@v2
+      - uses: ./.github/actions/setup-bun
 
       - name: Cache bun dependencies
         uses: actions/cache@v6
