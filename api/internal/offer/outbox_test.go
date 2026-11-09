@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -45,23 +45,7 @@ func runWorker(t *testing.T, db *testdb.DB, worker offer.Worker) response {
 // header, closing the response.
 func postWithSecret(t *testing.T, url, secret string) response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	if secret != "" {
-		req.Header.Set("X-Internal-Secret", secret)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	read, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return response{status: resp.StatusCode, body: read}
+	return finish(t, reqtest.Do(t, http.MethodPost, url, reqtest.HeaderIf(secret != "", "X-Internal-Secret", secret))) //nolint:bodyclose // finish closes the body
 }
 
 // outboxRow is one engagement_offer_outbox row as these tests read it.

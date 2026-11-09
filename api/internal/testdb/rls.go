@@ -48,6 +48,22 @@ func (d *DB) BeginAs(t *testing.T, vars ...SessionVar) *sql.Tx {
 	return tx
 }
 
+// RunAsWorker runs one outbox worker pass in its own app_runtime
+// transaction with the trusted-worker door open, the way
+// outbox.ProcessHandler sets it after its own secret check, and commits.
+func (d *DB) RunAsWorker(t *testing.T, process func(context.Context, *sql.Tx) error) {
+	t.Helper()
+	tx := d.BeginAs(t, SessionVar{"app.notification_worker_trusted", "true"})
+	if err := process(t.Context(), tx); err != nil {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("testdb: worker pass: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: commit worker pass: %v", err)
+	}
+}
+
 // Scalar returns the one value query selects, for a count or a single
 // column.
 func Scalar[T any](t *testing.T, q Querier, query string, args ...any) T {

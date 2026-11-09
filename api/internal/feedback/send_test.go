@@ -25,14 +25,7 @@ func TestSend_SavesCommitsAndNudgesTheIssueWorker(t *testing.T) {
 	const identityUID = "feedback-send-staff-uid"
 	staffID := testdb.SeedStaff(t, db, identityUID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		t.Fatalf("set identity: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity(identityUID))
 
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/feedback", nil)
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15")

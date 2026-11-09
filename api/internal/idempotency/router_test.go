@@ -27,17 +27,35 @@ const (
 	adminRole = "admin"
 )
 
-// TestRouter_ExemptPanicsWithoutAReason mirrors
+// TestRouter_ExemptDoorsPanicWithoutAReason mirrors
 // staffauth.TestGatedRouter_ExemptPanicsWithoutAReason: an exemption
-// nobody had to justify is not a declaration, so Exempt refuses one.
-func TestRouter_ExemptPanicsWithoutAReason(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected Exempt to panic on an empty reason, it did not")
-		}
-	}()
-	rt := idempotency.NewRouter(discardMounter{}, nil)
-	rt.Exempt("/api/practices/{practiceId}/website", "", false, http.NotFoundHandler())
+// nobody had to justify is not a declaration, so every exempting door
+// refuses one -- Exempt, ExemptGated (Exempt plus a role declaration) and
+// PortalExempt, whose portal write left unwrapped must say why under the
+// same rule (#1924).
+func TestRouter_ExemptDoorsPanicWithoutAReason(t *testing.T) {
+	cases := map[string]func(*idempotency.Router){
+		"Exempt": func(rt *idempotency.Router) {
+			rt.Exempt("/api/practices/{practiceId}/website", "", false, http.NotFoundHandler())
+		},
+		"ExemptGated": func(rt *idempotency.Router) {
+			rt.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
+				"", true, []string{ownerRole, adminRole}, http.NotFoundHandler())
+		},
+		"PortalExempt": func(rt *idempotency.Router) {
+			rt.PortalExempt("POST /api/portal/feedback", "", http.NotFoundHandler())
+		},
+	}
+	for name, register := range cases {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if r := recover(); r == nil {
+					t.Fatalf("expected %s to panic on an empty reason, it did not", name)
+				}
+			}()
+			register(idempotency.NewRouter(discardMounter{}, nil))
+		})
+	}
 }
 
 // TestRouter_RegistryIsWalkable proves every mutating route registered
@@ -110,21 +128,6 @@ func TestRouter_AttachingIsRecordedOnBothDeclarations(t *testing.T) {
 	}
 }
 
-// TestRouter_ExemptGatedPanicsWithoutAReason mirrors
-// TestRouter_ExemptPanicsWithoutAReason: ExemptGated is Exempt plus a
-// role declaration, and inherits the same "no reason, no registration"
-// refusal.
-func TestRouter_ExemptGatedPanicsWithoutAReason(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected ExemptGated to panic on an empty reason, it did not")
-		}
-	}()
-	rt := idempotency.NewRouter(discardMounter{}, nil)
-	rt.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/void",
-		"", true, []string{ownerRole, adminRole}, http.NotFoundHandler())
-}
-
 // TestRouter_ExemptGatedRecordsRoles proves a route registered through
 // ExemptGated carries its role declaration on the registry --
 // TestRoutes_EveryMutatingWriteDeclaresRolesOrIsExempt (#1028, which
@@ -183,19 +186,6 @@ func TestRouter_ReplayableGatedRecordsRoles(t *testing.T) {
 	if routes[1].Attaching {
 		t.Error("second route Attaching = true, want false")
 	}
-}
-
-// TestRouter_PortalExemptPanicsWithoutAReason: a portal write left
-// unwrapped must say why, the same rule Exempt holds a Staff write to
-// (#1924).
-func TestRouter_PortalExemptPanicsWithoutAReason(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Fatal("expected PortalExempt to panic on an empty reason, it did not")
-		}
-	}()
-	rt := idempotency.NewRouter(discardMounter{}, nil)
-	rt.PortalExempt("POST /api/portal/feedback", "", http.NotFoundHandler())
 }
 
 // TestRouter_PortalDoorsRecordTheirStance proves PortalReplayable and

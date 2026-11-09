@@ -3,6 +3,7 @@ package offer_test
 import (
 	"testing"
 
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -12,19 +13,15 @@ import (
 // -- proving the SQL scopes visibility itself, not merely agreeing with
 // the Go checks by coincidence.
 
+const countOffersQuery = `SELECT count(*) FROM engagement_offers WHERE id = $1`
+
 // With no session variable set at all, an Offer is invisible: neither the
 // practice-tier policy, the token door, nor the worker door matches.
 func TestRLS_OffersFailClosedWithNothingSet(t *testing.T) {
 	f := newFixture(t)
 	f.makeOffer(t, offerBody(f.doulaID, 45000))
 
-	var count int
-	if err := f.db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM engagement_offers`).Scan(&count); err != nil {
-		t.Fatalf("count offers: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("offers visible with no context = %d, want 0", count)
-	}
+	testdb.RequireFailsClosed(t, f.db, "engagement_offers")
 }
 
 // The token door opens exactly the Offers whose Invitation carries the
@@ -35,33 +32,9 @@ func TestRLS_TokenDoorOpensOnlyItsOwnOffers(t *testing.T) {
 	emailOfferID, token, _ := seedEmailOffer(t, f)
 	f.makeOffer(t, offerBody(f.doulaID, 45000))
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.invite_token_digest', $1, true)`, staffauth.TokenDigest(token),
-	); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := f.db.BeginAs(t, testdb.SessionVar{Name: "app.invite_token_digest", Value: staffauth.TokenDigest(token)})
 
-	rows, err := tx.QueryContext(t.Context(), `SELECT id FROM engagement_offers`)
-	if err != nil {
-		t.Fatalf("select offers: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var visible []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visible = append(visible, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate: %v", err)
-	}
+	visible := testdb.Column[string](t, tx, `SELECT id FROM engagement_offers`)
 	if len(visible) != 1 || visible[0] != emailOfferID {
 		t.Fatalf("visible through the token door = %v, want only %q", visible, emailOfferID)
 	}
@@ -73,30 +46,11 @@ func TestRLS_WorkerDoorNeedsTheTrustedFlag(t *testing.T) {
 	f := newFixture(t)
 	offerID, _, _ := seedEmailOffer(t, f)
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_offers WHERE id = $1`, offerID).Scan(&count); err != nil {
-		t.Fatalf("count before: %v", err)
-	}
-	if count != 0 {
+	if count := testdb.Scalar[int](t, f.db.App, countOffersQuery, offerID); count != 0 {
 		t.Fatalf("offers visible without the flag = %d, want 0", count)
 	}
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM engagement_offers WHERE id = $1`, offerID).Scan(&count); err != nil {
-		t.Fatalf("count after: %v", err)
-	}
-	if count != 1 {
+	tx := f.db.BeginAs(t, testdb.SessionVar{Name: outbox.NotificationDoor, Value: "true"})
+	if count := testdb.Scalar[int](t, tx, countOffersQuery, offerID); count != 1 {
 		t.Fatalf("offers visible with the flag = %d, want 1", count)
 	}
 }
@@ -121,23 +75,10 @@ func TestRLS_PracticeTierFencesAnotherPractice(t *testing.T) {
 		t.Fatalf("seed other practice offer: %v", err)
 	}
 
-	tx, err := f.db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, f.practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := f.db.BeginAs(t, testdb.Practice(f.practiceID))
 
-	var visible string
-	var count int
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT count(*), max(id::text) FROM engagement_offers`).Scan(&count, &visible); err != nil {
-		t.Fatalf("count offers: %v", err)
-	}
-	if count != 1 || visible != mine {
-		t.Fatalf("visible = %d rows (%q), want only this practice's %q", count, visible, mine)
+	visible := testdb.Column[string](t, tx, `SELECT id::text FROM engagement_offers`)
+	if len(visible) != 1 || visible[0] != mine {
+		t.Fatalf("visible = %v, want only this practice's %q", visible, mine)
 	}
 }

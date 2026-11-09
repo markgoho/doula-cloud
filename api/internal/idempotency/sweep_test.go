@@ -38,23 +38,7 @@ func seedKeyAt(t *testing.T, db *testdb.DB, key, practiceID, staffID, clientID s
 // remainingKeys reads every row's key through the superuser, sorted.
 func remainingKeys(t *testing.T, db *testdb.DB) []string {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(), `SELECT key FROM idempotency_keys ORDER BY key`)
-	if err != nil {
-		t.Fatalf("read keys: %v", err)
-	}
-	defer rows.Close()
-	keys := []string{}
-	for rows.Next() {
-		var k string
-		if err := rows.Scan(&k); err != nil {
-			t.Fatalf("scan key: %v", err)
-		}
-		keys = append(keys, k)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate keys: %v", err)
-	}
-	return keys
+	return testdb.Column[string](t, db.Admin, `SELECT key FROM idempotency_keys ORDER BY key`)
 }
 
 // runSweep runs the Sweeper in one app_runtime transaction, the way the
@@ -62,16 +46,12 @@ func remainingKeys(t *testing.T, db *testdb.DB) []string {
 func runSweep(t *testing.T, db *testdb.DB, door bool) error {
 	t.Helper()
 	ctx := clock.Into(t.Context(), func() time.Time { return sweepNow })
-	tx, err := db.App.BeginTx(ctx, nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	var vars []testdb.SessionVar
 	if door {
-		if _, err := tx.ExecContext(ctx, `SELECT set_config($1, 'true', true)`, outbox.NotificationDoor); err != nil {
-			t.Fatalf("set door: %v", err)
-		}
+		vars = append(vars, testdb.SessionVar{Name: outbox.NotificationDoor, Value: "true"})
 	}
+	tx := db.BeginAs(t, vars...)
+	defer func() { _ = tx.Rollback() }()
 	if err := (idempotency.Sweeper{}).ProcessPending(ctx, tx); err != nil {
 		return err //nolint:wrapcheck // test helper; the caller only checks nil-ness
 	}

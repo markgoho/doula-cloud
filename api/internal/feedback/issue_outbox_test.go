@@ -2,9 +2,6 @@ package feedback_test
 
 import (
 	"database/sql"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -13,8 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/feedback"
-	"doula-cloud/api/internal/internalauth"
-	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -147,36 +142,86 @@ func readIssueNumber(t *testing.T, db *testdb.DB, feedbackID string) sql.NullInt
 	return n
 }
 
+// issueEnv is a Feedback piece with its issue job pending, a fake GitHub
+// and a worker pointed at it.
+type issueEnv struct {
+	T          *testing.T
+	DB         *testdb.DB
+	FeedbackID string
+	Creator    *feedback.FakeIssueCreator
+	Worker     feedback.IssueWorker
+}
+
+// newIssueEnvFor queues feedbackID's issue job.
+func newIssueEnvFor(t *testing.T, db *testdb.DB, feedbackID string) *issueEnv {
+	t.Helper()
+	enqueueIssueOutbox(t, db, feedbackID)
+	creator := feedback.NewFakeIssueCreator()
+	return &issueEnv{T: t, DB: db, FeedbackID: feedbackID, Creator: creator, Worker: newTestIssueWorker(creator)}
+}
+
+// newStaffIssueEnv is a bare Staff piece of the given kind sent from
+// routeID, with its job queued.
+func newStaffIssueEnv(t *testing.T, uid, kind, routeID string) *issueEnv {
+	t.Helper()
+	db := testdb.New(t)
+	staffID := testdb.SeedStaff(t, db, uid)
+	return newIssueEnvFor(t, db, seedStaffFeedbackRow(t, db, staffID, kind, routeID, ""))
+}
+
+func (e *issueEnv) run() {
+	e.T.Helper()
+	runIssueWorker(e.T, e.DB, e.Worker)
+}
+
+func (e *issueEnv) requireStatus(want string) {
+	e.T.Helper()
+	if got := readIssueOutboxStatus(e.T, e.DB, e.FeedbackID); got != want {
+		e.T.Fatalf("outbox status = %q, want %s", got, want)
+	}
+}
+
+// openedIssue is the issue the worker wrote back onto the piece.
+func (e *issueEnv) openedIssue() feedback.FakeIssue {
+	e.T.Helper()
+	number := readIssueNumber(e.T, e.DB, e.FeedbackID)
+	if !number.Valid {
+		e.T.Fatal("issue_number is NULL, want set")
+	}
+	issue, ok := e.Creator.Issues[int(number.Int64)]
+	if !ok {
+		e.T.Fatalf("no fake issue #%d", number.Int64)
+	}
+	return issue
+}
+
+// seedMarkedIssue is the crash window #1500's research names: GitHub
+// answered 201 and the row is still pending, so an issue carrying the
+// piece's marker already exists.
+func (e *issueEnv) seedMarkedIssue() int {
+	e.T.Helper()
+	number, err := e.Creator.CreateIssue(e.T.Context(), "stale title", markerBody(e.FeedbackID))
+	if err != nil {
+		e.T.Fatalf("seed existing issue: %v", err)
+	}
+	return number
+}
+
 // TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack is
 // #1524's own AC's first case: a first create.
 func TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-first-create")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/clients/[clientId]", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-first-create", feedback.KindNotWorking, "/clients/[clientId]")
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("outbox status = %q, want sent", status)
-	}
-	number := readIssueNumber(t, db, feedbackID)
-	if !number.Valid {
-		t.Fatal("issue_number is NULL, want set")
-	}
-	issue, ok := creator.Issues[int(number.Int64)]
-	if !ok {
-		t.Fatalf("no fake issue #%d", number.Int64)
-	}
+	e.requireStatus(statusSent)
+	issue := e.openedIssue()
 	if want := "Something is not working: /clients/[clientId]"; issue.Title != want {
 		t.Errorf("title = %q, want %q", issue.Title, want)
 	}
 	if len(issue.Labels) != 1 || issue.Labels[0] != testNotWorkingLabel {
 		t.Errorf("labels = %v, want [%q]", issue.Labels, testNotWorkingLabel)
 	}
-	if !strings.Contains(issue.Body, "/feedback/"+feedbackID) {
+	if !strings.Contains(issue.Body, "/feedback/"+e.FeedbackID) {
 		t.Errorf("body = %q, want the founder read page link", issue.Body)
 	}
 	if !strings.Contains(issue.Body, "Role: Staff") {
@@ -185,38 +230,21 @@ func TestIssueWorker_FirstCreateOpensAnIssueAndWritesTheNumberBack(t *testing.T)
 }
 
 // TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker is #1524's own AC's
-// second case: a retry that finds its marker creates nothing. It
-// simulates the exact crash window #1500's research names -- GitHub
-// already answered 201, but the row is still pending -- by seeding the
-// fake with an issue that already carries the marker before the worker
-// ever runs.
+// second case: a retry that finds its marker creates nothing.
 func TestIssueWorker_RetryAdoptsAnIssueFoundByItsMarker(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-retry")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindIdeaOrRequest, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-retry", feedback.KindIdeaOrRequest, testAccountPage)
+	existingNumber := e.seedMarkedIssue()
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	existingNumber, err := creator.CreateIssue(t.Context(), "stale title",
-		"stale body\n\n<!-- doula-cloud-feedback-id: "+feedbackID+" -->\n")
-	if err != nil {
-		t.Fatalf("seed existing issue: %v", err)
-	}
-
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("outbox status = %q, want sent", status)
-	}
-	number := readIssueNumber(t, db, feedbackID)
+	e.requireStatus(statusSent)
+	number := readIssueNumber(t, e.DB, e.FeedbackID)
 	if !number.Valid || int(number.Int64) != existingNumber {
 		t.Fatalf("issue_number = %v, want %d -- adopted, not a second issue", number, existingNumber)
 	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(creator.Issues))
+	if len(e.Creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(e.Creator.Issues))
 	}
-	if labels := creator.Issues[existingNumber].Labels; len(labels) != 1 || labels[0] != testIdeaOrRequestLabel {
+	if labels := e.Creator.Issues[existingNumber].Labels; len(labels) != 1 || labels[0] != testIdeaOrRequestLabel {
 		t.Errorf("labels = %v, want [%q] -- an adopted issue gets its kind label too (#1587)", labels, testIdeaOrRequestLabel)
 	}
 }
@@ -241,74 +269,25 @@ func makeIssueOutboxRowDue(t *testing.T, db *testdb.DB, feedbackID string) {
 // kind label -- before #1587 it marked the row sent and left the issue
 // with no label for good.
 func TestIssueWorker_RetryAfterAFailedAddLabelsAdoptsAndLabels(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-labels-retry")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-labels-retry", feedback.KindNotWorking, testAccountPage)
+	e.Creator.AddLabelsErr = errGitHubDown
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	creator.AddLabelsErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-		t.Fatalf("outbox status = %q, want pending after the failed labels call", status)
-	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1 -- the create itself succeeded", len(creator.Issues))
+	e.requireStatus(statusPending)
+	if len(e.Creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- the create itself succeeded", len(e.Creator.Issues))
 	}
 
-	creator.AddLabelsErr = nil
-	makeIssueOutboxRowDue(t, db, feedbackID)
-	runIssueWorker(t, db, worker)
+	e.Creator.AddLabelsErr = nil
+	makeIssueOutboxRowDue(t, e.DB, e.FeedbackID)
+	e.run()
 
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("outbox status = %q, want sent after the retry", status)
+	e.requireStatus(statusSent)
+	if len(e.Creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- the retry adopts, it opens no second issue", len(e.Creator.Issues))
 	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1 -- the retry adopts, it opens no second issue", len(creator.Issues))
-	}
-	number := readIssueNumber(t, db, feedbackID)
-	if !number.Valid {
-		t.Fatal("issue_number is NULL, want the adopted issue's number")
-	}
-	issue, ok := creator.Issues[int(number.Int64)]
-	if !ok {
-		t.Fatalf("no fake issue #%d", number.Int64)
-	}
-	if len(issue.Labels) != 1 || issue.Labels[0] != testNotWorkingLabel {
-		t.Errorf("labels = %v, want [%q] -- the retry adds the label the first attempt could not", issue.Labels, testNotWorkingLabel)
-	}
-}
-
-// TestIssueWorker_GitHubErrorOnAddLabelsWhileAdoptingLeavesTheRowPending
-// is the adopt path's own half of the labels-call failure: the row stays
-// pending and the issue number is not written, the same as on the create
-// path, so a later retry still owns the label.
-func TestIssueWorker_GitHubErrorOnAddLabelsWhileAdoptingLeavesTheRowPending(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-adopt-labels-error")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindSomethingElse, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	if _, err := creator.CreateIssue(t.Context(), "stale title",
-		"stale body\n\n<!-- doula-cloud-feedback-id: "+feedbackID+" -->\n"); err != nil {
-		t.Fatalf("seed existing issue: %v", err)
-	}
-	creator.AddLabelsErr = errors.New("github is down")
-
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
-	}
-	if number := readIssueNumber(t, db, feedbackID); number.Valid {
-		t.Fatalf("issue_number = %v, want NULL", number)
-	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(creator.Issues))
+	if labels := e.openedIssue().Labels; len(labels) != 1 || labels[0] != testNotWorkingLabel {
+		t.Errorf("labels = %v, want [%q] -- the retry adds the label the first attempt could not", labels, testNotWorkingLabel)
 	}
 }
 
@@ -336,68 +315,40 @@ func TestFakeIssueCreator_AddLabelsDoesNotRepeatALabel(t *testing.T) {
 	}
 }
 
-// TestIssueWorker_GitHubErrorOnCreateLeavesTheRowPending is #1524's own
-// AC's third case: a GitHub error leaves the row pending.
-func TestIssueWorker_GitHubErrorOnCreateLeavesTheRowPending(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-create-error")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindSomethingElse, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	creator.CreateIssueErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
+// TestIssueWorker_GitHubErrorLeavesTheRowPending covers each call that
+// can fail: the create, the list before it, the labels call after a
+// create (the number is not written yet, so a retry still owns finishing
+// the job) and the labels call while adopting (the same, on the adopt
+// path).
+func TestIssueWorker_GitHubErrorLeavesTheRowPending(t *testing.T) {
+	cases := []struct {
+		name       string
+		adopting   bool
+		breakIt    func(*feedback.FakeIssueCreator)
+		wantIssues int
+	}{
+		{"create", false, func(c *feedback.FakeIssueCreator) { c.CreateIssueErr = errGitHubDown }, 0},
+		{"list", false, func(c *feedback.FakeIssueCreator) { c.ListIssuesErr = errGitHubDown }, 0},
+		{"add labels after a create", false, func(c *feedback.FakeIssueCreator) { c.AddLabelsErr = errGitHubDown }, 1},
+		{"add labels while adopting", true, func(c *feedback.FakeIssueCreator) { c.AddLabelsErr = errGitHubDown }, 1},
 	}
-	if number := readIssueNumber(t, db, feedbackID); number.Valid {
-		t.Fatalf("issue_number = %v, want NULL", number)
-	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newStaffIssueEnv(t, "feedback-worker-github-error", feedback.KindSomethingElse, testAccountPage)
+			if tc.adopting {
+				e.seedMarkedIssue()
+			}
+			tc.breakIt(e.Creator)
+			e.run()
 
-// TestIssueWorker_GitHubErrorOnListLeavesTheRowPending covers the other
-// call that can fail before a create is even attempted.
-func TestIssueWorker_GitHubErrorOnListLeavesTheRowPending(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-list-error")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindSomethingElse, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	creator.ListIssuesErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
-	}
-	if len(creator.Issues) != 0 {
-		t.Fatalf("issues = %d, want 0 -- no create attempted while listing fails", len(creator.Issues))
-	}
-}
-
-// TestIssueWorker_GitHubErrorOnAddLabelsLeavesTheRowPending covers the
-// window between a create succeeding and its labels call failing: the
-// row stays pending and the issue number is not written yet, so a retry
-// still owns finishing the job.
-func TestIssueWorker_GitHubErrorOnAddLabelsLeavesTheRowPending(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-labels-error")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindSomethingElse, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	creator.AddLabelsErr = errors.New("github is down")
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-		t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
-	}
-	if number := readIssueNumber(t, db, feedbackID); number.Valid {
-		t.Fatalf("issue_number = %v, want NULL", number)
+			e.requireStatus(statusPending)
+			if number := readIssueNumber(t, e.DB, e.FeedbackID); number.Valid {
+				t.Fatalf("issue_number = %v, want NULL", number)
+			}
+			if len(e.Creator.Issues) != tc.wantIssues {
+				t.Fatalf("issues = %d, want %d", len(e.Creator.Issues), tc.wantIssues)
+			}
+		})
 	}
 }
 
@@ -409,15 +360,10 @@ func TestIssueWorker_BodyNeverCarriesTheFreeText(t *testing.T) {
 	db := testdb.New(t)
 	staffID := testdb.SeedStaff(t, db, "feedback-worker-no-text")
 	sentinel := "the client's name is Ada Lovelace, her diagnosis is..."
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", sentinel)
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newIssueEnvFor(t, db, seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, testAccountPage, sentinel))
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	number := readIssueNumber(t, db, feedbackID)
-	issue := creator.Issues[int(number.Int64)]
+	issue := e.openedIssue()
 	if strings.Contains(issue.Title, sentinel) || strings.Contains(issue.Body, sentinel) {
 		t.Fatalf("issue leaked the free text: title=%q body=%q", issue.Title, issue.Body)
 	}
@@ -426,68 +372,47 @@ func TestIssueWorker_BodyNeverCarriesTheFreeText(t *testing.T) {
 	}
 }
 
-// TestIssueWorker_PortalSenderReportsClientAsTheRole is #1501 Q2's own
-// rule: a role with no Practice identifies nobody, so a Portal sender's
-// role on the issue is always "Client".
-func TestIssueWorker_PortalSenderReportsClientAsTheRole(t *testing.T) {
-	db := testdb.New(t)
-	testdb.SeedPortalAccount(t, db, "feedback-worker-portal", "feedback-worker-portal@example.com")
-	feedbackID := seedPortalFeedbackRow(t, db, "feedback-worker-portal", feedback.KindIdeaOrRequest, "/portal")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	number := readIssueNumber(t, db, feedbackID)
-	issue := creator.Issues[int(number.Int64)]
-	if !strings.Contains(issue.Body, "Role: Client") {
-		t.Errorf("body = %q, want Role: Client for a Portal sender", issue.Body)
+// TestIssueWorker_BodyNamesTheSenderRole holds the Role line to #1501
+// Q2's rule for each sender shape that is not a Staff member with no
+// Practice in context: a Portal sender is always "Client" because a role
+// with no Practice identifies nobody; a Staff sender at a Practice
+// reports her actual roles; and one whose membership carries zero roles
+// reports no role name at all, per feedbackRole's own doc comment --
+// "Staff" would misstate that a Practice is in context.
+func TestIssueWorker_BodyNamesTheSenderRole(t *testing.T) {
+	cases := []struct {
+		name    string
+		seed    func(*testing.T, *testdb.DB) string
+		want    string
+		notWant string
+	}{
+		{"Portal sender", func(t *testing.T, db *testdb.DB) string {
+			testdb.SeedPortalAccount(t, db, "feedback-worker-portal", "feedback-worker-portal@example.com")
+			return seedPortalFeedbackRow(t, db, "feedback-worker-portal", feedback.KindIdeaOrRequest, "/portal")
+		}, "Role: Client", ""},
+		{"Staff sender with roles", func(t *testing.T, db *testdb.DB) string {
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-roles", []string{testOwnerRole, testAdminRole}, "employee")
+			return seedStaffFeedbackRowWithRoles(t, db, staffID, practiceID, feedback.KindNotWorking, "/practices/[practiceId]")
+		}, "Role: owner, admin", ""},
+		{"zero-role membership", func(t *testing.T, db *testdb.DB) string {
+			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-zero-role", nil, "employee")
+			return seedStaffFeedbackRowZeroRoles(t, db, staffID, practiceID)
+		}, "Role: \n", "Role: Staff"},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testdb.New(t)
+			e := newIssueEnvFor(t, db, tc.seed(t, db))
+			e.run()
 
-// TestIssueWorker_StaffSenderWithRolesReportsThem is the fourth shape:
-// a Staff sender at a real Practice reports her actual roles.
-func TestIssueWorker_StaffSenderWithRolesReportsThem(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-roles", []string{testOwnerRole, testAdminRole}, "employee")
-	feedbackID := seedStaffFeedbackRowWithRoles(t, db, staffID, practiceID, feedback.KindNotWorking, "/practices/[practiceId]")
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	number := readIssueNumber(t, db, feedbackID)
-	issue := creator.Issues[int(number.Int64)]
-	if !strings.Contains(issue.Body, "Role: owner, admin") {
-		t.Errorf("body = %q, want Role: owner, admin", issue.Body)
-	}
-}
-
-// TestIssueWorker_ZeroRoleMembershipReportsNoRoleName is the fifth
-// shape, distinct from both "Staff" (no Practice in context, roles
-// NULL) and a real role list: a Staff sender at a real Practice whose
-// membership carries zero roles reports no role name at all, per
-// feedbackRole's own doc comment -- "Staff" would misstate that a
-// Practice is in context.
-func TestIssueWorker_ZeroRoleMembershipReportsNoRoleName(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "feedback-worker-zero-role", nil, "employee")
-	feedbackID := seedStaffFeedbackRowZeroRoles(t, db, staffID, practiceID)
-	enqueueIssueOutbox(t, db, feedbackID)
-
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	runIssueWorker(t, db, worker)
-
-	number := readIssueNumber(t, db, feedbackID)
-	issue := creator.Issues[int(number.Int64)]
-	if !strings.Contains(issue.Body, "Role: \n") {
-		t.Errorf("body = %q, want an empty Role: line -- a zero-role membership names no role, and must not read as \"Staff\"", issue.Body)
-	}
-	if strings.Contains(issue.Body, "Role: Staff") {
-		t.Error("body reports Role: Staff for a zero-role membership -- that misstates that a Practice is in context")
+			body := e.openedIssue().Body
+			if !strings.Contains(body, tc.want) {
+				t.Errorf("body = %q, want %q", body, tc.want)
+			}
+			if tc.notWant != "" && strings.Contains(body, tc.notWant) {
+				t.Errorf("body = %q, must not contain %q", body, tc.notWant)
+			}
+		})
 	}
 }
 
@@ -499,37 +424,13 @@ func TestIssueWorker_ZeroRoleMembershipReportsNoRoleName(t *testing.T) {
 // issue_number back, licensed by the same notification_worker_trusted
 // door every mailing outbox already opens.
 func TestProcessIssueOutboxHandler_RunsBehindTheDoor(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-endpoint")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-endpoint", feedback.KindNotWorking, testAccountPage)
+	postProcessIssueOutbox(t, e.DB, e.Worker)
 
-	creator := feedback.NewFakeIssueCreator()
-	worker := feedback.IssueWorker{Creator: creator, OpsBaseURL: testIssueOpsBaseURL, Now: time.Now}
-	mux := http.NewServeMux()
-	mux.Handle("POST /internal/feedback/process-issue-outbox",
-		outbox.ProcessHandler(db.App, worker, internalauth.FromSecret("correct-secret"), outbox.NotificationDoor))
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/internal/feedback/process-issue-outbox", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", "correct-secret")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
+	if status := readIssueOutboxStatus(t, e.DB, e.FeedbackID); status != statusSent {
 		t.Fatalf("outbox status = %q, want sent -- app_runtime must reach feedback through the door", status)
 	}
-	if number := readIssueNumber(t, db, feedbackID); !number.Valid {
+	if number := readIssueNumber(t, e.DB, e.FeedbackID); !number.Valid {
 		t.Fatal("issue_number is NULL, want set through the door's UPDATE policy")
 	}
 }

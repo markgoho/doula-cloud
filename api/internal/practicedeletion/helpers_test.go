@@ -2,16 +2,15 @@ package practicedeletion_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/practicedeletion"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
@@ -22,68 +21,51 @@ const (
 	adminRole = "admin"
 )
 
-// newMux mounts practicedeletion.Mount alongside client.Mount -- the
-// latter only so a test can seed a Client through the real endpoint and,
-// where a test needs it, put a real erasure through it to prove finalize
-// does not double-erase.
-func newMux(db *testdb.DB) *http.ServeMux {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
-	practicedeletion.Mount(g, ir)
-	return mux
+// env is a Practice with this package's routes mounted beside
+// client.Mount -- the latter only so a test can seed a Client through the
+// real endpoint and, where a test needs it, put a real erasure through it
+// to prove finalize does not double-erase -- and one Staff member of the
+// given role at the screen.
+type env struct {
+	*fixture.Scene
 }
 
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+func newEnv(t *testing.T, role fixture.StaffOption) *env {
 	t.Helper()
-	return httptest.NewServer(newMux(db)), authntest.SeedSession(t, db.App, uid)
+	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+		client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
+		practicedeletion.Mount(g, ir)
+	}
+	return &env{fixture.NewScene(t, mount, fixture.SignedInAs(role))}
 }
 
-// authedRequest issues method against url with session's cookie -- every
-// route this package tests takes no request body, so unlike
-// client_test's own authedJSON there is no body parameter to marshal.
-func authedRequest(t *testing.T, session, method, url string, confirmed bool) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), method, url, http.NoBody)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	if confirmed {
-		req.Header.Set("X-Confirmed", "true")
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+// call issues method against the Practice's deletion route as the Staff
+// member at the screen. Every route this package tests takes no request
+// body.
+func (e *env) call(method string, confirmed bool) *http.Response {
+	e.T.Helper()
+	return reqtest.Do(e.T, method, e.PracticeURL("/deletion"), e.SignedIn,
+		reqtest.Header("Content-Type", "application/json"), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
 }
 
-func authedGet(t *testing.T, session, url string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+// callJSON issues method, requires want and decodes the body.
+func callJSON[T any](e *env, method string, confirmed bool, want int) T {
+	e.T.Helper()
+	resp := e.call(method, confirmed) //nolint:bodyclose // reqtest.DecodeStatus closes the body
+	return reqtest.DecodeStatus[T](e.T, resp, want)
 }
 
-// decodeJSON reads and json-decodes resp's body into v, closing the body
-// once done.
-func decodeJSON(t *testing.T, resp *http.Response, v any) {
-	t.Helper()
-	defer resp.Body.Close()
-	if err := json.UnmarshalRead(resp.Body, v); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
+// expect issues method and requires want.
+func (e *env) expect(method string, confirmed bool, want int) {
+	e.T.Helper()
+	resp := e.call(method, confirmed)
+	defer func() { _ = resp.Body.Close() }()
+	reqtest.RequireStatus(e.T, resp, want)
 }
+
+// initiate and restore are the two writes, each expected to succeed.
+func (e *env) initiate() { e.T.Helper(); e.expect(http.MethodPost, true, http.StatusOK) }
+func (e *env) restore()  { e.T.Helper(); e.expect(http.MethodDelete, false, http.StatusNoContent) }
 
 // seedUnsettledInvoice gives practiceID one draft Invoice on a fresh
 // Client/Engagement/Contract chain -- the fact InitiateHandler's own

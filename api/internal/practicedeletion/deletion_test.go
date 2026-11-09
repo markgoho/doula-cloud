@@ -7,32 +7,30 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/practicedeletion"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
+func pendingCount(t *testing.T, e *env, act string) int {
+	t.Helper()
+	return testdb.Scalar[int](t, e.DB.Admin,
+		`SELECT count(*) FROM practice_deletion_outbox WHERE practice_id = $1 AND act = $2 AND status = 'pending'`, e.Practice.ID, act)
+}
+
 func TestInitiateHandler_StartsThirtyDayWindow(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-initiate-happy"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
 
 	before := time.Now().UTC()
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out practicedeletion.InitiateResponse
-	decodeJSON(t, resp, &out)
+	out := callJSON[practicedeletion.InitiateResponse](e, http.MethodPost, true, http.StatusOK)
 
 	wantFinalize := before.Add(practicedeletion.RestoreWindow)
 	if diff := out.FinalizeAt.Sub(wantFinalize); diff < -time.Minute || diff > time.Minute {
 		t.Fatalf("FinalizeAt = %v, want close to %v", out.FinalizeAt, wantFinalize)
 	}
 
-	requestedAt, finalizeAt, deletedAt, requestedBy := practiceDeletionState(t, db, practiceID)
+	requestedAt, finalizeAt, deletedAt, requestedBy := practiceDeletionState(t, e.DB, e.Practice.ID)
 	if requestedAt == nil {
 		t.Fatal("deletion_requested_at not set")
 	}
@@ -42,32 +40,20 @@ func TestInitiateHandler_StartsThirtyDayWindow(t *testing.T) {
 	if deletedAt != nil {
 		t.Fatal("deleted_at set on initiation, want nil")
 	}
-	if requestedBy == nil || *requestedBy != staffID {
-		t.Fatalf("deletion_requested_by = %v, want %s", requestedBy, staffID)
+	if requestedBy == nil || *requestedBy != e.Staff.ID {
+		t.Fatalf("deletion_requested_by = %v, want %s", requestedBy, e.Staff.ID)
 	}
 
-	var reminderCount, finalizeCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_deletion_outbox WHERE practice_id = $1 AND act = 'reminder' AND status = 'pending'`, practiceID,
-	).Scan(&reminderCount); err != nil {
-		t.Fatalf("query reminder outbox: %v", err)
-	}
-	if reminderCount != 1 {
-		t.Fatalf("pending reminder rows = %d, want 1", reminderCount)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_deletion_outbox WHERE practice_id = $1 AND act = 'finalize' AND status = 'pending'`, practiceID,
-	).Scan(&finalizeCount); err != nil {
-		t.Fatalf("query finalize outbox: %v", err)
-	}
-	if finalizeCount != 1 {
-		t.Fatalf("pending finalize rows = %d, want 1", finalizeCount)
+	for _, act := range []string{"reminder", "finalize"} {
+		if n := pendingCount(t, e, act); n != 1 {
+			t.Fatalf("pending %s rows = %d, want 1", act, n)
+		}
 	}
 
 	var action, actorKind string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT action, actor_kind::text FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 ORDER BY created_at`,
-		practiceID,
+		e.Practice.ID,
 	).Scan(&action, &actorKind); err != nil {
 		t.Fatalf("query activity: %v", err)
 	}
@@ -76,31 +62,26 @@ func TestInitiateHandler_StartsThirtyDayWindow(t *testing.T) {
 	}
 }
 
-func TestInitiateHandler_RefusesWithoutConfirmation(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-initiate-unconfirmed"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", false)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+// TestHandlers_Refusals holds each write to its refusal: the
+// confirmation header, the Owner-only gate, and a restore with nothing
+// pending.
+func TestHandlers_Refusals(t *testing.T) {
+	cases := []struct {
+		name      string
+		role      fixture.StaffOption
+		method    string
+		confirmed bool
+		want      int
+	}{
+		{"initiate without confirmation", fixture.Owner(), http.MethodPost, false, http.StatusBadRequest},
+		{"initiate by a non-Owner", fixture.Admin(), http.MethodPost, true, http.StatusForbidden},
+		{"restore by a non-Owner", fixture.Admin(), http.MethodDelete, false, http.StatusForbidden},
+		{"restore with nothing pending", fixture.Owner(), http.MethodDelete, false, http.StatusConflict},
 	}
-}
-
-func TestInitiateHandler_RefusesNonOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "admin-initiate-refused"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			newEnv(t, tc.role).expect(tc.method, tc.confirmed, tc.want)
+		})
 	}
 }
 
@@ -112,23 +93,12 @@ func TestInitiateHandler_RefusesNonOwner(t *testing.T) {
 // while pending, per decision 3's "reach the pending-deletion screen to
 // restore it," which never includes deleting again.
 func TestInitiateHandler_SecondCallBlockedByPendingDeletionLockout(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-initiate-twice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	e.initiate()
 
-	first := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first initiate status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	second := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
+	second := e.call(http.MethodPost, true)
 	defer second.Body.Close()
-	if second.StatusCode != http.StatusForbidden {
-		t.Fatalf("second initiate status = %d, want %d", second.StatusCode, http.StatusForbidden)
-	}
+	reqtest.RequireStatus(t, second, http.StatusForbidden)
 	apiErr := apierrtest.Decode(t, second)
 	if apiErr.Code != apierr.CodePracticePendingDeletion {
 		t.Fatalf("code = %s, want %s", apiErr.Code, apierr.CodePracticePendingDeletion)
@@ -136,49 +106,29 @@ func TestInitiateHandler_SecondCallBlockedByPendingDeletionLockout(t *testing.T)
 }
 
 func TestInitiateHandler_RefusesUnsettledInvoices(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-initiate-unsettled"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedUnsettledInvoice(t, db, practiceID)
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	seedUnsettledInvoice(t, e.DB, e.Practice.ID)
 
-	resp := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
+	resp := e.call(http.MethodPost, true)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
+	reqtest.RequireStatus(t, resp, http.StatusConflict)
 	apiErr := apierrtest.Decode(t, resp)
 	if apiErr.Code != apierr.CodeFailedPrecondition {
 		t.Fatalf("code = %s, want %s", apiErr.Code, apierr.CodeFailedPrecondition)
 	}
 
-	requestedAt, _, _, _ := practiceDeletionState(t, db, practiceID)
+	requestedAt, _, _, _ := practiceDeletionState(t, e.DB, e.Practice.ID)
 	if requestedAt != nil {
 		t.Fatal("deletion_requested_at set despite refusal")
 	}
 }
 
 func TestRestoreHandler_UndoesPendingDeletion(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-restore-happy"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	e.initiate()
+	e.restore()
 
-	initiate := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	_ = initiate.Body.Close()
-	if initiate.StatusCode != http.StatusOK {
-		t.Fatalf("initiate status = %d, want %d", initiate.StatusCode, http.StatusOK)
-	}
-
-	restore := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", false)
-	defer restore.Body.Close()
-	if restore.StatusCode != http.StatusNoContent {
-		t.Fatalf("restore status = %d, want %d", restore.StatusCode, http.StatusNoContent)
-	}
-
-	requestedAt, finalizeAt, deletedAt, requestedBy := practiceDeletionState(t, db, practiceID)
+	requestedAt, finalizeAt, deletedAt, requestedBy := practiceDeletionState(t, e.DB, e.Practice.ID)
 	if requestedAt != nil || finalizeAt != nil || requestedBy != nil {
 		t.Fatalf("deletion state not cleared: requestedAt=%v finalizeAt=%v requestedBy=%v", requestedAt, finalizeAt, requestedBy)
 	}
@@ -186,43 +136,11 @@ func TestRestoreHandler_UndoesPendingDeletion(t *testing.T) {
 		t.Fatal("deleted_at set by a restore")
 	}
 
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
+	count := testdb.Scalar[int](t, e.DB.Admin,
 		`SELECT count(*) FROM activity WHERE subject_kind = 'practice' AND subject_id = $1 AND action = 'practice_deletion_restored' AND actor_staff_id = $2`,
-		practiceID, staffID,
-	).Scan(&count); err != nil {
-		t.Fatalf("query activity: %v", err)
-	}
+		e.Practice.ID, e.Staff.ID)
 	if count != 1 {
 		t.Fatalf("restored activity rows = %d, want 1", count)
-	}
-}
-
-func TestRestoreHandler_RefusesNonOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "admin-restore-refused"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{adminRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", false)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
-	}
-}
-
-func TestRestoreHandler_RefusesNothingPending(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-restore-nothing-pending"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", false)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
 	}
 }
 
@@ -232,33 +150,14 @@ func TestRestoreHandler_RefusesNothingPending(t *testing.T) {
 // first initiate already queued, and must not leave them behind at their
 // original (now-wrong) deadline for the skip-at-send recheck to act on.
 func TestInitiateHandler_ReinitiateAfterRestoreMovesTheSamePendingRow(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-reinitiate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	e.initiate()
+	firstFinalizeAt, _ := pendingOutboxRow(t, e.DB, e.Practice.ID, "finalize")
+	e.restore()
+	e.initiate()
 
-	first := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first initiate status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-	firstFinalizeAt, _ := pendingOutboxRow(t, db, practiceID, "finalize")
-
-	restore := authedRequest(t, session, http.MethodDelete, srv.URL+"/api/practices/"+practiceID+"/deletion", false)
-	_ = restore.Body.Close()
-	if restore.StatusCode != http.StatusNoContent {
-		t.Fatalf("restore status = %d, want %d", restore.StatusCode, http.StatusNoContent)
-	}
-
-	second := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second initiate status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	reminderAt, reminderAttempts := pendingOutboxRow(t, db, practiceID, "reminder")
-	finalizeAt, finalizeAttempts := pendingOutboxRow(t, db, practiceID, "finalize")
+	reminderAt, reminderAttempts := pendingOutboxRow(t, e.DB, e.Practice.ID, "reminder")
+	finalizeAt, finalizeAttempts := pendingOutboxRow(t, e.DB, e.Practice.ID, "finalize")
 	if reminderAttempts != 0 || finalizeAttempts != 0 {
 		t.Fatalf("attempt_count after reinitiate = %d/%d, want 0/0", reminderAttempts, finalizeAttempts)
 	}
@@ -271,20 +170,10 @@ func TestInitiateHandler_ReinitiateAfterRestoreMovesTheSamePendingRow(t *testing
 }
 
 func TestStatusHandler_ReadsPendingAndUnsettledState(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-status-read"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	seedUnsettledInvoice(t, db, practiceID)
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	seedUnsettledInvoice(t, e.DB, e.Practice.ID)
 
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/deletion")
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out practicedeletion.StatusResponse
-	decodeJSON(t, resp, &out)
+	out := callJSON[practicedeletion.StatusResponse](e, http.MethodGet, false, http.StatusOK)
 	if out.Pending {
 		t.Fatal("Pending = true before any initiation")
 	}
@@ -296,25 +185,10 @@ func TestStatusHandler_ReadsPendingAndUnsettledState(t *testing.T) {
 // TestStatusHandler_ReadsPendingState covers StatusResponse's Pending
 // and FinalizeAt fields, both set together at initiation.
 func TestStatusHandler_ReadsPendingState(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-status-pending"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t, fixture.Owner())
+	e.initiate()
 
-	initiate := authedRequest(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/deletion", true)
-	_ = initiate.Body.Close()
-	if initiate.StatusCode != http.StatusOK {
-		t.Fatalf("initiate status = %d, want %d", initiate.StatusCode, http.StatusOK)
-	}
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/deletion")
-	if resp.StatusCode != http.StatusOK {
-		_ = resp.Body.Close()
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out practicedeletion.StatusResponse
-	decodeJSON(t, resp, &out)
+	out := callJSON[practicedeletion.StatusResponse](e, http.MethodGet, false, http.StatusOK)
 	if !out.Pending || out.DeletionRequestedAt == nil || out.FinalizeAt == nil {
 		t.Fatalf("status = %+v, want Pending true with both timestamps set", out)
 	}

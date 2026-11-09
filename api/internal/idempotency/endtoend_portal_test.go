@@ -2,8 +2,6 @@ package idempotency_test
 
 import (
 	"bytes"
-	"encoding/json/v2"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,6 +11,7 @@ import (
 	"doula-cloud/api/internal/message"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/push"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -45,43 +44,18 @@ func newPortalMessageServer(t *testing.T, db *testdb.DB) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
-func postPortalMessage(t *testing.T, srv *httptest.Server, c portalClient, key, text string) (status int, body []byte) {
+// postPortalMessage answers 201 or fails, and returns the raw body so a
+// test can compare one response to another byte for byte.
+func postPortalMessage(t *testing.T, srv *httptest.Server, c portalClient, key, text string) []byte {
 	t.Helper()
-	payload, err := json.Marshal(message.CreateRequest{Body: text})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
-		srv.URL+"/api/portal/engagements/"+c.engagementID+"/messages", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	authntest.AddSessionCookie(req, c.session)
-	if key != "" {
-		req.Header.Set("Idempotency-Key", key)
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	body, err = io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	return resp.StatusCode, body
+	return reqtest.ExpectBody(t, http.MethodPost, srv.URL+"/api/portal/engagements/"+c.engagementID+"/messages", http.StatusCreated,
+		reqtest.Session(c.session), reqtest.JSON(message.CreateRequest{Body: text}),
+		reqtest.HeaderIf(key != "", "Idempotency-Key", key))
 }
 
 func countMessages(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()
-	var n int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM messages WHERE engagement_id = $1`, engagementID,
-	).Scan(&n); err != nil {
-		t.Fatalf("count messages: %v", err)
-	}
-	return n
+	return testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM messages WHERE engagement_id = $1`, engagementID)
 }
 
 // TestEndToEnd_PortalMessageReplaysOnRetry is #1924's end-to-end proof: a
@@ -96,14 +70,8 @@ func TestEndToEnd_PortalMessageReplaysOnRetry(t *testing.T) {
 	srv := newPortalMessageServer(t, db)
 	defer srv.Close()
 
-	firstStatus, firstBody := postPortalMessage(t, srv, client, "portal-message-retry-key", "Is Tuesday still on?")
-	if firstStatus != http.StatusCreated {
-		t.Fatalf("first call status = %d, want %d: %s", firstStatus, http.StatusCreated, firstBody)
-	}
-	retriedStatus, retriedBody := postPortalMessage(t, srv, client, "portal-message-retry-key", "Is Tuesday still on?")
-	if retriedStatus != http.StatusCreated {
-		t.Fatalf("retried call status = %d, want %d", retriedStatus, http.StatusCreated)
-	}
+	firstBody := postPortalMessage(t, srv, client, "portal-message-retry-key", "Is Tuesday still on?")
+	retriedBody := postPortalMessage(t, srv, client, "portal-message-retry-key", "Is Tuesday still on?")
 	if !bytes.Equal(firstBody, retriedBody) {
 		t.Fatalf("retried body = %s, want the first response replayed: %s", retriedBody, firstBody)
 	}
@@ -113,9 +81,7 @@ func TestEndToEnd_PortalMessageReplaysOnRetry(t *testing.T) {
 
 	// The control: no key, so nothing to replay -- both posts land.
 	for range 2 {
-		if status, body := postPortalMessage(t, srv, client, "", "Is Tuesday still on?"); status != http.StatusCreated {
-			t.Fatalf("no-key call status = %d, want %d: %s", status, http.StatusCreated, body)
-		}
+		postPortalMessage(t, srv, client, "", "Is Tuesday still on?")
 	}
 	if n := countMessages(t, db, client.engagementID); n != 3 {
 		t.Fatalf("messages after two no-key posts = %d, want 3", n)
@@ -134,11 +100,8 @@ func TestEndToEnd_PortalKeyIsScopedToItsOwnClient(t *testing.T) {
 	srv := newPortalMessageServer(t, db)
 	defer srv.Close()
 
-	_, firstBody := postPortalMessage(t, srv, first, "shared-key", "From the first Client")
-	status, secondBody := postPortalMessage(t, srv, second, "shared-key", "From the second Client")
-	if status != http.StatusCreated {
-		t.Fatalf("second Client status = %d, want %d: %s", status, http.StatusCreated, secondBody)
-	}
+	firstBody := postPortalMessage(t, srv, first, "shared-key", "From the first Client")
+	secondBody := postPortalMessage(t, srv, second, "shared-key", "From the second Client")
 	if bytes.Equal(firstBody, secondBody) {
 		t.Fatal("second Client received the first Client's stored response for the same key value")
 	}

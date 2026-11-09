@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/internalauth"
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -81,20 +82,13 @@ func TestIssueWorker_CloseAsErasedGitHubErrorLeavesTheJobPending(t *testing.T) {
 // AC: a piece erased before its issue was opened opens no issue, and the
 // pending open job is marked done.
 func TestIssueWorker_OpenJobWhosePieceIsGoneOpensNoIssue(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-gone")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
-	deleteFeedbackRow(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-gone", feedback.KindNotWorking, testAccountPage)
+	deleteFeedbackRow(t, e.DB, e.FeedbackID)
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	runIssueWorker(t, db, newTestIssueWorker(creator))
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("outbox status = %q, want sent -- the job is done once its piece is gone", status)
-	}
-	if len(creator.Issues) != 0 {
-		t.Fatalf("issues = %d, want 0 -- an erased piece opens no issue", len(creator.Issues))
+	e.requireStatus(statusSent)
+	if len(e.Creator.Issues) != 0 {
+		t.Fatalf("issues = %d, want 0 -- an erased piece opens no issue", len(e.Creator.Issues))
 	}
 }
 
@@ -104,24 +98,16 @@ func TestIssueWorker_OpenJobWhosePieceIsGoneOpensNoIssue(t *testing.T) {
 // piece was erased before the retry. The Erasure found no number to
 // close, so the retry is the only act that can ever close that issue.
 func TestIssueWorker_OpenJobWhosePieceIsGoneClosesAnIssueAnEarlierAttemptOpened(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-gone-orphan")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-gone-orphan", feedback.KindNotWorking, testAccountPage)
+	number := seedOpenedIssue(t, e.Creator, markerBody(e.FeedbackID))
+	deleteFeedbackRow(t, e.DB, e.FeedbackID)
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	number := seedOpenedIssue(t, creator, markerBody(feedbackID))
-	deleteFeedbackRow(t, db, feedbackID)
-
-	runIssueWorker(t, db, newTestIssueWorker(creator))
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("outbox status = %q, want sent", status)
+	e.requireStatus(statusSent)
+	if len(e.Creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(e.Creator.Issues))
 	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1 -- no second issue opened", len(creator.Issues))
-	}
-	issue := creator.Issues[number]
+	issue := e.Creator.Issues[number]
 	if !issue.Closed || !hasLabel(issue, testErasedLabel) {
 		t.Fatalf("issue closed = %v, labels = %v; want closed with the erased label", issue.Closed, issue.Labels)
 	}
@@ -136,21 +122,13 @@ func TestIssueWorker_OpenJobWhosePieceIsGoneStaysPendingOnAGitHubError(t *testin
 		"close": func(c *feedback.FakeIssueCreator) { c.CloseIssueErr = errGitHubDown },
 	} {
 		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			staffID := testdb.SeedStaff(t, db, "feedback-worker-gone-error")
-			feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-			enqueueIssueOutbox(t, db, feedbackID)
+			e := newStaffIssueEnv(t, "feedback-worker-gone-error", feedback.KindNotWorking, testAccountPage)
+			seedOpenedIssue(t, e.Creator, markerBody(e.FeedbackID))
+			deleteFeedbackRow(t, e.DB, e.FeedbackID)
+			breakIt(e.Creator)
+			e.run()
 
-			creator := feedback.NewFakeIssueCreator()
-			seedOpenedIssue(t, creator, markerBody(feedbackID))
-			deleteFeedbackRow(t, db, feedbackID)
-			breakIt(creator)
-
-			runIssueWorker(t, db, newTestIssueWorker(creator))
-
-			if status := readIssueOutboxStatus(t, db, feedbackID); status != statusPending {
-				t.Fatalf("outbox status = %q, want pending after a GitHub error", status)
-			}
+			e.requireStatus(statusPending)
 		})
 	}
 }
@@ -162,35 +140,23 @@ func TestIssueWorker_OpenJobWhosePieceIsGoneStaysPendingOnAGitHubError(t *testin
 // matches no row, and that is its signal to queue the close itself --
 // otherwise the issue it just opened stays open forever.
 func TestIssueWorker_PieceErasedWhileItsIssueWasBeingOpenedQueuesAClose(t *testing.T) {
-	db := testdb.New(t)
-	staffID := testdb.SeedStaff(t, db, "feedback-worker-race")
-	feedbackID := seedStaffFeedbackRow(t, db, staffID, feedback.KindNotWorking, "/account", "")
-	enqueueIssueOutbox(t, db, feedbackID)
+	e := newStaffIssueEnv(t, "feedback-worker-race", feedback.KindNotWorking, testAccountPage)
+	e.Creator.AfterCreate = func(int) { deleteFeedbackRow(t, e.DB, e.FeedbackID) }
+	e.run()
 
-	creator := feedback.NewFakeIssueCreator()
-	creator.AfterCreate = func(int) { deleteFeedbackRow(t, db, feedbackID) }
-	worker := newTestIssueWorker(creator)
-	runIssueWorker(t, db, worker)
-
-	if status := readIssueOutboxStatus(t, db, feedbackID); status != statusSent {
-		t.Fatalf("open job status = %q, want sent", status)
+	e.requireStatus(statusSent)
+	if len(e.Creator.Issues) != 1 {
+		t.Fatalf("issues = %d, want 1", len(e.Creator.Issues))
 	}
-	if len(creator.Issues) != 1 {
-		t.Fatalf("issues = %d, want 1", len(creator.Issues))
-	}
-	var queued int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM feedback_issue_outbox WHERE act = 'close_erased' AND status = 'pending' AND issue_number = 1`,
-	).Scan(&queued); err != nil {
-		t.Fatalf("count close jobs: %v", err)
-	}
+	queued := testdb.Scalar[int](t, e.DB.Admin,
+		`SELECT count(*) FROM feedback_issue_outbox WHERE act = 'close_erased' AND status = 'pending' AND issue_number = 1`)
 	if queued != 1 {
 		t.Fatalf("pending close jobs for issue #1 = %d, want 1", queued)
 	}
 
-	creator.AfterCreate = nil
-	runIssueWorker(t, db, worker)
-	if issue := creator.Issues[1]; !issue.Closed || !hasLabel(issue, testErasedLabel) {
+	e.Creator.AfterCreate = nil
+	e.run()
+	if issue := e.Creator.Issues[1]; !issue.Closed || !hasLabel(issue, testErasedLabel) {
 		t.Fatalf("issue closed = %v, labels = %v; want closed with the erased label on the next run", issue.Closed, issue.Labels)
 	}
 }
@@ -241,11 +207,7 @@ func TestIssueWorker_RetentionDeletesAPieceAfter24Months(t *testing.T) {
 	if len(creator.LabelCalls) != labelCallsBefore {
 		t.Errorf("label calls = %d, want %d -- retention adds no label", len(creator.LabelCalls), labelCallsBefore)
 	}
-	var jobs int
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT count(*) FROM feedback_issue_outbox`).Scan(&jobs); err != nil {
-		t.Fatalf("count outbox rows: %v", err)
-	}
-	if jobs != 0 {
+	if jobs := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM feedback_issue_outbox`); jobs != 0 {
 		t.Fatalf("outbox rows = %d, want 0 -- retention queues no close", jobs)
 	}
 }
@@ -298,19 +260,8 @@ func postProcessIssueOutbox(t *testing.T, db *testdb.DB, worker feedback.IssueWo
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, srv.URL+"/internal/feedback/process-issue-outbox", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	req.Header.Set("X-Internal-Secret", "correct-secret")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, srv.URL+"/internal/feedback/process-issue-outbox", http.StatusOK,
+		reqtest.Header("X-Internal-Secret", "correct-secret"))
 }
 
 // TestProcessIssueOutboxHandler_RetentionAndCloseRunBehindTheDoor proves
