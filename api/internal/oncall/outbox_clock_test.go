@@ -49,18 +49,5 @@ func TestGapNoticeWorker_GapStillOpenUntilEndsAtOnTheWorkerClock(t *testing.T) {
 // fix its clock.
 func (e noticeEnv) runWorkerWith(w oncall.GapNoticeWorker) {
 	e.T.Helper()
-	tx, err := e.DB.App.BeginTx(e.T.Context(), nil)
-	if err != nil {
-		e.T.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(e.T.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		e.T.Fatalf("set trusted door: %v", err)
-	}
-	if err := w.ProcessPending(e.T.Context(), tx); err != nil {
-		e.T.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		e.T.Fatalf("commit: %v", err)
-	}
+	e.DB.RunAsWorker(e.T, w.ProcessPending)
 }

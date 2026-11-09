@@ -78,7 +78,7 @@ func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *t
 
 	for role, want := range wantDefinerFunctions {
 		t.Run(role, func(t *testing.T) {
-			rows, err := db.Admin.QueryContext(t.Context(),
+			got := testdb.Column[string](t, db.Admin,
 				`SELECT p.oid::regprocedure::text
 				   FROM pg_proc p
 				   JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -86,21 +86,6 @@ func TestOpsRuntime_DefinerFunctionsEachRoleCanExecuteAreTheOnesOnTheRecord(t *t
 				    AND n.nspname NOT IN ('pg_catalog', 'information_schema')
 				    AND has_function_privilege($1, p.oid, 'EXECUTE')
 				  ORDER BY 1`, role)
-			if err != nil {
-				t.Fatalf("read definer functions: %v", err)
-			}
-			defer rows.Close()
-			got := []string{}
-			for rows.Next() {
-				var fn string
-				if err := rows.Scan(&fn); err != nil {
-					t.Fatalf("scan: %v", err)
-				}
-				got = append(got, fn)
-			}
-			if err := rows.Err(); err != nil {
-				t.Fatalf("rows: %v", err)
-			}
 
 			wantSorted := slices.Sorted(slices.Values(want))
 			if !slices.Equal(got, wantSorted) {
@@ -123,7 +108,7 @@ const readsClientsException = "ops_feedback_piece(uuid)"
 func TestOpsRuntime_NoFunctionItCanExecuteReadsClients(t *testing.T) {
 	db := testdb.New(t)
 
-	rows, err := db.Admin.QueryContext(t.Context(),
+	got := testdb.Column[string](t, db.Admin,
 		`SELECT p.oid::regprocedure::text
 		   FROM pg_proc p
 		   JOIN pg_namespace n ON n.oid = p.pronamespace
@@ -132,21 +117,6 @@ func TestOpsRuntime_NoFunctionItCanExecuteReadsClients(t *testing.T) {
 		    AND has_function_privilege('ops_runtime', p.oid, 'EXECUTE')
 		    AND p.prosrc ~* '\mclients\M'
 		  ORDER BY 1`)
-	if err != nil {
-		t.Fatalf("read functions: %v", err)
-	}
-	defer rows.Close()
-	got := []string{}
-	for rows.Next() {
-		var fn string
-		if err := rows.Scan(&fn); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		got = append(got, fn)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows: %v", err)
-	}
 	if !slices.Equal(got, []string{readsClientsException}) {
 		t.Errorf("these functions ops_runtime can execute name clients:\n%s\nwant only %s", strings.Join(got, "\n"), readsClientsException)
 	}
@@ -159,12 +129,8 @@ func TestOpsRuntime_NoAppRuntimeRoleIsAMember(t *testing.T) {
 		t.Fatalf("these app_runtime roles are members of ops_runtime: %v", members)
 	}
 
-	var checked int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM pg_roles WHERE pg_has_role(oid, 'app_runtime', 'MEMBER') AND NOT rolsuper`,
-	).Scan(&checked); err != nil {
-		t.Fatalf("count app_runtime roles: %v", err)
-	}
+	checked := testdb.Scalar[int](t, db.Admin,
+		`SELECT count(*) FROM pg_roles WHERE pg_has_role(oid, 'app_runtime', 'MEMBER') AND NOT rolsuper`)
 	if checked < 2 {
 		t.Fatalf("checked %d app_runtime roles, want app_runtime and its test login at least", checked)
 	}
@@ -193,40 +159,20 @@ func TestOpsRuntime_AMembershipGrantedToAppRuntimeIsCaught(t *testing.T) {
 // stand-ins are app_runtime's member logins.
 func appRuntimeRolesInOpsRuntime(t *testing.T, db *testdb.DB) []string {
 	t.Helper()
-	rows, err := db.Admin.QueryContext(t.Context(),
+	return testdb.Column[string](t, db.Admin,
 		`SELECT r.rolname
 		   FROM pg_roles r
 		  WHERE (r.rolname IN ('app_runtime', 'app_runtime_login')
 		         OR pg_has_role(r.oid, 'app_runtime', 'MEMBER'))
 		    AND NOT r.rolsuper
 		    AND pg_has_role(r.oid, 'ops_runtime', 'MEMBER')`)
-	if err != nil {
-		t.Fatalf("read memberships: %v", err)
-	}
-	defer rows.Close()
-	var members []string
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		members = append(members, name)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows: %v", err)
-	}
-	return members
 }
 
 func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
 	db := testdb.New(t)
 
-	var operatorID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO operators (identity_uid, name, email) VALUES ('op-append-only', 'Op', 'op@example.com') RETURNING id`,
-	).Scan(&operatorID); err != nil {
-		t.Fatalf("seed operator: %v", err)
-	}
+	operatorID := testdb.Scalar[string](t, db.Admin,
+		`INSERT INTO operators (identity_uid, name, email) VALUES ('op-append-only', 'Op', 'op@example.com') RETURNING id`)
 
 	var actID string
 	if err := db.Ops.QueryRowContext(t.Context(),
@@ -259,8 +205,7 @@ func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
 		t.Fatalf("the act row after every refused change: count %d, err %v", count, err)
 	}
 
-	var holders []string
-	rows, err := db.Admin.QueryContext(t.Context(),
+	holders := testdb.Column[string](t, db.Admin,
 		`SELECT r.rolname FROM pg_roles r
 		  WHERE NOT r.rolsuper
 		    AND r.rolname NOT LIKE 'pg\_%'
@@ -268,20 +213,6 @@ func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
 		    AND (has_table_privilege(r.oid, 'operator_acts', 'UPDATE')
 		         OR has_table_privilege(r.oid, 'operator_acts', 'DELETE')
 		         OR has_table_privilege(r.oid, 'operator_acts', 'TRUNCATE'))`)
-	if err != nil {
-		t.Fatalf("read privileges: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var name string
-		if err := rows.Scan(&name); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		holders = append(holders, name)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows: %v", err)
-	}
 	if len(holders) > 0 {
 		t.Fatalf("these roles may UPDATE, DELETE or TRUNCATE operator_acts: %v", holders)
 	}
@@ -290,26 +221,11 @@ func TestOpsRuntime_OperatorActsIsAppendOnlyForEveryRole(t *testing.T) {
 func TestOpsRuntime_HoldsNoTableGrantButTheOperatorsOwnTables(t *testing.T) {
 	db := testdb.New(t)
 
-	rows, err := db.Admin.QueryContext(t.Context(),
+	got := testdb.Column[string](t, db.Admin,
 		`SELECT table_name || ' ' || privilege_type
 		   FROM information_schema.role_table_grants
 		  WHERE grantee = 'ops_runtime'
 		  ORDER BY 1`)
-	if err != nil {
-		t.Fatalf("read grants: %v", err)
-	}
-	defer rows.Close()
-	got := []string{}
-	for rows.Next() {
-		var g string
-		if err := rows.Scan(&g); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		got = append(got, g)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows: %v", err)
-	}
 	want := []string{
 		"operator_acts INSERT", "operator_acts SELECT",
 		"operator_sessions DELETE", "operator_sessions INSERT", "operator_sessions SELECT", "operator_sessions UPDATE",
@@ -336,15 +252,8 @@ func TestOpsRuntime_AppRuntimeCannotWriteARefundRow(t *testing.T) {
 		t.Fatalf("seed lot: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice: %v", err)
-	}
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO credit_ledger (practice_id, origin, quantity, unit_price_cents, tax_cents, stripe_refund_id, drawn_lot_id, refund_request_key, operator_act_id)
 		 VALUES ($1, 'refund', -1, 2000, 0, 're_boundary', $2, 'key-boundary', $3)`, practiceID, lotID, actID)
 	if err == nil || !strings.Contains(err.Error(), "row-level security") {
@@ -357,15 +266,8 @@ func TestOpsRuntime_AppRuntimeCannotWriteAFoundingGrantRow(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Grant Boundary")
 	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice: %v", err)
-	}
-	_, err = tx.ExecContext(t.Context(),
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO credit_ledger (practice_id, origin, quantity, operator_act_id) VALUES ($1, 'founding_grant', 3, $2)`, practiceID, actID)
 	if err == nil || !strings.Contains(err.Error(), "row-level security") {
 		t.Fatalf("app_runtime wrote a founding grant row: want a row-level security refusal, got %v", err)

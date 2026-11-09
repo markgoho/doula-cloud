@@ -28,27 +28,14 @@ func SeedOperatorAct(t *testing.T, db *DB, name string) (operatorActID string) {
 func SeedOperatorActivity(t *testing.T, db *DB, practiceID, subjectKind, subjectID, action, operatorName string, at time.Time) (operatorActID string) {
 	t.Helper()
 	operatorActID = SeedOperatorAct(t, db, operatorName)
-	tx, err := db.Ops.BeginTx(t.Context(), nil)
-	if err != nil {
-		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
-		t.Fatalf("testdb: seed operator activity begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
+	recordActivityOn(t, db.Ops, activity.Entry{
 		PracticeID:  practiceID,
 		SubjectKind: subjectKind,
 		SubjectID:   subjectID,
 		Action:      action,
 		Actor:       activity.OperatorActor(operatorActID),
 		CreatedAt:   at,
-	}); err != nil {
-		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
-		t.Fatalf("testdb: seed operator activity: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		// coverage:ignore reason: fixture transaction failure, not exercised by the happy-path test
-		t.Fatalf("testdb: seed operator activity commit: %v", err)
-	}
+	})
 	return operatorActID
 }
 

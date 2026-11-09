@@ -55,6 +55,20 @@ func (d *DB) BeginAs(t *testing.T, vars ...SessionVar) *sql.Tx {
 	return tx
 }
 
+// BeginAdmin opens a transaction on the superuser Admin connection, outside
+// every RLS policy, and rolls it back when the test ends -- for a test of
+// a package's own SQL rather than of the policy in front of it.
+func (d *DB) BeginAdmin(t *testing.T) *sql.Tx {
+	t.Helper()
+	tx, err := d.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: begin admin: %v", err)
+	}
+	t.Cleanup(func() { _ = tx.Rollback() })
+	return tx
+}
+
 // RunAsWorker runs one outbox worker pass in its own app_runtime
 // transaction with the trusted-worker door open, the way
 // outbox.ProcessHandler sets it after its own secret check, and commits.

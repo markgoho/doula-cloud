@@ -144,32 +144,9 @@ func TestSeedStaffAtPractice(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Seed Test Practice")
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "seed-test-staff", []string{ownerRole, doulaRole}, "contractor")
 
-	var name, email string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT name, email FROM staff WHERE id = $1`, staffID,
-	).Scan(&name, &email); err != nil {
-		t.Fatalf("read seeded staff: %v", err)
-	}
-	if name != "Test Staff seed-test-staff" {
-		t.Fatalf("name = %q, want derived from identityUID", name)
-	}
-	if email != "seed-test-staff@example.com" {
-		t.Fatalf("email = %q, want derived from identityUID", email)
-	}
+	requireDerivedStaffIdentity(t, db, staffID, "seed-test-staff")
 
-	var roles, employmentType string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT roles::text, employment_type FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, staffID,
-	).Scan(&roles, &employmentType); err != nil {
-		t.Fatalf("read seeded membership: %v", err)
-	}
-	if roles != "{owner,doula}" {
-		t.Fatalf("roles = %q, want {owner,doula}", roles)
-	}
-	if employmentType != "contractor" {
-		t.Fatalf("employment_type = %q, want contractor", employmentType)
-	}
+	requireMembership(t, db, practiceID, staffID, "{owner,doula}", "contractor")
 }
 
 // TestSeedNamedStaffAtPractice proves the display name passed in lands on
@@ -202,23 +179,7 @@ func TestRemoveMembership(t *testing.T) {
 
 	testdb.RemoveMembership(t, db, staffID)
 
-	var memberships, staffRows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID,
-	).Scan(&memberships); err != nil {
-		t.Fatalf("count memberships: %v", err)
-	}
-	if memberships != 0 {
-		t.Fatalf("memberships = %d, want none left", memberships)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff WHERE id = $1`, staffID,
-	).Scan(&staffRows); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
-	if staffRows != 1 {
-		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
-	}
+	requireMembershipEndedButStaffStanding(t, db, staffID)
 }
 
 // TestEndMembership proves the fixture leaves what
@@ -234,23 +195,7 @@ func TestEndMembership(t *testing.T) {
 
 	testdb.EndMembership(t, db, practiceID, staffID, ownerID)
 
-	var memberships, staffRows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID,
-	).Scan(&memberships); err != nil {
-		t.Fatalf("count memberships: %v", err)
-	}
-	if memberships != 0 {
-		t.Fatalf("memberships = %d, want none left", memberships)
-	}
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM staff WHERE id = $1`, staffID,
-	).Scan(&staffRows); err != nil {
-		t.Fatalf("count staff: %v", err)
-	}
-	if staffRows != 1 {
-		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
-	}
+	requireMembershipEndedButStaffStanding(t, db, staffID)
 
 	var event, actor string
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -297,18 +242,7 @@ func TestSeedStaff(t *testing.T) {
 	db := testdb.New(t)
 	staffID := testdb.SeedStaff(t, db, "seed-test-bare-staff")
 
-	var name, email string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT name, email FROM staff WHERE id = $1`, staffID,
-	).Scan(&name, &email); err != nil {
-		t.Fatalf("read seeded staff: %v", err)
-	}
-	if name != "Test Staff seed-test-bare-staff" {
-		t.Fatalf("name = %q, want derived from identityUID", name)
-	}
-	if email != "seed-test-bare-staff@example.com" {
-		t.Fatalf("email = %q, want derived from identityUID", email)
-	}
+	requireDerivedStaffIdentity(t, db, staffID, "seed-test-bare-staff")
 
 	var count int
 	if err := db.Admin.QueryRowContext(t.Context(),
@@ -378,19 +312,7 @@ func TestSeedContractorAtPractice(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Seed Contractor Test Practice")
 	staffID := testdb.SeedContractorAtPractice(t, db, practiceID, "seed-test-contractor")
 
-	var roles, employmentType string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT roles::text, employment_type FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
-		practiceID, staffID,
-	).Scan(&roles, &employmentType); err != nil {
-		t.Fatalf("read seeded membership: %v", err)
-	}
-	if roles != "{doula}" {
-		t.Fatalf("roles = %q, want {doula}", roles)
-	}
-	if employmentType != "contractor" {
-		t.Fatalf("employment_type = %q, want contractor", employmentType)
-	}
+	requireMembership(t, db, practiceID, staffID, "{doula}", "contractor")
 }
 
 // TestSeedNamedClient proves the Client row lands with the given name
@@ -608,20 +530,7 @@ func TestSeedGrantedAttachment(t *testing.T) {
 
 	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
 
-	var origin string
-	var endedAt *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
-		engagementID, staffID,
-	).Scan(&origin, &endedAt); err != nil {
-		t.Fatalf("read seeded attachment: %v", err)
-	}
-	if origin != "granted" {
-		t.Fatalf("origin = %q, want granted", origin)
-	}
-	if endedAt != nil {
-		t.Fatalf("ended_at = %v, want NULL (open)", *endedAt)
-	}
+	requireAttachment(t, db, engagementID, staffID, "granted", false)
 }
 
 // TestPracticeOfClient proves the read-back helper answers with the
@@ -684,20 +593,7 @@ func TestSeedAttachment(t *testing.T) {
 
 	testdb.SeedAttachment(t, db, engagementID, staffID, "granted", false)
 
-	var origin string
-	var endedAt *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
-		engagementID, staffID,
-	).Scan(&origin, &endedAt); err != nil {
-		t.Fatalf("read seeded attachment: %v", err)
-	}
-	if origin != "granted" {
-		t.Fatalf("origin = %q, want granted", origin)
-	}
-	if endedAt != nil {
-		t.Fatalf("ended_at = %v, want NULL (open)", *endedAt)
-	}
+	requireAttachment(t, db, engagementID, staffID, "granted", false)
 }
 
 // TestSeedAttachment_Ended proves ended=true actually sets ended_at,
@@ -710,20 +606,7 @@ func TestSeedAttachment_Ended(t *testing.T) {
 
 	testdb.SeedAttachment(t, db, engagementID, staffID, "accrued", true)
 
-	var origin string
-	var endedAt *string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
-		engagementID, staffID,
-	).Scan(&origin, &endedAt); err != nil {
-		t.Fatalf("read seeded attachment: %v", err)
-	}
-	if origin != "accrued" {
-		t.Fatalf("origin = %q, want accrued", origin)
-	}
-	if endedAt == nil {
-		t.Fatal("ended_at = NULL, want set (ended)")
-	}
+	requireAttachment(t, db, engagementID, staffID, "accrued", true)
 }
 
 // TestSeedPortalUser proves it mints a fresh Portal Account and attaches
@@ -845,5 +728,74 @@ func TestAttachPortalUser(t *testing.T) {
 	}
 	if identityUID != "portal_attach-test" {
 		t.Fatalf("identity_uid = %q, want %q", identityUID, "portal_attach-test")
+	}
+}
+
+// requireDerivedStaffIdentity checks the name and email the seed helpers
+// derive from a Staff member's identityUID.
+func requireDerivedStaffIdentity(t *testing.T, db *testdb.DB, staffID, identityUID string) {
+	t.Helper()
+	var name, email string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT name, email FROM staff WHERE id = $1`, staffID,
+	).Scan(&name, &email); err != nil {
+		t.Fatalf("read seeded staff: %v", err)
+	}
+	if name != "Test Staff "+identityUID {
+		t.Fatalf("name = %q, want derived from identityUID", name)
+	}
+	if email != identityUID+"@example.com" {
+		t.Fatalf("email = %q, want derived from identityUID", email)
+	}
+}
+
+// requireMembership checks the roles and employment type a seeded
+// Membership landed with.
+func requireMembership(t *testing.T, db *testdb.DB, practiceID, staffID, wantRoles, wantEmployment string) {
+	t.Helper()
+	var roles, employmentType string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT roles::text, employment_type FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
+		practiceID, staffID,
+	).Scan(&roles, &employmentType); err != nil {
+		t.Fatalf("read seeded membership: %v", err)
+	}
+	if roles != wantRoles {
+		t.Fatalf("roles = %q, want %s", roles, wantRoles)
+	}
+	if employmentType != wantEmployment {
+		t.Fatalf("employment_type = %q, want %s", employmentType, wantEmployment)
+	}
+}
+
+// requireMembershipEndedButStaffStanding checks an ended Membership took
+// only itself: no Membership left, the Staff row still on file.
+func requireMembershipEndedButStaffStanding(t *testing.T, db *testdb.DB, staffID string) {
+	t.Helper()
+	if memberships := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID); memberships != 0 {
+		t.Fatalf("memberships = %d, want none left", memberships)
+	}
+	if staffRows := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM staff WHERE id = $1`, staffID); staffRows != 1 {
+		t.Fatalf("staff rows = %d, want the person herself still on file", staffRows)
+	}
+}
+
+// requireAttachment checks the origin a seeded attachment landed with and
+// whether it is ended.
+func requireAttachment(t *testing.T, db *testdb.DB, engagementID, staffID, wantOrigin string, wantEnded bool) {
+	t.Helper()
+	var origin string
+	var endedAt *string
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT origin::text, ended_at::text FROM engagement_attachments WHERE engagement_id = $1 AND staff_id = $2`,
+		engagementID, staffID,
+	).Scan(&origin, &endedAt); err != nil {
+		t.Fatalf("read seeded attachment: %v", err)
+	}
+	if origin != wantOrigin {
+		t.Fatalf("origin = %q, want %s", origin, wantOrigin)
+	}
+	if ended := endedAt != nil; ended != wantEnded {
+		t.Fatalf("ended = %v (ended_at %v), want %v", ended, endedAt, wantEnded)
 	}
 }
