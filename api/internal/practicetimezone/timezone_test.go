@@ -1,27 +1,15 @@
 package practicetimezone_test
 
 import (
-	"bytes"
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
+	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/practicetimezone"
-	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
-)
-
-// The roles and employment types this package's tests seed a Membership
-// with, named once so golangci-lint's goconst check doesn't see the same
-// literal repeated across the table-driven role cases.
-const (
-	ownerRole    = "owner"
-	adminRole    = "admin"
-	doulaRole    = "doula"
-	employeeType = "employee"
 )
 
 // seededZone is what testdb.SeedPractice states for a fixture Practice,
@@ -33,90 +21,43 @@ const seededZone = "America/New_York"
 // than an hour's difference.
 const denverZone = "America/Denver"
 
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	practicetimezone.Mount(g, ir)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// env is what a test in this package starts from: a Practice with the
+// timezone routes mounted and one Staff member at the screen, an Owner
+// unless a test says otherwise.
+type env struct {
+	*fixture.Scene
 }
 
-func getTimezone(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
+func newEnv(t *testing.T, staff ...fixture.StaffOption) *env {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/timezone", nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
+	if len(staff) == 0 {
+		staff = []fixture.StaffOption{fixture.Owner()}
 	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return &env{fixture.NewScene(t, fixture.Routes(practicetimezone.Mount), fixture.SignedInAs(staff...))}
 }
 
-func putTimezone(t *testing.T, srv *httptest.Server, session, practiceID, zone string) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(practicetimezone.PutRequest{Timezone: zone})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+"/api/practices/"+practiceID+"/timezone", bytes.NewReader(payload))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+func (e *env) url() string { return e.PracticeURL("/timezone") }
+
+func put(zone string) reqtest.Option {
+	return reqtest.JSON(practicetimezone.PutRequest{Timezone: zone})
 }
 
-func storedZone(t *testing.T, db *testdb.DB, practiceID string) string {
-	t.Helper()
-	var zone string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT timezone FROM practices WHERE id = $1`, practiceID,
-	).Scan(&zone); err != nil {
-		t.Fatalf("read stored zone: %v", err)
-	}
-	return zone
+// storedZone is the zone a Practice holds, read around the handlers.
+func (e *env) storedZone(practiceID string) string {
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin, `SELECT timezone FROM practices WHERE id = $1`, practiceID)
 }
 
-func decodeDetails(t *testing.T, resp *http.Response) map[string]string {
-	t.Helper()
-	var out struct {
-		Details map[string]string `json:"details"`
-	}
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode refusal: %v", err)
-	}
-	return out.Details
-}
+// changedRows is the Activity query for the Practice's zone changes.
+const changedRows = `FROM activity WHERE practice_id = $1 AND action = 'practice_timezone_changed'`
 
 // TestGetHandler_ReadsThePracticesOwnZone proves an Owner reads the zone
 // the Practice actually holds, rather than a zone the BFF assumes.
 func TestGetHandler_ReadsThePracticesOwnZone(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-owner-read"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[practicetimezone.Response](t, http.MethodGet, e.url(), http.StatusOK, e.SignedIn)
 
-	resp := getTimezone(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out practicetimezone.Response
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Timezone != seededZone {
 		t.Fatalf("timezone = %q, want %q", out.Timezone, seededZone)
 	}
@@ -125,27 +66,14 @@ func TestGetHandler_ReadsThePracticesOwnZone(t *testing.T) {
 // TestPutHandler_OwnerStatesAZone is the happy path: the row moves and
 // the answer names the zone that is now stored.
 func TestPutHandler_OwnerStatesAZone(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-owner-write"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	out := reqtest.Expect[practicetimezone.Response](t, http.MethodPut, e.url(), http.StatusOK, e.SignedIn, put(denverZone))
 
-	resp := putTimezone(t, srv, session, practiceID, denverZone)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out practicetimezone.Response
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Timezone != denverZone {
 		t.Fatalf("timezone = %q, want %q", out.Timezone, denverZone)
 	}
-	if got := storedZone(t, db, practiceID); got != denverZone {
+	if got := e.storedZone(e.Practice.ID); got != denverZone {
 		t.Fatalf("stored zone = %q, want %q", got, denverZone)
 	}
 }
@@ -155,35 +83,18 @@ func TestPutHandler_OwnerStatesAZone(t *testing.T) {
 // acting Staff member and both sides of the change, so "how did this
 // Practice come to be in Denver" has an answer.
 func TestPutHandler_RecordsWhoChangedItAndFromWhat(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-activity"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.url(), http.StatusOK, e.SignedIn, put(denverZone))
 
-	resp := putTimezone(t, srv, session, practiceID, denverZone)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var actorStaffID string
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id, diff FROM activity
-		 WHERE practice_id = $1 AND action = 'practice_timezone_changed'`, practiceID,
-	).Scan(&actorStaffID, &diff); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
-	if actorStaffID != staffID {
-		t.Fatalf("actor = %q, want the Staff member who pressed it (%q)", actorStaffID, staffID)
+	if actor := testdb.Scalar[string](t, e.DB.Admin, `SELECT actor_staff_id `+changedRows, e.Practice.ID); actor != e.Staff.ID {
+		t.Fatalf("actor = %q, want the Staff member who pressed it (%q)", actor, e.Staff.ID)
 	}
 	var recorded struct {
 		Before string `json:"timezoneBefore"`
 		After  string `json:"timezoneAfter"`
 	}
-	if err := json.Unmarshal(diff, &recorded); err != nil {
+	if err := json.Unmarshal(testdb.Scalar[[]byte](t, e.DB.Admin, `SELECT diff `+changedRows, e.Practice.ID), &recorded); err != nil {
 		t.Fatalf("decode diff: %v", err)
 	}
 	if recorded.Before != seededZone || recorded.After != denverZone {
@@ -196,59 +107,36 @@ func TestPutHandler_RecordsWhoChangedItAndFromWhat(t *testing.T) {
 // same body leaves the row where it is and adds no second Activity row,
 // so a double-press does not read as two changes.
 func TestPutHandler_ResendingTheSameZoneRecordsNothingNew(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-idempotent"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t)
 
 	for range 2 {
-		resp := putTimezone(t, srv, session, practiceID, denverZone)
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-		}
-		_ = resp.Body.Close()
+		reqtest.ExpectStatus(t, http.MethodPut, e.url(), http.StatusOK, e.SignedIn, put(denverZone))
 	}
 
-	var rows int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'practice_timezone_changed'`,
-		practiceID,
-	).Scan(&rows); err != nil {
-		t.Fatalf("count activity rows: %v", err)
-	}
-	if rows != 1 {
+	if rows := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) `+changedRows, e.Practice.ID); rows != 1 {
 		t.Fatalf("activity rows = %d, want 1 -- the second press changed nothing", rows)
 	}
 }
 
 // TestPutHandler_RefusesAZoneTheDatabaseDoesNotName is the boundary the
 // screen cannot enforce: the API, not the select, decides what a zone is.
-// The three cases are the three ways a name can be wrong -- one the IANA
+// The three zones are the three ways a name can be wrong -- one the IANA
 // database has never carried, the empty string that time.LoadLocation
 // answers as UTC, and "Local", which is the server's own zone rather
 // than the Practice's.
 func TestPutHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 	for _, zone := range []string{"Nowhere/Atlantis", "", "Local"} {
 		t.Run("zone "+zone, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "timezone-refused-" + zone
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+			e := newEnv(t)
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
+			body := reqtest.Expect[struct {
+				Details map[string]string `json:"details"`
+			}](t, http.MethodPut, e.url(), http.StatusBadRequest, e.SignedIn, put(zone))
 
-			resp := putTimezone(t, srv, session, practiceID, zone)
-			defer resp.Body.Close()
-
-			if resp.StatusCode != http.StatusBadRequest {
-				t.Fatalf("status = %d, want %d for zone %q", resp.StatusCode, http.StatusBadRequest, zone)
+			if body.Details["timezone"] == "" {
+				t.Fatalf("details = %v, want an entry keyed by the DTO's own timezone field", body.Details)
 			}
-			if details := decodeDetails(t, resp); details["timezone"] == "" {
-				t.Fatalf("details = %v, want an entry keyed by the DTO's own timezone field", details)
-			}
-			if got := storedZone(t, db, practiceID); got != seededZone {
+			if got := e.storedZone(e.Practice.ID); got != seededZone {
 				t.Fatalf("stored zone = %q, want the refusal to have written nothing", got)
 			}
 		})
@@ -259,32 +147,25 @@ func TestPutHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 // caller can send that is not a zone at all: the decode refuses before
 // the zone is ever looked at, so nothing is written.
 func TestPutHandler_RefusesABodyItCannotRead(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-bad-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
+	e := newEnv(t)
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
+	reqtest.ExpectStatus(t, http.MethodPut, e.url(), http.StatusBadRequest, e.SignedIn, reqtest.RawJSON([]byte("{not json")))
 
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut,
-		srv.URL+"/api/practices/"+practiceID+"/timezone", bytes.NewReader([]byte("{not json")))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if got := storedZone(t, db, practiceID); got != seededZone {
+	if got := e.storedZone(e.Practice.ID); got != seededZone {
 		t.Fatalf("stored zone = %q, want the refusal to have written nothing", got)
 	}
+}
+
+// loadZone calls practicetimezone.Load for practiceID in a transaction of
+// its own.
+func loadZone(t *testing.T, db *testdb.DB, practiceID string) (*time.Location, error) {
+	t.Helper()
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	return practicetimezone.Load(t.Context(), tx, practiceID)
 }
 
 // TestLoad_IsTheSeamEveryCalendarDayComparisonReads covers the reader
@@ -295,13 +176,7 @@ func TestLoad_IsTheSeamEveryCalendarDayComparisonReads(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Zone Reading Practice")
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	loc, err := practicetimezone.Load(t.Context(), tx, practiceID)
+	loc, err := loadZone(t, db, practiceID)
 	if err != nil {
 		t.Fatalf("Load = %v, want the Practice's zone", err)
 	}
@@ -318,72 +193,35 @@ func TestLoad_IsTheSeamEveryCalendarDayComparisonReads(t *testing.T) {
 func TestLoad_RefusesRatherThanAnsweringInTheWrongZone(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Unloadable Zone Practice")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET timezone = 'Nowhere/Atlantis' WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("seed an unloadable zone: %v", err)
-	}
+	testdb.SetPracticeTimezone(t, db, practiceID, "Nowhere/Atlantis")
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := practicetimezone.Load(t.Context(), tx, practiceID); err == nil {
+	if _, err := loadZone(t, db, practiceID); err == nil {
 		t.Fatal("Load = nil error, want a refusal for a zone that will not load")
 	}
 }
 
-// TestGetHandler_AnyStaffReachesIt is the read boundary #1280 widened to:
-// a Doula reads the zone the same as an Owner or Admin, because
-// InvoiceSection's own future-date ceiling reads it too, and
-// InvoiceSection renders for any Staff (matching payments' Invoices and
-// billing-mode reads, both AnyStaff).
-func TestGetHandler_AnyStaffReachesIt(t *testing.T) {
-	for _, role := range []string{ownerRole, adminRole, doulaRole} {
-		t.Run(role, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "timezone-get-role-" + role
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{role}, employeeType)
-
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
-
-			read := getTimezone(t, srv, session, practiceID)
-			_ = read.Body.Close()
-			if read.StatusCode != http.StatusOK {
-				t.Fatalf("GET status for %s = %d, want %d", role, read.StatusCode, http.StatusOK)
-			}
-		})
-	}
-}
-
-// TestPutHandler_OnlyAnOwnerOrAdminReachesIt is the write boundary #1166
-// asks for, enforced at the mount rather than on the screen: a Doula may
-// read the zone (#1280) but may not state it.
-func TestPutHandler_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
-	for _, tc := range []struct {
-		role       string
-		wantStatus int
+// TestRoles_ReadIsAnyStaffAndWriteIsOwnerOrAdmin is the read boundary
+// #1280 widened to and the write boundary #1166 asks for, enforced at the
+// mount rather than on the screen: a Doula reads the zone the same as an
+// Owner or Admin, because InvoiceSection's own future-date ceiling reads
+// it too, but may not state it.
+func TestRoles_ReadIsAnyStaffAndWriteIsOwnerOrAdmin(t *testing.T) {
+	cases := []struct {
+		name     string
+		staff    fixture.StaffOption
+		putWants int
 	}{
-		{ownerRole, http.StatusOK},
-		{adminRole, http.StatusOK},
-		{doulaRole, http.StatusForbidden},
-	} {
-		t.Run(tc.role, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "timezone-put-role-" + tc.role
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{tc.role}, employeeType)
+		{fixture.RoleOwner, fixture.Owner(), http.StatusOK},
+		{fixture.RoleAdmin, fixture.Admin(), http.StatusOK},
+		{fixture.RoleDoula, fixture.Doula(), http.StatusForbidden},
+	}
 
-			srv, session := newServer(t, db, uid)
-			defer srv.Close()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, tc.staff)
 
-			write := putTimezone(t, srv, session, practiceID, denverZone)
-			_ = write.Body.Close()
-			if write.StatusCode != tc.wantStatus {
-				t.Fatalf("PUT status for %s = %d, want %d", tc.role, write.StatusCode, tc.wantStatus)
-			}
+			reqtest.ExpectStatus(t, http.MethodGet, e.url(), http.StatusOK, e.SignedIn)
+			reqtest.ExpectStatus(t, http.MethodPut, e.url(), tc.putWants, e.SignedIn, put(denverZone))
 		})
 	}
 }
@@ -393,27 +231,24 @@ func TestPutHandler_OnlyAnOwnerOrAdminReachesIt(t *testing.T) {
 // one Practice reaching for another's meets the session's own scope, on
 // both the read (#1280 widened to AnyStaff) and the write.
 func TestTimezone_AnotherPracticesZoneIsOutOfReach(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "timezone-cross-practice"
-	_, _ = testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	otherPracticeID := testdb.SeedPractice(t, db, "Someone Else's Practice")
+	e := newEnv(t)
+	other := fixture.Practice(t, e.DB, fixture.PracticeName("Someone Else's Practice"))
+	otherURL := e.URL("/api/practices/" + other.ID + "/timezone")
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	read := getTimezone(t, srv, session, otherPracticeID)
-	defer read.Body.Close()
-	if read.StatusCode == http.StatusOK {
-		t.Fatalf("GET status = %d, want a refusal for another Practice's zone", read.StatusCode)
+	for _, tc := range []struct {
+		method string
+		opts   []reqtest.Option
+	}{
+		{http.MethodGet, []reqtest.Option{e.SignedIn}},
+		{http.MethodPut, []reqtest.Option{e.SignedIn, put(denverZone)}},
+	} {
+		resp := reqtest.Do(t, tc.method, otherURL, tc.opts...)
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK {
+			t.Fatalf("%s status = %d, want a refusal for another Practice's zone", tc.method, resp.StatusCode)
+		}
 	}
-
-	resp := putTimezone(t, srv, session, otherPracticeID, denverZone)
-	defer resp.Body.Close()
-
-	if resp.StatusCode == http.StatusOK {
-		t.Fatalf("PUT status = %d, want a refusal for another Practice's zone", resp.StatusCode)
-	}
-	if got := storedZone(t, db, otherPracticeID); got != seededZone {
+	if got := e.storedZone(other.ID); got != seededZone {
 		t.Fatalf("other Practice's zone = %q, want it untouched", got)
 	}
 }

@@ -27,28 +27,15 @@ func testMessage(to string) mail.Message {
 func TestActive_UnknownAddressIsNotSuppressed(t *testing.T) {
 	db := testdb.New(t)
 
-	got, err := mailsuppress.Active(t.Context(), db.App, testAddress)
-	if err != nil {
-		t.Fatalf("Active: %v", err)
-	}
-	if got {
-		t.Fatal("an address nobody ever complained about reads as suppressed")
-	}
+	requireActive(t, db, testAddress, false)
 }
 
 func TestRecordThenActive(t *testing.T) {
 	db := testdb.New(t)
 
-	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseComplaint, "evt-1"); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	got, err := mailsuppress.Active(t.Context(), db.App, testAddress)
-	if err != nil {
-		t.Fatalf("Active: %v", err)
-	}
-	if !got {
-		t.Fatal("a recorded complaint does not read as suppressed")
-	}
+	suppress(t, db, testAddress, mailsuppress.CauseComplaint)
+
+	requireActive(t, db, testAddress, true)
 }
 
 // Mailgun reports the recipient as the sender wrote it, so a Client whose
@@ -56,16 +43,9 @@ func TestRecordThenActive(t *testing.T) {
 func TestSuppressionIsCaseAndSpaceInsensitive(t *testing.T) {
 	db := testdb.New(t)
 
-	if err := mailsuppress.Record(t.Context(), db.App, "  Someone@Example.Test ", mailsuppress.CauseBounce, "evt-1"); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	got, err := mailsuppress.Active(t.Context(), db.App, "SOMEONE@EXAMPLE.TEST")
-	if err != nil {
-		t.Fatalf("Active: %v", err)
-	}
-	if !got {
-		t.Fatal("a differently-cased spelling of a suppressed address reads as sendable")
-	}
+	suppress(t, db, "  Someone@Example.Test ", mailsuppress.CauseBounce)
+
+	requireActive(t, db, "SOMEONE@EXAMPLE.TEST", true)
 }
 
 // A second event for an address already suppressed is not an error --
@@ -99,33 +79,18 @@ func TestRecordTwiceReplacesTheCause(t *testing.T) {
 func TestClearedSuppressionIsInactiveUntilRecordedAgain(t *testing.T) {
 	db := testdb.New(t)
 
-	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseBounce, "evt-1"); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	suppress(t, db, testAddress, mailsuppress.CauseBounce)
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, testAddress,
 	); err != nil {
 		t.Fatalf("clear suppression: %v", err)
 	}
 
-	got, err := mailsuppress.Active(t.Context(), db.App, testAddress)
-	if err != nil {
-		t.Fatalf("Active after clear: %v", err)
-	}
-	if got {
-		t.Fatal("a cleared suppression still refuses the address")
-	}
+	requireActive(t, db, testAddress, false)
 
-	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseComplaint, "evt-2"); err != nil {
-		t.Fatalf("re-Record: %v", err)
-	}
-	got, err = mailsuppress.Active(t.Context(), db.App, testAddress)
-	if err != nil {
-		t.Fatalf("Active after re-record: %v", err)
-	}
-	if !got {
-		t.Fatal("a new complaint after a clear does not re-suppress the address")
-	}
+	suppress(t, db, testAddress, mailsuppress.CauseComplaint)
+
+	requireActive(t, db, testAddress, true)
 }
 
 func TestSender_DeliversAnUnsuppressedAddress(t *testing.T) {
@@ -143,9 +108,7 @@ func TestSender_DeliversAnUnsuppressedAddress(t *testing.T) {
 
 func TestSender_RefusesASuppressedAddressWithoutCallingMailgun(t *testing.T) {
 	db := testdb.New(t)
-	if err := mailsuppress.Record(t.Context(), db.App, testAddress, mailsuppress.CauseComplaint, "evt-1"); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
+	suppress(t, db, testAddress, mailsuppress.CauseComplaint)
 	inner := &mail.FakeSender{}
 	s := mailsuppress.Sender{Inner: inner, DB: db.App}
 
@@ -160,14 +123,8 @@ func TestSender_RefusesASuppressedAddressWithoutCallingMailgun(t *testing.T) {
 
 func TestSender_ReadsThroughTheWorkersTransactionOnAOneConnectionPool(t *testing.T) {
 	db := testdb.New(t)
-	if err := mailsuppress.Record(t.Context(), db.App, "worker@example.test", mailsuppress.CauseComplaint, "evt-1"); err != nil {
-		t.Fatalf("Record: %v", err)
-	}
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	suppress(t, db, "worker@example.test", mailsuppress.CauseComplaint)
+	tx := db.BeginAs(t)
 	inner := &mail.FakeSender{}
 	s := mailsuppress.Sender{Inner: inner, DB: db.App}
 

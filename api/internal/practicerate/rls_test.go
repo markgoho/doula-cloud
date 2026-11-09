@@ -1,8 +1,10 @@
 package practicerate_test
 
 import (
+	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -15,93 +17,40 @@ import (
 // practice_rates denies all rows when app.current_practice_id is never
 // set.
 func TestRLS_PracticeRatesFailsClosedWithNoSessionVarSet(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Some Practice")
-	seedRate(t, db, practiceID, 15000)
+	e := newEnv(t)
+	e.seedRate(fixture.KindBirth, 15000)
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM practice_rates`).Scan(&count); err != nil {
-		t.Fatalf("query practice_rates with no session vars set: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, e.DB, "practice_rates")
 }
 
 // TestRLS_PracticeRatesVisibilityIsScopedToCurrentPractice proves the
 // plain-column-comparison policy narrows practice_rates to rows for
 // app.current_practice_id, not every row globally.
 func TestRLS_PracticeRatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
-	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	seedRate(t, db, practiceA, 15000)
-	seedRate(t, db, practiceB, 20000)
+	e := newEnv(t)
+	e.seedRate(fixture.KindBirth, 15000)
+	other := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
+	testdb.SeedPracticeRate(t, e.DB, other.ID, fixture.KindBirth, 20000)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	var visiblePracticeIDs []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT practice_id FROM practice_rates`)
-	if err != nil {
-		t.Fatalf("query practice_rates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visiblePracticeIDs = append(visiblePracticeIDs, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
-
-	if len(visiblePracticeIDs) != 1 || visiblePracticeIDs[0] != practiceA {
-		t.Fatalf("visible practice_ids = %v, want only %q", visiblePracticeIDs, practiceA)
+	if visible := testdb.Column[string](t, tx, `SELECT practice_id FROM practice_rates`); !slices.Equal(visible, []string{e.Practice.ID}) {
+		t.Fatalf("visible practice_ids = %v, want only %q", visible, e.Practice.ID)
 	}
 }
 
 // TestRLS_PracticeRatesUpdateRejectedAcrossPractice proves the policy
-// scopes UPDATE, not just SELECT: a session acting as Practice A can't
-// edit a rate that belongs to Practice B, even naming the correct row,
+// scopes UPDATE, not just SELECT: a session acting as one Practice can't
+// edit a rate that belongs to another, even naming the correct row,
 // because the row isn't visible to update in the first place.
 func TestRLS_PracticeRatesUpdateRejectedAcrossPractice(t *testing.T) {
-	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	seedRate(t, db, practiceB, 15000)
+	e := newEnv(t)
+	other := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
+	testdb.SeedPracticeRate(t, e.DB, other.ID, fixture.KindBirth, 15000)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceA); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-
-	result, err := tx.ExecContext(t.Context(),
-		`UPDATE practice_rates SET amount_cents = 99999 WHERE practice_id = $1`,
-		practiceB,
-	)
-	if err != nil {
-		t.Fatalf("update practice_rates: %v", err)
-	}
-	rowsAffected, err := result.RowsAffected()
-	if err != nil {
-		t.Fatalf("rows affected: %v", err)
-	}
-	if rowsAffected != 0 {
-		t.Fatalf("expected 0 rows affected editing a rate at a different Practice, got %d", rowsAffected)
+	if rows := testdb.RowsAffected(t, tx, `UPDATE practice_rates SET amount_cents = 99999 WHERE practice_id = $1`, other.ID); rows != 0 {
+		t.Fatalf("expected 0 rows affected editing a rate at a different Practice, got %d", rows)
 	}
 }

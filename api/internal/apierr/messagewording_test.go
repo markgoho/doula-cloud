@@ -156,13 +156,7 @@ func f(w W) {
 	other.WriteError(w, "skipped, not apierr", 409)
 }
 `
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "p.go", src, 0)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	consts := map[string]string{}
-	collectStringConsts(file, consts)
+	fset, file, consts := parseSnippet(t, src)
 
 	assertSorted(t, "pronouns", pronounOffenses(file, fset, "p.go", consts, true), []string{
 		`p.go:9: "Enter his email address" contains "his"`,
@@ -174,6 +168,20 @@ func f(w W) {
 		`p.go:7: "a contractor does not search where she works"`,
 		`p.go:8: "contract cannot be %s"`,
 	})
+}
+
+// parseSnippet parses src as p.go and reads its string constants, the
+// input every gate proof below hands the gate it is proving.
+func parseSnippet(t *testing.T, src string) (*token.FileSet, *ast.File, map[string]string) {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "p.go", src, 0)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	consts := map[string]string{}
+	collectStringConsts(file, consts)
+	return fset, file, consts
 }
 
 func assertSorted(t *testing.T, name string, got, want []string) {

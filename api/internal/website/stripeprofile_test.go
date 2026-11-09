@@ -1,28 +1,22 @@
 package website_test
 
 import (
-	"database/sql"
 	"testing"
 
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/website"
 )
 
-// practiceTx opens a transaction scoped to practiceID, the way
-// staffauth.Middleware scopes every request, so ReadStripeProfile is
-// exercised through the RLS it actually runs behind.
-func practiceTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
+// readProfile reads the Stripe profile of practiceID in a transaction
+// scoped to it, the way staffauth.Middleware scopes every request, so
+// ReadStripeProfile is exercised through the RLS it actually runs behind.
+func readProfile(t *testing.T, db *testdb.DB, practiceID string) website.StripeProfile {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
+	got, err := website.ReadStripeProfile(t.Context(), db.BeginAs(t, testdb.Practice(practiceID)), practiceID)
 	if err != nil {
-		t.Fatalf("begin: %v", err)
+		t.Fatalf("ReadStripeProfile: %v", err)
 	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
-	return tx
+	return got
 }
 
 // TestReadStripeProfile_UndeclaredIsTheGate proves a Practice who has
@@ -33,10 +27,7 @@ func TestReadStripeProfile_UndeclaredIsTheGate(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 
-	got, err := website.ReadStripeProfile(t.Context(), practiceTx(t, db, practiceID), practiceID)
-	if err != nil {
-		t.Fatalf("ReadStripeProfile: %v", err)
-	}
+	got := readProfile(t, db, practiceID)
 	if got.Declared {
 		t.Fatalf("Declared = true, want false for a Practice with no row")
 	}
@@ -53,10 +44,7 @@ func TestReadStripeProfile_HerOwnSite(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Rochester Doulas")
 	seedWebsite(t, db, practiceID, "own", "https://facebook.com/rochester-doulas")
 
-	got, err := website.ReadStripeProfile(t.Context(), practiceTx(t, db, practiceID), practiceID)
-	if err != nil {
-		t.Fatalf("ReadStripeProfile: %v", err)
-	}
+	got := readProfile(t, db, practiceID)
 	if !got.Declared {
 		t.Fatalf("Declared = false, want true")
 	}
@@ -82,10 +70,7 @@ func TestReadStripeProfile_HerHostedPage(t *testing.T) {
 		t.Fatalf("seed hosted page: %v", err)
 	}
 
-	got, err := website.ReadStripeProfile(t.Context(), practiceTx(t, db, practiceID), practiceID)
-	if err != nil {
-		t.Fatalf("ReadStripeProfile: %v", err)
-	}
+	got := readProfile(t, db, practiceID)
 	if !got.Declared {
 		t.Fatalf("Declared = false, want true")
 	}
