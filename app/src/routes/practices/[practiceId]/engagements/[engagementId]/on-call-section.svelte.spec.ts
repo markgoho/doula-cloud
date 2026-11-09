@@ -79,6 +79,31 @@ const summaryLinks = () =>
 		.elements()
 		.map((link) => [link.textContent.trim(), link.getAttribute('href')]);
 
+async function setupGapFormRecordingPosts() {
+	const posted: RequestInit[] = [];
+	await setupGapForm((path, init) => {
+		if (path === gapsPath && init?.method === 'POST') {
+			posted.push(init);
+			return jsonResponse({ id: 'gap-3' }, 201);
+		}
+		return;
+	});
+	return posted;
+}
+
+async function submitGap({
+	staff,
+	from,
+	until,
+	reason
+}: { staff?: string; from?: string; until?: string; reason?: string } = {}) {
+	if (staff) await gapStaffField().selectOptions(staff);
+	if (from) await testPage.getByLabelText('From', { exact: true }).fill(from);
+	if (until) await testPage.getByLabelText('Until', { exact: true }).fill(until);
+	if (reason) await testPage.getByLabelText('Reason', { exact: true }).fill(reason);
+	await testPage.getByRole('button', { name: 'Record the gap' }).click();
+}
+
 describe('the on-call section after a Visit puts a Doula on the birth (#2568)', () => {
 	const onCallWithoutBo = { ...onCallPanel, doulas: [onCallPanel.doulas[0]!] };
 
@@ -152,20 +177,9 @@ describe('the on-call section on a birth (#1093)', () => {
 	});
 
 	it('records a gap for a doula on the birth, and reads the section back', async () => {
-		const posted: RequestInit[] = [];
-		await setupGapForm((path, init) => {
-			if (path === gapsPath && init?.method === 'POST') {
-				posted.push(init);
-				return jsonResponse({ id: 'gap-3' }, 201);
-			}
-			return;
-		});
+		const posted = await setupGapFormRecordingPosts();
 
-		await gapStaffField().selectOptions('Bo Ng');
-		await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-		await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
-		await testPage.getByLabelText('Reason', { exact: true }).fill('Away overnight');
-		await testPage.getByRole('button', { name: 'Record the gap' }).click();
+		await submitGap({ staff: 'Bo Ng', from: '2026-10-20T22:00', until: '2026-10-21T08:00', reason: 'Away overnight' });
 
 		await vi.waitFor(() => expect(posted).toHaveLength(1));
 		const body = JSON.parse(String(posted[0]!.body));
@@ -191,18 +205,9 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('refuses a gap with no Doula chosen, in the summary and against the field, and sends nothing', async () => {
-			const posted: RequestInit[] = [];
-			await setupGapForm((path, init) => {
-				if (path === gapsPath && init?.method === 'POST') {
-					posted.push(init);
-					return jsonResponse({ id: 'gap-3' }, 201);
-				}
-				return;
-			});
+			const posted = await setupGapFormRecordingPosts();
 
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ from: '2026-10-20T22:00', until: '2026-10-21T08:00' });
 
 			await expect
 				.element(testPage.getByRole('link', { name: 'Select the Doula who cannot be reached' }))
@@ -226,10 +231,7 @@ describe('the on-call section on a birth (#1093)', () => {
 					: undefined
 			);
 
-			await gapStaffField().selectOptions('Bo Ng');
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ staff: 'Bo Ng', from: '2026-10-20T22:00', until: '2026-10-21T08:00' });
 
 			await expect
 				.element(testPage.getByRole('link', { name: 'Choose a doula who is on this birth.' }))
@@ -260,16 +262,9 @@ describe('the on-call section on a birth (#1093)', () => {
 	// and the browser's own "Invalid time value" was the gap's error.
 	describe('From and Until', () => {
 		it('refuses every empty question in one summary, in field order, against each field, and sends nothing', async () => {
-			const posted: RequestInit[] = [];
-			await setupGapForm((path, init) => {
-				if (path === gapsPath && init?.method === 'POST') {
-					posted.push(init);
-					return jsonResponse({ id: 'gap-3' }, 201);
-				}
-				return;
-			});
+			const posted = await setupGapFormRecordingPosts();
 
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap();
 
 			await expect.element(testPage.getByRole('link', { name: 'Enter when the gap starts' })).toBeVisible();
 			expect(summaryLinks()).toEqual([
@@ -291,9 +286,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		it('refuses an empty Until alone, with the Doula and From answered', async () => {
 			await setupGapForm();
 
-			await gapStaffField().selectOptions('Bo Ng');
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ staff: 'Bo Ng', from: '2026-10-20T22:00' });
 
 			await expect.element(testPage.getByRole('link', { name: 'Enter when the gap ends' })).toBeVisible();
 			expect(summaryLinks()).toEqual([['Enter when the gap ends', '#coverage-gap-ends']]);
@@ -301,19 +294,9 @@ describe('the on-call section on a birth (#1093)', () => {
 		});
 
 		it('refuses an Until that is not after From, against Until, and sends nothing', async () => {
-			const posted: RequestInit[] = [];
-			await setupGapForm((path, init) => {
-				if (path === gapsPath && init?.method === 'POST') {
-					posted.push(init);
-					return jsonResponse({ id: 'gap-3' }, 201);
-				}
-				return;
-			});
+			const posted = await setupGapFormRecordingPosts();
 
-			await gapStaffField().selectOptions('Bo Ng');
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-21T08:00');
-			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ staff: 'Bo Ng', from: '2026-10-21T08:00', until: '2026-10-20T22:00' });
 
 			await expect
 				.element(testPage.getByRole('link', { name: 'The gap must end after it starts' }))
@@ -343,10 +326,7 @@ describe('the on-call section on a birth (#1093)', () => {
 					: undefined
 			);
 
-			await gapStaffField().selectOptions('Bo Ng');
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ staff: 'Bo Ng', from: '2026-10-20T22:00', until: '2026-10-21T08:00' });
 
 			await expect.element(testPage.getByRole('link', { name: 'The gap must end after it starts' })).toBeVisible();
 			expect(summaryLinks()).toEqual([
@@ -369,10 +349,7 @@ describe('the on-call section on a birth (#1093)', () => {
 					: undefined
 			);
 
-			await gapStaffField().selectOptions('Bo Ng');
-			await testPage.getByLabelText('From', { exact: true }).fill('2026-10-20T22:00');
-			await testPage.getByLabelText('Until', { exact: true }).fill('2026-10-21T08:00');
-			await testPage.getByRole('button', { name: 'Record the gap' }).click();
+			await submitGap({ staff: 'Bo Ng', from: '2026-10-20T22:00', until: '2026-10-21T08:00' });
 
 			await expect
 				.element(

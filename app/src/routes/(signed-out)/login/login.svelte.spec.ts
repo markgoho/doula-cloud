@@ -103,6 +103,12 @@ async function setup() {
 	await render(Page, {});
 }
 
+async function submitCredentials(email = 'priya@example.com') {
+	await testPage.getByLabelText('Email address').fill(email);
+	await testPage.getByLabelText('Password').fill('correct horse');
+	await testPage.getByRole('button', { name: 'Sign in' }).click();
+}
+
 describe('Staff login -- the way back from a lost authenticator app (#694)', () => {
 	it('offers the recovery-code screen from the credentials step', async () => {
 		apiFetch.mockResolvedValue(jsonResponse('no session', 401));
@@ -119,9 +125,7 @@ describe('Staff login -- the way back from a lost authenticator app (#694)', () 
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
 		await setup();
 
-		await testPage.getByLabelText('Email address').fill('anne-marie@example.test');
-		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Sign in' }).click();
+		await submitCredentials('anne-marie@example.test');
 
 		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
 		await expect
@@ -239,9 +243,7 @@ async function signIn() {
 	vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({}, 200)));
 
 	await render(Page, {});
-	await testPage.getByLabelText('Email address').fill('priya@example.com');
-	await testPage.getByLabelText('Password').fill('correct horse');
-	await testPage.getByRole('button', { name: 'Sign in' }).click();
+	await submitCredentials();
 }
 
 describe('Staff login -- a credential that resolves to no Practice (#745)', () => {
@@ -318,9 +320,7 @@ describe('Staff login -- the TOTP sign-in challenge (#606)', () => {
 		getMultiFactorResolver.mockReturnValue(resolver);
 
 		await render(Page, {});
-		await testPage.getByLabelText('Email address').fill('priya@example.com');
-		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Sign in' }).click();
+		await submitCredentials();
 
 		await expect
 			.element(testPage.getByLabelText('Authenticator app code'))
@@ -416,9 +416,7 @@ describe('Staff login -- signing in over a live portal session (#610)', () => {
 		vi.stubGlobal('fetch', exchange);
 
 		await render(Page, {});
-		await testPage.getByLabelText('Email address').fill('priya@example.com');
-		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Sign in' }).click();
+		await submitCredentials();
 
 		await expect.element(testPage.getByText(WARNING)).toBeVisible();
 		return exchange;
@@ -511,9 +509,7 @@ async function signInReturningTo(target: string) {
 	apiFetchWithSession.mockResolvedValue(jsonResponse({ ...session, memberships: [firstMembership] }));
 	await setup();
 
-	await testPage.getByLabelText('Email address').fill('priya@example.com');
-	await testPage.getByLabelText('Password').fill('correct horse');
-	await testPage.getByRole('button', { name: 'Sign in' }).click();
+	await submitCredentials();
 }
 
 describe('Staff login -- back to the address she opened (#2259)', () => {
@@ -584,9 +580,7 @@ describe('Staff login -- the session-ended notice (#757)', () => {
 		getMultiFactorResolver.mockReturnValue({ hints: [{ uid: 'enrollment-1' }] });
 
 		await setupSessionEnded();
-		await testPage.getByLabelText('Email address').fill('priya@example.com');
-		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Sign in' }).click();
+		await submitCredentials();
 
 		await expect.element(testPage.getByLabelText('Authenticator app code')).toBeVisible();
 		expect(testPage.getByText(NOTICE).elements()).toHaveLength(0);
@@ -607,9 +601,7 @@ describe('Staff login -- the exchange carries the Staff session (#2434)', () => 
 		);
 
 		await render(Page, {});
-		await testPage.getByLabelText('Email address').fill('priya@example.com');
-		await testPage.getByLabelText('Password').fill('correct horse');
-		await testPage.getByRole('button', { name: 'Sign in' }).click();
+		await submitCredentials();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`/practices/${firstMembership.practiceId}`));
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith('/api/staff/session');
