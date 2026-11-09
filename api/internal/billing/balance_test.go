@@ -81,13 +81,7 @@ func TestBalance_SumsLedgerRows(t *testing.T) {
 			db := testdb.New(t)
 			practiceID := testdb.SeedPractice(t, db, "Test Practice")
 			c.seed(t, db, practiceID)
-			tx, err := db.Admin.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-
-			got, err := billing.Balance(t.Context(), tx, practiceID)
+			got, err := billing.Balance(t.Context(), db.BeginAdmin(t), practiceID)
 			if err != nil {
 				t.Fatalf("Balance: %v", err)
 			}

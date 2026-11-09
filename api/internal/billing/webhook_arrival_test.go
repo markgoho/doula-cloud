@@ -32,7 +32,7 @@ func TestPostPurchaseWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T)
 	e := newWebhookEnv(t)
 
 	e.deliver(checkoutCompletedPayload(t, "evt_paid", e.Practice, 3, paidStatus), webhookTestSecret, http.StatusOK)
-	e.deliver(buildEventPayload(t, "evt_other", "payment_intent.succeeded", map[string]any{"id": "pi_test", objectKey: "payment_intent"}), webhookTestSecret, http.StatusOK)
+	e.deliver(buildEventPayload(t, "evt_other", "payment_intent.succeeded", map[string]any{"id": "pi_test", objectKey: failingPaymentIntent}), webhookTestSecret, http.StatusOK)
 	e.deliver(checkoutCompletedPayload(t, "evt_forged", e.Practice, 3, paidStatus), "whsec_wrong", http.StatusBadRequest)
 	e.deliver(liveEventPayload(t, e.Practice), webhookTestSecret, http.StatusBadRequest)
 	e.deliver(checkoutCompletedPayload(t, "evt_bad_quantity", e.Practice, 0, paidStatus), webhookTestSecret, http.StatusBadRequest)

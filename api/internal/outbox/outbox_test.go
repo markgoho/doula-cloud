@@ -206,12 +206,12 @@ func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 // uncommitted, so a test can read what it returned.
 func pendingRun(env *rowEnv, query string, handle func(context.Context, *sql.Tx, outbox.Worker, testRow, time.Time) error) error {
 	env.T.Helper()
-	tx, err := env.DB.Admin.BeginTx(env.T.Context(), nil)
+	tx := env.DB.BeginAdmin(env.T)
+	err := newTestWorker(&mail.FakeSender{}).HandlePending(env.T.Context(), tx, query, scanTestRow, handle)
 	if err != nil {
-		env.T.Fatalf("begin: %v", err)
+		return fmt.Errorf("handle pending: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
-	return newTestWorker(&mail.FakeSender{}).HandlePending(env.T.Context(), tx, query, scanTestRow, handle)
+	return nil
 }
 
 func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {

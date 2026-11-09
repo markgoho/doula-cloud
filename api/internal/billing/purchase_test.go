@@ -12,6 +12,8 @@ import (
 
 // errStripeFake is returned by FakeStripeClient methods in tests that
 // exercise a handler's Stripe-failure path.
+const quantityFive = `{"quantity": 5}`
+
 var errStripeFake = errors.New("stripe: fake failure")
 
 func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
@@ -99,15 +101,15 @@ func TestPostPurchaseHandler_Refusals(t *testing.T) {
 		// the Customer exists.
 		reachesCheckout bool
 	}{
-		{name: "a non-Owner", staff: []fixture.StaffOption{fixture.Doula()}, body: `{"quantity": 5}`, want: http.StatusForbidden},
+		{name: "a non-Owner", staff: []fixture.StaffOption{fixture.Doula()}, body: quantityFive, want: http.StatusForbidden},
 		{name: "a zero quantity", body: `{"quantity": 0}`, want: http.StatusBadRequest},
 		{name: "a body that is not JSON", body: `not json`, want: http.StatusBadRequest},
 		{
-			name: "a Customer Stripe will not create", body: `{"quantity": 5}`, want: http.StatusInternalServerError,
+			name: "a Customer Stripe will not create", body: quantityFive, want: http.StatusInternalServerError,
 			stripeFails: func(c *billing.FakeStripeClient) { c.CreateCustomerErr = errStripeFake },
 		},
 		{
-			name: "a Checkout Session Stripe will not create", body: `{"quantity": 5}`, want: http.StatusInternalServerError,
+			name: "a Checkout Session Stripe will not create", body: quantityFive, want: http.StatusInternalServerError,
 			stripeFails:     func(c *billing.FakeStripeClient) { c.CreateCheckoutSessionErr = errStripeFake },
 			reachesCheckout: true,
 		},

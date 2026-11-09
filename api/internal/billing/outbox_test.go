@@ -2,6 +2,7 @@ package billing_test
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,25 +39,11 @@ func seedLowCreditOutboxRow(t *testing.T, db *testdb.DB, practiceID string, atte
 	return id
 }
 
-// runLowCreditWorker begins a tx on db.App, sets the trusted session var
-// outbox.ProcessHandler would otherwise set after its own secret
-// check, runs ProcessPending, and commits.
+// runLowCreditWorker runs ProcessPending the way outbox.ProcessHandler
+// drives it, behind its trusted session var and without HTTP.
 func runLowCreditWorker(t *testing.T, db *testdb.DB, w billing.Worker) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsNotificationWorker(t, w.ProcessPending)
 }
 
 func lowCreditOutboxRowState(t *testing.T, db *testdb.DB, id string) (status string, attemptCount int) {
@@ -167,23 +154,16 @@ func TestLowCreditWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T
 		t.Fatalf("sent %d messages, want 2 (one per Owner)", len(sent))
 	}
 	wantLink := testLowCreditAppBaseURL + "/practices/" + practiceID + "/billing"
-	wantRecipients := map[string]bool{"owner-one@example.com": false, "owner-two@example.com": false}
+	var recipients []string
 	for _, msg := range sent {
-		if msg.Subject != "DoulaCloud: your Practice is out of Credits" {
-			t.Fatalf("subject = %q", msg.Subject)
-		}
-		if _, ok := wantRecipients[msg.To]; !ok {
-			t.Fatalf("To = %q, want one of the two Owners", msg.To)
-		}
-		wantRecipients[msg.To] = true
-		if !strings.Contains(msg.Text, wantLink) {
-			t.Fatalf("body %q does not contain link %q", msg.Text, wantLink)
+		recipients = append(recipients, msg.To)
+		if msg.Subject != "DoulaCloud: your Practice is out of Credits" || !strings.Contains(msg.Text, wantLink) {
+			t.Fatalf("message to %q = %q / %q, want the out-of-Credits subject and %q", msg.To, msg.Subject, msg.Text, wantLink)
 		}
 	}
-	for to, got := range wantRecipients {
-		if !got {
-			t.Fatalf("Owner %q was never mailed", to)
-		}
+	slices.Sort(recipients)
+	if want := []string{"owner-one@example.com", "owner-two@example.com"}; !slices.Equal(recipients, want) {
+		t.Fatalf("mailed %v, want exactly the two Owners %v", recipients, want)
 	}
 }
 

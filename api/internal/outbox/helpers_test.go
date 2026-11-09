@@ -138,11 +138,7 @@ func newRowEnv(t *testing.T, attempts int) *rowEnv {
 // inTx runs fn in a transaction and commits it, the way a drain does.
 func (e *rowEnv) inTx(fn func(tx *sql.Tx) error) {
 	e.T.Helper()
-	tx, err := e.DB.Admin.BeginTx(e.T.Context(), nil)
-	if err != nil {
-		e.T.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := e.DB.BeginAdmin(e.T)
 	if err := fn(tx); err != nil {
 		e.T.Fatalf("worker: %v", err)
 	}

@@ -20,6 +20,9 @@ import (
 //nolint:gosec // test fixture value, not a real credential
 const webhookTestSecret = "whsec_test_secret"
 
+//nolint:gosec // test fixture value, not a real credential
+const wrongWebhookSecret = "whsec_wrong_secret"
+
 const (
 	stripeObjectEvent                = "event"
 	stripeObjectCheckoutSession      = "checkout.session"
@@ -98,8 +101,8 @@ func checkoutCompletedPayload(t *testing.T, eventID, practiceID string, quantity
 		// What the lot cost and the payment it arrived on: the webhook
 		// records both on the purchase row (#420), so a Session without
 		// them is not a Session this handler will credit.
-		"amount_subtotal": seedUnitPriceCents * quantity,
-		"payment_intent":  stripeTestPaymentIntentID,
+		"amount_subtotal":    seedUnitPriceCents * quantity,
+		failingPaymentIntent: stripeTestPaymentIntentID,
 		metadataKey: map[string]any{
 			practiceIDKey: practiceID,
 			quantityKey:   strconv.Itoa(quantity),
@@ -198,7 +201,7 @@ func TestPostPurchaseWebhookHandler_NeverCredits(t *testing.T) {
 			payload: func(t *testing.T, id string) []byte {
 				return checkoutCompletedPayload(t, "evt_bad_sig", id, 9, paidStatus)
 			},
-			secret: "whsec_wrong_secret",
+			secret: wrongWebhookSecret,
 			want:   http.StatusBadRequest,
 		},
 		{name: "a live event on test keys", payload: liveEventPayload, want: http.StatusBadRequest},

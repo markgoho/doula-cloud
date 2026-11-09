@@ -60,9 +60,9 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 }
 
 // seedLedger seeds one lot of origin at the Practice.
-func (e *env) seedLedger(origin string, quantity int) string {
+func (e *env) seedLedger(origin string, quantity int) {
 	e.T.Helper()
-	return seedLedgerRow(e.T, e.DB, e.Practice.ID, origin, quantity)
+	seedLedgerRow(e.T, e.DB, e.Practice.ID, origin, quantity)
 }
 
 // startPurchase posts a purchase body as the Staff member at the screen
