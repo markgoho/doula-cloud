@@ -6,7 +6,6 @@ import (
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"strconv"
 	"strings"
 	"testing"
@@ -142,26 +141,6 @@ func invoiceStatus(t *testing.T, db *testdb.DB, invoiceID string) string {
 	return status
 }
 
-func postInvoiceBody(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
-	return resp
-}
-
-func postInvoice(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	body, err := json.Marshal(payments.CreateInvoiceRequest{})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	return postInvoiceBody(t, srv, session, practiceID, engagementID, string(body))
-}
-
-func getInvoices(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/contract/invoices", reqtest.Session(session))
-}
-
 func invoicesPath(engagementID string) string {
 	return "/engagements/" + engagementID + "/contract/invoices"
 }
@@ -173,47 +152,47 @@ var janeClient = fixture.NewClient(fixture.ClientName("Jane Client"), fixture.Cl
 // contractWithStatus seeds an Engagement at the Practice with a Contract
 // in status.
 func (e *env) contractWithStatus(status string, opts ...fixture.EngagementOption) (engagementID, contractID string) {
-	e.t.Helper()
-	engagementID = fixture.Engagement(e.t, e.db, e.Practice, opts...).ID
-	return engagementID, seedContractWithStatus(e.t, e.db, engagementID, status)
+	e.T.Helper()
+	engagementID = fixture.Engagement(e.T, e.DB, e.Practice, opts...).ID
+	return engagementID, seedContractWithStatus(e.T, e.DB, engagementID, status)
 }
 
 // raise raises an Invoice as the Staff member at the screen and returns
 // the 201 view.
 func (e *env) raise(engagementID string) payments.InvoiceView {
-	e.t.Helper()
-	return reqtest.Expect[payments.InvoiceView](e.t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
-		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{}))
+	e.T.Helper()
+	return reqtest.Expect[payments.InvoiceView](e.T, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{}))
 }
 
 // raiseWithMode is raise with the billing-mode answer (#271) on the request.
 func (e *env) raiseWithMode(engagementID, billingMode string) payments.InvoiceView {
-	e.t.Helper()
-	return reqtest.Expect[payments.InvoiceView](e.t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
-		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &billingMode}))
+	e.T.Helper()
+	return reqtest.Expect[payments.InvoiceView](e.T, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &billingMode}))
 }
 
 // refuseRaise raises an Invoice, requires the status want, and returns the
 // error envelope it carries.
 func (e *env) refuseRaise(engagementID string, want int, opts ...reqtest.Option) apierr.APIError {
-	e.t.Helper()
+	e.T.Helper()
 	return e.postRefused(invoicesPath(engagementID), want, append([]reqtest.Option{reqtest.JSON(payments.CreateInvoiceRequest{})}, opts...)...)
 }
 
 func (e *env) listInvoices(engagementID string) payments.ListInvoicesResponse {
-	e.t.Helper()
-	return reqtest.Expect[payments.ListInvoicesResponse](e.t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[payments.ListInvoicesResponse](e.T, http.MethodGet, e.PracticeURL(invoicesPath(engagementID)), http.StatusOK, e.SignedIn)
 }
 
 // requireNothingRaised proves a refusal reached neither Stripe nor the
 // invoices table.
 func (e *env) requireNothingRaised() {
-	e.t.Helper()
+	e.T.Helper()
 	if got := len(e.Stripe.CreateInvoiceCalls); got != 0 {
-		e.t.Fatalf("CreateInvoice calls = %d, want 0 -- nothing must reach Stripe", got)
+		e.T.Fatalf("CreateInvoice calls = %d, want 0 -- nothing must reach Stripe", got)
 	}
-	if got := invoiceCount(e.t, e.db); got != 0 {
-		e.t.Fatalf("invoices row count = %d, want 0", got)
+	if got := invoiceCount(e.T, e.DB); got != 0 {
+		e.T.Fatalf("invoices row count = %d, want 0", got)
 	}
 }
 
@@ -266,7 +245,7 @@ func TestPostInvoiceHandler_RestrictedCardPaymentsRefuses(t *testing.T) {
 // calling Stripe with an empty account id.
 func TestPostInvoiceHandler_CardPaymentsActiveWithNoAccountReturns500(t *testing.T) {
 	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
-	testdb.SeedClientsCanPay(t, e.db, e.Practice.ID)
+	testdb.SeedClientsCanPay(t, e.DB, e.Practice.ID)
 	engagementID, _ := e.signedContract()
 
 	e.refuseRaise(engagementID, http.StatusInternalServerError)
@@ -338,7 +317,7 @@ func TestPostInvoiceHandler_CreatesInvoiceWhenConnected(t *testing.T) {
 		t.Fatalf("FinalizeInvoice calls = %d, want 1", len(client.FinalizeInvoiceIDs))
 	}
 
-	if got := invoiceStatus(t, e.db, out.ID); got != invoiceStatusOpen {
+	if got := invoiceStatus(t, e.DB, out.ID); got != invoiceStatusOpen {
 		t.Fatalf("persisted invoice status = %q, want %q", got, invoiceStatusOpen)
 	}
 }
@@ -389,7 +368,7 @@ func TestPostInvoiceHandler_ClientWithNoEmailRefuses(t *testing.T) {
 // Contract yet 404s rather than creating an Invoice against nothing.
 func TestPostInvoiceHandler_NoContractReturns404(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Doula()))
-	engagementID := fixture.Engagement(t, e.db, e.Practice).ID
+	engagementID := fixture.Engagement(t, e.DB, e.Practice).ID
 
 	e.refuseRaise(engagementID, http.StatusNotFound)
 
@@ -449,10 +428,10 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	engagementID, _ := e.signedContract(fixture.WithDoula(e.Staff))
 	byHand := string(payments.BillingModeByHand)
 
-	body := reqtest.ExpectBody(t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
-		e.signedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &byHand}))
+	body := reqtest.ExpectBody(t, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &byHand}))
 
-	if got := invoiceCount(t, e.db); got != 1 {
+	if got := invoiceCount(t, e.DB); got != 1 {
 		t.Fatalf("invoices row count = %d, want 1", got)
 	}
 
@@ -491,8 +470,8 @@ func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) 
 	e := newEnv(t, signedInAs(fixture.Doula()), connected())
 	engagementID, _ := e.signedContract()
 
-	out := reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.url(invoicesPath(engagementID)), http.StatusCreated,
-		e.signedIn, reqtest.RawJSON([]byte(`{"amountCents": 999}`)))
+	out := reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.RawJSON([]byte(`{"amountCents": 999}`)))
 
 	if out.AmountCents != 15000 {
 		t.Fatalf("invoice.amountCents = %d, want 15000 (the Contract's, not the attempted 999)", out.AmountCents)
@@ -501,7 +480,7 @@ func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) 
 		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", calls)
 	}
 
-	diff := testdb.Scalar[[]byte](t, e.db.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
+	diff := testdb.Scalar[[]byte](t, e.DB.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
 	var decoded struct {
 		AmountCents int64 `json:"amountCents"`
 	}
@@ -547,13 +526,13 @@ func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 
 			e.refuseRaise(engagementID, http.StatusInternalServerError)
 
-			if got := invoiceCount(t, e.db); got != tc.wantRows {
+			if got := invoiceCount(t, e.DB); got != tc.wantRows {
 				t.Fatalf("invoices row count = %d, want %d", got, tc.wantRows)
 			}
 			if tc.wantRows == 0 {
 				return
 			}
-			if status := testdb.Scalar[string](t, e.db.Admin, `SELECT status FROM invoices LIMIT 1`); status != tc.wantStatus {
+			if status := testdb.Scalar[string](t, e.DB.Admin, `SELECT status FROM invoices LIMIT 1`); status != tc.wantStatus {
 				t.Fatalf("persisted invoice status = %q, want %q", status, tc.wantStatus)
 			}
 		})
@@ -568,11 +547,11 @@ func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 	e := newEnv(t)
 	engagementID, voidedContractID := e.contractWithStatus("voided")
-	currentContractID := seedDraftContract(t, e.db, engagementID)
+	currentContractID := seedDraftContract(t, e.DB, engagementID)
 
 	base := time.Now().Add(-time.Hour)
-	oldInvoiceID := seedInvoice(t, e.db, e.Practice.ID, voidedContractID, "in_old", invoiceStatusPaid, 10000, base)
-	newInvoiceID := seedInvoice(t, e.db, e.Practice.ID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
+	oldInvoiceID := seedInvoice(t, e.DB, e.Practice.ID, voidedContractID, "in_old", invoiceStatusPaid, 10000, base)
+	newInvoiceID := seedInvoice(t, e.DB, e.Practice.ID, currentContractID, "in_new", invoiceStatusOpen, 20000, base.Add(time.Minute))
 
 	out := e.listInvoices(engagementID)
 
@@ -598,9 +577,9 @@ func TestGetInvoicesHandler_ListsAcrossVoidedContract(t *testing.T) {
 func TestGetInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	e := newEnv(t)
 	engagementID, contractID := e.contractWithStatus("draft")
-	invoiceID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
-	seedManualPayment(t, e.db, invoiceID, methodCheck, "")
-	if _, err := e.db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
+	invoiceID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_paid", invoiceStatusPaid, 10000, time.Now())
+	seedManualPayment(t, e.DB, invoiceID, methodCheck, "")
+	if _, err := e.DB.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
 		t.Fatalf("seed paid_at: %v", err)
 	}
 
@@ -630,7 +609,7 @@ func TestGetInvoicesHandler_EmptyBeforeAnyContract(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.who))
-			engagementID := fixture.Engagement(t, e.db, e.Practice).ID
+			engagementID := fixture.Engagement(t, e.DB, e.Practice).ID
 
 			if out := e.listInvoices(engagementID); len(out.Items) != 0 {
 				t.Fatalf("items = %d, want 0", len(out.Items))
@@ -650,7 +629,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	base := time.Now().Add(-time.Hour)
 	ids := make([]string, total)
 	for i := range total {
-		ids[i] = seedInvoice(t, e.db, e.Practice.ID, contractID, "in_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
+		ids[i] = seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
 	}
 
 	firstPage := e.listInvoices(engagementID)
@@ -669,7 +648,7 @@ func TestGetInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	}
 
 	secondPage := reqtest.Expect[payments.ListInvoicesResponse](t, http.MethodGet,
-		e.url(invoicesPath(engagementID)+"?cursor="+*firstPage.NextCursor), http.StatusOK, e.signedIn)
+		e.PracticeURL(invoicesPath(engagementID)+"?cursor="+*firstPage.NextCursor), http.StatusOK, e.SignedIn)
 	if secondPage.HasMore {
 		t.Fatal("hasMore = true on second page, want false")
 	}
@@ -696,7 +675,7 @@ var invalidCursors = map[string]string{
 // than a panic or a silently wrong page.
 func TestGetInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	e := newEnv(t)
-	engagementID := fixture.Engagement(t, e.db, e.Practice).ID
+	engagementID := fixture.Engagement(t, e.DB, e.Practice).ID
 
 	for name, cursor := range invalidCursors {
 		t.Run(name, func(*testing.T) {
@@ -729,7 +708,7 @@ func TestPostInvoiceHandler_BillingModeRequiredWhenUnset(t *testing.T) {
 	if got := out.Details["billingMode"]; got != payments.DetailBillingModeRequired {
 		t.Fatalf("details.billingMode = %q, want %q", got, payments.DetailBillingModeRequired)
 	}
-	if got := invoiceCount(t, e.db); got != 0 {
+	if got := invoiceCount(t, e.DB); got != 0 {
 		t.Fatalf("invoices row count = %d, want 0", got)
 	}
 }
@@ -765,10 +744,10 @@ func TestPostInvoiceHandler_RefusedFirstInvoiceDoesNotLockInBillingMode(t *testi
 
 			e.refuseRaise(engagementID, tc.wantStatus, reqtest.JSON(payments.CreateInvoiceRequest{BillingMode: &tc.mode}))
 
-			if got := invoiceCount(t, e.db); got != 0 {
+			if got := invoiceCount(t, e.DB); got != 0 {
 				t.Fatalf("invoices row count = %d, want 0", got)
 			}
-			if mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID); ok {
+			if mode, ok := billingModeOfPractice(t, e.DB, e.Practice.ID); ok {
 				t.Fatalf("billing_mode = %q, want it left unset after a refused first Invoice", mode)
 			}
 		})
@@ -803,7 +782,7 @@ func TestPostInvoiceHandler_ByHandInvoiceCreatedOpenNoStripeCall(t *testing.T) {
 	if len(e.Stripe.FinalizeInvoiceIDs) != 0 {
 		t.Fatalf("FinalizeInvoice calls = %d, want 0", len(e.Stripe.FinalizeInvoiceIDs))
 	}
-	mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID)
+	mode, ok := billingModeOfPractice(t, e.DB, e.Practice.ID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}
@@ -885,7 +864,7 @@ func TestPostInvoiceHandler_StripeInvoiceUsesStripeNumberAsReference(t *testing.
 func TestGetInvoicesHandler_ByHandInvoiceReportsByHandBillingMode(t *testing.T) {
 	e := newEnv(t)
 	engagementID, contractID := e.signedContract()
-	seedByHandInvoice(t, e.db, e.Practice.ID, contractID)
+	seedByHandInvoice(t, e.DB, e.Practice.ID, contractID)
 
 	out := e.listInvoices(engagementID)
 

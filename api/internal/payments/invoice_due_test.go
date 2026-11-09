@@ -30,7 +30,7 @@ func TestPostInvoiceHandler_StripeRailSendsTheStoredDueDate(t *testing.T) {
 
 	view := e.raise(engagementID)
 
-	stored := invoiceDueAtOf(t, e.db, view.ID)
+	stored := invoiceDueAtOf(t, e.DB, view.ID)
 	if len(e.Stripe.CreateInvoiceCalls) != 1 {
 		t.Fatalf("CreateInvoice calls = %d, want 1", len(e.Stripe.CreateInvoiceCalls))
 	}
@@ -63,7 +63,7 @@ func TestPostInvoiceHandler_ByHandRailStoresTheDueDate(t *testing.T) {
 
 	view := e.raise(engagementID)
 
-	stored := invoiceDueAtOf(t, e.db, view.ID)
+	stored := invoiceDueAtOf(t, e.DB, view.ID)
 	if want := seededPracticeDay(t, stored); view.DueOn != want {
 		t.Fatalf("returned dueOn = %q, stored due_at = %v; want %q", view.DueOn, stored, want)
 	}
@@ -96,7 +96,7 @@ func TestPostInvoiceHandler_RaisesOnTheRequestClock(t *testing.T) {
 	if want := now.Truncate(time.Microsecond); !view.CreatedAt.Equal(want) {
 		t.Fatalf("createdAt = %v, want the request clock %v", view.CreatedAt, want)
 	}
-	if stored, want := invoiceDueAtOf(t, e.db, view.ID), payments.DueAfterTerms(now, payments.DefaultPaymentTermsDays); !stored.Equal(want) {
+	if stored, want := invoiceDueAtOf(t, e.DB, view.ID), payments.DueAfterTerms(now, payments.DefaultPaymentTermsDays); !stored.Equal(want) {
 		t.Fatalf("due date = %v, want %v", stored, want)
 	}
 }
@@ -110,7 +110,7 @@ func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
 	e.setTerms(`{"netDays":7}`)
 
 	view := e.raise(engagementID)
-	stored := invoiceDueAtOf(t, e.db, view.ID)
+	stored := invoiceDueAtOf(t, e.DB, view.ID)
 	wantDue := payments.DueAfterTerms(view.CreatedAt, 7)
 	if !stored.Equal(wantDue) {
 		t.Fatalf("due date = %v, want %v (the Practice's own net-7 terms)", stored, wantDue)
@@ -120,7 +120,7 @@ func TestPostInvoiceHandler_UsesThePracticesOwnTerms(t *testing.T) {
 	// raised: the row carries the terms it was billed under, the same way
 	// it carries the rail it was born on.
 	e.setTerms(`{"netDays":60}`)
-	if again := invoiceDueAtOf(t, e.db, view.ID); again.Unix() != stored.Unix() {
+	if again := invoiceDueAtOf(t, e.DB, view.ID); again.Unix() != stored.Unix() {
 		t.Fatalf("due date after a terms change = %v, want the unchanged %v", again, stored)
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -145,16 +146,12 @@ func TestClientGetPayment_AStripeFailureIsARetryableRefusalNotACredential(t *tes
 // TestClientGetPayment_RefusesAStaffSession: the gate is her own portal
 // access, never a Staff role, Owner included.
 func TestClientGetPayment_RefusesAStaffSession(t *testing.T) {
-	db := testdb.New(t)
-	me := seedClientMoney(t, db, "pay-staff-gate", "Jordan Client", "jordan@example.com")
-	seedConnectAccount(t, db, me.practiceID, payAccountID)
-	invoiceID := seedInvoice(t, db, me.practiceID, me.contractID, "in_sg2", invoiceStatusOpen, 100, time.Now())
-	const staffUID = "owner-not-a-client-pay"
-	testdb.SeedStaffAtPractice(t, db, me.practiceID, staffUID, []string{ownerRole}, "employee")
+	e := newEnv(t, connected())
+	engagementID, contractID := e.contractWithStatus("signed")
+	invoiceID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_sg2", invoiceStatusOpen, 100, time.Now())
 
-	srv, session := newPracticeInvoiceServer(t, db, staffUID)
-	defer srv.Close()
-	if status, body := getPortal(t, srv, session, clientPaymentPath(me.engagementID, invoiceID)); status == http.StatusOK {
+	body := reqtest.ExpectBody(t, http.MethodGet, e.URL(clientPaymentPath(engagementID, invoiceID)), http.StatusUnauthorized, e.SignedIn)
+	if strings.Contains(string(body), "clientSecret") {
 		t.Fatalf("Staff session read a pay secret: %s", body)
 	}
 }

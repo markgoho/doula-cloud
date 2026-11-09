@@ -1,14 +1,14 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -31,20 +31,14 @@ func markProcessing(t *testing.T, db *testdb.DB, invoiceID string) {
 // open. A value left on an Invoice that has since been paid reads as
 // nothing on its way: only an open Invoice can be waiting on one.
 func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
-	db := testdb.New(t)
-	const clientUID = "on-its-way-client"
-	me := seedClientMoney(t, db, clientUID, "Imani Client", "imani@example.com")
 	now := time.Now()
-	onItsWay := seedInvoice(t, db, me.practiceID, me.contractID, "in_on_its_way", invoiceStatusOpen, 15000, now.Add(-time.Hour))
-	markProcessing(t, db, onItsWay)
-	settled := seedInvoice(t, db, me.practiceID, me.contractID, "in_settled", invoiceStatusPaid, 5000, now.Add(-2*time.Hour))
-	markProcessing(t, db, settled)
+	e := newEnv(t, atInstant(now), viaScene(fixture.WithClient(fixture.WithPortalLogin())))
+	contractID := seedSignedContract(t, e.DB, e.Engagement.ID)
+	onItsWay := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_on_its_way", invoiceStatusOpen, 15000, now.Add(-time.Hour))
+	markProcessing(t, e.DB, onItsWay)
+	settled := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_settled", invoiceStatusPaid, 5000, now.Add(-2*time.Hour))
+	markProcessing(t, e.DB, settled)
 	want := map[string]bool{onItsWay: true, settled: false}
-
-	const ownerUID = "on-its-way-owner"
-	testdb.SeedStaffAtPractice(t, db, me.practiceID, ownerUID, []string{ownerRole}, "employee")
-	srv, ownerSession := newPracticeInvoiceServerAt(t, db, ownerUID, now)
-	defer srv.Close()
 
 	check := func(view, id, status string, got bool) {
 		t.Helper()
@@ -56,54 +50,26 @@ func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
 		}
 	}
 
-	for _, it := range readPracticeInvoices(t, srv, ownerSession, me.practiceID).Items {
+	for _, it := range e.practiceInvoices().Items {
 		check("Practice-wide list", it.ID, it.Status, it.PaymentProcessing)
 	}
-
-	var section payments.ListInvoicesResponse
-	sectionResp := getInvoices(t, srv, ownerSession, me.practiceID, me.engagementID)
-	defer sectionResp.Body.Close()
-	decodeInvoices(t, sectionResp, &section)
-	for _, it := range section.Items {
+	for _, it := range e.listInvoices(e.Engagement.ID).Items {
 		check("Engagement list", it.ID, it.Status, it.PaymentProcessing)
 	}
 
-	const contractorUID = "on-its-way-contractor"
-	contractorID := testdb.SeedStaffAtPractice(t, db, me.practiceID, contractorUID, []string{doulaRole}, "contractor")
-	testdb.SeedGrantedAttachment(t, db, me.engagementID, contractorID)
-	var rows payments.ContractorInvoicesResponse
-	rowsResp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID)
-	defer rowsResp.Body.Close()
-	decodeInvoices(t, rowsResp, &rows)
+	contractor := e.Colleague(fixture.Doula(), fixture.Contractor())
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, contractor.ID)
+	rows := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet, e.PracticeURL(invoicesPath(e.Engagement.ID)), http.StatusOK, e.As(contractor))
 	for _, it := range rows.Items {
 		check("contractor's list", it.ID, it.Status, it.PaymentProcessing)
 	}
 
-	portal := newClientMoneyServer(t, db)
-	session := portalSession(t, db, clientUID)
-	for _, it := range readClientInvoices(t, portal, session, me.engagementID, "").Items {
+	portalInvoices := e.URL(clientInvoicesPath(e.Engagement.ID, ""))
+	for _, it := range reqtest.Expect[payments.ClientInvoicesResponse](t, http.MethodGet, portalInvoices, http.StatusOK, e.AsClient).Items {
 		check("portal list", it.ID, it.Status, it.PaymentProcessing)
 	}
-	status, body := getPortal(t, portal, session, clientInvoicesPath(me.engagementID, "/"+onItsWay))
-	if status != http.StatusOK {
-		t.Fatalf("portal invoice status = %d; body %s", status, body)
-	}
-	var one payments.ClientInvoiceView
-	if err := json.Unmarshal([]byte(body), &one); err != nil {
-		t.Fatalf("decode portal invoice: %v", err)
-	}
+	one := reqtest.Expect[payments.ClientInvoiceView](t, http.MethodGet, portalInvoices+"/"+onItsWay, http.StatusOK, e.AsClient)
 	check("portal invoice", one.ID, one.Status, one.PaymentProcessing)
-}
-
-// decodeInvoices reads a 200 into into. The caller closes the body.
-func decodeInvoices(t *testing.T, resp *http.Response, into any) {
-	t.Helper()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	if err := json.UnmarshalRead(resp.Body, into); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
 }
 
 // TestClientGetPayment_RefusesWhileAPaymentIsOnItsWay is the boundary

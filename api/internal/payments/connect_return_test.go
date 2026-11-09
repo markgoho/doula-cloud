@@ -29,13 +29,13 @@ func connectReturnCount(t *testing.T, db *testdb.DB, practiceID string) int {
 // time, on the server.
 func TestPostConnectReturnHandler_RecordsTheOwnerAndTheTime(t *testing.T) {
 	e := newEnv(t, atInstant(connectReturnInstant))
-	setConnectAccountID(t, e.db, e.Practice.ID, "acct_returning")
+	setConnectAccountID(t, e.DB, e.Practice.ID, "acct_returning")
 
 	e.expect(http.MethodPost, connectReturnPath, http.StatusNoContent)
 
 	var subjectKind, subjectID, actorKind, actorStaffID string
 	var createdAt time.Time
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT subject_kind, subject_id, actor_kind::text, actor_staff_id, created_at
 		 FROM activity WHERE practice_id = $1 AND action = $2`, e.Practice.ID, connectReturnActionName,
 	).Scan(&subjectKind, &subjectID, &actorKind, &actorStaffID, &createdAt); err != nil {
@@ -69,7 +69,7 @@ func TestPostConnectReturnHandler_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.staff), atInstant(connectReturnInstant))
 			if tc.connected {
-				setConnectAccountID(t, e.db, e.Practice.ID, "acct_admin_return")
+				setConnectAccountID(t, e.DB, e.Practice.ID, "acct_admin_return")
 			}
 
 			out := e.postRefused(connectReturnPath, tc.want)
@@ -77,7 +77,7 @@ func TestPostConnectReturnHandler_Refusals(t *testing.T) {
 			if tc.wantMessage != "" && out.Message != tc.wantMessage {
 				t.Fatalf("message = %q, want %q", out.Message, tc.wantMessage)
 			}
-			if got := connectReturnCount(t, e.db, e.Practice.ID); got != 0 {
+			if got := connectReturnCount(t, e.DB, e.Practice.ID); got != 0 {
 				t.Fatalf("return rows = %d, want 0", got)
 			}
 		})

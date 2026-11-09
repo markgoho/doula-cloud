@@ -51,39 +51,39 @@ func todayInSeededZone(t *testing.T) string {
 // byHandInvoice seeds an Engagement at the Practice with a signed Contract
 // and an open by-hand Invoice against it.
 func (e *env) byHandInvoice() (engagementID, invoiceID string) {
-	e.t.Helper()
+	e.T.Helper()
 	return e.byHandInvoiceFor()
 }
 
 // byHandInvoiceFor is byHandInvoice on an Engagement shaped by opts.
 func (e *env) byHandInvoiceFor(opts ...fixture.EngagementOption) (engagementID, invoiceID string) {
-	e.t.Helper()
+	e.T.Helper()
 	engagementID, contractID := e.signedContract(opts...)
-	return engagementID, seedByHandInvoice(e.t, e.db, e.Practice.ID, contractID)
+	return engagementID, seedByHandInvoice(e.T, e.DB, e.Practice.ID, contractID)
 }
 
 // signedContract seeds an Engagement at the Practice with a signed Contract.
 func (e *env) signedContract(opts ...fixture.EngagementOption) (engagementID, contractID string) {
-	e.t.Helper()
-	engagementID = fixture.Engagement(e.t, e.db, e.Practice, opts...).ID
-	return engagementID, seedSignedContract(e.t, e.db, engagementID)
+	e.T.Helper()
+	engagementID = fixture.Engagement(e.T, e.DB, e.Practice, opts...).ID
+	return engagementID, seedSignedContract(e.T, e.DB, engagementID)
 }
 
 // stripeInvoice seeds the same, with an open Invoice that Stripe issued,
 // and gives the Practice a Stripe Connect account when accountID is not
 // empty.
 func (e *env) stripeInvoice(stripeInvoiceID, accountID string) (invoiceID string) {
-	e.t.Helper()
+	e.T.Helper()
 	_, contractID := e.signedContract()
 	if accountID != "" {
-		seedConnectAccount(e.t, e.db, e.Practice.ID, accountID)
+		seedConnectAccount(e.T, e.DB, e.Practice.ID, accountID)
 	}
-	return seedInvoice(e.t, e.db, e.Practice.ID, contractID, stripeInvoiceID, invoiceStatusOpen, 15000, time.Now())
+	return seedInvoice(e.T, e.DB, e.Practice.ID, contractID, stripeInvoiceID, invoiceStatusOpen, 15000, time.Now())
 }
 
 func (e *env) activityCount(action, engagementID string) int {
-	e.t.Helper()
-	return testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE action = $1 AND subject_id = $2`, action, engagementID)
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin, `SELECT count(*) FROM activity WHERE action = $1 AND subject_id = $2`, action, engagementID)
 }
 
 // paymentRequest is the body recording a Payment sends.
@@ -101,8 +101,8 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 	e := newEnv(t)
 	engagementID, invoiceID := e.byHandInvoice()
 
-	out := reqtest.Expect[payments.PaymentView](t, http.MethodPost, e.url(paymentsPath(invoiceID)), http.StatusCreated,
-		e.signedIn, paymentRequest(payments.PaymentMethodCheck, "check #204", todayInSeededZone(t)))
+	out := reqtest.Expect[payments.PaymentView](t, http.MethodPost, e.PracticeURL(paymentsPath(invoiceID)), http.StatusCreated,
+		e.SignedIn, paymentRequest(payments.PaymentMethodCheck, "check #204", todayInSeededZone(t)))
 
 	if out.AmountCents != 15000 {
 		t.Fatalf("payment.amountCents = %d, want 15000", out.AmountCents)
@@ -110,7 +110,7 @@ func TestPostManualPaymentHandler_ByHandCheckHappyPath(t *testing.T) {
 	if out.Note == nil || *out.Note != "check #204" {
 		t.Fatalf("payment.note = %v, want %q", out.Note, "check #204")
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 	if got := e.activityCount("payment_recorded", engagementID); got != 1 {
@@ -168,10 +168,10 @@ func TestPostManualPaymentHandler_FieldRefusals(t *testing.T) {
 			if out.Details[tc.field] != tc.want {
 				t.Fatalf("details[%s] = %q, want %q", tc.field, out.Details[tc.field], tc.want)
 			}
-			if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
+			if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusOpen {
 				t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 			}
-			if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
+			if got := paymentsForInvoice(t, e.DB, invoiceID); len(got) != 0 {
 				t.Fatalf("payments = %d, want 0", len(got))
 			}
 		})
@@ -215,7 +215,7 @@ func TestPostManualPaymentHandler_FutureDateRefused(t *testing.T) {
 func TestPostManualPaymentHandler_UnloadablePracticeZoneIsAnError(t *testing.T) {
 	e := newEnv(t)
 	_, invoiceID := e.byHandInvoice()
-	testdb.SetPracticeTimezone(t, e.db, e.Practice.ID, "Nowhere/Atlantis")
+	testdb.SetPracticeTimezone(t, e.DB, e.Practice.ID, "Nowhere/Atlantis")
 
 	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusInternalServerError, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)))
 }
@@ -227,7 +227,7 @@ func TestPostManualPaymentHandler_NotOpenInvoiceRefused(t *testing.T) {
 	_, contractID := e.signedContract()
 
 	for _, status := range []string{invoiceStatusDraft, invoiceStatusVoid, invoiceStatusUncollectible, invoiceStatusPaid} {
-		invoiceID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_not_open_"+status, status, 15000, time.Now())
+		invoiceID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_not_open_"+status, status, 15000, time.Now())
 
 		e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusConflict, paymentRequest(payments.PaymentMethodCash, "", todayInSeededZone(t)))
 	}
@@ -274,7 +274,7 @@ func TestPostManualPaymentHandler_StripeBackedCallsPayOutOfBandThenRecords(t *te
 	if got := e.Stripe.PayOutOfBandCalls[0]; got.AccountID != "acct_pay_oob" || got.InvoiceID != "in_pay_oob" {
 		t.Fatalf("PayOutOfBand call = %+v, want account acct_pay_oob invoice in_pay_oob", got)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 }
@@ -290,10 +290,10 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 
 	e.expect(http.MethodPost, paymentsPath(invoiceID), http.StatusBadGateway, paymentRequest(payments.PaymentMethodCheck, "", todayInSeededZone(t)))
 
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 	}
-	if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
+	if got := paymentsForInvoice(t, e.DB, invoiceID); len(got) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(got))
 	}
 }
@@ -304,7 +304,7 @@ func TestPostManualPaymentHandler_StripePayOutOfBandFailureRecordsNothing(t *tes
 func TestPostManualPaymentHandler_PaymentOnItsWayRefused(t *testing.T) {
 	e := newEnv(t)
 	invoiceID := e.stripeInvoice("in_on_its_way", "acct_on_its_way")
-	markProcessing(t, e.db, invoiceID)
+	markProcessing(t, e.DB, invoiceID)
 
 	out := e.postRefused(paymentsPath(invoiceID), http.StatusConflict, paymentRequest(payments.PaymentMethodCheck, "", todayInSeededZone(t)))
 
@@ -314,10 +314,10 @@ func TestPostManualPaymentHandler_PaymentOnItsWayRefused(t *testing.T) {
 	if len(e.Stripe.PayOutOfBandCalls) != 0 {
 		t.Fatalf("PayOutOfBand calls = %d, want 0", len(e.Stripe.PayOutOfBandCalls))
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want unchanged %q", status, invoiceStatusOpen)
 	}
-	if got := paymentsForInvoice(t, e.db, invoiceID); len(got) != 0 {
+	if got := paymentsForInvoice(t, e.DB, invoiceID); len(got) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(got))
 	}
 }
@@ -348,13 +348,13 @@ func TestPostInvoiceTransitionHandler_HappyPath(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.staff))
 			engagementID, invoiceID := e.byHandInvoice()
 
-			out := reqtest.Expect[payments.InvoiceTransitionView](t, http.MethodPost, e.url(invoiceActionPath(invoiceID, tc.action)), http.StatusOK,
-				e.signedIn, reqtest.RawJSON([]byte("{}")))
+			out := reqtest.Expect[payments.InvoiceTransitionView](t, http.MethodPost, e.PracticeURL(invoiceActionPath(invoiceID, tc.action)), http.StatusOK,
+				e.SignedIn, reqtest.RawJSON([]byte("{}")))
 
 			if out.Status != tc.status {
 				t.Fatalf("status = %q, want %q", out.Status, tc.status)
 			}
-			if got := invoiceStatusFor(t, e.db, invoiceID); got != tc.status {
+			if got := invoiceStatusFor(t, e.DB, invoiceID); got != tc.status {
 				t.Fatalf("persisted invoice status = %q, want %q", got, tc.status)
 			}
 			if got := e.activityCount(tc.activity, engagementID); got != 1 {
@@ -381,8 +381,8 @@ func TestPostInvoiceTransitionHandler_Refusals(t *testing.T) {
 			{"a Stripe-backed Invoice", tc.staff, func(e *env) string { id := e.stripeInvoice("in_"+tc.action+"_stripe", ""); return id }, "", http.StatusConflict},
 			{"an Invoice that is not open", tc.staff, func(e *env) string {
 				_, id := e.byHandInvoice()
-				if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, id); err != nil {
-					e.t.Fatalf("seed paid status: %v", err)
+				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, id); err != nil {
+					e.T.Fatalf("seed paid status: %v", err)
 				}
 				return id
 			}, "", http.StatusConflict},
@@ -400,7 +400,7 @@ func TestPostInvoiceTransitionHandler_Refusals(t *testing.T) {
 				e.expect(http.MethodPost, invoiceActionPath(invoiceID, tc.action), refusal.want, reqtest.RawJSON([]byte("{}")))
 
 				if refusal.invoice != nil && refusal.want == http.StatusConflict {
-					if got := invoiceStatusFor(t, e.db, invoiceID); got == tc.status {
+					if got := invoiceStatusFor(t, e.DB, invoiceID); got == tc.status {
 						t.Fatalf("persisted invoice status = %q, want it not to have changed", got)
 					}
 				}

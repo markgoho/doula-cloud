@@ -55,7 +55,7 @@ var contractorInvoiceKeys = map[string]bool{
 // and a Refund against that Payment.
 func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.T) {
 	e, engagementID, contractID := attachedContractor(t)
-	db, practiceID := e.db, e.Practice.ID
+	db, practiceID := e.DB, e.Practice.ID
 
 	base := time.Now().Add(-90 * 24 * time.Hour)
 	overdueID := seedInvoiceDue(t, db, practiceID, contractID, "in_ctr_overdue", invoiceStatusOpen, leakInvoiceCents, base, base.Add(24*time.Hour))
@@ -72,7 +72,7 @@ func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.
 	voidID := seedInvoice(t, db, practiceID, contractID, "in_ctr_void", invoiceStatusVoid, leakInvoiceCents, base.Add(2*time.Minute))
 	openID := seedInvoice(t, db, practiceID, contractID, "in_ctr_open", invoiceStatusOpen, leakInvoiceCents, time.Now())
 
-	raw := reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
+	raw := reqtest.ExpectBody(t, http.MethodGet, e.PracticeURL(invoicesPath(engagementID)), http.StatusOK, e.SignedIn)
 	body := string(raw)
 
 	for _, figure := range []int{leakInvoiceCents, leakPaymentCents, leakRefundCents} {
@@ -139,7 +139,7 @@ func TestGetInvoicesHandler_AContractorReadsDatesAndStatusNeverMoney(t *testing.
 func TestGetInvoicesHandler_AnUnattachedContractorGets404(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 	engagementID, contractID := e.signedContract()
-	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_ctr_unattached", invoiceStatusOpen, leakInvoiceCents, time.Now())
+	seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_ctr_unattached", invoiceStatusOpen, leakInvoiceCents, time.Now())
 
 	e.expect(http.MethodGet, invoicesPath(engagementID), http.StatusNotFound)
 }
@@ -150,16 +150,16 @@ func TestGetInvoicesHandler_AContractorPages(t *testing.T) {
 	e, engagementID, contractID := attachedContractor(t)
 	base := time.Now().Add(-time.Hour)
 	for i := range 31 {
-		seedInvoice(t, e.db, e.Practice.ID, contractID, "in_ctr_page_"+strconv.Itoa(i), invoiceStatusOpen, 1000, base.Add(time.Duration(i)*time.Second))
+		seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_ctr_page_"+strconv.Itoa(i), invoiceStatusOpen, 1000, base.Add(time.Duration(i)*time.Second))
 	}
 
-	page := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn)
+	page := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet, e.PracticeURL(invoicesPath(engagementID)), http.StatusOK, e.SignedIn)
 	if !page.HasMore || page.NextCursor == nil || len(page.Items) != 30 {
 		t.Fatalf("first page = %d items, hasMore %v, cursor %v; want 30, true, a cursor", len(page.Items), page.HasMore, page.NextCursor)
 	}
 
 	next := reqtest.Expect[payments.ContractorInvoicesResponse](t, http.MethodGet,
-		e.url(invoicesPath(engagementID)+"?cursor="+*page.NextCursor), http.StatusOK, e.signedIn)
+		e.PracticeURL(invoicesPath(engagementID)+"?cursor="+*page.NextCursor), http.StatusOK, e.SignedIn)
 	if next.HasMore || len(next.Items) != 1 {
 		t.Fatalf("second page = %d items, hasMore %v; want 1, false", len(next.Items), next.HasMore)
 	}

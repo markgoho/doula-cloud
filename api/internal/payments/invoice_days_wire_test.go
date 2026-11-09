@@ -3,16 +3,12 @@ package payments_test
 import (
 	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -25,20 +21,6 @@ import (
 // dayOct25 is the day every paid-day case here lands on: 8pm in New York
 // on Oct 25 for a card Payment, and Oct 25 typed for a by-hand one.
 const dayOct25 = "2026-10-25"
-
-// newPracticeInvoiceServerAt is newPracticeInvoiceServer with the
-// request clock fixed at now, the way main.go seeds Deps.Now through
-// clock.Middleware. The session is minted at the same instant, so the
-// fixed clock does not read it as expired.
-func newPracticeInvoiceServerAt(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	payments.Mount(g, ir, payments.NewFakeClient(), tasknudge.NoOpEnqueuer{}, db.App, testPublishableKey)
-	handler := clock.Middleware(func() time.Time { return now })(mux)
-	return httptest.NewServer(handler), authntest.SeedSessionAt(t, db.App, uid, now)
-}
 
 // TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn is the
 // boundary itself. The Invoice is due at 2026-11-24T00:00Z, which is the
@@ -63,7 +45,7 @@ func TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			e := newEnv(t, atInstant(tt.now))
 			_, contractID := e.contractWithStatus("draft")
-			invoiceID := seedInvoiceDue(t, e.db, e.Practice.ID, contractID, "in_due_on_boundary", invoiceStatusOpen, 15000, createdAt, dueAt)
+			invoiceID := seedInvoiceDue(t, e.DB, e.Practice.ID, contractID, "in_due_on_boundary", invoiceStatusOpen, 15000, createdAt, dueAt)
 
 			whole := e.practiceInvoices()
 			if whole.OverdueCount != tt.wantOverdue || whole.OverdueCents != int64(tt.wantOverdue)*15000 {
@@ -95,9 +77,9 @@ func TestGetPracticeInvoicesHandler_OverdueFromTheDayAfterDueOn(t *testing.T) {
 // Practice's, not New York's, UTC's or the server's.
 func TestGetPracticeInvoicesHandler_OverdueBoundaryIsThePracticesZone(t *testing.T) {
 	e := newEnv(t, atInstant(time.Date(2026, 11, 24, 5, 0, 0, 0, time.UTC)))
-	testdb.SetPracticeTimezone(t, e.db, e.Practice.ID, "America/Los_Angeles")
+	testdb.SetPracticeTimezone(t, e.DB, e.Practice.ID, "America/Los_Angeles")
 	_, contractID := e.contractWithStatus("draft")
-	seedInvoiceDue(t, e.db, e.Practice.ID, contractID, "in_due_on_zone", invoiceStatusOpen, 15000,
+	seedInvoiceDue(t, e.DB, e.Practice.ID, contractID, "in_due_on_zone", invoiceStatusOpen, 15000,
 		time.Date(2026, 10, 25, 15, 0, 0, 0, time.UTC), time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC))
 
 	out := e.practiceInvoices()
@@ -118,7 +100,7 @@ func TestInvoicePaid_8pmEasternIsPaidOnThatDay(t *testing.T) {
 	paidAt := time.Date(2026, 10, 26, 0, 0, 0, 0, time.UTC) // 8pm EDT, Oct 25
 	deliverConnect(t, hook, invoicePaidPayload(t, "evt_paid_8pm", e.AccountID, "in_paid_8pm", paidAt))
 
-	if _, stored := invoiceStatusAndPaidAt(t, e.db, invoiceID); stored == nil || !stored.Equal(paidAt) {
+	if _, stored := invoiceStatusAndPaidAt(t, e.DB, invoiceID); stored == nil || !stored.Equal(paidAt) {
 		t.Fatalf("stored paid_at = %v, want the instant %v", stored, paidAt)
 	}
 
@@ -182,34 +164,16 @@ func TestClientInvoices_PaidOnIsThePracticesDay(t *testing.T) {
 // Invoice's days to ADR-0036: a Practice zone that will not load is a
 // 500, never a quiet fall back to UTC's day.
 func TestInvoiceReads_RefuseAZoneThatWillNotLoad(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-days-bad-zone"
-	me := seedClientMoney(t, db, "invoice-days-bad-zone-client", "Jordan Client", "jordan@example.com")
-	testdb.SeedStaffAtPractice(t, db, me.practiceID, uid, []string{ownerRole}, "employee")
-	testdb.SeedBillingMode(t, db, me.practiceID, string(payments.BillingModeByHand))
-	invoiceID := seedInvoice(t, db, me.practiceID, me.contractID, "in_bad_zone", invoiceStatusOpen, 2000, time.Now())
-	testdb.SetPracticeTimezone(t, db, me.practiceID, "Nowhere/Atlantis")
+	e := newEnv(t, withBillingMode(payments.BillingModeByHand), viaScene(fixture.WithClient(fixture.WithPortalLogin())))
+	contractID := seedSignedContract(t, e.DB, e.Engagement.ID)
+	invoiceID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_bad_zone", invoiceStatusOpen, 2000, time.Now())
+	testdb.SetPracticeTimezone(t, e.DB, e.Practice.ID, "Nowhere/Atlantis")
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	e.expect(http.MethodGet, practiceInvoicesPath(), http.StatusInternalServerError)
+	e.expect(http.MethodGet, invoicesPath(e.Engagement.ID), http.StatusInternalServerError)
+	e.expect(http.MethodPost, invoicesPath(e.Engagement.ID), http.StatusInternalServerError, reqtest.JSON(payments.CreateInvoiceRequest{}))
 
-	book := getPracticeInvoicesNarrowed(t, srv, session, me.practiceID, "")
-	_ = book.Body.Close()
-	section := getInvoices(t, srv, session, me.practiceID, me.engagementID)
-	_ = section.Body.Close()
-	raised := postInvoice(t, srv, session, me.practiceID, me.engagementID)
-	_ = raised.Body.Close()
-	for name, got := range map[string]int{"practice list": book.StatusCode, "engagement list": section.StatusCode, "raise": raised.StatusCode} {
-		if got != http.StatusInternalServerError {
-			t.Errorf("%s status = %d, want 500", name, got)
-		}
-	}
-
-	portal := newClientMoneyServer(t, db)
-	clientSession := portalSession(t, db, "invoice-days-bad-zone-client")
 	for _, path := range []string{"", "/" + invoiceID} {
-		if status, body := getPortal(t, portal, clientSession, clientInvoicesPath(me.engagementID, path)); status != http.StatusInternalServerError {
-			t.Errorf("portal %q status = %d, want 500; body %s", path, status, body)
-		}
+		reqtest.ExpectStatus(t, http.MethodGet, e.URL(clientInvoicesPath(e.Engagement.ID, path)), http.StatusInternalServerError, e.AsClient)
 	}
 }

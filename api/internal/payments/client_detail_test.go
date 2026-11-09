@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -145,17 +146,11 @@ func TestClientGetInvoice_RefusesWhatIsNotHers(t *testing.T) {
 // TestClientInvoiceRoutes_RefuseAStaffSession proves the gate is the
 // Client's own portal access: a Staff session, Owner included, reads none.
 func TestClientInvoiceRoutes_RefuseAStaffSession(t *testing.T) {
-	db := testdb.New(t)
-	me := seedClientMoney(t, db, "client-staff-gate", "Jordan Client", "jordan@example.com")
-	invoiceID := seedInvoice(t, db, me.practiceID, me.contractID, "in_sg", invoiceStatusOpen, 100, time.Now())
-	const staffUID = "owner-not-a-client"
-	testdb.SeedStaffAtPractice(t, db, me.practiceID, staffUID, []string{ownerRole}, "employee")
+	e := newEnv(t)
+	engagementID, contractID := e.contractWithStatus("signed")
+	invoiceID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_sg", invoiceStatusOpen, 100, time.Now())
 
-	srv, session := newPracticeInvoiceServer(t, db, staffUID)
-	defer srv.Close()
 	for _, suffix := range []string{"", "/" + invoiceID} {
-		if status, body := getPortal(t, srv, session, clientInvoicesPath(me.engagementID, suffix)); status == http.StatusOK {
-			t.Errorf("Staff session read %q: status 200; body %s", suffix, body)
-		}
+		reqtest.ExpectStatus(t, http.MethodGet, e.URL(clientInvoicesPath(engagementID, suffix)), http.StatusUnauthorized, e.SignedIn)
 	}
 }

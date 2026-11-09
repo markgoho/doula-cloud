@@ -62,7 +62,7 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 			client.CreateInvoiceCalls[1].CustomerID, billed)
 	}
 
-	mapped, createdBy := mappedCustomer(t, e.db, clientOfEngagement(t, e.db, engagementID), e.AccountID)
+	mapped, createdBy := mappedCustomer(t, e.DB, clientOfEngagement(t, e.DB, engagementID), e.AccountID)
 	if mapped != billed {
 		t.Fatalf("mapped customer = %q, want the billed %q", mapped, billed)
 	}
@@ -80,10 +80,10 @@ func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Doula()), connected())
 	engagementID, _ := e.signedContract()
 	const preAllocated = "cus_on_a_test_clock"
-	if _, err := e.db.Admin.ExecContext(t.Context(),
+	if _, err := e.DB.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
 		 VALUES ($1, $2, $3, $4)`,
-		e.Practice.ID, clientOfEngagement(t, e.db, engagementID), e.AccountID, preAllocated,
+		e.Practice.ID, clientOfEngagement(t, e.DB, engagementID), e.AccountID, preAllocated,
 	); err != nil {
 		t.Fatalf("seed pre-allocated customer: %v", err)
 	}
