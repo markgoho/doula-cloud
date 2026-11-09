@@ -192,11 +192,7 @@ func TestRLS_InvitationAcceptLookupNeedsTheTokenDigest(t *testing.T) {
 		{"the right token", "the-real-token", 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer func() { _ = tx.Rollback() }()
+			tx := db.BeginAs(t)
 			if tc.token != "" {
 				if _, err := tx.ExecContext(t.Context(),
 					`SELECT set_config('app.invite_token_digest', $1, true)`, staffauth.TokenDigest(tc.token),
@@ -225,17 +221,8 @@ func asHerself(t *testing.T, db *testdb.DB, identityUID string, body func(tx *sq
 // test can prove what happens without it.
 func inSelfWindow(t *testing.T, db *testdb.DB, identityUID string, trusted bool, body func(tx *sql.Tx)) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		// coverage:ignore reason: DB connection failure, not exercised by unit tests
-		t.Fatalf("begin: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Identity(identityUID))
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.current_identity_uid', $1, true)`, identityUID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		t.Fatalf("set identity: %v", err)
-	}
 	if trusted {
 		if _, err := tx.ExecContext(t.Context(),
 			`SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {

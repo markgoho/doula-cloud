@@ -58,40 +58,26 @@ const (
 // a status may change kind too (refuseFactWrite), and a contractor Doula
 // -- refused every status move outright -- is refused this too.
 func TestChangeKindHandler_RolesMayChange(t *testing.T) {
-	cases := []struct {
-		role   roleCase
-		wantOK bool
-	}{
-		{ownerCase, true},
-		{adminCase, true},
-		{employeeDoulaCase, true},
-		{contractorDoulaCase, false},
-		{noRoleCase, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.role.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.opts...))
+	eachFactWriter(t, func(t *testing.T, e *env, wantOK bool) {
+		body := e.changeKind(engagement.KindPostpartum, okOrForbidden(wantOK))
 
-			body := e.changeKind(engagement.KindPostpartum, okOrForbidden(tc.wantOK))
-
-			if !tc.wantOK {
-				if got := e.kind(); got != birthKind {
-					t.Fatalf("kind = %q, want left unchanged at birth", got)
-				}
-				return
+		if !wantOK {
+			if got := e.kind(); got != birthKind {
+				t.Fatalf("kind = %q, want left unchanged at birth", got)
 			}
-			if body.Kind != postpartumKind {
-				t.Fatalf("kind = %q, want postpartum", body.Kind)
-			}
-			if got := e.kind(); got != postpartumKind {
-				t.Fatalf("kind = %q, want postpartum", got)
-			}
-			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
-				t.Fatalf("fact entries = %d, want 1", n)
-			}
-			assertKindEvent(t, e.DB, e.Engagement.ID, birthKind, postpartumKind)
-		})
-	}
+			return
+		}
+		if body.Kind != postpartumKind {
+			t.Fatalf("kind = %q, want postpartum", body.Kind)
+		}
+		if got := e.kind(); got != postpartumKind {
+			t.Fatalf("kind = %q, want postpartum", got)
+		}
+		if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
+			t.Fatalf("fact entries = %d, want 1", n)
+		}
+		assertKindEvent(t, e.DB, e.Engagement.ID, birthKind, postpartumKind)
+	})
 }
 
 // TestChangeKindHandler_Validation proves the handler refuses a value

@@ -113,14 +113,7 @@ func TestRLS_CreditLedgerIsAppendOnlyForTheRuntime(t *testing.T) {
 		"zero a balance":   `UPDATE credit_ledger SET quantity = 0`,
 		"delete a balance": `DELETE FROM credit_ledger`,
 	} {
-		tx, err := db.App.BeginTx(t.Context(), nil)
-		if err != nil {
-			t.Fatalf("%s: begin: %v", name, err)
-		}
-		if _, err := tx.ExecContext(t.Context(),
-			`SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-			t.Fatalf("%s: set practice: %v", name, err)
-		}
+		tx := db.BeginAs(t, testdb.Practice(practiceID))
 		if _, err := tx.ExecContext(t.Context(), statement); err == nil {
 			t.Fatalf("%s: the runtime was allowed to rewrite credit_ledger", name)
 		}

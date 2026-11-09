@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/fixture"
@@ -28,9 +29,23 @@ type env struct {
 type envSpec struct {
 	staff  []fixture.StaffOption
 	stripe *billing.FakeStripeClient
+	terms  legal.Document
+	at     time.Time
 }
 
 type envOption func(*envSpec)
+
+// withTerms serves a version history of the Terms other than the real
+// one.
+func withTerms(terms legal.Document) envOption {
+	return func(s *envSpec) { s.terms = terms }
+}
+
+// atInstant fixes the request clock at at; the Scene's MoveClockTo moves
+// it from there.
+func atInstant(at time.Time) envOption {
+	return func(s *envSpec) { s.at = at }
+}
 
 // signedInAs replaces the Owner at the screen with a Staff member of
 // these options.
@@ -46,7 +61,7 @@ func withStripe(c *billing.FakeStripeClient) envOption {
 
 func newEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	spec := envSpec{staff: []fixture.StaffOption{fixture.Owner()}}
+	spec := envSpec{staff: []fixture.StaffOption{fixture.Owner()}, terms: legal.Terms}
 	for _, opt := range opts {
 		opt(&spec)
 	}
@@ -54,9 +69,9 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 		spec.stripe = billing.NewFakeStripeClient()
 	}
 	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
-		billing.Mount(g, ir, spec.stripe, legal.Terms)
+		billing.Mount(g, ir, spec.stripe, spec.terms)
 	}
-	return &env{Scene: fixture.NewScene(t, mount, fixture.SignedInAs(spec.staff...)), Stripe: spec.stripe}
+	return &env{Scene: fixture.NewScene(t, mount, fixture.SignedInAs(spec.staff...), fixture.At(spec.at)), Stripe: spec.stripe}
 }
 
 // seedLedger seeds one lot of origin at the Practice.

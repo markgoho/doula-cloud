@@ -124,18 +124,18 @@ func TestDetailHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 func TestDetailHandler_StatusMoves(t *testing.T) {
 	cases := []struct {
 		name   string
-		role   roleCase
+		role   fixture.RoleCase
 		status string
 		want   []string
 	}{
-		{"bare staff, no role, at intake", noRoleCase, engagement.StatusIntake, nil},
-		{"owner at intake sees active and completed", ownerCase, engagement.StatusIntake, []string{engagement.StatusActive, engagement.StatusCompleted}},
-		{"owner at completed sees reopen", ownerCase, engagement.StatusCompleted, []string{engagement.StatusActive}},
-		{"employee doula at completed sees no reopen", employeeDoulaCase, engagement.StatusCompleted, nil},
+		{"bare staff, no role, at intake", fixture.NoRoleCase, engagement.StatusIntake, nil},
+		{"owner at intake sees active and completed", fixture.OwnerCase, engagement.StatusIntake, []string{engagement.StatusActive, engagement.StatusCompleted}},
+		{"owner at completed sees reopen", fixture.OwnerCase, engagement.StatusCompleted, []string{engagement.StatusActive}},
+		{"employee doula at completed sees no reopen", fixture.EmployeeDoulaCase, engagement.StatusCompleted, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.opts...), withEngagement(fixture.Status(tc.status)))
+			e := newEnv(t, signedInAs(tc.role.Opts...), withEngagement(fixture.Status(tc.status)))
 
 			got := e.detail().StatusMoves
 

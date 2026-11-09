@@ -62,20 +62,27 @@ func (e *env) detailOf(engagementID string, who fixture.StaffRecord) engagement.
 	return reqtest.Expect[engagement.Detail](e.T, http.MethodGet, e.urlOf(engagementID, ""), http.StatusOK, e.As(who))
 }
 
-// roleCase is one row of ADR-0015's role table, for a test that ranges
-// over who may do a thing.
-type roleCase struct {
-	name string
-	opts []fixture.StaffOption
+// eachFactWriter runs run once per row of ADR-0015's role table for
+// writing an Engagement's facts (refuseFactWrite): an Owner, an Admin and
+// an employee Doula may; a contractor Doula and a member with no role are
+// refused. Each row gets its own env, signed in as that role.
+func eachFactWriter(t *testing.T, run func(t *testing.T, e *env, wantOK bool), opts ...envOption) {
+	t.Helper()
+	for _, tc := range []struct {
+		role   fixture.RoleCase
+		wantOK bool
+	}{
+		{fixture.OwnerCase, true},
+		{fixture.AdminCase, true},
+		{fixture.EmployeeDoulaCase, true},
+		{fixture.ContractorDoulaCase, false},
+		{fixture.NoRoleCase, false},
+	} {
+		t.Run(tc.role.Name, func(t *testing.T) {
+			run(t, newEnv(t, append([]envOption{signedInAs(tc.role.Opts...)}, opts...)...), tc.wantOK)
+		})
+	}
 }
-
-var (
-	ownerCase           = roleCase{ownerRole, []fixture.StaffOption{fixture.Owner()}}
-	adminCase           = roleCase{adminRole, []fixture.StaffOption{fixture.Admin()}}
-	employeeDoulaCase   = roleCase{employeeDoulaKind, []fixture.StaffOption{fixture.Doula()}}
-	contractorDoulaCase = roleCase{contractorDoulaKind, []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}}
-	noRoleCase          = roleCase{"no role", []fixture.StaffOption{fixture.NoRole()}}
-)
 
 // okOrForbidden is the status a write answers a role that may do it, 200,
 // and one that may not, 403.
@@ -109,10 +116,6 @@ func (e *env) refusesAnUnreadableRequest(t *testing.T, method, path string, vali
 	}
 }
 
-// ownerRole is named once so golangci-lint's goconst check doesn't see
-// repeated "owner" literals across this package's test surface.
-const ownerRole = "owner"
-
 // employeeType is named once for the same reason, shared by every test
 // that seeds a Staff member's employment_type.
 
@@ -128,9 +131,3 @@ const careCompleteReason = "care_complete"
 // carries, named once for the same reason -- two role tables in this
 // package name her, and one of them branches on the label.
 const employeeDoulaKind = "employee doula"
-
-// contractorDoulaKind is the role-table case label a contractor Doula's
-// row carries, named once for the same reason -- three role tables in
-// this package name her (transition_test.go, outcome_test.go,
-// kind_change_test.go).
-const contractorDoulaKind = "contractor doula"

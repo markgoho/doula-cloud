@@ -14,11 +14,7 @@ func TestResolveSession_ReadsTheCallersStaffSession(t *testing.T) {
 	const uid = "uid-resolve-session"
 	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"owner"}, "employee")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAs(t)
 
 	resp, found, err := staffauth.ResolveSession(t.Context(), tx, uid, true)
 	if err != nil {
@@ -41,11 +37,7 @@ func TestResolveSession_ReadsTheCallersStaffSession(t *testing.T) {
 func TestResolveSession_FindsNothingForAnIdentityWithNoStaffRow(t *testing.T) {
 	db := testdb.New(t)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAs(t)
 
 	_, found, err := staffauth.ResolveSession(t.Context(), tx, "uid-nobody", false)
 	if err != nil {

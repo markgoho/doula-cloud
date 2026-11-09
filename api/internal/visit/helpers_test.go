@@ -2,12 +2,10 @@ package visit_test
 
 import (
 	"database/sql"
-	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/staffauth"
@@ -32,11 +30,9 @@ const (
 // and seeds a live session for uid.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	visit.Mount(g, ir, &tasknudge.FakeEnqueuer{})
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return fixture.ServeStaff(t, db, uid, func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+		visit.Mount(g, ir, &tasknudge.FakeEnqueuer{})
+	})
 }
 
 // seedVisit inserts a Visit under engagementID assigned to staffID, using

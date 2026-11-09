@@ -1,21 +1,13 @@
 package billing_test
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"net/http"
-	"net/http/httptest"
-	"sync"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -37,50 +29,6 @@ var termsWithRise = legal.Document{Name: "Terms of Service", Path: "/terms", Ver
 // the reading legal.Document.InForce gives every version.
 var riseStart = time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC)
 
-// movableClock is a clock a test moves by hand across riseStart.
-type movableClock struct {
-	mu sync.Mutex
-	at time.Time
-}
-
-func (c *movableClock) now() time.Time {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.at
-}
-
-func (c *movableClock) set(at time.Time) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.at = at
-}
-
-// newBillingServerAt mounts this package's whole surface through
-// billing.Mount with a caller-supplied StripeClient, version history of the
-// Terms and clock, for the tests that move the clock across the date a new
-// price of a Credit starts (#1834). A fixture.Scene fixes its clock at one
-// instant, so these tests keep a server of their own.
-func newBillingServerAt(t *testing.T, db *testdb.DB, uid string, client billing.StripeClient, terms legal.Document, now clock.Clock) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	billing.Mount(g, ir, client, terms)
-	return httptest.NewServer(clock.Middleware(now)(mux)), authntest.SeedSessionAt(t, db.App, uid, now())
-}
-
-func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/billing/purchases", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
-	return resp
-}
-
-func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing", reqtest.Session(session))
-	return resp
-}
-
 // publish records a version of the Terms as published, the row
 // ops's publish act writes (#2486).
 func publish(t *testing.T, db *testdb.DB, version string) {
@@ -90,33 +38,15 @@ func publish(t *testing.T, db *testdb.DB, version string) {
 
 // buyAt starts a purchase of five Credits at the clock's instant and
 // returns the Session request the Stripe client was asked to build.
-func buyAt(t *testing.T, fake *billing.FakeStripeClient, srv *httptest.Server, session, practiceID string) billing.CheckoutSessionRequest {
-	t.Helper()
-	before := len(fake.Calls())
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("purchase status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	calls := fake.Calls()
+func (e *env) buyAt() billing.CheckoutSessionRequest {
+	e.T.Helper()
+	before := len(e.Stripe.Calls())
+	e.startPurchase(`{"quantity": 5}`, http.StatusOK)
+	calls := e.Stripe.Calls()
 	if len(calls) != before+1 {
-		t.Fatalf("checkout sessions = %d, want %d", len(calls), before+1)
+		e.T.Fatalf("checkout sessions = %d, want %d", len(calls), before+1)
 	}
 	return calls[len(calls)-1]
-}
-
-func readBalance(t *testing.T, srv *httptest.Server, session, practiceID string) billing.BalanceResponse {
-	t.Helper()
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("billing read status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out billing.BalanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode billing read: %v", err)
-	}
-	return out
 }
 
 // TestCheckoutChargesTheOldPriceUntilThePublishedRiseStarts moves the
@@ -125,23 +55,16 @@ func readBalance(t *testing.T, srv *httptest.Server, session, practiceID string)
 // on the date, $25.00 under the rise. Nothing else changes between the
 // two purchases, so nothing else moved the price.
 func TestCheckoutChargesTheOldPriceUntilThePublishedRiseStarts(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "price-rise-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	publish(t, db, riseDate)
+	e := newEnv(t, withTerms(termsWithRise), atInstant(riseStart.Add(-time.Nanosecond)))
+	publish(t, e.DB, riseDate)
 
-	fake := billing.NewFakeStripeClient()
-	clk := &movableClock{at: riseStart.Add(-time.Nanosecond)}
-	srv, session := newBillingServerAt(t, db, uid, fake, termsWithRise, clk.now)
-	defer srv.Close()
-
-	got := buyAt(t, fake, srv, session, practiceID)
+	got := e.buyAt()
 	if got.UnitAmountCents != 2000 || got.TermsVersion != firstVersion {
 		t.Fatalf("before the date: charged %d cents under %q, want 2000 under 2026-09-29", got.UnitAmountCents, got.TermsVersion)
 	}
 
-	clk.set(riseStart)
-	got = buyAt(t, fake, srv, session, practiceID)
+	e.MoveClockTo(riseStart)
+	got = e.buyAt()
 	if got.UnitAmountCents != 2500 || got.TermsVersion != riseDate {
 		t.Fatalf("on the date: charged %d cents under %q, want 2500 under %s", got.UnitAmountCents, got.TermsVersion, riseDate)
 	}
@@ -152,27 +75,20 @@ func TestCheckoutChargesTheOldPriceUntilThePublishedRiseStarts(t *testing.T) {
 // date checkout still charges the old price, and the Billing screen
 // shows no change coming before it.
 func TestCheckoutKeepsTheOldPriceWhenTheRiseWasNeverPublished(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "price-rise-unpublished-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, withTerms(termsWithRise), atInstant(riseStart.Add(-24*time.Hour)))
 
-	fake := billing.NewFakeStripeClient()
-	clk := &movableClock{at: riseStart.Add(-24 * time.Hour)}
-	srv, session := newBillingServerAt(t, db, uid, fake, termsWithRise, clk.now)
-	defer srv.Close()
-
-	if out := readBalance(t, srv, session, practiceID); out.ComingPrice != nil {
+	if out := e.balance(); out.ComingPrice != nil {
 		t.Fatalf("comingPrice = %+v before an unpublished rise, want none", out.ComingPrice)
 	}
 
-	clk.set(riseStart.Add(24 * time.Hour))
+	e.MoveClockTo(riseStart.Add(24 * time.Hour))
 	// Two days on, the first session has expired; sign in again then.
-	session = authntest.SeedSessionAt(t, db.App, uid, clk.now())
-	got := buyAt(t, fake, srv, session, practiceID)
+	e.SignedIn = e.As(e.Staff)
+	got := e.buyAt()
 	if got.UnitAmountCents != 2000 || got.TermsVersion != firstVersion {
 		t.Fatalf("after an unpublished rise: charged %d cents under %q, want 2000 under 2026-09-29", got.UnitAmountCents, got.TermsVersion)
 	}
-	if out := readBalance(t, srv, session, practiceID); out.Price.UnitAmountCents != 2000 {
+	if out := e.balance(); out.Price.UnitAmountCents != 2000 {
 		t.Fatalf("price after an unpublished rise = %+v, want 2000", out.Price)
 	}
 }
@@ -181,16 +97,10 @@ func TestCheckoutKeepsTheOldPriceWhenTheRiseWasNeverPublished(t *testing.T) {
 // coming, the read gives today's price and the new one with its date;
 // from the date, the new price alone.
 func TestBillingShowsTodaysPriceAndTheComingOne(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "price-rise-billing-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	publish(t, db, riseDate)
+	e := newEnv(t, withTerms(termsWithRise), atInstant(riseStart.Add(-time.Nanosecond)))
+	publish(t, e.DB, riseDate)
 
-	clk := &movableClock{at: riseStart.Add(-time.Nanosecond)}
-	srv, session := newBillingServerAt(t, db, uid, billing.NewFakeStripeClient(), termsWithRise, clk.now)
-	defer srv.Close()
-
-	out := readBalance(t, srv, session, practiceID)
+	out := e.balance()
 	if out.Price != (billing.CreditPrice{UnitAmountCents: 2000, Currency: usd}) {
 		t.Fatalf("price before the date = %+v, want {2000 usd}", out.Price)
 	}
@@ -199,8 +109,8 @@ func TestBillingShowsTodaysPriceAndTheComingOne(t *testing.T) {
 		t.Fatalf("comingPrice before the date = %+v, want %+v", out.ComingPrice, want)
 	}
 
-	clk.set(riseStart)
-	out = readBalance(t, srv, session, practiceID)
+	e.MoveClockTo(riseStart)
+	out = e.balance()
 	if out.Price.UnitAmountCents != 2500 || out.ComingPrice != nil {
 		t.Fatalf("on the date: price = %+v, comingPrice = %+v, want 2500 and none", out.Price, out.ComingPrice)
 	}
@@ -210,26 +120,19 @@ func TestBillingShowsTodaysPriceAndTheComingOne(t *testing.T) {
 // not of a fall, so a version that lowers the price is shown as coming
 // and charged from its date whether or not it was published.
 func TestALowerPriceNeedsNoPublication(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "price-fall-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
 	terms := legal.Document{Name: "Terms of Service", Path: "/terms", Versions: []legal.Version{
 		{Effective: firstVersion, Change: "First version.", CreditPriceCents: 2000},
 		{Effective: riseDate, Material: true, Change: "A Credit costs $15.00.", CreditPriceCents: 1500},
 	}}
+	e := newEnv(t, withTerms(terms), atInstant(riseStart.Add(-time.Nanosecond)))
 
-	fake := billing.NewFakeStripeClient()
-	clk := &movableClock{at: riseStart.Add(-time.Nanosecond)}
-	srv, session := newBillingServerAt(t, db, uid, fake, terms, clk.now)
-	defer srv.Close()
-
-	out := readBalance(t, srv, session, practiceID)
+	out := e.balance()
 	if out.ComingPrice == nil || out.ComingPrice.UnitAmountCents != 1500 {
 		t.Fatalf("comingPrice = %+v, want 1500", out.ComingPrice)
 	}
 
-	clk.set(riseStart)
-	if got := buyAt(t, fake, srv, session, practiceID); got.UnitAmountCents != 1500 {
+	e.MoveClockTo(riseStart)
+	if got := e.buyAt(); got.UnitAmountCents != 1500 {
 		t.Fatalf("charged %d cents, want 1500", got.UnitAmountCents)
 	}
 }
@@ -238,27 +141,12 @@ func TestALowerPriceNeedsNoPublication(t *testing.T) {
 // there is no price to charge or show, and both routes say so with a 500
 // rather than charging some other amount.
 func TestNoVersionInForceRefusesBoth(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "price-none-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t, withTerms(termsWithRise), atInstant(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)))
 
-	fake := billing.NewFakeStripeClient()
-	early := func() time.Time { return time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC) }
-	srv, session := newBillingServerAt(t, db, uid, fake, termsWithRise, early)
-	defer srv.Close()
-
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("billing read status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	purchase := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer purchase.Body.Close()
-	if purchase.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("purchase status = %d, want %d", purchase.StatusCode, http.StatusInternalServerError)
-	}
-	if len(fake.Calls()) != 0 {
-		t.Fatalf("checkout sessions = %d, want none", len(fake.Calls()))
+	e.balanceAt("", http.StatusInternalServerError)
+	e.startPurchase(`{"quantity": 5}`, http.StatusInternalServerError)
+	if len(e.Stripe.Calls()) != 0 {
+		t.Fatalf("checkout sessions = %d, want none", len(e.Stripe.Calls()))
 	}
 }
 

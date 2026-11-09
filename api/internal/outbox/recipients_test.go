@@ -20,11 +20,7 @@ func TestRecipients_NameTheRoleAtThatPracticeAndNobodyElse(t *testing.T) {
 	otherPracticeID := testdb.SeedPractice(t, db, "Recipients Other Practice")
 	testdb.SeedStaffAtPractice(t, db, otherPracticeID, "rc-elsewhere", []string{roleOwner}, "employee")
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAdmin(t)
 
 	cases := []struct {
 		name       string

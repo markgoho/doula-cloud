@@ -21,6 +21,15 @@ func Staff(id string) SessionVar { return SessionVar{"app.current_staff_id", id}
 // Identity names the signed-in identity.
 func Identity(uid string) SessionVar { return SessionVar{"app.current_identity_uid", uid} }
 
+// InviteToken names the Portal invite token a pre-account request presents.
+func InviteToken(token string) SessionVar { return SessionVar{"app.invite_token", token} }
+
+// InviteTokenDigest names the digest of the Staff invitation token a
+// pre-account request presents.
+func InviteTokenDigest(digest string) SessionVar {
+	return SessionVar{"app.invite_token_digest", digest}
+}
+
 // NotificationWorker opens a transaction the way outbox.ProcessHandler does
 // for a worker, once its secret check has passed: the trust 00033 reads to
 // let a worker see rows across Practices.
@@ -36,8 +45,10 @@ type Querier interface {
 
 // BeginAs opens a transaction on App, sets each var for its length, and
 // rolls it back when the test ends. App holds one connection, so the
-// transaction owns it until then: a closure or loop that opens a second
-// one in the same test rolls the first back itself.
+// transaction owns it until it commits, rolls back or the test ends. A
+// second BeginAs, or any db.App query, while one is open waits for that
+// connection and hangs. A closure or loop that opens one per call must
+// defer tx.Rollback() inside the closure.
 func (d *DB) BeginAs(t *testing.T, vars ...SessionVar) *sql.Tx {
 	t.Helper()
 	tx, err := d.App.BeginTx(t.Context(), nil)
@@ -82,6 +93,22 @@ func (d *DB) RunAsWorker(t *testing.T, process func(context.Context, *sql.Tx) er
 	if err := tx.Commit(); err != nil {
 		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
 		t.Fatalf("testdb: commit worker pass: %v", err)
+	}
+}
+
+// RunAsAdminWorker runs one outbox worker pass in its own superuser
+// transaction and commits, for a test about the worker's own logic rather
+// than the RLS door RunAsWorker opens.
+func (d *DB) RunAsAdminWorker(t *testing.T, process func(context.Context, *sql.Tx) error) {
+	t.Helper()
+	tx := d.BeginAdmin(t)
+	if err := process(t.Context(), tx); err != nil {
+		// coverage:ignore reason: the failure branch ends the calling test by design; exercising it would need a testing.T substitute this repo has no precedent for
+		t.Fatalf("testdb: admin worker pass: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is broken
+		t.Fatalf("testdb: commit admin worker pass: %v", err)
 	}
 }
 

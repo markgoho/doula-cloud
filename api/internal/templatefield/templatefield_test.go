@@ -77,11 +77,7 @@ func TestRecordChange_WritesOneRowOnlyWhenTheListChanged(t *testing.T) {
 	staffID := testdb.SeedStaffAtPractice(t, db, practiceID, "tf-owner", []string{"owner"}, "employee")
 	templateID := uuid.NewString()
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAdmin(t)
 
 	count := func() int {
 		var n int

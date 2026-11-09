@@ -193,25 +193,25 @@ func TestTransitionHandler_LegalMovesByRole(t *testing.T) {
 		{"completed to active (reopen)", engagement.StatusCompleted, engagement.StatusActive, ""},
 	}
 	roles := []struct {
-		roleCase
+		fixture.RoleCase
 		mayMove bool
 	}{
-		{ownerCase, true},
-		{adminCase, true},
-		{employeeDoulaCase, true},
-		{contractorDoulaCase, false},
-		{noRoleCase, false},
+		{fixture.OwnerCase, true},
+		{fixture.AdminCase, true},
+		{fixture.EmployeeDoulaCase, true},
+		{fixture.ContractorDoulaCase, false},
+		{fixture.NoRoleCase, false},
 	}
 
 	for _, move := range moves {
 		for _, role := range roles {
-			t.Run(move.name+"/"+role.name, func(t *testing.T) {
-				e := newEnv(t, signedInAs(role.opts...), withEngagement(fixture.Status(move.from)))
+			t.Run(move.name+"/"+role.Name, func(t *testing.T) {
+				e := newEnv(t, signedInAs(role.Opts...), withEngagement(fixture.Status(move.from)))
 				if move.to == engagement.StatusCompleted {
 					testdb.SeedBirthOutcome(t, e.DB, e.Engagement.ID)
 				}
 				isReopen := move.from == engagement.StatusCompleted && move.to == engagement.StatusActive
-				wantOK := role.mayMove && (!isReopen || role.name != employeeDoulaKind)
+				wantOK := role.mayMove && (!isReopen || role.Name != employeeDoulaKind)
 
 				body := e.transition(transitionBody(move.to, move.endingReason, ""), okOrForbidden(wantOK))
 

@@ -93,44 +93,30 @@ func newOwnerEnv(t *testing.T, opts ...envOption) *env {
 // outcome, and a contractor Doula -- refused every status move outright
 // -- is refused this too.
 func TestRecordBirthOutcomeHandler_RolesMayRecord(t *testing.T) {
-	cases := []struct {
-		role   roleCase
-		wantOK bool
-	}{
-		{ownerCase, true},
-		{adminCase, true},
-		{employeeDoulaCase, true},
-		{contractorDoulaCase, false},
-		{noRoleCase, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.role.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.opts...))
+	eachFactWriter(t, func(t *testing.T, e *env, wantOK bool) {
+		body := e.recordOutcome(outcomeBody(engagement.OutcomeLoss, lossOn, false), okOrForbidden(wantOK))
 
-			body := e.recordOutcome(outcomeBody(engagement.OutcomeLoss, lossOn, false), okOrForbidden(tc.wantOK))
-
-			gotOutcome, gotEndedOn := e.outcome()
-			if !tc.wantOK {
-				if gotOutcome != nil {
-					t.Fatalf("birth_outcome = %v, want it left unrecorded", *gotOutcome)
-				}
-				return
+		gotOutcome, gotEndedOn := e.outcome()
+		if !wantOK {
+			if gotOutcome != nil {
+				t.Fatalf("birth_outcome = %v, want it left unrecorded", *gotOutcome)
 			}
-			if body.BirthOutcome == nil || *body.BirthOutcome != engagement.OutcomeLoss ||
-				body.PregnancyEndedOn == nil || *body.PregnancyEndedOn != lossOn {
-				t.Fatalf("body = %+v, want loss on %s", body, lossOn)
-			}
-			if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss {
-				t.Fatalf("birth_outcome = %v, want loss", gotOutcome)
-			}
-			if gotEndedOn == nil || *gotEndedOn != lossOn {
-				t.Fatalf("pregnancy_ended_on = %v, want %s", gotEndedOn, lossOn)
-			}
-			if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
-				t.Fatalf("fact entries = %d, want 1", n)
-			}
-		})
-	}
+			return
+		}
+		if body.BirthOutcome == nil || *body.BirthOutcome != engagement.OutcomeLoss ||
+			body.PregnancyEndedOn == nil || *body.PregnancyEndedOn != lossOn {
+			t.Fatalf("body = %+v, want loss on %s", body, lossOn)
+		}
+		if gotOutcome == nil || *gotOutcome != engagement.OutcomeLoss {
+			t.Fatalf("birth_outcome = %v, want loss", gotOutcome)
+		}
+		if gotEndedOn == nil || *gotEndedOn != lossOn {
+			t.Fatalf("pregnancy_ended_on = %v, want %s", gotEndedOn, lossOn)
+		}
+		if n := countFactEntries(t, e.DB, e.Engagement.ID); n != 1 {
+			t.Fatalf("fact entries = %d, want 1", n)
+		}
+	})
 }
 
 // TestRecordBirthOutcomeHandler_Validation proves the handler refuses a
@@ -193,16 +179,16 @@ func TestRecordBirthOutcomeHandler_FrozenValueRefusesAPlainRecord(t *testing.T) 
 // facts on its birth_outcome_recorded activity entry.
 func TestRecordBirthOutcomeHandler_OnlyAnOwnerCorrects(t *testing.T) {
 	correctors := []struct {
-		role   roleCase
+		role   fixture.RoleCase
 		wantOK bool
 	}{
-		{ownerCase, true},
-		{adminCase, false},
-		{employeeDoulaCase, false},
+		{fixture.OwnerCase, true},
+		{fixture.AdminCase, false},
+		{fixture.EmployeeDoulaCase, false},
 	}
 	for _, tc := range correctors {
-		t.Run(tc.role.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.opts...))
+		t.Run(tc.role.Name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.role.Opts...))
 			e.Exec(`UPDATE engagements SET birth_outcome = 'loss', pregnancy_ended_on = $2::date WHERE id = $1`, e.Engagement.ID, lossOn)
 
 			e.recordOutcome(outcomeBody(engagement.OutcomeLiveBirth, "2027-03-05", true), okOrForbidden(tc.wantOK))

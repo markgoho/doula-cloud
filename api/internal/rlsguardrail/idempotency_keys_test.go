@@ -44,11 +44,8 @@ func seedClientKey(t *testing.T, db *testdb.DB, key, practiceID, clientID string
 // staffauth.Middleware set them.
 func inSession(t *testing.T, db *testdb.DB, vars map[string]string, fn func(tx *sql.Tx)) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
+	defer func() { _ = tx.Rollback() }()
 	for name, value := range vars {
 		if _, err := tx.ExecContext(t.Context(), `SELECT set_config($1, $2, true)`, name, value); err != nil {
 			t.Fatalf("set_config %s: %v", name, err)

@@ -13,11 +13,7 @@ import (
 // HTTP handler.
 func fetchPortalInviteState(t *testing.T, db *testdb.DB, clientID string) client.PortalInviteState {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAdmin(t)
 	state, err := client.FetchPortalInviteState(t.Context(), tx, clientID)
 	if err != nil {
 		t.Fatalf("fetch portal invite state: %v", err)

@@ -35,9 +35,9 @@ func TestGetTemplateHandler_Refusals(t *testing.T) {
 // Owner, Admin, an employed Doula and a contractor Doula -- can read the
 // template (ADR-0008's read table): only the PUT is Owner-gated (#1407).
 func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
-	for _, tc := range []roleCase{ownerCase, adminCase, employeeDoulaCase, contractorDoulaCase} {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.opts...))
+	for _, tc := range []fixture.RoleCase{fixture.OwnerCase, fixture.AdminCase, fixture.EmployeeDoulaCase, fixture.ContractorDoulaCase} {
+		t.Run(tc.Name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.Opts...))
 			e.seedTemplate(carePlanType, f1Fields)
 
 			out := e.template(carePlanType)
@@ -58,9 +58,9 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 // mount declaration must keep exactly that population, not widen it to
 // Owner and Admin. The refusal also leaves the stored template untouched.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	for _, tc := range []roleCase{employeeDoulaCase, adminCase} {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.opts...))
+	for _, tc := range []fixture.RoleCase{fixture.EmployeeDoulaCase, fixture.AdminCase} {
+		t.Run(tc.Name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.Opts...))
 			e.seedTemplate(carePlanType, f1Fields)
 
 			e.putTemplate(carePlanType, []plans.Field{{ID: "f2", Type: shortTextType, Label: testFieldLabel}}, http.StatusForbidden)

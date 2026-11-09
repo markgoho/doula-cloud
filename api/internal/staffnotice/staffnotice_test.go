@@ -64,10 +64,7 @@ func (f fixture) notice() staffnotice.Notice {
 
 func (f fixture) queue(t *testing.T, n staffnotice.Notice) {
 	t.Helper()
-	tx, err := f.db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
+	tx := f.db.BeginAdmin(t)
 	if err := staffnotice.Queue(t.Context(), tx, n); err != nil {
 		_ = tx.Rollback()
 		t.Fatalf("queue: %v", err)

@@ -20,11 +20,7 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 		clientID)
 	outboxID := seedPortalInviteOutboxRow(t, db, portalUserID, 0, time.Now())
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 	// client_portal_users carries practice-tier RLS, reached through
 	// clients.practice_id -- RevokePending's UPDATE joins through it, so
 	// the session needs the same app.current_practice_id staffauth.Middleware
@@ -62,11 +58,7 @@ func TestRevokePending_NoPendingRowIsANoop(t *testing.T) {
 	db := testdb.New(t)
 	clientID, _ := seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
 	if err := portalinvite.RevokePending(t.Context(), tx, clientID, portalinvite.RevokedEmailChanged); err != nil {
 		t.Fatalf("RevokePending on a Client with no outbox row: %v", err)

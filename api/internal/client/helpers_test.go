@@ -1,12 +1,12 @@
 package client_test
 
 import (
+	"database/sql"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
@@ -44,11 +44,11 @@ const (
 // enqueue, only on the erasure outbox rows EraseHandler writes directly.
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
+	return fixture.ServeStaff(t, db, uid, mountClient)
+}
+
+func mountClient(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
 	client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
 const (

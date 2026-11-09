@@ -263,10 +263,7 @@ func TestEnqueue_SetsTheFireTimeFourteenDaysOut(t *testing.T) {
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "wc-enqueue-owner", []string{ownerRole}, employee)
 	now := time.Date(2027, time.February, 1, 9, 0, 0, 0, time.UTC)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
+	tx := db.BeginAs(t)
 	if err := welcomecredits.Enqueue(t.Context(), tx, practiceID, now); err != nil {
 		t.Fatalf("Enqueue: %v", err)
 	}

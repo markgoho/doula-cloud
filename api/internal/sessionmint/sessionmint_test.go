@@ -42,11 +42,8 @@ func issue(t *testing.T, db *testdb.DB, cookieToken string, confirmed bool, adap
 	rec = httptest.NewRecorder()
 	enq = &tasknudge.FakeEnqueuer{}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
+	defer func() { _ = tx.Rollback() }()
 
 	committed = sessionmint.Issue(rec, req, tx, enq, adapter, step, finish)
 	return rec, enq, committed

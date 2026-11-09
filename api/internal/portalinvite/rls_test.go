@@ -18,13 +18,9 @@ func TestRLS_ClientPortalUsersInviteInsertFailsClosedWithNoPracticeSet(t *testin
 	practiceID := testdb.SeedPractice(t, db, "No Session Practice")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "No Session Client", "nosession@example.com")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
 		clientID,
 	)
@@ -178,15 +174,7 @@ func TestRLS_ClientPortalUsersAcceptFailsClosedWithWrongInviteToken(t *testing.T
 	db := testdb.New(t)
 	seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.invite_token', $1, true)`, "00000000-0000-0000-0000-000000000000"); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.InviteToken("00000000-0000-0000-0000-000000000000"))
 
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users WHERE identity_uid IS NULL`)
 	if count != 0 {
@@ -200,15 +188,7 @@ func TestRLS_ClientPortalUsersAcceptSelectSucceedsWithMatchingToken(t *testing.T
 	db := testdb.New(t)
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.invite_token', $1, true)`, inviteToken); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.InviteToken(inviteToken))
 
 	gotClientID := testdb.Scalar[string](t, tx, `SELECT client_id FROM client_portal_users WHERE identity_uid IS NULL`)
 	if gotClientID != clientID {
@@ -226,20 +206,9 @@ func TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity(t *testing.T
 	db := testdb.New(t)
 	_, inviteToken := seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t, testdb.Identity("the-real-caller"), testdb.InviteToken(inviteToken))
 
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_identity_uid', $1, true)`, "the-real-caller"); err != nil {
-		t.Fatalf("set_config identity: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.invite_token', $1, true)`, inviteToken); err != nil {
-		t.Fatalf("set_config invite token: %v", err)
-	}
-
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`UPDATE client_portal_users SET identity_uid = 'someone-else', invite_token = NULL WHERE invite_token = $1`,
 		inviteToken,
 	)
@@ -257,11 +226,7 @@ func TestRLS_NotificationWorkerCannotReadClientPortalUsersWithoutTrustedFlag(t *
 	db := testdb.New(t)
 	seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
 	count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM client_portal_users`)
 	if count != 0 {
@@ -277,15 +242,7 @@ func TestRLS_NotificationWorkerTrustedFlagOpensClientPortalUsersAndClients(t *te
 	db := testdb.New(t)
 	seedPendingPortalInvite(t, db)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.NotificationWorker())
 
 	var portalUserCount, clientCount int
 	if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM client_portal_users`).Scan(&portalUserCount); err != nil {

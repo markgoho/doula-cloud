@@ -91,16 +91,7 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	db.RunAsWorker(t, newTokenMailWorker(sender, accounts).ProcessPending)
 
 	status, token := tokenMailRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if token.Valid {
-		t.Fatal("token still set once sent, want NULL")
-	}
-	sent := sender.Sent()
-	if len(sent) != 1 || sent[0].To != "person@example.com" {
-		t.Fatalf("sent = %+v, want one message to person@example.com", sent)
-	}
+	testdb.RequireSentAndTokenCleared(t, status, token, sender, "person@example.com")
 }
 
 // TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail is
@@ -180,10 +171,7 @@ func TestEmailChangeWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 	if status != statusSent {
 		t.Fatalf("status = %q, want sent", status)
 	}
-	sent := sender.Sent()
-	if len(sent) != 1 || sent[0].To != "old@example.com" {
-		t.Fatalf("sent = %+v, want one message to old@example.com", sent)
-	}
+	testdb.RequireSentOnceTo(t, sender, "old@example.com")
 }
 
 func TestQueueEmailChangeNotice_InsertsRow(t *testing.T) {

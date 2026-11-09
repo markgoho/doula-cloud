@@ -16,9 +16,6 @@ const (
 	testAppBaseURL = "https://app.example.test"
 	testSenderAddr = "a@b.test"
 	testReplyTo    = "support@b.test"
-
-	statusPending = "pending"
-	statusSent    = "sent"
 )
 
 // newMagicLinkWorker builds a Worker around sender -- the one end-to-end
@@ -49,11 +46,7 @@ func magicLinkRowState(t *testing.T, db *testdb.DB, id string) (status string, a
 
 func runMagicLinkTx(t *testing.T, db *testdb.DB, fn func(ctx context.Context, tx *sql.Tx) error) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAs(t)
 	if err := fn(t.Context(), tx); err != nil {
 		t.Fatalf("tx func: %v", err)
 	}
@@ -72,16 +65,7 @@ func TestMagicLinkWorker_ProcessPending_SendsAndMarksSent(t *testing.T) {
 	runMagicLinkTx(t, db, newMagicLinkWorker(sender).ProcessPending)
 
 	status, _, token := magicLinkRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if token.Valid {
-		t.Fatal("token still set once sent, want NULL")
-	}
-	sent := sender.Sent()
-	if len(sent) != 1 || sent[0].To != "worker-send@example.com" {
-		t.Fatalf("sent = %+v, want one message to worker-send@example.com", sent)
-	}
+	testdb.RequireSentAndTokenCleared(t, status, token, sender, "worker-send@example.com")
 }
 
 // TestMagicLinkWorker_ProcessPending_ErasureCascadesAwayThePendingRow

@@ -21,12 +21,6 @@ const (
 	// read back, named once so the files that assert on it agree.
 	hospital = "Hospital"
 
-	// ownerRole, adminRole and doulaRole are named once so golangci-lint's
-	// goconst check doesn't see repeated literals across this package's tests.
-	ownerRole = "owner"
-	adminRole = "admin"
-	doulaRole = "doula"
-
 	nameFieldID = "name"
 	jamieAnswer = "Jamie"
 )
@@ -225,17 +219,3 @@ func (e *env) refusesEngagementsItCannotReach(method, planType, path string, opt
 		return e.instanceURLOf(engagementID, planType, path)
 	}, append([]reqtest.Option{e.SignedIn}, opts...)...)
 }
-
-// roleCase is one Staff member who may read a Plan Template, for a test
-// that ranges over who may do a thing.
-type roleCase struct {
-	name string
-	opts []fixture.StaffOption
-}
-
-var (
-	ownerCase           = roleCase{ownerRole, []fixture.StaffOption{fixture.Owner()}}
-	adminCase           = roleCase{adminRole, []fixture.StaffOption{fixture.Admin()}}
-	employeeDoulaCase   = roleCase{doulaRole, []fixture.StaffOption{fixture.Doula()}}
-	contractorDoulaCase = roleCase{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}}
-)

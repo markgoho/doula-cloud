@@ -32,13 +32,9 @@ func TestRLS_PortalAccountsSelfInsertRejectsMismatchedIdentity(t *testing.T) {
 func TestRLS_PortalAccountsSelfInsertFailsClosedWithNoIdentitySet(t *testing.T) {
 	db := testdb.New(t)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
-	_, err = tx.ExecContext(t.Context(),
+	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ('portal_no-session', 'nosession@example.com')`,
 	)
 	if err == nil {

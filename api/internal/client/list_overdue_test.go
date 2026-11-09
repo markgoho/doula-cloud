@@ -9,12 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/client"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -31,11 +27,7 @@ var lateDueAt = time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
 // clock.Now(ctx) reads (#773).
 func newServerAt(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	client.Mount(g, ir, tasknudge.NoOpEnqueuer{})
-	return httptest.NewServer(clock.Middleware(func() time.Time { return now })(mux)), authntest.SeedSessionAt(t, db.App, uid, now)
+	return fixture.ServeStaffAt(t, db, uid, mountClient, now)
 }
 
 // seedClientInvoiceDue is seedClientInvoice with the due instant stated.
