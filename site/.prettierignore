@@ -1,0 +1,3 @@
+# Prettier reads .prettierignore only from the directory it runs in, so the
+# root file does not cover a run from here (#2801). site/ has no formatter.
+*
