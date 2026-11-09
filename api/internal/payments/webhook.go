@@ -7,7 +7,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
-	"io"
 	"log"
 	"maps"
 	"net/http"
@@ -24,11 +23,6 @@ import (
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/webhookarrival"
 )
-
-// maxWebhookBodyBytes bounds how much of a webhook request body
-// PostConnectWebhookHandler will read -- mirrors billing's own bound on
-// its (separate) webhook endpoint.
-const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
 // The v1 snapshot event types the Connect endpoint handles: #82's
 // invoice.paid / invoice.payment_failed below, #2224's
@@ -124,23 +118,12 @@ type invoiceEventObject struct {
 // secret.
 func PostConnectWebhookHandler(db *sql.DB, client Client, webhookSecret string, mode stripemode.Mode, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		event, err := client.VerifyWebhookSignature(body, r.Header.Get("Stripe-Signature"), webhookSecret)
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
-			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
-			return
-		}
-		if !mode.Matches(event.Livemode) {
-			log.Printf("payments: connect webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
-			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
+		event, ok := webhookarrival.OpenStripe(w, r, "payments: connect webhook", mode,
+			func(body []byte, sigHeader string) (WebhookEvent, error) {
+				return client.VerifyWebhookSignature(body, sigHeader, webhookSecret)
+			},
+			func(e WebhookEvent) (string, bool) { return e.ID, e.Livemode })
+		if !ok {
 			return
 		}
 
@@ -415,12 +398,9 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	// dedup window is not the only way this event type can repeat). A
 	// no-op commit-and-ack, same shape as the alreadyProcessed branch
 	// above: this is not an error, just nothing left to do.
-	var currentStatus string
-	if err := tx.QueryRowContext(r.Context(),
-		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
-	).Scan(&currentStatus); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceForEvent already proved this row exists
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	currentStatus, ok := lockInvoiceStatus(w, r, tx, invoiceID)
+	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 		return
 	}
 	if currentStatus == invoiceStatusPaid {
@@ -483,6 +463,42 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	}
 }
 
+// lockInvoiceStatus reads an Invoice's status under FOR UPDATE, so two
+// deliveries touching the same Invoice serialize. The row is known to
+// exist: resolveInvoiceForEvent found it a moment ago.
+func lockInvoiceStatus(w http.ResponseWriter, r *http.Request, tx *sql.Tx, invoiceID string) (string, bool) {
+	var status string
+	if err := tx.QueryRowContext(r.Context(),
+		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
+	).Scan(&status); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceForEvent already proved this row exists
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return "", false
+	}
+	return status, true
+}
+
+// recordPaymentAttempt records an attempt to pay an Invoice on its
+// activity trail, with the payment method when Stripe named one.
+func recordPaymentAttempt(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string, action activity.EngagementAction, methodType string) bool {
+	diff := map[string]string{}
+	if methodType != "" {
+		diff[activity.DiffKeyPaymentMethodType] = methodType
+	}
+	diffJSON, err := json.Marshal(diff)
+	if err != nil {
+		// coverage:ignore reason: a map of strings always marshals
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, action, diffJSON, true); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
+}
+
 // handleInvoicePaymentFailed records one failed attempt to pay an
 // Invoice (#2224) and leaves its status alone. Stripe sends this event on
 // every failed attempt -- a declined card, a bank debit that bounces days
@@ -525,19 +541,8 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 		return
 	}
 
-	diff := map[string]string{}
-	if attempt.PaymentMethodType != "" {
-		diff[activity.DiffKeyPaymentMethodType] = attempt.PaymentMethodType
-	}
-	diffJSON, err := json.Marshal(diff)
-	if err != nil {
-		// coverage:ignore reason: a map of strings always marshals
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoicePaymentFailed, diffJSON, true); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !recordPaymentAttempt(w, r, tx, practiceID, invoiceID, activity.ActionInvoicePaymentFailed, attempt.PaymentMethodType) {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 		return
 	}
 
@@ -560,12 +565,9 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 	defer ev.rollbackUnlessCommitted()
 	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
-	var currentStatus string
-	if err := tx.QueryRowContext(r.Context(),
-		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
-	).Scan(&currentStatus); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- resolveInvoiceForEvent already proved this row exists
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	currentStatus, ok := lockInvoiceStatus(w, r, tx, invoiceID)
+	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 		return
 	}
 	if currentStatus != invoiceStatusOpen {
@@ -663,19 +665,8 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	diff := map[string]string{}
-	if intent.PaymentMethodType != "" {
-		diff[activity.DiffKeyPaymentMethodType] = intent.PaymentMethodType
-	}
-	diffJSON, err := json.Marshal(diff)
-	if err != nil {
-		// coverage:ignore reason: a map of strings always marshals
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return
-	}
-	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoicePaymentProcessing, diffJSON, true); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	if !recordPaymentAttempt(w, r, tx, practiceID, invoiceID, activity.ActionInvoicePaymentProcessing, intent.PaymentMethodType) {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 		return
 	}
 
@@ -707,23 +698,12 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 // erroring, because Stripe retries indefinitely on anything else.
 func PostAccountWebhookHandler(db *sql.DB, client Client, webhookSecret string, mode stripemode.Mode, enq tasknudge.Enqueuer) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		event, err := client.ParseAccountEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret)
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
-			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
-			return
-		}
-		if !mode.Matches(event.Livemode) {
-			log.Printf("payments: account webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
-			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
+		event, ok := webhookarrival.OpenStripe(w, r, "payments: account webhook", mode,
+			func(body []byte, sigHeader string) (AccountEvent, error) {
+				return client.ParseAccountEvent(body, sigHeader, webhookSecret)
+			},
+			func(e AccountEvent) (string, bool) { return e.ID, e.Livemode })
+		if !ok {
 			return
 		}
 

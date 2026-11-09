@@ -67,19 +67,7 @@ func RequestResetHandler(accounts authn.AccountManager, db *sql.DB) http.Handler
 		}
 		defer dbtx.Rollback(tx)
 
-		token, err := authtoken.Mint(r.Context(), tx, uid, authtoken.PurposeStaffPasswordReset, authmail.ResetLinkLifetime, clock.Now(r.Context()))
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := authmail.QueueTokenMail(r.Context(), tx, uid, authmail.KindPasswordReset, token); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		dbtx.CommitWith(w, tx, http.StatusAccepted)
+		queueLinkAndAccept(w, r, tx, uid, authtoken.PurposeStaffPasswordReset, authmail.ResetLinkLifetime, authmail.KindPasswordReset)
 	})
 }
 

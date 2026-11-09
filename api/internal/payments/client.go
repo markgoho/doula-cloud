@@ -194,7 +194,7 @@ func ClientListInvoicesHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		items, hasMore, err := listClientInvoices(r.Context(), c.Tx, c.EngagementID, after, zone)
+		items, next, err := listClientInvoices(r.Context(), c.Tx, c.EngagementID, after, zone)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -207,17 +207,12 @@ func ClientListInvoicesHandler() http.Handler {
 			return
 		}
 
-		resp := ClientInvoicesResponse{Items: items, HasMore: hasMore, TotalToPayCents: cents, TotalToPayCount: count}
-		if hasMore {
-			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
-			resp.NextCursor = &next
-		}
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, ClientInvoicesResponse{Items: items, HasMore: next != nil, NextCursor: next, TotalToPayCents: cents, TotalToPayCount: count})
 	})
 }
 
 // listClientInvoices fetches one page under engagementID.
-func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]ClientInvoiceView, bool, error) {
+func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]ClientInvoiceView, *string, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -227,7 +222,7 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 	}
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, false, fmt.Errorf("payments: list client invoices: %w", err)
+		return nil, nil, fmt.Errorf("payments: list client invoices: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -236,17 +231,19 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 		it, err := scanClientInvoice(rows, zone)
 		if err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, false, fmt.Errorf("payments: scan client invoice row: %w", err)
+			return nil, nil, fmt.Errorf("payments: scan client invoice row: %w", err)
 		}
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("payments: iterate client invoice rows: %w", err)
+		return nil, nil, fmt.Errorf("payments: iterate client invoice rows: %w", err)
 	}
 
-	items, hasMore := pagecursor.Trim(items, invoicePageSize)
-	return items, hasMore, nil
+	items, next, _ := pagecursor.Cut(items, invoicePageSize, func(v ClientInvoiceView) (time.Time, string) {
+		return v.CreatedAt, v.ID
+	})
+	return items, next, nil
 }
 
 // clientInvoiceID reads {invoiceId}, answering a malformed one with the

@@ -68,39 +68,24 @@ type ListResponse struct {
 // display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		tx, practiceID, engagementID := c.Tx, c.PracticeID, c.EngagementID
-
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		page, ok := pagecursor.Fetch(w, r, "invalid cursor", pageSize,
+			func(after *pagecursor.Cursor) ([]Visit, error) {
+				// Read once for the whole page, before the rows: every Visit on
+				// it types against the same Practice's day (#953). The zone comes
+				// from practicetimezone, which owns it for every calendar-day
+				// comparison in the BFF rather than only for this one (#1166).
+				zone, err := practicetimezone.Load(r.Context(), c.Tx, c.PracticeID)
+				if err != nil {
+					return nil, err //nolint:wrapcheck // Fetch turns any error into the 500
+				}
+				return listVisits(r.Context(), c.Tx, c.EngagementID, after, zone)
+			},
+			func(v Visit) (time.Time, string) { return v.CreatedAt, v.VisitID })
 		if !ok {
 			return
 		}
 
-		// Read once for the whole page, before the rows: every Visit on
-		// it types against the same Practice's day (#953). The zone comes
-		// from practicetimezone, which owns it for every calendar-day
-		// comparison in the BFF rather than only for this one (#1166).
-		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, err := listVisits(r.Context(), tx, engagementID, after, zone)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, pageSize)
-		resp := ListResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.CreatedAt, last.VisitID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	}, staffauth.EngagementReach("engagement not found"))
 }
 

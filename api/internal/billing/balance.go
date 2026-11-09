@@ -117,32 +117,21 @@ func ledgerHistory(ctx context.Context, tx *sql.Tx, practiceID string, after *pa
 // production, a fixture in a test.
 func GetBalanceHandler(terms legal.Document) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		var balance int
+		page, ok := pagecursor.Fetch(w, r, "invalid cursor", pageSize,
+			func(after *pagecursor.Cursor) ([]LedgerEntry, error) {
+				var err error
+				if balance, err = Balance(r.Context(), c.Tx, c.PracticeID); err != nil {
+					// coverage:ignore reason: DB query failure, not exercised by unit tests
+					return nil, err
+				}
+				return ledgerHistory(r.Context(), c.Tx, c.PracticeID, after)
+			},
+			func(v LedgerEntry) (time.Time, string) { return v.CreatedAt, v.ID })
 		if !ok {
 			return
 		}
-
-		balance, err := Balance(r.Context(), c.Tx, c.PracticeID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		entries, err := ledgerHistory(r.Context(), c.Tx, c.PracticeID, after)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		entries, hasMore := pagecursor.Trim(entries, pageSize)
-		ledger := LedgerPage{Items: entries, HasMore: hasMore}
-		if hasMore {
-			last := entries[len(entries)-1]
-			next := pagecursor.Encode(last.CreatedAt, last.ID)
-			ledger.NextCursor = &next
-		}
+		ledger := LedgerPage{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next}
 
 		pricing, ok := requireCreditPrice(w, r, c.Tx, terms)
 		if !ok {

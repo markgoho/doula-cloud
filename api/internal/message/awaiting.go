@@ -58,33 +58,19 @@ type AwaitingReplyResponse struct {
 // staffauth.Middleware.
 func AwaitingReplyHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		page, ok := pagecursor.Fetch(w, r, "invalid cursor", awaitingPageSize,
+			func(after *pagecursor.Cursor) ([]AwaitingReplyItem, error) {
+				if c.Reader.IsAmbientContractor() {
+					return listAttachedAwaitingReply(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
+				}
+				return listAwaitingReply(r.Context(), c.Tx, c.PracticeID, after)
+			},
+			func(v AwaitingReplyItem) (time.Time, string) { return v.LastMessageAt, v.EngagementID })
 		if !ok {
 			return
 		}
 
-		var items []AwaitingReplyItem
-		var err error
-		if c.Reader.IsAmbientContractor() {
-			items, err = listAttachedAwaitingReply(r.Context(), c.Tx, c.PracticeID, c.StaffID, after)
-		} else {
-			items, err = listAwaitingReply(r.Context(), c.Tx, c.PracticeID, after)
-		}
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		items, hasMore := pagecursor.Trim(items, awaitingPageSize)
-		resp := AwaitingReplyResponse{Items: items, HasMore: hasMore}
-		if hasMore {
-			last := items[len(items)-1]
-			next := pagecursor.Encode(last.LastMessageAt, last.EngagementID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, AwaitingReplyResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

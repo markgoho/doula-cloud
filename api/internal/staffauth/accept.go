@@ -13,7 +13,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -69,13 +68,7 @@ type AcceptInviteResponse struct {
 // would be a second round-trip proving something already proven. No
 // verification mail is ever queued on this path.
 func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.BootstrapHandler(verifier, db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, verified authn.VerifiedToken) {
 		var req AcceptInviteRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return

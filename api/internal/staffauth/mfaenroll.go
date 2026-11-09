@@ -7,7 +7,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/sessionmint"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -31,13 +30,7 @@ import (
 // staff id" shape as UpdateWorkStateHandler: enrollment is per person
 // (#606's brief), not per Practice.
 func FinishEnrollmentHandler(verifier authn.Verifier, db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, verified, ok := authn.BeginBootstrap(w, r, verifier, db)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.BootstrapHandler(verifier, db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, verified authn.VerifiedToken) {
 		if !verified.SecondFactor {
 			// The token this call was handed does not show a second
 			// factor -- enroll() did not actually finish, or the token

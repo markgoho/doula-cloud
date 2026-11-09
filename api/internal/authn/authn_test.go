@@ -2,6 +2,7 @@ package authn_test
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -79,6 +80,42 @@ func assertUnauthorized(t *testing.T, rec *httptest.ResponseRecorder, message st
 	}
 	if got := rec.Result().Cookies(); len(got) != 0 {
 		t.Fatalf("Set-Cookie = %v, want none", got)
+	}
+}
+
+func TestHandler_RunsFnOnTheOpenTransactionOnlyForASignedInCaller(t *testing.T) {
+	db := testdb.New(t)
+	token := authntest.SeedSession(t, db.App, testUID)
+
+	var gotUID string
+	var txOpen bool
+	h := authn.Handler(db.App, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
+		gotUID = uid
+		txOpen = tx.QueryRowContext(r.Context(), `SELECT 1`).Scan(new(int)) == nil
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	signedIn := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil)
+	authntest.AddSessionCookie(signedIn, token)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, signedIn)
+	if rec.Code != http.StatusNoContent || gotUID != testUID || !txOpen {
+		t.Fatalf("signed in: status %d uid %q txOpen %v, want 204, %q, true", rec.Code, gotUID, txOpen, testUID)
+	}
+
+	gotUID = ""
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/", nil))
+	assertUnauthorized(t, rec, "missing credential")
+	if gotUID != "" {
+		t.Fatal("fn ran for a caller with no credential")
+	}
+}
+
+func TestExpiredSessionCookie_DropsTheSessionCookieEverywhere(t *testing.T) {
+	c := authn.ExpiredSessionCookie()
+	if c.Name != authn.SessionCookieName || c.Value != "" || c.MaxAge != -1 || c.Path != "/" || !c.HttpOnly || !c.Secure {
+		t.Fatalf("cookie = %+v, want the session cookie emptied with MaxAge -1", c)
 	}
 }
 
@@ -326,6 +363,35 @@ func TestBeginBootstrap_BearerToken_Success(t *testing.T) {
 	}
 	if uid != testUID {
 		t.Fatalf("uid = %q, want %q", uid, testUID)
+	}
+}
+
+func TestBootstrapHandler_RunsFnOnTheOpenTransactionOnlyForAVerifiedToken(t *testing.T) {
+	db := testdb.New(t)
+
+	var gotUID string
+	h := authn.BootstrapHandler(authntest.Verifier{UID: testUID}, db.App, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, verified authn.VerifiedToken) {
+		gotUID = verified.UID
+		if err := tx.QueryRowContext(r.Context(), `SELECT 1`).Scan(new(int)); err != nil {
+			t.Errorf("transaction not open: %v", err)
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil)
+	req.Header.Set("Authorization", "Bearer valid-token")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusNoContent || gotUID != testUID {
+		t.Fatalf("verified: status %d uid %q, want 204 and %q", rec.Code, gotUID, testUID)
+	}
+
+	gotUID = ""
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/", nil))
+	assertUnauthorized(t, rec, "missing credential")
+	if gotUID != "" {
+		t.Fatal("fn ran with no credential")
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const (
@@ -78,13 +79,12 @@ func staffLookup(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		found, err := findStaff(r.Context(), tx, email)
 		if err != nil {
@@ -103,9 +103,8 @@ func staffLookup(db *sql.DB) http.HandlerFunc {
 				return
 			}
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, staffLookupResult{Staff: found})

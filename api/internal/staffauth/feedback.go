@@ -12,8 +12,6 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/tasknudge"
@@ -79,13 +77,7 @@ var feedbackRules = []ratelimit.Rule{
 // than no feedback" (#1498), so a retried send landing twice is not the
 // failure this route exists to prevent.
 func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req FeedbackRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -123,35 +115,11 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		staffID := self.ID
-		id := uuid.NewString()
-		row := feedback.Row{
-			ID:           id,
-			Kind:         req.Kind,
-			Text:         req.Text,
-			PageURL:      req.Page.URL,
-			RouteID:      req.Page.Route.ID,
-			AppBuild:     req.AppBuild,
-			ScreenWidth:  req.ScreenWidth,
-			Browser:      feedback.ParseBrowser(r.Header.Get("User-Agent")),
-			StaffID:      &staffID,
-			PracticeID:   practiceID,
-			RolesLiteral: rolesLiteral,
-			SentAt:       clock.Now(r.Context()),
-		}
-		if !feedback.Save(r.Context(), w, tx, row) {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
+		id, ok := feedback.Send(w, r, tx, enq, req.ClientInput, feedback.Row{StaffID: &staffID, PracticeID: practiceID, RolesLiteral: rolesLiteral})
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-
-		if !dbtx.Commit(w, tx) {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		// This handler commits its own write rather than running inside
-		// staffauth.Middleware's request-scoped transaction (billing.
-		// QueueOutOfCreditsNotification's own reasoning), so the nudge
-		// fires immediately rather than through tasknudge.Register.
-		tasknudge.Fire(enq, tasknudge.FeedbackIssue)(r.Context())
 
 		apierr.WriteJSON(w, http.StatusCreated, FeedbackResponse{ID: id})
 	})

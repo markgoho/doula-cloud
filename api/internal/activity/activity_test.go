@@ -67,6 +67,38 @@ func TestRecord_StaffActor(t *testing.T) {
 	}
 }
 
+func TestRecordPracticeChange_NamesThePracticeAsSubjectAndTheStaffMemberAsActor(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	staffID := testdb.SeedStaff(t, db, "record-practice-change")
+
+	tx, err := db.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin: %v", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := activity.RecordPracticeChange(t.Context(), tx, practiceID, staffID, "name_changed", map[string]string{"nameAfter": "New"}); err != nil {
+		t.Fatalf("RecordPracticeChange: %v", err)
+	}
+
+	var got row
+	var diff []byte
+	if err := tx.QueryRowContext(t.Context(),
+		`SELECT subject_kind, subject_id, action, actor_kind::text, actor_staff_id, diff
+		 FROM activity WHERE practice_id = $1`, practiceID,
+	).Scan(&got.SubjectKind, &got.SubjectID, &got.Action, &got.ActorKind, &got.ActorStaffID, &diff); err != nil {
+		t.Fatalf("read activity row: %v", err)
+	}
+	if got.SubjectKind != activity.SubjectPractice || got.SubjectID != practiceID || got.Action != "name_changed" ||
+		got.ActorKind != "staff" || got.ActorStaffID == nil || *got.ActorStaffID != staffID {
+		t.Fatalf("row = %+v, want the Practice as subject and the Staff member as actor", got)
+	}
+	if string(diff) != `{"nameAfter": "New"}` {
+		t.Fatalf("diff = %s", diff)
+	}
+}
+
 func TestRecord_ClientActor(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Test Practice")

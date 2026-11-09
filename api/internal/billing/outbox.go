@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/outbox"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -141,7 +140,7 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 }
 
 func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
-	emails, err := staffauth.OwnerEmails(ctx, tx, r.practiceID)
+	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("billing: %w", err)

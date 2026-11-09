@@ -9,9 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/authn"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -67,27 +64,7 @@ type PortalFeedbackResponse struct {
 // resolution -- "redundant feedback is better than no feedback" (#1498)
 // -- is why it is not worth building one here.
 func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
-		// A __session cookie is one cookie for two populations
-		// (ADR-0026), so a signed-in Staff member's session reaches this
-		// route with a perfectly valid uid that names no Portal Account.
-		holds, err := isPortalAccount(r.Context(), tx, uid)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !holds {
-			apierr.WriteError(w, msgNotAPortalAccount, http.StatusForbidden)
-			return
-		}
-
+	return portalAccountHandler(db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req PortalFeedbackRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -139,35 +116,11 @@ func FeedbackHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		}
 
 		portalAccount := uid
-		id := uuid.NewString()
-		row := feedback.Row{
-			ID:            id,
-			Kind:          req.Kind,
-			Text:          req.Text,
-			PageURL:       req.Page.URL,
-			RouteID:       req.Page.Route.ID,
-			AppBuild:      req.AppBuild,
-			ScreenWidth:   req.ScreenWidth,
-			Browser:       feedback.ParseBrowser(r.Header.Get("User-Agent")),
-			PortalAccount: &portalAccount,
-			PracticeID:    practiceID,
-			ClientID:      clientID,
-			SentAt:        clock.Now(r.Context()),
-		}
-		if !feedback.Save(r.Context(), w, tx, row) {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
+		id, ok := feedback.Send(w, r, tx, enq, req.ClientInput, feedback.Row{PortalAccount: &portalAccount, PracticeID: practiceID, ClientID: clientID})
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-
-		if !dbtx.Commit(w, tx) {
-			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
-			return
-		}
-		// This handler commits its own write rather than running inside
-		// clientauth.Middleware's request-scoped transaction, the same
-		// reasoning staffauth.FeedbackHandler's own nudge carries, so the
-		// nudge fires immediately rather than through tasknudge.Register.
-		tasknudge.Fire(enq, tasknudge.FeedbackIssue)(r.Context())
 
 		apierr.WriteJSON(w, http.StatusCreated, PortalFeedbackResponse{ID: id})
 	})

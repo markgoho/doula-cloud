@@ -3,7 +3,6 @@ package message
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"fmt"
 	"log"
 
@@ -55,27 +54,7 @@ func notifyRecipient(ctx context.Context, tx *sql.Tx, pusher push.Pusher, engage
 		payload.PracticeID = practiceID
 	}
 
-	body, err := json.Marshal(payload)
-	// coverage:ignore reason: pushPayload always marshals cleanly, not exercised by unit tests
-	if err != nil {
-		// coverage:ignore reason: pushPayload always marshals cleanly, not exercised by unit tests
-		log.Printf("message: notify recipient: marshal payload: %v", err)
-		// coverage:ignore reason: pushPayload always marshals cleanly, not exercised by unit tests
-		return
-	}
-
-	subs, err := resolveRecipientSubscriptions(ctx, tx, engagementID, recipientType)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		log.Printf("message: notify recipient: resolve subscriptions: %v", err)
-		return
-	}
-
-	for _, sub := range subs {
-		if err := pusher.Send(ctx, sub, body); err != nil {
-			log.Printf("message: notify recipient: send push: %v", err)
-		}
-	}
+	push.NotifyMessageRecipient(ctx, tx, pusher, "message: notify recipient", engagementID, recipientType, payload)
 }
 
 // fetchEngagementPracticeID looks up engagementID's Practice, for a Staff
@@ -93,39 +72,4 @@ func fetchEngagementPracticeID(ctx context.Context, tx *sql.Tx, engagementID str
 		return "", fmt.Errorf("message: fetch engagement practice id: %w", err)
 	}
 	return practiceID, nil
-}
-
-// resolveRecipientSubscriptions calls the SECURITY DEFINER function added
-// by 00010_push_subscriptions_message_recipient.sql, which -- unlike
-// every other query in this package -- deliberately bypasses
-// push_subscriptions' own RLS (00008_messaging.sql scoped it to
-// self-identity only, never cross-identity readable, per #57's AC) so a
-// Message's *other* party's subscriptions can be resolved without
-// widening that table's RLS surface. Safe only because engagementID's
-// ownership by the caller was already established by staffauth's or
-// clientauth's middleware before this runs.
-func resolveRecipientSubscriptions(ctx context.Context, tx *sql.Tx, engagementID, recipientType string) ([]push.Subscription, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT endpoint, p256dh_key, auth_key FROM push_subscriptions_for_message_recipient($1, $2)`,
-		engagementID, recipientType)
-	// coverage:ignore reason: DB query failure, not exercised by unit tests
-	if err != nil {
-		return nil, fmt.Errorf("message: query recipient subscriptions: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var subs []push.Subscription
-	for rows.Next() {
-		var s push.Subscription
-		if err := rows.Scan(&s.Endpoint, &s.P256dhKey, &s.AuthKey); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("message: scan recipient subscription row: %w", err)
-		}
-		subs = append(subs, s)
-	}
-	// coverage:ignore reason: row iteration failure, not exercised by unit tests
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("message: iterate recipient subscription rows: %w", err)
-	}
-	return subs, nil
 }

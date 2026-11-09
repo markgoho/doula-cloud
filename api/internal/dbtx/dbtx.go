@@ -6,6 +6,7 @@ package dbtx
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/apierr"
@@ -15,7 +16,16 @@ import (
 // returning ok=false if the database cannot be reached. Callers defer
 // Rollback(tx) straight after.
 func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB) (tx *sql.Tx, ok bool) {
-	tx, err := db.BeginTx(r.Context(), nil)
+	return begin(w, r, db, nil)
+}
+
+// BeginReadOnly is Begin for a transaction that only reads.
+func BeginReadOnly(w http.ResponseWriter, r *http.Request, db *sql.DB) (tx *sql.Tx, ok bool) {
+	return begin(w, r, db, &sql.TxOptions{ReadOnly: true})
+}
+
+func begin(w http.ResponseWriter, r *http.Request, db *sql.DB, opts *sql.TxOptions) (tx *sql.Tx, ok bool) {
+	tx, err := db.BeginTx(r.Context(), opts)
 	if err != nil {
 		// coverage:ignore reason: DB connection failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -48,6 +58,32 @@ func CommitWith(w http.ResponseWriter, tx *sql.Tx, status int) {
 	if Commit(w, tx) {
 		w.WriteHeader(status)
 	}
+}
+
+// Strings runs a query on tx whose single column is text and returns every
+// row's value in the order the query yields them.
+func Strings(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("dbtx: query: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	var values []string
+	for rows.Next() {
+		var v string
+		if err := rows.Scan(&v); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("dbtx: scan: %w", err)
+		}
+		values = append(values, v)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("dbtx: iterate: %w", err)
+	}
+	return values, nil
 }
 
 // ExecRows runs a statement on tx and returns the rows it affected,

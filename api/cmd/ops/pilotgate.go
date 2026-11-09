@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const (
@@ -48,29 +49,21 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 		}
 
 		op := signedIn(r)
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := beginSpentAct(w, r, db, op, actPilotGateOpened, requestKey)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
-
-		if err := spendUnlessReplay(r.Context(), tx, op, actPilotGateOpened, requestKey); err != nil {
-			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
-			writeStepUpRequired(w)
-			return
-		}
+		defer dbtx.Rollback(tx)
 
 		var priorAt time.Time
-		err = tx.QueryRowContext(r.Context(),
+		err := tx.QueryRowContext(r.Context(),
 			`SELECT created_at FROM operator_acts
 			  WHERE operator_id = $1 AND action = 'pilot_gate_opened' AND details->>'requestKey' = $2`,
 			op.ID, requestKey).Scan(&priorAt)
 		if err == nil {
-			if err := tx.Commit(); err != nil {
-				// coverage:ignore reason: DB failure, not exercised by unit tests
-				writeInternal(w)
+			if !dbtx.Commit(w, tx) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return
 			}
 			apierr.WriteJSON(w, http.StatusOK, pilotGateState{OpenedAt: &priorAt})
@@ -112,9 +105,8 @@ func pilotGateOpenAct(db *sql.DB) http.HandlerFunc {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict, msgGateOpenRaced, nil)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, pilotGateState{OpenedAt: &now})

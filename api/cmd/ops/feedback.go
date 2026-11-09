@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/pagecursor"
 )
@@ -106,13 +107,7 @@ func readFeedbackPage(r *http.Request, db *sql.DB, repo string, unopened bool, a
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return feedbackPage{}, fmt.Errorf("read feedback list: %w", err)
 	}
-	if len(page.Items) > feedbackPageSize {
-		page.Items = page.Items[:feedbackPageSize]
-		page.HasMore = true
-		last := page.Items[feedbackPageSize-1]
-		next := pagecursor.Encode(last.SentAt, last.ID)
-		page.NextCursor = &next
-	}
+	page.Items, page.NextCursor, page.HasMore = pagecursor.Cut(page.Items, feedbackPageSize, func(v feedbackSummary) (time.Time, string) { return v.SentAt, v.ID })
 	return page, nil
 }
 
@@ -124,13 +119,12 @@ func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 			apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, msgFeedbackNotFound, nil)
 			return
 		}
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		piece, err := readFeedbackPiece(r, tx, repo, id)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -147,9 +141,8 @@ func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 			writeInternal(w)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, piece)

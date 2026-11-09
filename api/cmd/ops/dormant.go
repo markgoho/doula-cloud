@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -37,13 +38,12 @@ func dormantList(db *sql.DB) http.HandlerFunc {
 		}
 		notSeenSince := businessToday(clock.Now(r.Context())).AddDate(-dormancyNoticeYears, 0, 0)
 
-		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.BeginReadOnly(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		page, err := readDormantPage(r, tx, notSeenSince, afterAt, afterID)
 		if err != nil {
@@ -77,12 +77,6 @@ func readDormantPage(r *http.Request, tx *sql.Tx, notSeenSince time.Time, afterA
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return dormantPage{}, fmt.Errorf("read dormant practices: %w", err)
 	}
-	if len(page.Items) > practicePageSize {
-		page.Items = page.Items[:practicePageSize]
-		page.HasMore = true
-		last := page.Items[practicePageSize-1]
-		next := pagecursor.Encode(last.SignedUpAt, last.ID)
-		page.NextCursor = &next
-	}
+	page.Items, page.NextCursor, page.HasMore = pagecursor.Cut(page.Items, practicePageSize, func(v dormantPractice) (time.Time, string) { return v.SignedUpAt, v.ID })
 	return page, nil
 }

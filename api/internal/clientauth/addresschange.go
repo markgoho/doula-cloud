@@ -66,33 +66,10 @@ type RequestAddressChangeRequest struct {
 // instead, where she has already proved the mailbox and so learns
 // nothing she could not have learned by asking for a sign-in link at it.
 func RequestAddressChangeHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Authenticate before reading a byte of the body, the order
-		// staffauth's own email-change handler keeps: an unauthenticated
-		// caller gets a 401, never a critique of the address she sent.
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
-		// A __session cookie is one cookie for two populations
-		// (ADR-0026), so a signed-in Staff member's session reaches this
-		// route with a perfectly valid uid that names no Portal Account.
-		// Without this check her uid would be minted a token against a
-		// portal_accounts row that does not exist, and the FK on
-		// portal_sign_in_address_changes would surface it as a 500.
-		holds, err := isPortalAccount(r.Context(), tx, uid)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !holds {
-			apierr.WriteError(w, msgNotAPortalAccount, http.StatusForbidden)
-			return
-		}
-
+	// Authenticate before reading a byte of the body, the order
+	// staffauth's own email-change handler keeps: an unauthenticated
+	// caller gets a 401, never a critique of the address she sent.
+	return portalAccountHandler(db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req RequestAddressChangeRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
@@ -143,6 +120,28 @@ func RequestAddressChangeHandler(db *sql.DB) http.Handler {
 // isPortalAccount reports whether identifier names a portal_accounts row,
 // read through portal_accounts_signin_lookup (00074) -- the same
 // USING (true) SELECT policy the magic-link request reads through.
+// portalAccountHandler is authn.Handler for the Portal population with the
+// check every Portal Account route needs: a __session cookie is one cookie
+// for two populations (ADR-0026), so a signed-in Staff member's session
+// reaches these routes with a perfectly valid uid that names no Portal
+// Account. Without the check her uid would be acted on against rows that do
+// not exist, and a foreign key would surface it as a 500.
+func portalAccountHandler(db *sql.DB, fn func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string)) http.Handler {
+	return authn.Handler(db, authn.TierPortal, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
+		holds, err := isPortalAccount(r.Context(), tx, uid)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if !holds {
+			apierr.WriteError(w, msgNotAPortalAccount, http.StatusForbidden)
+			return
+		}
+		fn(w, r, tx, uid)
+	})
+}
+
 func isPortalAccount(ctx context.Context, tx *sql.Tx, identifier string) (bool, error) {
 	var exists bool
 	err := tx.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM portal_accounts WHERE identifier = $1)`, identifier).Scan(&exists)
@@ -340,25 +339,10 @@ func recordForEachClient(ctx context.Context, tx *sql.Tx, identifier string, act
 // reaches, through client_portal_users' own self-visibility policy --
 // which is why app.current_identity_uid is set before this runs.
 func listPortalClientIDs(ctx context.Context, tx *sql.Tx, identifier string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identifier)
+	ids, err := dbtx.Strings(ctx, tx, `SELECT client_id FROM client_portal_users WHERE identity_uid = $1`, identifier)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("clientauth: list portal client ids: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("clientauth: scan portal client id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, fmt.Errorf("clientauth: iterate portal client ids: %w", err)
 	}
 	return ids, nil
 }

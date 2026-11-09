@@ -82,6 +82,20 @@ func NewSessionCookie(token string, lifetime time.Duration) *http.Cookie {
 	}
 }
 
+// ExpiredSessionCookie is the cookie that tells a browser to drop its
+// session, sent when every session the browser held has just ended.
+func ExpiredSessionCookie() *http.Cookie {
+	return &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteLaxMode,
+	}
+}
+
 // BearerToken extracts the token from an HTTP Authorization header of the
 // form "Bearer <token>". It returns ("", false) if the header is missing,
 // malformed, or contains an empty token.
@@ -141,6 +155,22 @@ func Begin(w http.ResponseWriter, r *http.Request, db *sql.DB, population Tier) 
 	return tx, uid, secondFactor, true
 }
 
+// Handler is the opening every route outside the Practice-scoped
+// middleware repeats: Begin for the population, a rollback when fn
+// returns without committing, and fn run on the open transaction and the
+// signed-in person's uid. fn commits itself, with dbtx.Commit, when it
+// has something to keep.
+func Handler(db *sql.DB, population Tier, fn func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, uid, _, ok := Begin(w, r, db, population)
+		if !ok {
+			return
+		}
+		defer dbtx.Rollback(tx)
+		fn(w, r, tx, uid)
+	})
+}
+
 // BeginBootstrap is Begin for the endpoints that cannot read a session
 // cookie because they run before the session they need exists: Staff
 // signup, Staff invitation acceptance, Client portal invitation
@@ -168,6 +198,20 @@ func BeginBootstrap(w http.ResponseWriter, r *http.Request, verifier Verifier, d
 	}
 
 	return tx, verified, true
+}
+
+// BootstrapHandler is Handler for the BeginBootstrap routes: a rollback when
+// fn returns without committing, and fn run on the open transaction and the
+// verified ID token.
+func BootstrapHandler(verifier Verifier, db *sql.DB, fn func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, verified VerifiedToken)) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tx, verified, ok := BeginBootstrap(w, r, verifier, db)
+		if !ok {
+			return
+		}
+		defer dbtx.Rollback(tx)
+		fn(w, r, tx, verified)
+	})
 }
 
 // beginTx opens the request-scoped transaction both entry points run

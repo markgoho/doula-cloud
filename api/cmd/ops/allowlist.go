@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -55,17 +56,16 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 		}
 
 		op := signedIn(r)
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
 		var priorDetails []byte
 		var priorAt time.Time
-		err = tx.QueryRowContext(r.Context(),
+		err := tx.QueryRowContext(r.Context(),
 			`SELECT details, created_at FROM operator_acts
 			  WHERE operator_id = $1 AND action = 'pilot_address_added' AND details->>'requestKey' = $2`,
 			op.ID, requestKey).Scan(&priorDetails, &priorAt)
@@ -118,9 +118,8 @@ func pilotAddressAct(db *sql.DB) http.HandlerFunc {
 			apierr.Write(w, http.StatusConflict, apierr.CodeConflict, fmt.Sprintf(msgPilotAddRaced, address), nil)
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, pilotAddressResult{Address: address, AddedAt: now})

@@ -3,7 +3,6 @@ package practicetimezone
 import (
 	"context"
 	"database/sql"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 
@@ -134,20 +133,7 @@ func write(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, before, af
 		return fmt.Errorf("practicetimezone: write practice timezone: %w", err)
 	}
 
-	diffJSON, err := json.Marshal(timezoneDiff{TimezoneBefore: before, TimezoneAfter: after})
-	if err != nil {
-		// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
-		return fmt.Errorf("practicetimezone: marshal timezone diff: %w", err)
-	}
-
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
-		Action:      actionTimezoneChanged,
-		Diff:        diffJSON,
-		Actor:       activity.StaffActor(actorStaffID),
-	}); err != nil {
+	if err := activity.RecordPracticeChange(ctx, tx, practiceID, actorStaffID, actionTimezoneChanged, timezoneDiff{TimezoneBefore: before, TimezoneAfter: after}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicetimezone: record timezone change: %w", err)
 	}

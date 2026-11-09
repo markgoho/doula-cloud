@@ -278,7 +278,9 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		return
 	}
 
-	list, hasMore := pagecursor.Trim(list, pageSize)
+	list, next, hasMore := pagecursor.Cut(list, pageSize, func(v ListItem) (time.Time, string) {
+		return v.sortAt, v.ClientID
+	})
 
 	if err := attachOpenEngagements(r.Context(), c.Tx, c.PracticeID, list, c.Reader, c.StaffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -286,14 +288,7 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		return
 	}
 
-	resp := ListResponse{Items: list, HasMore: hasMore}
-	if hasMore {
-		last := list[len(list)-1]
-		next := pagecursor.Encode(last.sortAt, last.ClientID)
-		resp.NextCursor = &next
-	}
-
-	apierr.WriteJSON(w, http.StatusOK, resp)
+	apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: list, HasMore: hasMore, NextCursor: next})
 }
 
 // dueSortJoin is shared by both list queries: due.sort_at is the Client's

@@ -95,29 +95,16 @@ type VisitsResponse struct {
 // reads already sit behind.
 func VisitsHandler() http.Handler {
 	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
-		tx, engagementID := c.Tx, c.EngagementID
-
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, "invalid cursor")
+		page, ok := pagecursor.Fetch(w, r, "invalid cursor", visitPageSize,
+			func(after *pagecursor.Cursor) ([]Visit, error) {
+				return listPortalVisits(r.Context(), c.Tx, c.EngagementID, after)
+			},
+			func(v Visit) (time.Time, string) { return v.ScheduledAt, v.VisitID })
 		if !ok {
 			return
 		}
 
-		list, err := listPortalVisits(r.Context(), tx, engagementID, after)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, visitPageSize)
-		resp := VisitsResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.ScheduledAt, last.VisitID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, VisitsResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

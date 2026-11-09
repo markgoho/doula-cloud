@@ -3,7 +3,6 @@ package billing
 import (
 	"database/sql"
 	"encoding/json/v2"
-	"io"
 	"log"
 	"net/http"
 	"strconv"
@@ -23,12 +22,6 @@ func refusePayload(w http.ResponseWriter, r *http.Request, event stripe.Event, f
 	webhookarrival.Mark(r.Context(), webhookarrival.PayloadRefused)
 	apierr.WriteError(w, message, http.StatusBadRequest)
 }
-
-// maxWebhookBodyBytes bounds how much of a webhook request body
-// PostPurchaseWebhookHandler will read -- Stripe event payloads are
-// small; this just stops an unbounded read on an unauthenticated
-// endpoint.
-const maxWebhookBodyBytes = 1 << 20 // 1 MiB
 
 // purchaseEventType is the one event type PostPurchaseWebhookHandler acts
 // on. stripe_destinations_test.go holds it equal to the platform route's
@@ -53,24 +46,12 @@ func HandledEventTypes() []string {
 // low-privilege app_runtime connection staffauth.Middleware uses.
 func PostPurchaseWebhookHandler(db *sql.DB, webhookSecret string, mode stripemode.Mode) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes))
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.BodyRefused)
-			apierr.WriteError(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-
-		event, err := stripe.ConstructEvent(body, r.Header.Get("Stripe-Signature"), webhookSecret,
-			stripe.WithIgnoreAPIVersionMismatch())
-		if err != nil {
-			webhookarrival.Mark(r.Context(), webhookarrival.SignatureRefused)
-			apierr.WriteError(w, "invalid signature", http.StatusBadRequest)
-			return
-		}
-		if !mode.Matches(event.Livemode) {
-			log.Printf("billing: purchase webhook: refusing event %s: livemode %v, keys are in %s mode", event.ID, event.Livemode, mode)
-			webhookarrival.Mark(r.Context(), webhookarrival.LivemodeRefused)
-			apierr.WriteError(w, "Event mode does not match the Stripe keys", http.StatusBadRequest)
+		event, ok := webhookarrival.OpenStripe(w, r, "billing: purchase webhook", mode,
+			func(body []byte, sigHeader string) (stripe.Event, error) {
+				return stripe.ConstructEvent(body, sigHeader, webhookSecret, stripe.WithIgnoreAPIVersionMismatch())
+			},
+			func(e stripe.Event) (string, bool) { return e.ID, e.Livemode })
+		if !ok {
 			return
 		}
 

@@ -100,45 +100,11 @@ func (w PaymentReceivedWorker) ProcessPending(ctx context.Context, tx *sql.Tx) e
 }
 
 func (w PaymentReceivedWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r paymentReceivedPendingRow, now time.Time) error {
-	emails, err := ownerAndAdminEmails(ctx, tx, r.practiceID)
+	_, emails, err := outbox.OwnerAndAdminRecipients(ctx, tx, r.practiceID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return err //nolint:wrapcheck // OwnerAndAdminRecipients names its own failures
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID
 	return wrapOutboxErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, paymentReceivedSubject, paymentReceivedText(link)))
-}
-
-// ownerAndAdminEmails returns the email of every Staff member holding
-// the owner or admin role at practiceID -- distinct from ownerEmails
-// (payout_outbox's resolver), which must stay Owner-only for #343's
-// notification. Relies on the same 00033 app.notification_worker_trusted
-// policies ownerEmails does.
-func ownerAndAdminEmails(ctx context.Context, tx *sql.Tx, practiceID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT s.email FROM staff s
-		 JOIN practice_memberships pm ON pm.staff_id = s.id
-		 WHERE pm.practice_id = $1 AND (pm.roles && ARRAY['owner', 'admin']::practice_role[])`,
-		practiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, fmt.Errorf("payments: resolve owner/admin emails: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	var emails []string
-	for rows.Next() {
-		var email string
-		if err := rows.Scan(&email); err != nil {
-			// coverage:ignore reason: DB scan failure, not exercised by unit tests
-			return nil, fmt.Errorf("payments: scan owner/admin email: %w", err)
-		}
-		emails = append(emails, email)
-	}
-	if err := rows.Err(); err != nil {
-		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
-		return nil, fmt.Errorf("payments: iterate owner/admin emails: %w", err)
-	}
-	return emails, nil
 }

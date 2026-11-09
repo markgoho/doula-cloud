@@ -111,13 +111,7 @@ type NameResponse struct {
 // that fails halfway leaves neither a changed name with no event nor an
 // event describing a change that did not happen.
 func UpdateNameHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req UpdateNameRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return

@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/stripemode"
 )
@@ -112,13 +113,12 @@ func systemRead(d Deps) http.HandlerFunc {
 		since := now.AddDate(0, 0, -systemWindowDays)
 		view := systemView{Stripe: readStripe(r.Context(), d.Stripe, d.StripeMode, since)}
 
-		tx, err := d.DB.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.BeginReadOnly(w, r, d.DB)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 		if err := readSystemDatabase(r.Context(), tx, now, since, &view); err != nil {
 			// coverage:ignore reason: DB failure, not exercised by unit tests
 			writeInternal(w)

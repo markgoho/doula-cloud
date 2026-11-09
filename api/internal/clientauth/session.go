@@ -48,13 +48,7 @@ type SessionResponse struct {
 // sets app.current_client_id here: that variable would narrow the read to
 // one Client, which is the bug this handler exists to not have.
 func SessionHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
-		if !ok {
-			return
-		}
-		defer func() { _ = tx.Rollback() }()
-
+	return authn.Handler(db, authn.TierPortal, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		resp, status, msg := session(r, tx, uid)
 		if status != http.StatusOK {
 			apierr.WriteError(w, msg, status)

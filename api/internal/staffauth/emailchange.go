@@ -54,13 +54,7 @@ type ChangeEmailRequest struct {
 // UpdateWorkStateHandler and RequestVerificationHandler: an email
 // address is a fact about the person, not about a Membership.
 func ChangeEmailHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierStaff)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
+	return authn.Handler(db, authn.TierStaff, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		var req ChangeEmailRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return

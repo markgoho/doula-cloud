@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const (
@@ -88,13 +89,12 @@ func secondFactorCheckRead(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 		staff, err := readSecondFactorStaff(r.Context(), tx, staffID)
 		if err != nil {
 			writeStaffRead(w, err)
@@ -131,19 +131,12 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		}
 
 		op := signedIn(r)
-		tx, err := d.DB.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := beginSpentAct(w, r, d.DB, op, actSecondFactorCleared, requestKey)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
-
-		if err := spendUnlessReplay(r.Context(), tx, op, actSecondFactorCleared, requestKey); err != nil {
-			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
-			writeStepUpRequired(w)
-			return
-		}
+		defer dbtx.Rollback(tx)
 		staff, err := readSecondFactorStaff(r.Context(), tx, staffID)
 		if err != nil {
 			writeStaffRead(w, err)
@@ -158,9 +151,8 @@ func secondFactorClearAct(d Deps) http.HandlerFunc {
 		if !done && !clearSecondFactor(w, r, d, tx, op, staffID, requestKey, staff) {
 			return
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, staff)

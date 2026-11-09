@@ -46,27 +46,16 @@ type VoidRequestsAwaitingResponse struct {
 // anything to act on here. Must be mounted behind staffauth.Middleware.
 func VoidRequestsAwaitingHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		after, ok := pagecursor.FromQuery(w, r, pagecursor.Decode, MsgInvalidCursor)
+		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, voidRequestsAwaitingPageSize,
+			func(after *pagecursor.Cursor) ([]VoidRequestAwaitingItem, error) {
+				return listVoidRequestsAwaiting(r.Context(), c.Tx, c.PracticeID, after)
+			},
+			func(v VoidRequestAwaitingItem) (time.Time, string) { return v.CreatedAt, v.RequestID })
 		if !ok {
 			return
 		}
 
-		list, err := listVoidRequestsAwaiting(r.Context(), c.Tx, c.PracticeID, after)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		list, hasMore := pagecursor.Trim(list, voidRequestsAwaitingPageSize)
-		resp := VoidRequestsAwaitingResponse{Items: list, HasMore: hasMore}
-		if hasMore {
-			last := list[len(list)-1]
-			next := pagecursor.Encode(last.CreatedAt, last.RequestID)
-			resp.NextCursor = &next
-		}
-
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		apierr.WriteJSON(w, http.StatusOK, VoidRequestsAwaitingResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
 	})
 }
 

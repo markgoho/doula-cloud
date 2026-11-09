@@ -2,32 +2,10 @@ package clientfieldtemplate
 
 import (
 	"fmt"
-	"slices"
 	"strings"
+
+	"doula-cloud/api/internal/templatefield"
 )
-
-// fieldTypeSingleSelect and fieldTypeMultiSelect are shared with
-// selectFieldTypes below, the same split plans/template.go draws for its
-// own field-type palette.
-const (
-	fieldTypeSingleSelect = "single_select"
-	fieldTypeMultiSelect  = "multi_select"
-)
-
-// validFieldTypes is ADR-0001's palette, unchanged by ADR-0017: the only
-// kinds of field a Client Field Template may contain. No date type --
-// ADR-0017 names this explicitly, since a Practice-defined date is
-// exactly the shape #370/#371 moved date_of_birth out of.
-var validFieldTypes = map[string]bool{
-	"short_text":          true,
-	"long_text":           true,
-	fieldTypeSingleSelect: true,
-	fieldTypeMultiSelect:  true,
-	"checkbox":            true,
-	"section_header":      true,
-}
-
-var selectFieldTypes = map[string]bool{fieldTypeSingleSelect: true, fieldTypeMultiSelect: true}
 
 // The structural fact names structuralFieldNames' error message reports
 // -- named constants, not repeated literals, so a canonical name changes
@@ -97,33 +75,15 @@ func normalizeFields(fields []Field, previous []Field) ([]Field, string) {
 	seenIDs := make(map[string]bool, len(fields))
 	out := make([]Field, len(fields))
 	for i, f := range fields {
-		if f.ID == "" {
-			return nil, "field id is required"
-		}
-		if seenIDs[f.ID] {
-			return nil, "duplicate field id: " + f.ID
-		}
-		seenIDs[f.ID] = true
-
-		if !validFieldTypes[f.Type] {
-			return nil, "unknown field type: " + f.Type
-		}
-		if f.Label == "" {
-			return nil, "field label is required"
+		if msg := templatefield.CheckIdentity(seenIDs, f.ID, f.Type, f.Label); msg != "" {
+			return nil, msg
 		}
 		if structural, blocked := structuralFieldNames[strings.ToLower(strings.TrimSpace(f.Label))]; blocked {
 			return nil, fmt.Sprintf("field %s: %q is already on every Client record as the structural %s field", f.ID, f.Label, structural)
 		}
 
-		if selectFieldTypes[f.Type] {
-			if len(f.Options) == 0 {
-				return nil, "field " + f.ID + " requires at least one option"
-			}
-			if slices.Contains(f.Options, "") {
-				return nil, "field " + f.ID + " has a blank option"
-			}
-		} else if len(f.Options) > 0 {
-			return nil, "field " + f.ID + " of type " + f.Type + " may not have options"
+		if msg := templatefield.CheckOptions(f.ID, f.Type, f.Options); msg != "" {
+			return nil, msg
 		}
 
 		if was, existed := previousByID[f.ID]; existed && was.Type != f.Type {

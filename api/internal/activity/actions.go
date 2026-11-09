@@ -117,6 +117,14 @@ const (
 // from drifting out of a reader's sight.
 const SubjectMembership = "membership"
 
+// SubjectPlanTemplate and SubjectClientFieldTemplate are the subject_kinds
+// of a Practice's two field templates, recorded by templatefield.RecordChange
+// for both.
+const (
+	SubjectPlanTemplate        = "plan_template"
+	SubjectClientFieldTemplate = "client_field_template"
+)
+
 // MembershipAction is one of the fixed action strings a write site
 // records against SubjectMembership. It exists for the same reason
 // EngagementAction does, and #1148 is the reason it exists now: the five

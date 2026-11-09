@@ -70,14 +70,10 @@ func NoDoulaHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		resp := NoDoulaResponse{Items: items}
-		if len(items) > noDoulaPageSize {
-			resp.Items, resp.HasMore = items[:noDoulaPageSize], true
-			last := resp.Items[noDoulaPageSize-1]
-			next := pagecursor.Encode(last.At, last.ID)
-			resp.NextCursor = &next
-		}
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		items, next, hasMore := pagecursor.Cut(items, noDoulaPageSize, func(v NoDoula) (time.Time, string) {
+			return v.At, v.ID
+		})
+		apierr.WriteJSON(w, http.StatusOK, NoDoulaResponse{Items: items, HasMore: hasMore, NextCursor: next})
 	})
 }
 

@@ -149,6 +149,16 @@ func attachIfAbsent(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practice
 // asks the same three things in the same order, so the hub draws "Put me
 // on this Engagement" exactly where the write accepts the press, with no
 // copy of the rule in Svelte -- what legalMoves does for StatusMoves.
+// writeAttachState answers an attach, a take-off or a self-attach with who
+// holds the Engagement now and whether the caller may still attach herself.
+func writeAttachState(w http.ResponseWriter, engagementID string, reader staffauth.Reader, callerID, status string, doulas []AttachedDoula) {
+	apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
+		EngagementID:  engagementID,
+		Doulas:        doulas,
+		CanAttachSelf: canAttachSelf(reader, callerID, status, doulas),
+	})
+}
+
 func canAttachSelf(reader staffauth.Reader, staffID, status string, doulas []AttachedDoula) bool {
 	return attachment.OfReader(reader).WhyNotAttachable() == attachment.Attachable &&
 		status != StatusCompleted &&
@@ -224,10 +234,6 @@ func AttachSelfHandler() http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, AttachSelfResponse{
-			EngagementID:  c.EngagementID,
-			Doulas:        doulas,
-			CanAttachSelf: canAttachSelf(c.Reader, c.StaffID, status, doulas),
-		})
+		writeAttachState(w, c.EngagementID, c.Reader, c.StaffID, status, doulas)
 	}, staffauth.EngagementID())
 }

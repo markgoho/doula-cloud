@@ -5,7 +5,12 @@ import (
 	"database/sql"
 	"net/http"
 
+	"github.com/google/uuid"
+
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
+	"doula-cloud/api/internal/tasknudge"
 )
 
 // RequireValid refuses a send whose kind is not one of the three choices
@@ -21,6 +26,39 @@ func RequireValid(w http.ResponseWriter, kind, text, kindNeeded, textTooLong str
 		return false
 	}
 	return true
+}
+
+// Send finishes a send both populations' handlers share: it fills in row
+// the fields every sender has -- the id it mints, what the client wrote
+// in, the browser parsed from User-Agent and the instant -- saves it,
+// commits tx, and fires the nudge that tells the issue worker there is
+// something to open. The caller sets the sender and the context that
+// depends on who sent it. It returns the new id, or writes the failure
+// response and reports ok=false.
+//
+// A send commits its own write rather than running inside a request-scoped
+// transaction (billing.QueueOutOfCreditsNotification's own reasoning), so
+// the nudge fires immediately rather than through tasknudge.Register.
+func Send(w http.ResponseWriter, r *http.Request, tx *sql.Tx, enq tasknudge.Enqueuer, in ClientInput, row Row) (id string, ok bool) {
+	row.ID = uuid.NewString()
+	row.Kind = in.Kind
+	row.Text = in.Text
+	row.PageURL = in.Page.URL
+	row.RouteID = in.Page.Route.ID
+	row.AppBuild = in.AppBuild
+	row.ScreenWidth = in.ScreenWidth
+	row.Browser = ParseBrowser(r.Header.Get("User-Agent"))
+	row.SentAt = clock.Now(r.Context())
+	if !Save(r.Context(), w, tx, row) {
+		// coverage:ignore reason: Save already wrote the failure response; reached only on a DB failure, not exercised by unit tests
+		return "", false
+	}
+	if !dbtx.Commit(w, tx) {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
+		return "", false
+	}
+	tasknudge.Fire(enq, tasknudge.FeedbackIssue)(r.Context())
+	return row.ID, true
 }
 
 // Save inserts row and queues the outbox row that opens its private GitHub

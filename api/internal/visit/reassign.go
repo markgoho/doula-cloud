@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -69,16 +68,8 @@ func ReassignHandler(enq tasknudge.Enqueuer) http.Handler {
 		var previousStaffID string
 		var scheduledAt sql.NullTime
 		var createdAt time.Time
-		if err := c.Tx.QueryRowContext(r.Context(),
-			`SELECT staff_id, scheduled_at, created_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
-			visitID, engagementID,
-		).Scan(&previousStaffID, &scheduledAt, &createdAt); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "visit not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !lockVisit(w, r, c.Tx, `SELECT staff_id, scheduled_at, created_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
+			visitID, engagementID, &previousStaffID, &scheduledAt, &createdAt) {
 			return
 		}
 		if _, err := c.Tx.ExecContext(r.Context(),

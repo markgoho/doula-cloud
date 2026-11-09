@@ -25,30 +25,7 @@ import (
 // Account (ADR-0015: "the person lives in the login"), not one
 // Engagement.
 func EndAllSessionsHandler(db *sql.DB) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tx, uid, _, ok := authn.Begin(w, r, db, authn.TierPortal)
-		if !ok {
-			return
-		}
-		defer dbtx.Rollback(tx)
-
-		// A __session cookie is one cookie for two populations
-		// (ADR-0026), so a signed-in Staff member's session reaches this
-		// route with a perfectly valid uid that names no Portal Account --
-		// see RequestAddressChangeHandler's own doc comment for why this
-		// check exists rather than letting EndAllSessions run against
-		// whatever uid the cookie names.
-		holds, err := isPortalAccount(r.Context(), tx, uid)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !holds {
-			apierr.WriteError(w, msgNotAPortalAccount, http.StatusForbidden)
-			return
-		}
-
+	return portalAccountHandler(db, func(w http.ResponseWriter, r *http.Request, tx *sql.Tx, uid string) {
 		if err := authn.EndAllSessions(r.Context(), tx, uid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -80,15 +57,7 @@ func EndAllSessionsHandler(db *sql.DB) http.Handler {
 		// just deleted -- it matches every row for uid, this one
 		// included -- so the browser is told to drop it too, the same
 		// clearing session.EndHandler sends on ordinary sign-out.
-		http.SetCookie(w, &http.Cookie{
-			Name:     authn.SessionCookieName,
-			Value:    "",
-			Path:     "/",
-			MaxAge:   -1,
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteLaxMode,
-		})
+		http.SetCookie(w, authn.ExpiredSessionCookie())
 		w.WriteHeader(http.StatusNoContent)
 	})
 }

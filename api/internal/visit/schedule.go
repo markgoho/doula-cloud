@@ -2,7 +2,6 @@ package visit
 
 import (
 	"database/sql"
-	"errors"
 	"net/http"
 	"time"
 
@@ -81,16 +80,8 @@ func ScheduleHandler() http.Handler {
 		// together. Its NOT FOUND is this route's 404, same as
 		// ReassignHandler's own missing-Visit case.
 		var previous sql.NullTime
-		if err := c.Tx.QueryRowContext(r.Context(),
-			`SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
-			visitID, engagementID,
-		).Scan(&previous); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				apierr.WriteError(w, "visit not found", http.StatusNotFound)
-				return
-			}
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if !lockVisit(w, r, c.Tx, `SELECT scheduled_at FROM visits WHERE id = $1 AND engagement_id = $2 FOR UPDATE`,
+			visitID, engagementID, &previous) {
 			return
 		}
 		var previousAt *time.Time

@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/dbtx"
 )
 
 const (
@@ -73,6 +74,22 @@ type refundDiff struct {
 	Credits     int   `json:"credits"`
 	AmountCents int64 `json:"amountCents"`
 	TaxCents    int64 `json:"taxCents"`
+}
+
+// requireRefundPractice is readRefundPractice for a handler: a Practice that
+// is not there is a 404 and any other failure a 500, written here.
+func requireRefundPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string) (name string, owners []refundOwner, ok bool) {
+	name, owners, err := readRefundPractice(r.Context(), tx, practiceID)
+	if errors.Is(err, errNoPractice) {
+		apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, msgPracticeNotFound, nil)
+		return "", nil, false
+	}
+	if err != nil {
+		// coverage:ignore reason: DB failure, not exercised by unit tests
+		writeInternal(w)
+		return "", nil, false
+	}
+	return name, owners, true
 }
 
 func readRefundPractice(ctx context.Context, tx *sql.Tx, practiceID string) (string, []refundOwner, error) {
@@ -134,22 +151,15 @@ func refundCheckRead(db *sql.DB) http.HandlerFunc {
 			credits = n
 		}
 
-		tx, err := db.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.Begin(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 
-		name, owners, err := readRefundPractice(r.Context(), tx, practiceID)
-		if errors.Is(err, errNoPractice) {
-			apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, msgPracticeNotFound, nil)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		name, owners, ok := requireRefundPractice(w, r, tx, practiceID)
+		if !ok {
 			return
 		}
 		check := refundCheck{PracticeName: name, Owners: owners}
@@ -209,27 +219,14 @@ func refundAct(d Deps) http.HandlerFunc {
 		}
 
 		op := signedIn(r)
-		tx, err := d.DB.BeginTx(r.Context(), nil)
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := beginSpentAct(w, r, d.DB, op, actRefund, requestKey)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
-
-		if err := spendUnlessReplay(r.Context(), tx, op, actRefund, requestKey); err != nil {
-			// coverage:ignore reason: a DB failure, or a second act spending the stamp between requireStepUp's read and this one; stepup_test.go covers spendStepUp's refusal
-			writeStepUpRequired(w)
-			return
-		}
-		name, owners, err := readRefundPractice(r.Context(), tx, practiceID)
-		if errors.Is(err, errNoPractice) {
-			apierr.Write(w, http.StatusNotFound, apierr.CodeNotFound, msgPracticeNotFound, nil)
-			return
-		}
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		defer dbtx.Rollback(tx)
+		name, owners, ok := requireRefundPractice(w, r, tx, practiceID)
+		if !ok {
 			return
 		}
 		ownerName, isOwner := "", false
@@ -287,9 +284,8 @@ func refundAct(d Deps) http.HandlerFunc {
 				return
 			}
 		}
-		if err := tx.Commit(); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !dbtx.Commit(w, tx) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, refundResult{

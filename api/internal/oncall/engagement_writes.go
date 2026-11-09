@@ -86,18 +86,10 @@ func PutRuleHandler() http.Handler {
 			before.StartRule = &rule
 		}
 		if !sameRule(before, req) {
-			if _, err := c.Tx.ExecContext(r.Context(),
+			if !updateAndRecord(w, r, c, activity.ActionOnCallRuleChanged, map[string]RuleRequest{diffBefore: before, diffAfter: req},
 				`UPDATE engagements SET on_call_start_rule = $2, on_call_start_week = $3 WHERE id = $1`,
-				c.EngagementID, req.StartRule, req.StartWeek,
-			); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.EngagementID, activity.ActionOnCallRuleChanged,
-				map[string]RuleRequest{diffBefore: before, diffAfter: req}); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				c.EngagementID, req.StartRule, req.StartWeek) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return
 			}
 		}
@@ -167,24 +159,33 @@ func PutNarrowingHandler() http.Handler {
 		before.From, before.To = nullString(from), nullString(to)
 
 		if !sameString(before.From, req.From) || !sameString(before.To, req.To) {
-			if _, err := c.Tx.ExecContext(r.Context(),
+			if !updateAndRecord(w, r, c, activity.ActionOnCallNarrowingChanged, map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req},
 				`UPDATE engagement_attachments SET on_call_from = $3, on_call_to = $4
 				  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NULL`,
-				c.EngagementID, staffID, req.From, req.To,
-			); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-			if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.EngagementID, activity.ActionOnCallNarrowingChanged,
-				map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req}); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				c.EngagementID, staffID, req.From, req.To) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return
 			}
 		}
 		apierr.WriteJSON(w, http.StatusOK, req)
 	}, staffauth.EngagementID(), staffauth.PathID("staff", "staffId"))
+}
+
+// updateAndRecord runs one on-call UPDATE and writes the Engagement ledger
+// row for it on the same transaction, answering 500 itself and reporting
+// false when either fails.
+func updateAndRecord(w http.ResponseWriter, r *http.Request, c staffauth.Call, action activity.EngagementAction, diff any, query string, args ...any) bool {
+	if _, err := c.Tx.ExecContext(r.Context(), query, args...); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	if err := recordEngagement(r.Context(), c.Tx, c.PracticeID, c.StaffID, c.EngagementID, action, diff); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	return true
 }
 
 // recordEngagement writes one on-call action to an Engagement's ledger,

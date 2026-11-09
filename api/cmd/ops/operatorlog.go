@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pagecursor"
 )
 
@@ -56,13 +57,12 @@ func operatorLog(db *sql.DB) http.HandlerFunc {
 		if !ok {
 			return
 		}
-		tx, err := db.BeginTx(r.Context(), &sql.TxOptions{ReadOnly: true})
-		if err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		tx, ok := dbtx.BeginReadOnly(w, r, db)
+		if !ok {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
-		defer func() { _ = tx.Rollback() }()
+		defer dbtx.Rollback(tx)
 		page, err := readLogPage(r.Context(), tx, afterAt, afterID)
 		if err == nil {
 			err = nameSubjects(r.Context(), tx, page.Items)
@@ -111,13 +111,7 @@ func readLogPage(ctx context.Context, tx *sql.Tx, afterAt, afterID any) (logPage
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return logPage{}, fmt.Errorf("read operator log: %w", err)
 	}
-	if len(page.Items) > operatorLogPageSize {
-		page.Items = page.Items[:operatorLogPageSize]
-		page.HasMore = true
-		last := page.Items[operatorLogPageSize-1]
-		next := pagecursor.Encode(last.At, last.ID)
-		page.NextCursor = &next
-	}
+	page.Items, page.NextCursor, page.HasMore = pagecursor.Cut(page.Items, operatorLogPageSize, func(v logRow) (time.Time, string) { return v.At, v.ID })
 	return page, nil
 }
 

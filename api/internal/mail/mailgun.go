@@ -70,11 +70,17 @@ func (m *MailgunSender) Send(ctx context.Context, msg Message) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("mail: mailgun status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+	return statusError(resp)
+}
+
+// statusError is the error for a Mailgun answer that is not a success, with
+// the start of what Mailgun said, or nil for one that is.
+func statusError(resp *http.Response) error {
+	if resp.StatusCode < 300 {
+		return nil
 	}
-	return nil
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+	return fmt.Errorf("mail: mailgun status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 }
 
 // DeleteBounce takes address off Mailgun's own bounce list, which is a
@@ -109,9 +115,5 @@ func (m *MailgunSender) DeleteBounce(ctx context.Context, address string) error 
 	if resp.StatusCode == http.StatusNotFound {
 		return nil
 	}
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return fmt.Errorf("mail: mailgun status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-	return nil
+	return statusError(resp)
 }

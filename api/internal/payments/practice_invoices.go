@@ -156,7 +156,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 		}
 		days := bookDays{zone: zone, now: clock.Now(r.Context())}
 
-		items, hasMore, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r), days)
+		items, next, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r), days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -172,7 +172,8 @@ func GetPracticeInvoicesHandler() http.Handler {
 
 		resp := PracticeInvoicesResponse{
 			Items:            items,
-			HasMore:          hasMore,
+			HasMore:          next != nil,
+			NextCursor:       next,
 			OutstandingCents: totals.outstandingCents,
 			OutstandingCount: totals.outstandingCount,
 			PaidCents:        totals.paidCents,
@@ -180,10 +181,6 @@ func GetPracticeInvoicesHandler() http.Handler {
 			OverdueCents:     totals.overdueCents,
 			OverdueCount:     totals.overdueCount,
 			ClientsCanPay:    totals.clientsCanPay,
-		}
-		if hasMore {
-			next := encodeInvoiceCursor(items[len(items)-1].CreatedAt, items[len(items)-1].ID)
-			resp.NextCursor = &next
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	}, staffauth.NotAmbientContractor())
@@ -291,7 +288,7 @@ func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
 // (00056_invoices_practice_listing_index.sql), so the page is an index
 // scan of at most invoicePageSize+1 rows rather than a sort of the
 // Practice's whole book.
-func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing, days bookDays) ([]PracticeInvoiceView, bool, error) {
+func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing, days bookDays) ([]PracticeInvoiceView, *string, error) {
 	query := listPracticeInvoicesQuery(narrowing)
 	args := []any{practiceID, invoicePageSize + 1}
 	if after != nil {
@@ -304,7 +301,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, false, fmt.Errorf("payments: list practice invoices: %w", err)
+		return nil, nil, fmt.Errorf("payments: list practice invoices: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -319,7 +316,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName,
 			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, false, fmt.Errorf("payments: scan practice invoice row: %w", err)
+			return nil, nil, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
 		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
@@ -331,11 +328,13 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
+		return nil, nil, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
 	}
 
-	items, hasMore := pagecursor.Trim(items, invoicePageSize)
-	return items, hasMore, nil
+	items, next, _ := pagecursor.Cut(items, invoicePageSize, func(v PracticeInvoiceView) (time.Time, string) {
+		return v.CreatedAt, v.ID
+	})
+	return items, next, nil
 }
 
 // invoiceTotals is the whole-book summary the Practice-wide list carries
