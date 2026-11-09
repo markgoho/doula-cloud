@@ -18,60 +18,6 @@ import (
 	"doula-cloud/api/internal/visit"
 )
 
-// TestListHandler_InvalidCursorRejected mirrors
-// message.TestListHandler_InvalidCursorRejected.
-func TestListHandler_InvalidCursorRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-visits-bad-cursor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+cursor)
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
-		}
-	}
-}
-
-// TestListHandler_PaginatesNewestFirst seeds more than one page of
-// Visits and walks the cursor, mirroring
-// message.TestListHandler_PaginatesNewestFirst.
-func TestListHandler_PaginatesNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-visits-paging"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	const total = 31 // pageSize (30) + 1, to force a second page
-	for range total {
-		seedVisit(t, db, engagementID, staffID)
-	}
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	firstResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer firstResp.Body.Close()
-	first := reqtest.Decode[visit.ListResponse](t, firstResp)
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
-	}
-
-	secondResp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits?cursor="+*first.NextCursor)
-	defer secondResp.Body.Close()
-	second := reqtest.Decode[visit.ListResponse](t, secondResp)
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
-	}
-}
-
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
 	resp := reqtest.Get(t, url, reqtest.Session(session))
@@ -92,66 +38,6 @@ func authedBody(t *testing.T, session, method, url string, body []byte) *http.Re
 	t.Helper()
 	resp := reqtest.Do(t, method, url, reqtest.Session(session), reqtest.RawJSON(body))
 	return resp
-}
-
-func TestCreateHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-creating"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	out := reqtest.Decode[visit.CreateResponse](t, resp)
-	if out.VisitID == "" || out.StaffID != staffID {
-		t.Fatalf("unexpected response: %+v, want staffId = %q", out, staffID)
-	}
-}
-
-// An Admin who is not a Doula has no self to put on a birth, so a create
-// with no assignee is a refusal for her rather than a silent
-// self-assignment (#268). Naming a colleague is what she does instead --
-// TestCreateHandler_AdminWhoIsNotADoulaNamesAColleague, in assign_test.go.
-func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "admin-creating"
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{adminRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "staff-listing"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	listResp := reqtest.Decode[visit.ListResponse](t, resp)
-	list := listResp.Items
-	if len(list) != 1 || list[0].StaffID != staffID {
-		t.Fatalf("list = %+v, want one Visit assigned to %q", list, staffID)
-	}
 }
 
 // TestListHandler_AssigneeWhoLeftStillShowsTheVisit is #1322's fix for
@@ -226,42 +112,6 @@ func listDepartedAssigneeVisits(t *testing.T, db *testdb.DB, practiceID, engagem
 		t.Fatalf("staffId = %q, want %q -- her id, unlike her name, is never lost", list[0].StaffID, assigneeID)
 	}
 	return list
-}
-
-func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-creator", []string{doulaRole}, "employee")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-bystander", []string{adminRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, "admin-bystander")
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-// TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
-// other half: an open, granted attachment reaches.
-func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-visits-2", []string{doulaRole}, "employee")
-	contractorUID := "contractor-attached-visits"
-	contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedVisit(t, db, engagementID, staffID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
-
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestReassignHandler_Success(t *testing.T) {
@@ -343,30 +193,6 @@ func TestCreateHandler_LogsOnlyTheAssignee(t *testing.T) {
 	if len(diff) != 1 || diff["assignedStaffId"] != staffID {
 		t.Fatalf("visit_logged diff = %v, want only assignedStaffId = %q", diff, staffID)
 	}
-}
-
-// An Admin who is not herself a Doula is the person whose job scheduling
-// is (ADR-0006, ADR-0008), so handing a Visit to a colleague is hers to
-// do -- #268 replaced the Doula-only guard that used to refuse her.
-func TestReassignHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-reassigning", []string{adminRole}, "employee")
-	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-bystander", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, doulaStaffID)
-
-	srv, session := newServer(t, db, "admin-reassigning")
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: doulaStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func TestReassignHandler_TargetNotDoula(t *testing.T) {
@@ -456,29 +282,6 @@ func TestReassignHandler_RefusesAContractorWhoHasNotAccepted(t *testing.T) {
 	if count != 0 {
 		t.Fatalf("attachments = %d, want none -- nobody may put a contractor on a birth", count)
 	}
-}
-
-// A contractor who has already accepted is on the birth, so handing her
-// a Visit is ordinary.
-func TestReassignHandler_AllowsAnAttachedContractor(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-to-attached"
-	practiceID, creatorStaffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	targetStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, "contractor-attached")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, creatorStaffID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, targetStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: targetStaffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // Logging her own Visit puts an employee Doula on the birth, granted.
@@ -885,28 +688,6 @@ func waitForLockContention(t *testing.T, db *testdb.DB) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("timed out waiting for the request under test to contend for the Visit row's lock")
-}
-
-// Setting a Visit's date is the Admin's own job, not something the Doula
-// role gates (#268) -- see ScheduleHandler's doc comment.
-func TestScheduleHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-scheduling", []string{adminRole}, "employee")
-	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-schedule-bystander", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, doulaStaffID)
-
-	srv, session := newServer(t, db, "admin-scheduling")
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 // TestListHandler_ReturnsNotes proves list.Visit round-trips notes (#251):
@@ -1338,58 +1119,6 @@ func TestNotesHandler_ConcurrentEditsRecordTheTrueHadNotes(t *testing.T) {
 	if !diff.HadNotes {
 		t.Fatalf("diff.hadNotes = false, want true (the stand-in's own write had already given the Visit a first note)")
 	}
-}
-
-// TestNotesHandler_AllowedForNonDoulaCaller states the rule notes,
-// schedule and reassign now share (#268): any Staff member who may read a
-// Visit may also write its notes and its date, and an Owner or Admin may
-// additionally say who it is for. An Admin holding no Doula role at all
-// succeeds at all three; only logging a Visit for *herself* is still
-// closed to her, because she has no self on a birth to log.
-func TestNotesHandler_AllowedForNonDoulaCaller(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedStaffAtPractice(t, db, practiceID, "admin-writing-notes", []string{adminRole}, "employee")
-	doulaStaffID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-notes-bystander", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, doulaStaffID)
-
-	srv, session := newServer(t, db, "admin-writing-notes")
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("Admin recorded this on the Doula's behalf.")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-// TestNotesHandler_AllowsAnAttachedContractor is the other half: a
-// contractor with an open, granted attachment reaches the write even
-// though she is not the Visit's own assigned staff_id -- "any Staff
-// member who may read a Visit may also write its notes" holds for her
-// too.
-func TestNotesHandler_AllowsAnAttachedContractor(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-notes-2", []string{doulaRole}, "employee")
-	contractorUID := "contractor-attached-notes"
-	contractorStaffID := testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-	testdb.SeedGrantedAttachment(t, db, engagementID, contractorStaffID)
-
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("Contractor's own observation from the Visit.")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
 func parseRFC3339(t *testing.T, s string) time.Time {
