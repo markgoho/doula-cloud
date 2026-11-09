@@ -14,6 +14,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
+import { BUN_504, COVCHECK_FAILED } from './ci-transient.fixtures.ts';
+
 const ROOT = path.join(import.meta.dir, '..');
 const SCRIPT = path.join(import.meta.dir, 'trunk-red.ts');
 const WORKFLOWS = path.join(ROOT, '.github', 'workflows');
@@ -57,6 +59,8 @@ type Fixtures = {
   jobs?: Job[];
   /** The stand-in exits 1 on the jobs read. */
   jobsFail?: boolean;
+  /** What the log of each job answers, by the job's id. */
+  logs?: Record<number, string>;
   /** What `repos/<repo>/actions/runs/<id>` answers, for a replay. */
   run?: object;
   /** The comments of each issue, by its number. */
@@ -93,7 +97,9 @@ function standIn(fixtures: Fixtures): string {
       "const input = readsInput ? JSON.parse(fs.readFileSync(0, 'utf8')) : null;",
       "const fixtures = JSON.parse(fs.readFileSync(path.join(import.meta.dir, 'fixtures.json'), 'utf8'));",
       "fs.appendFileSync(path.join(import.meta.dir, 'calls.jsonl'), JSON.stringify({ method, endpoint, input }) + '\\n');",
-      "if (method === 'GET' && /\\/actions\\/runs\\/\\d+\\/attempts\\/\\d+\\/jobs/.test(endpoint)) {",
+      "if (method === 'GET' && /\\/actions\\/jobs\\/\\d+\\/logs$/.test(endpoint)) {",
+      "  console.log((fixtures.logs ?? {})[endpoint.match(/\\/jobs\\/(\\d+)\\//)[1]] ?? '');",
+      "} else if (method === 'GET' && /\\/actions\\/runs\\/\\d+\\/attempts\\/\\d+\\/jobs/.test(endpoint)) {",
       "  if (fixtures.jobsFail) { console.error('HTTP 502'); process.exit(1); }",
       '  console.log(JSON.stringify({ jobs: fixtures.jobs ?? [] }));',
       "} else if (method === 'GET' && /\\/commits\\/[0-9a-f]+$/.test(endpoint)) {",
@@ -834,6 +840,67 @@ describe('a passing run', () => {
     expect((result.writes[0]?.input as CommentInput).body).toContain(
       'never reproduced'
     );
+  });
+});
+
+describe('a run that ci-heal reruns (#2819)', () => {
+  const setupBun = (attempt: number) =>
+    workflowRun(CI, { conclusion: 'failure', attempt });
+  const SETUP_FAILED: Job[] = [
+    {
+      id: 11,
+      name: 'format',
+      conclusion: 'failure',
+      steps: [{ name: 'Run oven-sh/setup-bun@v2', conclusion: 'failure' }],
+    } as Job,
+  ];
+
+  test('a first-attempt setup-bun 504 opens no issue and comments nowhere', () => {
+    const result = alarm(setupBun(1), {
+      jobs: SETUP_FAILED,
+      logs: { 11: BUN_504 },
+      issues: [openAlarm(5, CI)],
+    });
+
+    expect(result.status).toBe(0);
+    expect(result.writes).toEqual([]);
+    expect(result.stdout).toContain('no alarm: this failure is transient');
+  });
+
+  test('the same failure on the second attempt opens the alarm', () => {
+    const result = alarm(setupBun(2), {
+      jobs: SETUP_FAILED,
+      logs: { 11: BUN_504 },
+    });
+
+    expect(result.writes).toHaveLength(1);
+    expect(result.writes[0]?.endpoint).toBe(`repos/${REPO}/issues`);
+  });
+
+  test('a first-attempt failure of a real step opens the alarm', () => {
+    const result = alarm(setupBun(1), {
+      jobs: [
+        {
+          id: 13,
+          name: 'api',
+          conclusion: 'failure',
+          steps: [
+            { name: 'Enforce 100% line coverage', conclusion: 'failure' },
+          ],
+        } as Job,
+      ],
+      logs: { 13: COVCHECK_FAILED },
+    });
+
+    expect(result.writes).toHaveLength(1);
+    expect(result.stdout).toContain('not transient');
+  });
+
+  test('a log that cannot be read opens the alarm and does not hide the failure', () => {
+    const result = alarm(setupBun(1), { jobsFail: true });
+
+    expect(result.status).toBe(0);
+    expect(result.writes).toHaveLength(1);
   });
 });
 

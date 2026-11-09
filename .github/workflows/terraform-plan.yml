@@ -142,7 +142,7 @@ jobs:
 
       - name: Terraform init
         working-directory: terraform
-        run: terraform init -input=false
+        run: bash "$GITHUB_WORKSPACE/scripts/retry.sh" terraform init -input=false
 
       # Drift is the live project against the commit last applied to it,
       # not against trunk (#2680). Every apply stamps that commit into state
@@ -159,6 +159,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
+          cp "$GITHUB_WORKSPACE/scripts/retry.sh" "$RUNNER_TEMP/retry.sh"
           git fetch --quiet origin trunk
           applied=$(terraform output -raw applied_sha 2>/dev/null || true)
           if ! printf '%s' "$applied" | grep -Eq '^[0-9a-f]{40}$'; then
@@ -203,7 +204,7 @@ jobs:
             exit 0
           fi
           git checkout --quiet --detach "$applied"
-          terraform init -input=false > /dev/null
+          bash "$RUNNER_TEMP/retry.sh" terraform init -input=false > /dev/null
           echo "mode=applied" >> "$GITHUB_OUTPUT"
           echo "Planning \`$applied\`, the commit last applied to the live project (#2680)." >> "$GITHUB_STEP_SUMMARY"
 
@@ -444,7 +445,7 @@ jobs:
         working-directory: terraform
         run: |
           for root in stripe-sandbox stripe-live; do
-            terraform -chdir="$root" init -backend=false -input=false -no-color > /dev/null
+            bash "$GITHUB_WORKSPACE/scripts/retry.sh" terraform -chdir="$root" init -backend=false -input=false -no-color > /dev/null
             terraform -chdir="$root" validate -no-color
           done
 
@@ -490,7 +491,7 @@ jobs:
             *) echo "$KEY_SECRET does not hold a Sandbox restricted key (rk_test_...)."; exit 1 ;;
           esac
 
-          terraform init -reconfigure -input=false -no-color > /dev/null
+          bash "$GITHUB_WORKSPACE/scripts/retry.sh" terraform init -reconfigure -input=false -no-color > /dev/null
 
           set +e
           TF_VAR_stripe_api_key="$key" terraform plan -detailed-exitcode -input=false -no-color -lock-timeout=480s -out=tfplan > plan-raw.log 2>&1

@@ -31,3 +31,17 @@ To fix a failure, extract the shared piece so the second copy is a call: `fixtur
 ```
 
 In Svelte markup write `<!-- jscpd:ignore-start -- reason -->`, in CSS `/* jscpd:ignore-start -- reason */`, and in TypeScript or a Svelte script `//` as in Go. jscpd drops every token from the start line through the end line, so the fragment no longer matches anything. A start with no reason after `--`, or with no end marker after it, fails the check wherever it is in the scanned tree, changed line or not, so a marker cannot be left bare. The reason follows the same rule as `spelling:ignore`: it says why, not that. The rules are `markerProblems`, `parseDiff` and `newClones` in `scripts/dupes-check.ts`.
+
+## What CI heals by itself, and what it does not (#2819)
+
+A run that goes red because GitHub Releases, a registry or a runner had a bad minute is not a failure of the code. It heals without a person. A failure of the code reaches a person and nothing else does.
+
+**Prevented.** Every workflow gets Bun from `.github/actions/setup-bun`, which installs the version in `.bun-version` from a cache keyed on that version. A cache miss downloads with five attempts and a backoff of 150 seconds in all (`scripts/install-bun.sh`); `oven-sh/setup-bun` gave up after about 35 seconds. Every `terraform init` in `terraform-plan.yml` goes through `scripts/retry.sh`, three attempts. Bump Bun by editing `.bun-version`. Earlier per-step retries (#2681): Cloud Run deploys, Firebase, the Postgres pull.
+
+**Healed.** `.github/workflows/ci-heal.yml` runs when `CI`, the site deploy, `Hosting edge check` or `Terraform Plan` completes with `failure`, on trunk or on a pull request. `scripts/ci-transient.ts` reads each failed job. The run is transient only when every failed job failed in a setup or download step (a step name on its allowlist) and the log lines before the `##[error]` hold a signature: an HTTP 5xx from a host, `ETIMEDOUT`, `ECONNRESET`, `RemoteDisconnected`, a TLS or I/O timeout. A failed `Set up job` is transient with no signature. Then the failed jobs run once more (`gh run rerun --failed`), on the first attempt only.
+
+**Not healed.** A test, lint, format, build or coverage step, whatever its log says: it is not on the allowlist. A run on its second attempt. A run with one real failure among transient ones. A setup step whose log has no signature. Those go to a person: a flaky test is fixed (#2682), not hidden.
+
+**The alarm.** `scripts/trunk-red.ts` runs the same classifier and opens no issue for a first-attempt run that is being rerun. The rerun's own completion is what it acts on: red on attempt 2 opens the alarm, green closes an open one of the same commit. If the classifier cannot read the logs, the alarm opens.
+
+**Replay.** `workflow_run` runs from trunk only, so a pull request cannot prove it. `gh workflow run ci-heal.yml -f run_id=<id>` reads that run's first attempt and prints the verdict and the rerun it would make, without making it.
