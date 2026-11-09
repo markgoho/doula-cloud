@@ -151,10 +151,7 @@ func TestSpend_RollsBackWithItsTransaction(t *testing.T) {
 		t.Fatalf("Mint: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
+	tx := db.BeginAs(t)
 	if _, err := authtoken.Spend(t.Context(), tx, token, authtoken.PurposeStaffPasswordReset, now); err != nil {
 		t.Fatalf("Spend: %v", err)
 	}

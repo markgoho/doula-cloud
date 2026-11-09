@@ -61,20 +61,7 @@ type worker interface {
 // runs ProcessPending, and commits.
 func runWorker(t *testing.T, db *testdb.DB, w worker) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 // outboxRowState reads a row of one of the outbox tables directly.
@@ -104,11 +91,7 @@ func TestQueuePayoutIncompleteNotification_InsertsPendingRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID := testdb.SeedPractice(t, db, "Queue Insert")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
 	// The grace window is counted from clock.Now(ctx) (#1992), so a fixed
 	// clock pins next_attempt_at exactly.
@@ -148,16 +131,7 @@ func TestQueuePayoutIncompleteNotification_GraceWindowDefersTheSend(t *testing.T
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-grace-window", []string{ownerRole}, "employee")
 	setRequirementsDue(t, db, practiceID, []string{testRequirementDOB})
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	if err := payments.QueuePayoutIncompleteNotification(t.Context(), tx, practiceID); err != nil {
-		t.Fatalf("QueuePayoutIncompleteNotification: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	queuePayoutIncomplete(t, db, practiceID)
 
 	sender := &mail.FakeSender{}
 	runWorker(t, db, newTestPayoutWorker(sender))
@@ -176,18 +150,7 @@ func TestQueuePayoutIncompleteNotification_ConflictOnExistingPendingRowIsNoop(t 
 	practiceID := testdb.SeedPractice(t, db, "Queue Conflict")
 	seedPayoutOutboxRow(t, db, practiceID, 0, time.Now())
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-
-	if err := payments.QueuePayoutIncompleteNotification(t.Context(), tx, practiceID); err != nil {
-		t.Fatalf("QueuePayoutIncompleteNotification: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	queuePayoutIncomplete(t, db, practiceID)
 
 	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM payout_outbox WHERE practice_id = $1`, practiceID)
 	if count != 1 {
@@ -287,5 +250,18 @@ func TestPayoutWorker_ProcessPending_Outcomes(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// queuePayoutIncomplete queues the payout-incomplete notice for practiceID
+// in a transaction of its own and commits it.
+func queuePayoutIncomplete(t *testing.T, db *testdb.DB, practiceID string) {
+	t.Helper()
+	tx := db.BeginAs(t)
+	if err := payments.QueuePayoutIncompleteNotification(t.Context(), tx, practiceID); err != nil {
+		t.Fatalf("QueuePayoutIncompleteNotification: %v", err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
 	}
 }

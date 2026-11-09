@@ -87,11 +87,7 @@ func seedPortalFeedbackRow(t *testing.T, db *testdb.DB, portalAccount, kind, rou
 
 func enqueueIssueOutbox(t *testing.T, db *testdb.DB, feedbackID string) {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAdmin(t)
 	if err := feedback.EnqueueIssueOutbox(t.Context(), tx, feedbackID); err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -107,17 +103,7 @@ func enqueueIssueOutbox(t *testing.T, db *testdb.DB, feedbackID string) {
 // TestProcessIssueOutboxHandler_RunsBehindTheDoor below proves.
 func runIssueWorker(t *testing.T, db *testdb.DB, worker feedback.IssueWorker) {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := worker.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("process pending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsAdminWorker(t, worker.ProcessPending)
 }
 
 func readIssueOutboxStatus(t *testing.T, db *testdb.DB, feedbackID string) string {

@@ -65,6 +65,14 @@ resp := reqtest.Get(t, url, reqtest.Session(fixture.Session(t, db, owner)))
 
 Defaults are an employee Doula, a Client named "Test Client" with a unique address, and an intake birth Engagement for a new Client. `fixture.WithPortalLogin()` gives a Client an accepted Portal Account so `fixture.Session` can sign her in. The builders write through the Admin connection, as the `testdb.Seed*` functions do, and write no activity row; a test that asserts on activity seeds its own. A test that needs an exact identity (a shared Staff and Client uid, an RLS session variable) passes `fixture.StaffUID`. A new option goes in `fixture` when a second package needs it.
 
+### Transactions, workers and the clock in a test
+
+`testdb.BeginAs(t, vars...)` opens a transaction on `App` scoped like a request and rolls it back when the test ends. **`App` holds one connection, and `BeginAs` holds it until the transaction commits, rolls back or the test ends.** A second `BeginAs`, or any `db.App` query, while one is open waits for that connection and hangs the test with no error. Three habits keep it safe: commit or roll back before the next `App` use; in a closure or loop that calls `BeginAs` once per pass, `defer func() { _ = tx.Rollback() }()` inside the closure; and read through `db.Admin`, which has its own connections, when a test only needs to look. `testdb.ReadAs` already rolls back for you.
+
+`testdb.BeginAdmin(t)` is the same on the superuser `Admin` connection, outside every RLS policy, for a test of a package's own SQL. Commit it when the write must outlive the test's next statement; whatever is left open rolls back when the test ends. Do not write `db.Admin.BeginTx` with its own rollback in a test.
+
+`db.RunAsWorker(t, w.ProcessPending)` runs one outbox worker pass behind the trusted-worker door and commits. `testdb.RequireSentOnceTo` and `testdb.RequireSentAndTokenCleared` assert what a mail worker pass left behind. `fixture.OwnerCase`, `AdminCase`, `EmployeeDoulaCase`, `ContractorDoulaCase`, `NoRoleCase` and `OwnerAndDoulaCase` are the rows of ADR-0015's role table for a test that ranges over who may do a thing. `fixture.ServeStaff` and `ServeStaffAt` mount a package's routes for a test that seeds its own people and keeps a literal uid. A `fixture.Scene` built with `fixture.At(t)` serves every request at that instant, and `scene.MoveClockTo(t)` moves it for a test that crosses a date; sign in again with `scene.As(who)` once the move outlasts the session.
+
 ### A due-time fixture must not compare two clocks
 
 The host and the database run on different clocks whenever the container engine is VM-backed — Podman on macOS, Docker Desktop on macOS. The VM keeps its own time, drifts against the host's, and does not resync when the Mac wakes. CI never sees this: on `ubuntu-latest` the container shares the runner's kernel clock, so the skew is structurally zero.

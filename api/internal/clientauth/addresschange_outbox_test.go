@@ -47,22 +47,13 @@ func TestAddressChangeWorker_ProcessPending_MailsTheRowsOwnAddress(t *testing.T)
 	runMagicLinkTx(t, db, newAddressChangeWorker(sender).ProcessPending)
 
 	status, _, token := addressChangeRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if token.Valid {
-		t.Fatal("token still set once sent, want NULL")
-	}
-	sent := sender.Sent()
-	if len(sent) != 1 || sent[0].To != "the-new-one@example.com" {
-		t.Fatalf("sent = %+v, want one message to the-new-one@example.com", sent)
-	}
+	msg := testdb.RequireSentAndTokenCleared(t, status, token, sender, "the-new-one@example.com")
 	// ADR-0009: content-free. The mail carries the link and nothing that
 	// would tell an unintended reader whose account this is.
-	if !strings.Contains(sent[0].Text, testAppBaseURL+"/portal/confirm-sign-in-address?token=confirm-token") {
-		t.Fatalf("mail body = %q, want the confirmation link", sent[0].Text)
+	if !strings.Contains(msg.Text, testAppBaseURL+"/portal/confirm-sign-in-address?token=confirm-token") {
+		t.Fatalf("mail body = %q, want the confirmation link", msg.Text)
 	}
-	if strings.Contains(sent[0].Text, "still-the-old@example.com") {
+	if strings.Contains(msg.Text, "still-the-old@example.com") {
 		t.Fatal("the confirmation mail names the old address")
 	}
 }

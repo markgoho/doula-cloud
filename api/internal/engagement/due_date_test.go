@@ -86,46 +86,32 @@ func readEngagementDueDate(t *testing.T, db *testdb.DB, engagementID string) str
 // what and to what (readFactDiff fails on a row with no actor; the row's
 // created_at is the when).
 func TestChangeDueDateHandler_RolesMayChange(t *testing.T) {
-	cases := []struct {
-		role   roleCase
-		wantOK bool
-	}{
-		{ownerCase, true},
-		{adminCase, true},
-		{employeeDoulaCase, true},
-		{contractorDoulaCase, false},
-		{noRoleCase, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.role.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.opts...), withEngagement(fixture.DueDate(dueBefore)))
+	eachFactWriter(t, func(t *testing.T, e *env, wantOK bool) {
+		body := e.changeDueDate(dueAfter, okOrForbidden(wantOK))
 
-			body := e.changeDueDate(dueAfter, okOrForbidden(tc.wantOK))
-
-			if !tc.wantOK {
-				if got := e.storedDueDate(); got != dueBefore {
-					t.Fatalf("due date = %q, want left unchanged at %s", got, dueBefore)
-				}
-				if n := e.countActivity("due_date_changed"); n != 0 {
-					t.Fatalf("due_date_changed entries = %d, want 0", n)
-				}
-				return
+		if !wantOK {
+			if got := e.storedDueDate(); got != dueBefore {
+				t.Fatalf("due date = %q, want left unchanged at %s", got, dueBefore)
 			}
-			if body.DueDate != dueAfter || body.EngagementID != e.Engagement.ID {
-				t.Fatalf("body = %+v, want %s on %s", body, dueAfter, e.Engagement.ID)
+			if n := e.countActivity("due_date_changed"); n != 0 {
+				t.Fatalf("due_date_changed entries = %d, want 0", n)
 			}
-			if got := e.storedDueDate(); got != dueAfter {
-				t.Fatalf("due date = %q, want %s", got, dueAfter)
-			}
-			if n := e.countActivity("due_date_changed"); n != 1 {
-				t.Fatalf("due_date_changed entries = %d, want 1", n)
-			}
-			assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "due_date_changed"), map[string]any{
-				"dueDateBefore": dueBefore,
-				"dueDateAfter":  dueAfter,
-			})
+			return
+		}
+		if body.DueDate != dueAfter || body.EngagementID != e.Engagement.ID {
+			t.Fatalf("body = %+v, want %s on %s", body, dueAfter, e.Engagement.ID)
+		}
+		if got := e.storedDueDate(); got != dueAfter {
+			t.Fatalf("due date = %q, want %s", got, dueAfter)
+		}
+		if n := e.countActivity("due_date_changed"); n != 1 {
+			t.Fatalf("due_date_changed entries = %d, want 1", n)
+		}
+		assertDiff(t, readFactDiff(t, e.DB, e.Engagement.ID, "due_date_changed"), map[string]any{
+			"dueDateBefore": dueBefore,
+			"dueDateAfter":  dueAfter,
 		})
-	}
+	}, withEngagement(fixture.DueDate(dueBefore)))
 }
 
 // TestChangeDueDateHandler_FirstDueDate covers the nullable column: an

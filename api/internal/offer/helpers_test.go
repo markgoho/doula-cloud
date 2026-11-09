@@ -1,6 +1,7 @@
 package offer_test
 
 import (
+	"database/sql"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/engagement"
+	fixtures "doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/reqtest"
@@ -51,12 +53,10 @@ var completeStatusBody = map[string]string{"status": engagement.StatusCompleted,
 // carries.
 func newServer(t *testing.T, db *testdb.DB, uid string, enq tasknudge.Enqueuer) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	offer.Mount(g, ir, db.App, enq)
-	engagement.Mount(g, ir)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return fixtures.ServeStaff(t, db, uid, func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+		offer.Mount(g, ir, app, enq)
+		engagement.Mount(g, ir)
+	})
 }
 
 // seedSessionFor mints a live session for a second identity, so one test

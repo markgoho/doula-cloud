@@ -40,9 +40,9 @@ type attachingEnv struct {
 	Doula fixture.StaffRecord
 }
 
-func newAttachingEnv(t *testing.T, caller roleCase, doula []fixture.StaffOption, opts ...envOption) attachingEnv {
+func newAttachingEnv(t *testing.T, caller fixture.RoleCase, doula []fixture.StaffOption, opts ...envOption) attachingEnv {
 	t.Helper()
-	opts = append([]envOption{signedInAs(append(caller.opts, fixture.StaffName(attachingOwnerName))...)}, opts...)
+	opts = append([]envOption{signedInAs(append(caller.Opts, fixture.StaffName(attachingOwnerName))...)}, opts...)
 	e := attachingEnv{env: newEnv(t, opts...)}
 	e.Doula = e.Colleague(append(doula, fixture.StaffName(attachedDoulaName))...)
 	return e
@@ -59,17 +59,17 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 	asContractor := []fixture.StaffOption{fixture.Contractor()}
 	cases := []struct {
 		name       string
-		caller     roleCase
+		caller     fixture.RoleCase
 		doula      []fixture.StaffOption
 		wantStatus int
 		wantCode   apierr.Code
 	}{
-		{"owner puts an employee doula on", ownerCase, nil, http.StatusOK, ""},
-		{"admin puts an employee doula on", adminCase, nil, http.StatusOK, ""},
-		{"owner puts on an admin who is a contractor doula", ownerCase, []fixture.StaffOption{fixture.Admin(), fixture.Doula(), fixture.Contractor()}, http.StatusOK, ""},
-		{"a doula cannot put a colleague on", employeeDoulaCase, nil, http.StatusForbidden, apierr.CodeForbidden},
-		{"a contractor goes on by an offer", ownerCase, asContractor, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument},
-		{"a staff member with no doula role", ownerCase, []fixture.StaffOption{fixture.Roles(adminRole)}, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument},
+		{"owner puts an employee doula on", fixture.OwnerCase, nil, http.StatusOK, ""},
+		{"admin puts an employee doula on", fixture.AdminCase, nil, http.StatusOK, ""},
+		{"owner puts on an admin who is a contractor doula", fixture.OwnerCase, []fixture.StaffOption{fixture.Admin(), fixture.Doula(), fixture.Contractor()}, http.StatusOK, ""},
+		{"a doula cannot put a colleague on", fixture.EmployeeDoulaCase, nil, http.StatusForbidden, apierr.CodeForbidden},
+		{"a contractor goes on by an offer", fixture.OwnerCase, asContractor, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument},
+		{"a staff member with no doula role", fixture.OwnerCase, []fixture.StaffOption{fixture.Roles(adminRole)}, http.StatusUnprocessableEntity, apierr.CodeInvalidArgument},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -122,7 +122,7 @@ func TestAttachDoulaHandler_RoleTable(t *testing.T) {
 // TestAttachDoulaHandler_ContractorRefusalNamesTheOffer: the refusal
 // names her and the way she does go on.
 func TestAttachDoulaHandler_ContractorRefusalNamesTheOffer(t *testing.T) {
-	e := newAttachingEnv(t, ownerCase, []fixture.StaffOption{fixture.Contractor()}, withEngagement(fixture.Status(fixture.StatusActive)))
+	e := newAttachingEnv(t, fixture.OwnerCase, []fixture.StaffOption{fixture.Contractor()}, withEngagement(fixture.Status(fixture.StatusActive)))
 
 	body := e.put(http.StatusUnprocessableEntity)
 
@@ -135,7 +135,7 @@ func TestAttachDoulaHandler_ContractorRefusalNamesTheOffer(t *testing.T) {
 // TestAttachDoulaHandler_SafeToRepeat: a Doula already on it gets the
 // same 200 and nothing more is written.
 func TestAttachDoulaHandler_SafeToRepeat(t *testing.T) {
-	e := newAttachingEnv(t, ownerCase, nil, withEngagement(fixture.Status(fixture.StatusActive)))
+	e := newAttachingEnv(t, fixture.OwnerCase, nil, withEngagement(fixture.Status(fixture.StatusActive)))
 
 	e.put(http.StatusOK)
 	second := e.put(http.StatusOK)
@@ -152,7 +152,7 @@ func TestAttachDoulaHandler_SafeToRepeat(t *testing.T) {
 // who is a Doula puts a colleague on, and the answer still says she can
 // put herself on too.
 func TestAttachDoulaHandler_ACallerWhoIsADoulaKeepsHerOwnControl(t *testing.T) {
-	e := newAttachingEnv(t, roleCase{"owner and doula", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}}, nil)
+	e := newAttachingEnv(t, fixture.OwnerAndDoulaCase, nil)
 
 	if body := e.put(http.StatusOK); !body.CanAttachSelf {
 		t.Fatal("canAttachSelf = false, want true")
@@ -163,7 +163,7 @@ func TestAttachDoulaHandler_ACallerWhoIsADoulaKeepsHerOwnControl(t *testing.T) {
 // another Practice's Engagement, a person not at this Practice, and
 // malformed ids.
 func TestAttachDoulaHandler_Refusals(t *testing.T) {
-	e := newAttachingEnv(t, ownerCase, nil)
+	e := newAttachingEnv(t, fixture.OwnerCase, nil)
 	completed := e.AnotherEngagement(fixture.Status(fixture.StatusCompleted))
 	otherPractice := fixture.Practice(t, e.DB)
 	otherEngagement := fixture.Engagement(t, e.DB, otherPractice)

@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"testing"
 	"time"
 
@@ -48,6 +49,7 @@ type Scene struct {
 	// she was seeded WithPortalLogin.
 	AsClient reqtest.Option
 
+	mu sync.Mutex
 	at time.Time
 }
 
@@ -109,8 +111,8 @@ func Attached() SceneOption {
 	}
 }
 
-// At fixes the instant every request is served at. The zero time leaves
-// the real clock in place.
+// At fixes the instant every request is served at, until the test moves it
+// with MoveClockTo. The zero time leaves the real clock in place.
 func At(at time.Time) SceneOption {
 	return func(s *sceneSpec) { s.at = at }
 }
@@ -157,7 +159,7 @@ func NewScene(t *testing.T, mount Mount, opts ...SceneOption) *Scene {
 	}
 	var handler http.Handler = mux
 	if !spec.at.IsZero() {
-		handler = clock.Middleware(func() time.Time { return spec.at })(mux)
+		handler = clock.Middleware(s.now)(mux)
 	}
 	s.Srv = httptest.NewServer(handler)
 	t.Cleanup(s.Srv.Close)
@@ -169,10 +171,31 @@ func NewScene(t *testing.T, mount Mount, opts ...SceneOption) *Scene {
 // clock does not read it as expired or not yet begun.
 func (s *Scene) As(who Signer) reqtest.Option {
 	s.T.Helper()
-	if s.at.IsZero() {
+	at := s.now()
+	if at.IsZero() {
 		return reqtest.Session(Session(s.T, s.DB, who))
 	}
-	return reqtest.Session(authntest.SeedSessionAt(s.T, s.DB.App, who.identity(), s.at))
+	return reqtest.Session(authntest.SeedSessionAt(s.T, s.DB.App, who.identity(), at))
+}
+
+func (s *Scene) now() time.Time {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.at
+}
+
+// MoveClockTo moves the instant requests are served at, for a test that
+// crosses a date. A session minted before the move is judged at the new
+// instant, so a test that moves far enough signs in again with As.
+func (s *Scene) MoveClockTo(at time.Time) {
+	s.T.Helper()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.at.IsZero() {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is misused
+		s.T.Fatal("fixture: MoveClockTo needs a Scene built with At")
+	}
+	s.at = at
 }
 
 // Colleague is another Staff member at the Practice.

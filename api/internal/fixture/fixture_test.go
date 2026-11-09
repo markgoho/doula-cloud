@@ -46,7 +46,7 @@ func TestStaff_DefaultsToAnEmployeeDoula(t *testing.T) {
 	}
 	roles := testdb.Scalar[string](t, db.Admin,
 		`SELECT roles::text FROM practice_memberships WHERE staff_id = $1 AND practice_id = $2`, s.ID, p.ID)
-	if roles != "{doula}" || s.Employment != "employee" || s.PracticeID != p.ID {
+	if roles != "{doula}" || s.Employment != employeeType || s.PracticeID != p.ID {
 		t.Fatalf("roles = %s, record = %+v, want an employee Doula at the Practice", roles, s)
 	}
 }
@@ -59,12 +59,12 @@ func TestStaff_OptionsShowTheState(t *testing.T) {
 		fixture.Owner(), fixture.Admin(), fixture.Doula(), fixture.Contractor(),
 		fixture.StaffName("Renata Alvarez"), fixture.StaffUID("renata"))
 
-	if s.UID != "renata" || !slices.Equal(s.Roles, []string{fixture.RoleOwner, fixture.RoleAdmin, fixture.RoleDoula}) || s.Employment != "contractor" {
+	if s.UID != "renata" || !slices.Equal(s.Roles, []string{fixture.RoleOwner, fixture.RoleAdmin, fixture.RoleDoula}) || s.Employment != contractorType {
 		t.Fatalf("record = %+v, want Renata as a contractor Owner, Admin and Doula", s)
 	}
 	first := testdb.Scalar[string](t, db.Admin, `SELECT first_name || ' ' || last_name FROM staff WHERE id = $1`, s.ID)
 	employment := testdb.Scalar[string](t, db.Admin, `SELECT employment_type::text FROM practice_memberships WHERE staff_id = $1`, s.ID)
-	if first != "Renata Alvarez" || employment != "contractor" {
+	if first != "Renata Alvarez" || employment != contractorType {
 		t.Fatalf("stored name = %q, employment = %q", first, employment)
 	}
 }

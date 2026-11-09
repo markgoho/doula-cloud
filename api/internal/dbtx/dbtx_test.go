@@ -11,11 +11,7 @@ import (
 
 func TestStrings(t *testing.T) {
 	db := testdb.New(t)
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	tx := db.BeginAdmin(t)
 
 	got, err := dbtx.Strings(t.Context(), tx, `SELECT s FROM unnest($1::text[]) AS s`, []string{"a", "b"})
 	if err != nil || len(got) != 2 || got[0] != "a" || got[1] != "b" {

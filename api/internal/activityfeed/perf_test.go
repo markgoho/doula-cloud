@@ -170,14 +170,8 @@ func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
 // returns its lines.
 func explainFeedPlan(t *testing.T, db *testdb.DB, practiceID, label string, rowCount int) []string {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
 
 	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+listPracticeActivityQuery, practiceID)
 	if err != nil {

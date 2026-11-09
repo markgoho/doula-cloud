@@ -118,18 +118,9 @@ func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	r.process(t)
 
 	status, token := r.state(t)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
-	}
-	if token.Valid {
-		t.Fatal("token still set once sent, want NULL")
-	}
-	sent := r.sender.Sent()
-	if len(sent) != 1 || sent[0].To != "owner@example.com" {
-		t.Fatalf("sent = %+v, want one message to owner@example.com", sent)
-	}
-	if !strings.Contains(sent[0].Text, "Priya Raman") || !strings.Contains(sent[0].Text, "87654321") {
-		t.Fatalf("mail body = %q, want it to name the subject and carry the code", sent[0].Text)
+	msg := testdb.RequireSentAndTokenCleared(t, status, token, r.sender, "owner@example.com")
+	if !strings.Contains(msg.Text, "Priya Raman") || !strings.Contains(msg.Text, "87654321") {
+		t.Fatalf("mail body = %q, want it to name the subject and carry the code", msg.Text)
 	}
 }
 

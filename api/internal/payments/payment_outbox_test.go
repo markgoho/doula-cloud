@@ -60,11 +60,7 @@ func TestQueuePaymentReceivedNotification_InsertsPendingRow(t *testing.T) {
 	paymentID := testdb.Scalar[string](t, db.Admin, `INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_queue_insert', 5000, now(), 'stripe') RETURNING id`,
 		invoiceID)
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
+	tx := db.BeginAs(t)
 
 	if err := payments.QueuePaymentReceivedNotification(t.Context(), tx, paymentID, practiceID); err != nil {
 		t.Fatalf("QueuePaymentReceivedNotification: %v", err)

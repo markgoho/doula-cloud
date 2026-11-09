@@ -3,6 +3,7 @@ package testdb_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -49,22 +50,43 @@ func TestRunAsWorker_OpensTheTrustedDoorForThePass(t *testing.T) {
 	}
 }
 
+func TestRunAsAdminWorker_CommitsThePassOutsideEveryPolicy(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Admin Worker Practice")
+
+	db.RunAsAdminWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `UPDATE practices SET name = 'Worked' WHERE id = $1`, practiceID)
+		if err != nil {
+			return fmt.Errorf("rename: %w", err)
+		}
+		return nil
+	})
+
+	if got := testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID); got != "Worked" {
+		t.Fatalf("name after the pass = %q, want Worked", got)
+	}
+}
+
 func TestSessionVars_NameTheirSettings(t *testing.T) {
 	cases := map[string]testdb.SessionVar{
 		"app.current_practice_id":  testdb.Practice("p"),
 		"app.current_client_id":    testdb.Client("p"),
 		"app.current_staff_id":     testdb.Staff("p"),
 		"app.current_identity_uid": testdb.Identity("p"),
+		"app.invite_token":         testdb.InviteToken("p"),
+		"app.invite_token_digest":  testdb.InviteTokenDigest("p"),
 
 		"app.notification_worker_trusted": testdb.NotificationWorker(),
 	}
 	db := testdb.New(t)
-	tx := db.BeginAs(t, testdb.Practice("p"), testdb.Client("c"), testdb.Staff("s"), testdb.Identity("u"), testdb.NotificationWorker())
+	tx := db.BeginAs(t, testdb.Practice("p"), testdb.Client("c"), testdb.Staff("s"), testdb.Identity("u"), testdb.InviteToken("t"), testdb.InviteTokenDigest("d"), testdb.NotificationWorker())
 	want := map[string]string{
 		"app.current_practice_id":  "p",
 		"app.current_client_id":    "c",
 		"app.current_staff_id":     "s",
 		"app.current_identity_uid": "u",
+		"app.invite_token":         "t",
+		"app.invite_token_digest":  "d",
 
 		"app.notification_worker_trusted": workerTrusted,
 	}
@@ -142,5 +164,37 @@ func TestReadAs_ReadsInATransactionScopedToWho(t *testing.T) {
 	}
 	if _, found := testdb.ReadAs(t, db, testdb.Client("00000000-0000-0000-0000-000000000000"), engagementID, read); found {
 		t.Fatalf("a stranger found the Engagement, want it hidden")
+	}
+}
+
+func TestBeginAdmin_KeepsWhatItCommitsAndRollsBackTheRestWhenTheTestEnds(t *testing.T) {
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, "Admin Commit Practice")
+	nameOf := func() string {
+		return testdb.Scalar[string](t, db.Admin, `SELECT name FROM practices WHERE id = $1`, practiceID)
+	}
+	rename := func(t *testing.T, tx *sql.Tx, name string) {
+		t.Helper()
+		if _, err := tx.ExecContext(t.Context(), `UPDATE practices SET name = $1 WHERE id = $2`, name, practiceID); err != nil {
+			t.Fatalf("rename: %v", err)
+		}
+	}
+
+	t.Run("a committed write survives the test", func(t *testing.T) {
+		tx := db.BeginAdmin(t)
+		rename(t, tx, "Committed Name")
+		if err := tx.Commit(); err != nil {
+			t.Fatalf("commit: %v", err)
+		}
+	})
+	if got := nameOf(); got != "Committed Name" {
+		t.Fatalf("name after the committing test = %q, want %q", got, "Committed Name")
+	}
+
+	t.Run("an uncommitted write is rolled back", func(t *testing.T) {
+		rename(t, db.BeginAdmin(t), "Uncommitted Name")
+	})
+	if got := nameOf(); got != "Committed Name" {
+		t.Fatalf("name after the uncommitted test = %q, want %q", got, "Committed Name")
 	}
 }

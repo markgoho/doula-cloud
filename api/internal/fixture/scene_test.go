@@ -34,7 +34,7 @@ func TestScene_SignsTheStaffMemberInAndRefusesAnonymous(t *testing.T) {
 	reqtest.ExpectStatus(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusOK, s.SignedIn)
 	reqtest.ExpectStatus(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusUnauthorized)
 
-	if s.Staff.PracticeID != s.Practice.ID || s.Staff.Employment != "employee" {
+	if s.Staff.PracticeID != s.Practice.ID || s.Staff.Employment != employeeType {
 		t.Fatalf("staff = %+v, want an employee at the Practice", s.Staff)
 	}
 }
@@ -127,5 +127,45 @@ func TestScene_AddsPeopleAndRoutesToThePractice(t *testing.T) {
 	s.Exec(`UPDATE practices SET name = $1 WHERE id = $2`, "Renamed", s.Practice.ID)
 	if got := testdb.Scalar[string](t, s.DB.Admin, `SELECT name FROM practices WHERE id = $1`, s.Practice.ID); got != "Renamed" {
 		t.Fatalf("name = %q, want Renamed", got)
+	}
+}
+
+func TestScene_MoveClockToServesLaterRequestsAtTheNewInstant(t *testing.T) {
+	at := time.Date(2027, 3, 1, 0, 0, 0, 0, time.UTC).Add(-time.Nanosecond)
+	s := fixture.NewScene(t, whoAmI, fixture.At(at))
+	serve := func(who reqtest.Option) string {
+		return string(reqtest.ExpectBody(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusOK, who))
+	}
+	if got := serve(s.SignedIn); got != at.Format(time.RFC3339) {
+		t.Fatalf("served at %q, want %q", got, at.Format(time.RFC3339))
+	}
+
+	moved := at.Add(time.Nanosecond)
+	s.MoveClockTo(moved)
+	if got := serve(s.SignedIn); got != moved.Format(time.RFC3339) {
+		t.Fatalf("served at %q after the move, want %q", got, moved.Format(time.RFC3339))
+	}
+
+	later := at.AddDate(5, 0, 0)
+	s.MoveClockTo(later)
+	reqtest.ExpectStatus(t, http.MethodGet, s.PracticeURL("/whoami"), http.StatusUnauthorized, s.SignedIn)
+	if got := serve(s.As(s.Staff)); got != later.Format(time.RFC3339) {
+		t.Fatalf("served at %q after signing in again, want %q", got, later.Format(time.RFC3339))
+	}
+}
+
+func TestServeStaff_SignsInAtTheRealOrFixedInstant(t *testing.T) {
+	db := testdb.New(t)
+	p := fixture.Practice(t, db)
+	s := fixture.Staff(t, db, p)
+
+	srv, session := fixture.ServeStaff(t, db, s.UID, fixture.Routes(alsoThere))
+	reqtest.ExpectStatus(t, http.MethodGet, srv.URL+"/api/practices/"+p.ID+"/also", http.StatusNoContent, reqtest.Session(session))
+
+	at := time.Now().AddDate(5, 0, 0).UTC()
+	srvAt, sessionAt := fixture.ServeStaffAt(t, db, s.UID, whoAmI, at)
+	got := reqtest.ExpectBody(t, http.MethodGet, srvAt.URL+"/api/practices/"+p.ID+"/whoami", http.StatusOK, reqtest.Session(sessionAt))
+	if string(got) != at.Format(time.RFC3339) {
+		t.Fatalf("served at %q, want %q", got, at.Format(time.RFC3339))
 	}
 }

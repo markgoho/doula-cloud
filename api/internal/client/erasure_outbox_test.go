@@ -479,17 +479,7 @@ func forceOutboxDueNow(t *testing.T, db *testdb.DB, clientID string) {
 // the way outbox.ProcessHandler does in production.
 func runWorker(t *testing.T, db *testdb.DB, worker client.ErasureWorker) {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := worker.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("process pending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsAdminWorker(t, worker.ProcessPending)
 }
 
 // readOutbox reads every queued act for clientID as "act|target" ->

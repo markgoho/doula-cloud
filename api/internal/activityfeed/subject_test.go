@@ -18,14 +18,7 @@ import (
 // itself.
 func beginScopedTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	return tx
 }
 

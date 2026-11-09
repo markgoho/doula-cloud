@@ -39,7 +39,7 @@ func (e *env) seedVisitAt(staffID, when string) {
 // on an active Engagement.
 func ownerWithDoulaOnIt(t *testing.T) attachingEnv {
 	t.Helper()
-	e := newAttachingEnv(t, ownerCase, nil, withEngagement(fixture.Status(fixture.StatusActive)))
+	e := newAttachingEnv(t, fixture.OwnerCase, nil, withEngagement(fixture.Status(fixture.StatusActive)))
 	e.put(http.StatusOK)
 	return e
 }
@@ -108,7 +108,7 @@ func TestTakeOffDoulaHandler_SafeToRepeat(t *testing.T) {
 }
 
 func TestTakeOffDoulaHandler_NobodyIsMailedAboutHerOwnTakingOff(t *testing.T) {
-	e := newAttachingEnv(t, roleCase{"owner and doula", []fixture.StaffOption{fixture.Owner(), fixture.Doula()}}, nil,
+	e := newAttachingEnv(t, fixture.OwnerAndDoulaCase, nil,
 		withEngagement(fixture.Status(fixture.StatusActive)))
 	e.attachDoula(e.Engagement.ID, e.Staff.ID, http.StatusOK)
 

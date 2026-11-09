@@ -2,12 +2,14 @@ package practicename_test
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/practicename"
 	"doula-cloud/api/internal/staffauth"
@@ -24,11 +26,9 @@ const (
 
 func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	practicename.Mount(ir)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return fixture.ServeStaff(t, db, uid, func(_ *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
+		practicename.Mount(ir)
+	})
 }
 
 func putRaw(t *testing.T, srv *httptest.Server, session, practiceID string, body []byte) *http.Response {

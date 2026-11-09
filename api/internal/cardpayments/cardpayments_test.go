@@ -13,10 +13,7 @@ func TestClientsCanPay(t *testing.T) {
 
 	read := func() bool {
 		t.Helper()
-		tx, err := db.Admin.BeginTx(t.Context(), nil)
-		if err != nil {
-			t.Fatalf("begin: %v", err)
-		}
+		tx := db.BeginAdmin(t)
 		defer func() { _ = tx.Rollback() }()
 		canPay, err := cardpayments.ClientsCanPay(t.Context(), tx, practiceID)
 		if err != nil {

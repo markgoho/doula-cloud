@@ -56,20 +56,7 @@ func portalUserIDForClient(t *testing.T, db *testdb.DB, clientID string) string 
 // handler drives it, without going through HTTP.
 func runWorker(t *testing.T, db *testdb.DB, w portalinvite.Worker) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer tx.Rollback()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
-		t.Fatalf("set trusted session var: %v", err)
-	}
-	if err := w.ProcessPending(t.Context(), tx); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.RunAsWorker(t, w.ProcessPending)
 }
 
 func outboxRowState(t *testing.T, db *testdb.DB, id string) (status string) {

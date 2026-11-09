@@ -566,11 +566,7 @@ func TestScheduleHandler_ConcurrentReschedulesRecordTheTrueBefore(t *testing.T) 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	standIn, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin stand-in transaction: %v", err)
-	}
-	defer func() { _ = standIn.Rollback() }()
+	standIn := db.BeginAdmin(t)
 	var locked sql.NullTime
 	if err := standIn.QueryRowContext(t.Context(),
 		`SELECT scheduled_at FROM visits WHERE id = $1 FOR UPDATE`, visitID,
@@ -1049,11 +1045,7 @@ func TestNotesHandler_ConcurrentEditsRecordTheTrueHadNotes(t *testing.T) {
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()
 
-	standIn, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin stand-in transaction: %v", err)
-	}
-	defer func() { _ = standIn.Rollback() }()
+	standIn := db.BeginAdmin(t)
 	var locked sql.NullString
 	if err := standIn.QueryRowContext(t.Context(),
 		`SELECT notes FROM visits WHERE id = $1 FOR UPDATE`, visitID,

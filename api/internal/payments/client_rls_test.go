@@ -19,14 +19,7 @@ import (
 // session for clientID. The caller rolls it back.
 func clientTx(t *testing.T, db *testdb.DB, clientID string) *sql.Tx {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_client_id', $1, true)`, clientID); err != nil {
-		t.Fatalf("set_config: %v", err)
-	}
+	tx := db.BeginAs(t, testdb.Client(clientID))
 	return tx
 }
 
