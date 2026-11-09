@@ -1,13 +1,10 @@
 package activityfeed_test
 
 import (
-	"encoding/json/v2"
-	"net/http"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -19,18 +16,7 @@ func TestPracticeHandler_NamesAnOperatorAsThePersonWithDoulaCloud(t *testing.T) 
 	testdb.SeedOperatorActivity(t, db, practiceID, activity.SubjectPractice, practiceID, "credits_refunded", "Mark Goho",
 		time.Date(2026, 10, 30, 14, 0, 0, 0, time.UTC))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 1 {
 		t.Fatalf("Items = %d, want 1", len(got.Items))
 	}

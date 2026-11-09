@@ -1,12 +1,12 @@
 package portalinvite_test
 
 import (
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/reqtest"
@@ -27,42 +27,52 @@ const doulaRole = "doula"
 // if the two drift apart.
 const invitedAddress = "invited@example.com"
 
-// newInviteServer mounts this package's whole surface through
+const (
+	notAUUID    = "not-a-uuid"
+	unknownUUID = "00000000-0000-0000-0000-000000000000"
+)
+
+func mount(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+	portalinvite.Mount(g, ir, app, &tasknudge.FakeEnqueuer{})
+}
+
+// newInviteScene mounts this package's whole surface through
 // portalinvite.Mount, the same call main.go makes on the real GatedRouter
-// and idempotency.Router, and seeds a live session for uid, returning the
-// token its __session cookie carries.
-func newInviteServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
+// and idempotency.Router, with a Doula at the screen. The Client-portal
+// invitation-acceptance route is one of the routes: public and pre-account
+// (#617), the invitation token itself is the whole credential, so a
+// request to it reads no session.
+func newInviteScene(t *testing.T, opts ...fixture.SceneOption) *fixture.Scene {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return fixture.NewScene(t, mount, opts...)
 }
 
-// newAcceptServer mounts this package's whole surface, the same as
-// newInviteServer -- the Client-portal invitation-acceptance route is one
-// of them. Public and pre-account (#617): the invitation token itself is
-// the whole credential, so this reads no Bearer token and no session.
-func newAcceptServer(db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
-	return httptest.NewServer(mux)
+// newAcceptScene is a server with nobody signed in, for the accept route.
+func newAcceptScene(t *testing.T) *fixture.Scene {
+	t.Helper()
+	return newInviteScene(t, fixture.NobodySignedIn())
 }
 
-func postInvite(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	url := srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/portal-invite"
-	resp := reqtest.Post(t, url, reqtest.Session(session))
-	return resp
+// invitedClient is the Client a staff-side test invites: named, and
+// reachable at email, which can be empty for a Client with no address on
+// file.
+func invitedClient(name, email string) fixture.SceneOption {
+	if email == "" {
+		return fixture.WithClient(fixture.ClientName(name), fixture.NoEmail())
+	}
+	return fixture.WithClient(fixture.ClientName(name), fixture.ClientEmail(email))
 }
 
-func postAccept(t *testing.T, srv *httptest.Server, body any) *http.Response {
+// invitePath is the portal-invite route of one Engagement.
+func invitePath(engagementID string) string {
+	return "/engagements/" + engagementID + "/portal-invite"
+}
+
+// acceptInvite posts an accept for token and requires the status want.
+func acceptInvite(t *testing.T, s *fixture.Scene, token string, want int) {
 	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/portal/accept-invite", reqtest.JSON(body))
-	return resp
+	reqtest.ExpectStatus(t, http.MethodPost, s.URL("/api/portal/accept-invite"), want,
+		reqtest.JSON(portalinvite.AcceptInviteRequest{InviteToken: token}))
 }
 
 // seedPendingPortalInvite seeds a Practice, a Staff member, a Client with

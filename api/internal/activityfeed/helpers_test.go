@@ -7,6 +7,7 @@ import (
 
 	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
@@ -35,16 +36,16 @@ func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, s
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
+// readFeed signs in as uid and reads the first page of the Practice's
+// activity feed.
+func readFeed(t *testing.T, db *testdb.DB, uid, practiceID string) activityfeed.ListResponse {
+	t.Helper()
+	srv, session := newServer(t, db, uid)
+	defer srv.Close()
+	return reqtest.Expect[activityfeed.ListResponse](t, http.MethodGet, srv.URL+"/api/practices/"+practiceID+"/activity", http.StatusOK, reqtest.Session(session))
+}
+
 func authedGet(t *testing.T, session, url string) *http.Response {
 	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
+	return reqtest.Get(t, url, reqtest.Session(session))
 }

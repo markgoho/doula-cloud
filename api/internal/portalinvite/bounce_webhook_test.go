@@ -11,18 +11,51 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
 
-const bounceWebhookTestKey = "mailgun-signing-key-test"
+const (
+	bounceWebhookTestKey = "mailgun-signing-key-test"
 
-func newBounceWebhookServer(db *testdb.DB, signingKey string) *httptest.Server {
+	// signatureField is Mailgun's name for both the signature envelope and
+	// the HMAC inside it, in every payload this package's tests build.
+	signatureField = "signature"
+
+	statusBounced    = "bounced"
+	statusComplained = "complained"
+	statusDelivered  = "delivered"
+	eventFailed      = "failed"
+	severityPerm     = "permanent"
+	someoneElsewhere = "someone@example.test"
+)
+
+// bounceEnv is what a Mailgun webhook test starts from: a database and a
+// server carrying the webhook route. Nobody is signed in; the signature
+// is the whole credential.
+type bounceEnv struct {
+	T   *testing.T
+	DB  *testdb.DB
+	Srv *httptest.Server
+}
+
+func newBounceEnv(t *testing.T, signingKey string) *bounceEnv {
+	t.Helper()
+	db := testdb.New(t)
 	mux := http.NewServeMux()
 	mux.Handle("POST /mailgun/webhook", webhookarrival.Record(db.App, webhookarrival.Mailgun, portalinvite.PostBounceWebhookHandler(db.App, signingKey)))
-	return httptest.NewServer(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return &bounceEnv{T: t, DB: db, Srv: srv}
+}
+
+// deliver posts payload as Mailgun would and requires the status want.
+func (e *bounceEnv) deliver(payload []byte, want int) {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.Srv.URL+"/mailgun/webhook", want, reqtest.Body("", payload))
 }
 
 // signedMailgunPayload builds a Mailgun webhook body around event/severity/
@@ -32,6 +65,15 @@ func newBounceWebhookServer(db *testdb.DB, signingKey string) *httptest.Server {
 // A wrong signingKey produces a body whose signature won't verify, for the
 // invalid-signature test.
 func signedMailgunPayload(t *testing.T, signingKey, event, severity, recipient, eventID string) []byte {
+	t.Helper()
+	return signedMailgunPayloadWithReason(t, signingKey, event, severity, recipient, eventID, "")
+}
+
+// signedMailgunPayloadWithReason is signedMailgunPayload plus the
+// event-data.reason field ADR-0029 reads to tell a first-time SMTP
+// rejection from a send Mailgun refused because the address was already
+// on its own suppression list.
+func signedMailgunPayloadWithReason(t *testing.T, signingKey, event, severity, recipient, eventID, reason string) []byte {
 	t.Helper()
 	timestamp := "1700000000"
 	token := "test-token-0123456789"
@@ -50,6 +92,7 @@ func signedMailgunPayload(t *testing.T, signingKey, event, severity, recipient, 
 			"event":     event,
 			"recipient": recipient,
 			"severity":  severity,
+			"reason":    reason,
 		},
 	}
 	b, err := json.Marshal(body)
@@ -57,12 +100,6 @@ func signedMailgunPayload(t *testing.T, signingKey, event, severity, recipient, 
 		t.Fatalf("marshal payload: %v", err)
 	}
 	return b
-}
-
-func postBounceWebhook(t *testing.T, srv *httptest.Server, payload []byte) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/mailgun/webhook", reqtest.Body("", payload))
-	return resp
 }
 
 // seedSentOutboxRow seeds a Client (via seedPendingPortalInvite) and marks
@@ -85,192 +122,148 @@ func seedSentOutboxRow(t *testing.T, db *testdb.DB) (outboxID, email string) {
 	return outboxID, email
 }
 
-func TestPostBounceWebhookHandler_HardBounceMarksRowBounced(t *testing.T) {
-	db := testdb.New(t)
-	outboxID, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "failed", "permanent", email, "event-bounce-1")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+// suppressionState reads the row, if any, the webhook wrote for address.
+func suppressionState(t *testing.T, db *testdb.DB, address string) (found bool, cause, eventID string) {
+	t.Helper()
+	err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT cause, coalesce(mailgun_event_id, '') FROM email_suppressions WHERE address = $1 AND cleared_at IS NULL`,
+		mailsuppress.Normalize(address),
+	).Scan(&cause, &eventID)
+	if err != nil {
+		return false, "", ""
 	}
-	status := outboxRowState(t, db, outboxID)
-	if status != "bounced" {
-		t.Fatalf("status = %q, want bounced", status)
-	}
+	return true, cause, eventID
 }
 
-func TestPostBounceWebhookHandler_ComplaintMarksRowComplained(t *testing.T) {
-	db := testdb.New(t)
-	outboxID, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "complained", "", email, "event-complaint-1")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+// TestPostBounceWebhookHandler_Outcomes is what each kind of Mailgun event
+// does to the sent row and to the address's suppression. A complaint or a
+// permanent failure marks the row and suppresses the address; everything
+// else Mailgun reports leaves both alone -- an opened or temporarily
+// deferred message must not silently stop a Practice's mail.
+func TestPostBounceWebhookHandler_Outcomes(t *testing.T) {
+	cases := []struct {
+		name                         string
+		event, severity, reason      string
+		alreadyComplained            bool
+		wantStatus                   string
+		wantSuppressed               bool
+		wantCause, wantSuppressEvent string
+	}{
+		{
+			name: "a hard bounce", event: eventFailed, severity: severityPerm, reason: "bounce",
+			wantStatus: statusBounced, wantSuppressed: true, wantCause: mailsuppress.CauseBounce,
+		},
+		{
+			name: "a complaint", event: statusComplained,
+			wantStatus: statusComplained, wantSuppressed: true, wantCause: mailsuppress.CauseComplaint, wantSuppressEvent: "evt-1",
+		},
+		{name: "a temporary failure", event: eventFailed, severity: "temporary", wantStatus: testOutboxStatusSent},
+		{name: "a delivery", event: statusDelivered, wantStatus: testOutboxStatusSent},
+		{
+			// A "suppress-*" reason is Mailgun declining a send it never
+			// attempted. Writing a fresh suppression there would downgrade
+			// a permanent, never-clearable complaint into a clearable
+			// bounce on the next retry.
+			name: "a refusal because the address is already suppressed", event: eventFailed, severity: severityPerm, reason: "suppress-complaint",
+			alreadyComplained: true, wantSuppressed: true, wantCause: mailsuppress.CauseComplaint, wantSuppressEvent: "evt-complaint",
+		},
 	}
-	status := outboxRowState(t, db, outboxID)
-	if status != "complained" {
-		t.Fatalf("status = %q, want complained", status)
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newBounceEnv(t, bounceWebhookTestKey)
+			outboxID, email := seedSentOutboxRow(t, e.DB)
+			if c.alreadyComplained {
+				if err := mailsuppress.Record(t.Context(), e.DB.App, email, mailsuppress.CauseComplaint, "evt-complaint"); err != nil {
+					t.Fatalf("seed suppression: %v", err)
+				}
+			}
 
-func TestPostBounceWebhookHandler_TemporaryFailureLeavesRowUntouched(t *testing.T) {
-	db := testdb.New(t)
-	outboxID, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
+			e.deliver(signedMailgunPayloadWithReason(t, bounceWebhookTestKey, c.event, c.severity, email, "evt-1", c.reason), http.StatusOK)
 
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "failed", "temporary", email, "event-temp-1")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	status := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusSent {
-		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
-	}
-}
-
-func TestPostBounceWebhookHandler_UnrelatedEventTypeLeavesRowUntouched(t *testing.T) {
-	db := testdb.New(t)
-	outboxID, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "delivered", "", email, "event-delivered-1")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	status := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusSent {
-		t.Fatalf("status = %q, want %s", status, testOutboxStatusSent)
+			if c.wantStatus != "" {
+				if status := outboxRowState(t, e.DB, outboxID); status != c.wantStatus {
+					t.Errorf("outbox status = %q, want %q", status, c.wantStatus)
+				}
+			}
+			found, cause, eventID := suppressionState(t, e.DB, email)
+			if found != c.wantSuppressed {
+				t.Fatalf("suppression found = %v, want %v", found, c.wantSuppressed)
+			}
+			if cause != c.wantCause {
+				t.Errorf("cause = %q, want %q", cause, c.wantCause)
+			}
+			if c.wantSuppressEvent != "" && eventID != c.wantSuppressEvent {
+				t.Errorf("mailgun_event_id = %q, want %q", eventID, c.wantSuppressEvent)
+			}
+		})
 	}
 }
 
 func TestPostBounceWebhookHandler_UnknownRecipientIsNoOp(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
+	e := newBounceEnv(t, bounceWebhookTestKey)
 
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "failed", "permanent", "nobody@example.test", "event-unknown-1")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
+	e.deliver(signedMailgunPayload(t, bounceWebhookTestKey, eventFailed, severityPerm, "nobody@example.test", "event-unknown-1"), http.StatusOK)
 }
 
 func TestPostBounceWebhookHandler_ReplayedEventIsNotDoubleProcessed(t *testing.T) {
-	db := testdb.New(t)
-	outboxID, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
+	e := newBounceEnv(t, bounceWebhookTestKey)
+	outboxID, email := seedSentOutboxRow(t, e.DB)
+	payload := signedMailgunPayload(t, bounceWebhookTestKey, eventFailed, severityPerm, email, "event-replay-1")
 
-	payload := signedMailgunPayload(t, bounceWebhookTestKey, "failed", "permanent", email, "event-replay-1")
-	resp1 := postBounceWebhook(t, srv, payload)
-	_ = resp1.Body.Close()
-	if resp1.StatusCode != http.StatusOK {
-		t.Fatalf("first delivery status = %d, want %d", resp1.StatusCode, http.StatusOK)
-	}
-
+	e.deliver(payload, http.StatusOK)
 	// Manually revert to 'sent' -- if the replay were reprocessed, this
-	// would flip back to 'bounced' and the test below would pass for the
+	// would flip back to 'bounced' and the check below would pass for the
 	// wrong reason.
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE portal_invite_outbox SET status = 'sent' WHERE id = $1`, outboxID); err != nil {
+	if _, err := e.DB.Admin.ExecContext(t.Context(), `UPDATE portal_invite_outbox SET status = 'sent' WHERE id = $1`, outboxID); err != nil {
 		t.Fatalf("revert outbox row: %v", err)
 	}
+	e.deliver(payload, http.StatusOK)
 
-	resp2 := postBounceWebhook(t, srv, payload)
-	defer resp2.Body.Close()
-	if resp2.StatusCode != http.StatusOK {
-		t.Fatalf("replayed delivery status = %d, want %d", resp2.StatusCode, http.StatusOK)
-	}
-	status := outboxRowState(t, db, outboxID)
-	if status != testOutboxStatusSent {
+	if status := outboxRowState(t, e.DB, outboxID); status != testOutboxStatusSent {
 		t.Fatalf("status = %q, want %s (replay must not reprocess)", status, testOutboxStatusSent)
 	}
 }
 
-func TestPostBounceWebhookHandler_InvalidSignatureRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	payload := signedMailgunPayload(t, "wrong-key", "failed", "permanent", "someone@example.test", "event-bad-sig")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+func TestPostBounceWebhookHandler_Refusals(t *testing.T) {
+	cases := []struct {
+		name string
+		// configuredKey is the key the server verifies with.
+		configuredKey string
+		payload       func(t *testing.T) []byte
+	}{
+		{
+			name:          "a signature made with the wrong key",
+			configuredKey: bounceWebhookTestKey,
+			payload: func(t *testing.T) []byte {
+				return signedMailgunPayload(t, "wrong-key", eventFailed, severityPerm, someoneElsewhere, "event-bad-sig")
+			},
+		},
+		{
+			name:          "no key configured",
+			configuredKey: "",
+			payload: func(t *testing.T) []byte {
+				return signedMailgunPayload(t, "", eventFailed, severityPerm, someoneElsewhere, "event-empty-key")
+			},
+		},
+		{
+			name:          "no signature fields",
+			configuredKey: bounceWebhookTestKey,
+			payload: func(*testing.T) []byte {
+				return []byte(`{"event-data": {"id": "event-no-sig", "event": "failed", "severity": "permanent", "recipient": "someone@example.test"}}`)
+			},
+		},
+		{name: "a body that is not JSON", configuredKey: bounceWebhookTestKey, payload: func(*testing.T) []byte { return []byte("not json") }},
+		{
+			name:          "a body over the limit",
+			configuredKey: bounceWebhookTestKey,
+			payload:       func(*testing.T) []byte { return []byte(strings.Repeat("a", (1<<20)+1)) },
+		},
 	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newBounceEnv(t, c.configuredKey)
 
-func TestPostBounceWebhookHandler_EmptyConfiguredKeyAlwaysRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, "")
-	defer srv.Close()
-
-	payload := signedMailgunPayload(t, "", "failed", "permanent", "someone@example.test", "event-empty-key")
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-func TestPostBounceWebhookHandler_MissingSignatureFieldsRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	payload := []byte(`{"event-data": {"id": "event-no-sig", "event": "failed", "severity": "permanent", "recipient": "someone@example.test"}}`)
-	resp := postBounceWebhook(t, srv, payload)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-func TestPostBounceWebhookHandler_MalformedBodyRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	resp := postBounceWebhook(t, srv, []byte("not json"))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-func TestPostBounceWebhookHandler_OversizedBodyRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
-
-	oversized := []byte(strings.Repeat("a", (1<<20)+1))
-	resp := postBounceWebhook(t, srv, oversized)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			e.deliver(c.payload(t), http.StatusBadRequest)
+		})
 	}
 }

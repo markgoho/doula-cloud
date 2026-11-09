@@ -1,39 +1,20 @@
 package billing_test
 
 import (
-	"encoding/json/v2"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/legal"
-	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
 // errStripeFake is returned by FakeStripeClient methods in tests that
 // exercise a handler's Stripe-failure path.
+const quantityFive = `{"quantity": 5}`
+
 var errStripeFake = errors.New("stripe: fake failure")
-
-func newPurchaseServer(t *testing.T, db *testdb.DB, uid string, stripeClient billing.StripeClient) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	billing.Mount(g, ir, stripeClient, legal.Terms)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/billing/purchases", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
-	return resp
-}
 
 func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
 	t.Helper()
@@ -46,42 +27,26 @@ func stripeCustomerID(t *testing.T, db *testdb.DB, practiceID string) *string {
 // on the Practice, and returns a Checkout Session URL tagged with the
 // right metadata.
 func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
+	e := newEnv(t)
 
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
+	out := e.purchase("5")
 
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out billing.PurchaseResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.CheckoutURL == "" {
 		t.Fatal("checkoutUrl is empty")
 	}
-
-	calls := stripeClient.Calls()
+	calls := e.Stripe.Calls()
 	if len(calls) != 1 {
 		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
 	}
-	if calls[0].PracticeID != practiceID || calls[0].Quantity != 5 {
-		t.Fatalf("checkout session call = %+v, want practiceID %q, quantity 5", calls[0], practiceID)
+	if calls[0].PracticeID != e.Practice.ID || calls[0].Quantity != 5 {
+		t.Fatalf("checkout session call = %+v, want practiceID %q, quantity 5", calls[0], e.Practice.ID)
 	}
 	// The sole Staff member works in New York, so the sale is wholly
 	// taxable and the Checkout page keeps its ordinary single line item.
 	if calls[0].NewYorkStaff != 1 || calls[0].TotalStaff != 1 {
 		t.Fatalf("apportionment = %d of %d, want 1 of 1", calls[0].NewYorkStaff, calls[0].TotalStaff)
 	}
-
-	id := stripeCustomerID(t, db, practiceID)
+	id := stripeCustomerID(t, e.DB, e.Practice.ID)
 	if id == nil || *id == "" {
 		t.Fatal("stripe_customer_id was not persisted")
 	}
@@ -93,25 +58,9 @@ func TestPostPurchaseHandler_OwnerCreatesCustomerAndCheckoutSession(t *testing.T
 // TestPostPurchaseHandler_AdminCanPurchase proves ADR-0017's correction:
 // an Admin, not only an Owner, may buy Credits.
 func TestPostPurchaseHandler_AdminCanPurchase(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-admin"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"admin"}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
+	e := newEnv(t, signedInAs(fixture.Admin()))
 
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 3}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	var out billing.PurchaseResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	if out.CheckoutURL == "" {
+	if out := e.purchase("3"); out.CheckoutURL == "" {
 		t.Fatal("checkoutUrl is empty")
 	}
 }
@@ -119,142 +68,73 @@ func TestPostPurchaseHandler_AdminCanPurchase(t *testing.T) {
 // TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer proves a
 // Practice's second purchase does not create a second Stripe Customer.
 func TestPostPurchaseHandler_SecondPurchaseReusesExistingCustomer(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-owner-repeat"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
+	e := newEnv(t)
 
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
+	e.purchase("3")
+	firstCustomerID := stripeCustomerID(t, e.DB, e.Practice.ID)
+	e.purchase("10")
 
-	first := postPurchase(t, srv, session, practiceID, `{"quantity": 3}`)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first purchase status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-	firstCustomerID := stripeCustomerID(t, db, practiceID)
-
-	second := postPurchase(t, srv, session, practiceID, `{"quantity": 10}`)
-	_ = second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second purchase status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	if got := stripeClient.CustomerCallCount(); got != 1 {
+	if got := e.Stripe.CustomerCallCount(); got != 1 {
 		t.Fatalf("CreateCustomer call count = %d, want 1", got)
 	}
-	if got := stripeCustomerID(t, db, practiceID); got == nil || *got != *firstCustomerID {
+	if got := stripeCustomerID(t, e.DB, e.Practice.ID); got == nil || *got != *firstCustomerID {
 		t.Fatalf("stripe_customer_id changed across purchases: first %v, second %v", firstCustomerID, got)
 	}
-	if got := len(stripeClient.Calls()); got != 2 {
+	if got := len(e.Stripe.Calls()); got != 2 {
 		t.Fatalf("CreateCheckoutSession calls = %d, want 2", got)
 	}
 }
 
-// TestPostPurchaseHandler_NonOwnerForbidden proves a non-Owner Staff
-// member cannot initiate a purchase.
-func TestPostPurchaseHandler_NonOwnerForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-non-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee") // doula role, not owner
-	stripeClient := billing.NewFakeStripeClient()
-
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+// TestPostPurchaseHandler_Refusals covers what the handler turns away. Each
+// refusal before Stripe leaves it untouched; a Stripe failure surfaces as
+// an internal error, and a failed Customer creation never persists an id.
+func TestPostPurchaseHandler_Refusals(t *testing.T) {
+	cases := []struct {
+		name string
+		// staff is who is at the screen; nil leaves the Owner.
+		staff []fixture.StaffOption
+		body  string
+		// stripeFails shapes the fake client.
+		stripeFails func(*billing.FakeStripeClient)
+		want        int
+		// reachesCheckout is set for the one refusal that happens after
+		// the Customer exists.
+		reachesCheckout bool
+	}{
+		{name: "a non-Owner", staff: []fixture.StaffOption{fixture.Doula()}, body: quantityFive, want: http.StatusForbidden},
+		{name: "a zero quantity", body: `{"quantity": 0}`, want: http.StatusBadRequest},
+		{name: "a body that is not JSON", body: `not json`, want: http.StatusBadRequest},
+		{
+			name: "a Customer Stripe will not create", body: quantityFive, want: http.StatusInternalServerError,
+			stripeFails: func(c *billing.FakeStripeClient) { c.CreateCustomerErr = errStripeFake },
+		},
+		{
+			name: "a Checkout Session Stripe will not create", body: quantityFive, want: http.StatusInternalServerError,
+			stripeFails:     func(c *billing.FakeStripeClient) { c.CreateCheckoutSessionErr = errStripeFake },
+			reachesCheckout: true,
+		},
 	}
-	if got := len(stripeClient.Calls()); got != 0 {
-		t.Fatalf("CreateCheckoutSession calls = %d, want 0", got)
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			stripe := billing.NewFakeStripeClient()
+			if c.stripeFails != nil {
+				c.stripeFails(stripe)
+			}
+			opts := []envOption{withStripe(stripe)}
+			if c.staff != nil {
+				opts = append(opts, signedInAs(c.staff...))
+			}
+			e := newEnv(t, opts...)
 
-// TestPostPurchaseHandler_InvalidQuantityRejected proves a non-positive
-// quantity is rejected before any Stripe call is made.
-func TestPostPurchaseHandler_InvalidQuantityRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-bad-quantity"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
+			e.startPurchase(c.body, c.want)
 
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 0}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if got := len(stripeClient.Calls()); got != 0 {
-		t.Fatalf("CreateCheckoutSession calls = %d, want 0", got)
-	}
-}
-
-// TestPostPurchaseHandler_InvalidBodyRejected proves malformed JSON is
-// rejected with a 400.
-func TestPostPurchaseHandler_InvalidBodyRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-bad-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
-
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `not json`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostPurchaseHandler_CreateCustomerFailureReturns500 proves a Stripe
-// Customer-creation failure surfaces as an internal error and never
-// persists a customer id.
-func TestPostPurchaseHandler_CreateCustomerFailureReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-customer-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
-	stripeClient.CreateCustomerErr = errStripeFake
-
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if got := stripeCustomerID(t, db, practiceID); got != nil {
-		t.Fatalf("stripe_customer_id = %v, want nil (never persisted)", got)
-	}
-}
-
-// TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500 proves a
-// Stripe Checkout Session-creation failure surfaces as an internal error.
-func TestPostPurchaseHandler_CreateCheckoutSessionFailureReturns500(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-checkout-fail"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	stripeClient := billing.NewFakeStripeClient()
-	stripeClient.CreateCheckoutSessionErr = errStripeFake
-
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 5}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
+			if got := len(stripe.Calls()); got != 0 {
+				t.Errorf("CreateCheckoutSession calls = %d, want 0", got)
+			}
+			if got := stripeCustomerID(t, e.DB, e.Practice.ID); got != nil && !c.reachesCheckout {
+				t.Errorf("stripe_customer_id = %v, want nil (never persisted)", *got)
+			}
+		})
 	}
 }
 
@@ -284,67 +164,41 @@ func seedStaffInState(t *testing.T, db *testdb.DB, practiceID, identityUID, work
 
 // TestPostPurchaseHandler_ApportionsByWhereStaffWork proves the headcount
 // New York's sales tax is computed on (#389) is counted from the
-// Practice's own roster: two of its four people work in New York, and
-// that pair -- not the quantity, and not the caseload -- is what reaches
-// Stripe.
+// Practice's own roster, and that pair -- not the quantity, and not the
+// caseload -- is what reaches Stripe. A Practice with nobody in New York
+// reaches Stripe with a zero numerator, which is what makes her purchase
+// carry no New York tax.
 func TestPostPurchaseHandler_ApportionsByWhereStaffWork(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-apportion-owner"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee") // the Owner herself works in NY
-	seedStaffInState(t, db, practiceID, "purchase-apportion-ny", "NY")
-	seedStaffInState(t, db, practiceID, "purchase-apportion-nj", "NJ")
-	seedStaffInState(t, db, practiceID, "purchase-apportion-ca", "CA")
-
-	// A second Practice's out-of-state doula must not dilute the ratio.
-	other := testdb.SeedPractice(t, db, "Other Practice")
-	seedStaffInState(t, db, other, "purchase-apportion-other", "TX")
-
-	stripeClient := billing.NewFakeStripeClient()
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 20}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+	cases := []struct {
+		name string
+		// ownerState is where the Owner at the screen works.
+		ownerState string
+		// colleagues are the work states of the Practice's other Staff.
+		colleagues             []string
+		wantNewYork, wantTotal int
+	}{
+		{name: "two of four work in New York", ownerState: "NY", colleagues: []string{"NY", "NJ", "CA"}, wantNewYork: 2, wantTotal: 4},
+		{name: "wholly out of state", ownerState: "NJ", colleagues: []string{"PA"}, wantNewYork: 0, wantTotal: 2},
 	}
-	calls := stripeClient.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
-	}
-	if calls[0].NewYorkStaff != 2 || calls[0].TotalStaff != 4 {
-		t.Fatalf("apportionment = %d of %d, want 2 of 4", calls[0].NewYorkStaff, calls[0].TotalStaff)
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.Exec(`UPDATE staff SET work_state = $1 WHERE id = $2`, c.ownerState, e.Staff.ID)
+			for i, state := range c.colleagues {
+				seedStaffInState(t, e.DB, e.Practice.ID, "apportion-"+string(rune('a'+i)), state)
+			}
+			// A second Practice's out-of-state doula must not dilute the ratio.
+			seedStaffInState(t, e.DB, testdb.SeedPractice(t, e.DB, "Other Practice"), "apportion-other", "TX")
 
-// TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff
-// proves a Practice with nobody in New York reaches Stripe with a zero
-// numerator, which is what makes her purchase carry no New York tax.
-func TestPostPurchaseHandler_WhollyOutOfStatePracticeCountsNoNewYorkStaff(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "purchase-out-of-state-owner"
-	practiceID := testdb.SeedPractice(t, db, "Out Of State Practice")
-	ownerID := testdb.Scalar[string](t, db.Admin, `INSERT INTO staff (identity_uid, first_name, last_name, email, work_state) VALUES ($1, 'Owner', '', 'oos-owner@example.com', 'NJ') RETURNING id`,
-		uid)
-	attachMembership(t, db, practiceID, ownerID, "{owner}")
-	seedStaffInState(t, db, practiceID, "purchase-out-of-state-pa", "PA")
+			e.purchase("20")
 
-	stripeClient := billing.NewFakeStripeClient()
-	srv, session := newPurchaseServer(t, db, uid, stripeClient)
-	defer srv.Close()
-
-	resp := postPurchase(t, srv, session, practiceID, `{"quantity": 4}`)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	calls := stripeClient.Calls()
-	if len(calls) != 1 {
-		t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
-	}
-	if calls[0].NewYorkStaff != 0 || calls[0].TotalStaff != 2 {
-		t.Fatalf("apportionment = %d of %d, want 0 of 2", calls[0].NewYorkStaff, calls[0].TotalStaff)
+			calls := e.Stripe.Calls()
+			if len(calls) != 1 {
+				t.Fatalf("CreateCheckoutSession calls = %d, want 1", len(calls))
+			}
+			if calls[0].NewYorkStaff != c.wantNewYork || calls[0].TotalStaff != c.wantTotal {
+				t.Fatalf("apportionment = %d of %d, want %d of %d", calls[0].NewYorkStaff, calls[0].TotalStaff, c.wantNewYork, c.wantTotal)
+			}
+		})
 	}
 }

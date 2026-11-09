@@ -1,11 +1,9 @@
 package activityfeed_test
 
 import (
-	"encoding/json/v2"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/testdb"
 )
@@ -34,15 +32,7 @@ func TestPracticeHandler_NamesTheClientEveryEngagementAndClientRowIsAbout(t *tes
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, amaraEngagementID, string(activity.ActionContractSent), activity.StaffActor(ownerID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectPractice, practiceID, string(activity.ActionPracticeNameChanged), activity.StaffActor(ownerID))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	bySubjectKind := map[string]string{}
 	for _, entry := range got.Items {
 		bySubjectKind[entry.SubjectKind] = entry.SubjectName
@@ -88,15 +78,7 @@ func TestPracticeHandler_TellsTwoClientsWithOneFirstNameApart(t *testing.T) {
 		t.Fatalf("redact: %v", err)
 	}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	bySubject := map[string]string{}
 	for _, entry := range got.Items {
 		bySubject[entry.SubjectID] = entry.SubjectName

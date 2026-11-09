@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -14,344 +13,148 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-const (
-	testTable         = "outbox_test_rows"
-	testStatusPending = "pending"
-	testStatusSent    = "sent"
-	testStatusDead    = "dead_lettered"
-	testFrom          = "sender@example.test"
-	testReplyTo       = "reply@example.test"
-	testDeadReason    = "no address on file"
-)
+func TestWorker_MarkingARow(t *testing.T) {
+	exhausted := len(outbox.BackoffSchedule) - 1
+	suppressedErr := fmt.Errorf("%w: someone@example.test", mail.ErrSuppressed)
+	cases := []struct {
+		name     string
+		attempts int
+		clear    []string
+		mark     func(w outbox.Worker, tx *sql.Tx) error
+		want     rowWant
+	}{
+		{
+			name: "sent leaves the secrets when none are configured",
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkSent(context.Background(), tx, rowID, time.Now())
+			},
+			want: rowWant{status: testStatusSent},
+		},
+		{
+			name:  "sent clears the configured columns",
+			clear: []string{secretA, secretB},
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkSent(context.Background(), tx, rowID, time.Now())
+			},
+			want: rowWant{status: testStatusSent, cleared: []string{secretA, secretB}},
+		},
+		{
+			name: "a failure before the schedule is spent schedules a retry",
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkFailed(context.Background(), tx, rowID, 0, errors.New(mailgunErr), time.Now())
+			},
+			want: rowWant{status: testStatusPending, attempts: 1, lastError: mailgunErr},
+		},
+		{
+			name:     "a failure after the schedule is spent dead-letters and clears the secrets too",
+			attempts: exhausted,
+			clear:    []string{secretA},
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkFailed(context.Background(), tx, rowID, exhausted, errors.New("still down"), time.Now())
+			},
+			want: rowWant{status: testStatusDead, attempts: exhausted + 1, reason: outbox.RetriesExhausted, lastError: "still down", cleared: []string{secretA}},
+		},
+		{
+			name: "dead-lettering now is outright, not a retry",
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkDeadLetteredNow(context.Background(), tx, rowID, testDeadReason)
+			},
+			want: rowWant{status: testStatusDead, reason: outbox.OwnData, lastError: testDeadReason},
+		},
+		{
+			// A suppressed address can never stop being suppressed by
+			// waiting, so ADR-0029 skips the backoff schedule rather than
+			// spending five attempts rediscovering the same refusal. The
+			// plaintext invite token must not survive on a row that will
+			// never send.
+			name:  "a suppressed address dead-letters without retrying and clears the secrets",
+			clear: []string{secretA, secretB},
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkFailed(context.Background(), tx, rowID, 0, suppressedErr, time.Now())
+			},
+			want: rowWant{status: testStatusDead, reason: outbox.OwnData, lastError: suppressedErr.Error(), cleared: []string{secretA, secretB}},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := newRowEnv(t, c.attempts)
+			w := newTestWorker(&mail.FakeSender{}, c.clear...)
 
-// createTestTable makes a scratch outbox-shaped table in db's own cloned
-// database -- one per test, via testdb.New -- rather than a session-scoped
-// CREATE TEMP TABLE, which a *sql.DB connection pool could hand a later
-// call a different connection than the one that created it. Run against
-// db.Admin throughout: a table this package invents has no grants for the
-// low-privilege app_test role db.App connects as, and this package's own
-// Worker methods carry no RLS concern to prove.
-func createTestTable(t *testing.T, db *testdb.DB) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(), `
-		CREATE TABLE outbox_test_rows (
-			id text PRIMARY KEY,
-			status text NOT NULL DEFAULT 'pending',
-			attempt_count int NOT NULL DEFAULT 0,
-			next_attempt_at timestamptz NOT NULL DEFAULT now(),
-			sent_at timestamptz,
-			last_error text,
-			dead_letter_reason outbox_dead_letter_reason,
-			secret_a text,
-			secret_b text,
-			CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL))
-		)`); err != nil {
-		t.Fatalf("create test table: %v", err)
+			env.inTx(func(tx *sql.Tx) error { return c.mark(w, tx) })
+
+			env.expect(c.want)
+		})
 	}
 }
 
-// insertTestRow seeds one row whose due-time is an offset from the
-// *database's* clock: dueIn of 0 means "due now", a negative value
-// "overdue", a positive one "not yet due". Rounded to whole microseconds,
-// which is Postgres timestamp resolution anyway.
-//
-// It deliberately takes no host-side time.Time. testClaimQuery decides
-// dueness against Postgres's own now(), so a due-time written from the
-// host's clock is a comparison of two clocks nothing keeps in step, and
-// under a VM-backed container engine it decided these tests by the sign
-// of the drift -- see #987, and "A due-time fixture must not compare two
-// clocks" in docs/testing/api.md for the rule this follows.
-func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, dueIn time.Duration) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO outbox_test_rows (id, attempt_count, next_attempt_at, secret_a, secret_b)
-		 VALUES ($1, $2, now() + $3 * interval '1 microsecond', 'a-secret', 'b-secret')`,
-		id, attemptCount, dueIn.Microseconds(),
-	); err != nil {
-		t.Fatalf("insert test row: %v", err)
+func TestWorker_SendAll(t *testing.T) {
+	cases := []struct {
+		name          string
+		sender        *scriptSender
+		addrs         []string
+		wantDelivered int
+		want          rowWant
+	}{
+		{
+			name:   "no addresses is sent with nothing to mail",
+			sender: &scriptSender{},
+			want:   rowWant{status: testStatusSent},
+		},
+		{
+			name:          "every address is mailed and the row is sent",
+			sender:        &scriptSender{},
+			addrs:         []string{addrA, addrB},
+			wantDelivered: 2,
+			want:          rowWant{status: testStatusSent},
+		},
+		{
+			name:          "the first failure stops the send and schedules a retry",
+			sender:        &scriptSender{failAt: 2},
+			addrs:         []string{addrA, addrB, addrC},
+			wantDelivered: 2,
+			want:          rowWant{status: testStatusPending, attempts: 1},
+		},
+		{
+			// One Practice owner who complained must not cost the other
+			// owners a Notification they never objected to.
+			name:          "a suppressed address is skipped, not a stop",
+			sender:        &scriptSender{refuse: refusing(addrB)},
+			addrs:         []string{addrA, addrB, addrC},
+			wantDelivered: 2,
+			want:          rowWant{status: testStatusSent},
+		},
+		{
+			// With nobody left to mail, the row records why rather than
+			// looking like a successful send that delivered nothing.
+			name:   "every address suppressed dead-letters with the reason",
+			sender: &scriptSender{refuse: refusing(addrA, addrB)},
+			addrs:  []string{addrA, addrB},
+			want:   rowWant{status: testStatusDead, reason: outbox.OwnData, lastError: mail.ErrSuppressed.Error()},
+		},
+		{
+			// A suppression must not turn a transient Mailgun outage into
+			// a permanent dead-letter.
+			name:          "a real failure after a suppressed address still retries",
+			sender:        &scriptSender{refuse: refusing(addrA), failAll: true},
+			addrs:         []string{addrA, addrB},
+			wantDelivered: 1,
+			want:          rowWant{status: testStatusPending, attempts: 1},
+		},
 	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := newRowEnv(t, 0)
+			w := newTestWorker(c.sender)
 
-type testRowState struct {
-	status       string
-	attemptCount int
-	lastError    sql.NullString
-	reason       sql.NullString
-	secretA      sql.NullString
-	secretB      sql.NullString
-}
+			env.inTx(func(tx *sql.Tx) error {
+				return w.SendAll(t.Context(), tx, rowID, 0, time.Now(), c.addrs, "subject", "text")
+			})
 
-func readTestRow(t *testing.T, db *testdb.DB, id string) testRowState {
-	t.Helper()
-	var s testRowState
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, last_error, dead_letter_reason, secret_a, secret_b FROM outbox_test_rows WHERE id = $1`, id,
-	).Scan(&s.status, &s.attemptCount, &s.lastError, &s.reason, &s.secretA, &s.secretB); err != nil {
-		t.Fatalf("read test row: %v", err)
-	}
-	return s
-}
-
-func assertReason(t *testing.T, got testRowState, want outbox.DeadLetterReason) {
-	t.Helper()
-	if got.reason.String != string(want) {
-		t.Fatalf("dead_letter_reason = %+v, want %q", got.reason, want)
-	}
-}
-
-func newTestWorker(sender mail.Sender, clearOnTerminal ...string) outbox.Worker {
-	return outbox.Worker{
-		Sender: sender, Now: time.Now, From: testFrom, ReplyTo: testReplyTo,
-		Table: testTable, ClearOnTerminal: clearOnTerminal,
-	}
-}
-
-// countingSender fails on its failAt'th call (1-indexed), or never if
-// failAt is zero -- lets SendAll's stop-at-first-failure behavior be
-// proven with more than one recipient, which mail.FakeSender's single
-// fixed Err can't do.
-type countingSender struct {
-	mu     sync.Mutex
-	sent   []mail.Message
-	failAt int
-}
-
-func (s *countingSender) Send(_ context.Context, msg mail.Message) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.sent = append(s.sent, msg)
-	if s.failAt != 0 && len(s.sent) == s.failAt {
-		return errors.New("send failed")
-	}
-	return nil
-}
-
-func TestMarkSent_NoClearOnTerminal(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkSent(t.Context(), tx, "row-1", time.Now()); err != nil {
-		t.Fatalf("MarkSent: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusSent {
-		t.Fatalf("status = %q, want %s", got.status, testStatusSent)
-	}
-	if !got.secretA.Valid || got.secretA.String != "a-secret" {
-		t.Fatalf("secret_a = %+v, want unchanged", got.secretA)
-	}
-}
-
-func TestMarkSent_ClearsConfiguredColumns(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{}, "secret_a", "secret_b")
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkSent(t.Context(), tx, "row-1", time.Now()); err != nil {
-		t.Fatalf("MarkSent: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	got := readTestRow(t, db, "row-1")
-	if got.secretA.Valid || got.secretB.Valid {
-		t.Fatalf("secrets = %+v/%+v, want both cleared", got.secretA, got.secretB)
-	}
-}
-
-func TestMarkFailed_SchedulesRetryBeforeScheduleExhausted(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkFailed(t.Context(), tx, "row-1", 0, errors.New("mailgun down"), time.Now()); err != nil {
-		t.Fatalf("MarkFailed: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusPending {
-		t.Fatalf("status = %q, want %s", got.status, testStatusPending)
-	}
-	if got.attemptCount != 1 {
-		t.Fatalf("attempt_count = %d, want 1", got.attemptCount)
-	}
-	if !got.lastError.Valid || got.lastError.String != "mailgun down" {
-		t.Fatalf("last_error = %+v, want %q", got.lastError, "mailgun down")
-	}
-}
-
-func TestMarkFailed_DeadLettersAfterScheduleExhausted(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", len(outbox.BackoffSchedule)-1, 0)
-	w := newTestWorker(&mail.FakeSender{}, "secret_a")
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkFailed(t.Context(), tx, "row-1", len(outbox.BackoffSchedule)-1, errors.New("still down"), time.Now()); err != nil {
-		t.Fatalf("MarkFailed: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusDead {
-		t.Fatalf("status = %q, want %s", got.status, testStatusDead)
-	}
-	if got.secretA.Valid {
-		t.Fatalf("secret_a = %+v, want cleared on dead-letter too", got.secretA)
-	}
-	assertReason(t, got, outbox.RetriesExhausted)
-}
-
-func TestMarkDeadLetteredNow(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.MarkDeadLetteredNow(t.Context(), tx, "row-1", testDeadReason); err != nil {
-		t.Fatalf("MarkDeadLetteredNow: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusDead {
-		t.Fatalf("status = %q, want %s", got.status, testStatusDead)
-	}
-	if got.attemptCount != 0 {
-		t.Fatalf("attempt_count = %d, want unchanged 0 (outright dead-letter, not a retry)", got.attemptCount)
-	}
-	if !got.lastError.Valid || got.lastError.String != testDeadReason {
-		t.Fatalf("last_error = %+v, want %q", got.lastError, testDeadReason)
-	}
-	assertReason(t, got, outbox.OwnData)
-}
-
-func TestSendAll_EmptyAddressesMarksSentWithNothingToMail(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	sender := &countingSender{}
-	w := newTestWorker(sender)
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := w.SendAll(t.Context(), tx, "row-1", 0, time.Now(), nil, "subject", "text"); err != nil {
-		t.Fatalf("SendAll: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	if len(sender.sent) != 0 {
-		t.Fatalf("sent %d messages, want 0", len(sender.sent))
-	}
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusSent {
-		t.Fatalf("status = %q, want %s", got.status, testStatusSent)
-	}
-}
-
-func TestSendAll_MailsEveryAddressAndMarksSent(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	sender := &countingSender{}
-	w := newTestWorker(sender)
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	addrs := []string{addrA, addrB}
-	if err := w.SendAll(t.Context(), tx, "row-1", 0, time.Now(), addrs, "subject", "text"); err != nil {
-		t.Fatalf("SendAll: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	if len(sender.sent) != 2 {
-		t.Fatalf("sent %d messages, want 2", len(sender.sent))
-	}
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusSent {
-		t.Fatalf("status = %q, want %s", got.status, testStatusSent)
-	}
-}
-
-func TestSendAll_StopsAtFirstFailureAndMarksFailed(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	sender := &countingSender{failAt: 2}
-	w := newTestWorker(sender)
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	addrs := []string{addrA, addrB, addrC}
-	if err := w.SendAll(t.Context(), tx, "row-1", 0, time.Now(), addrs, "subject", "text"); err != nil {
-		t.Fatalf("SendAll: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
-
-	if len(sender.sent) != 2 {
-		t.Fatalf("attempted %d sends, want 2 (stop at first failure)", len(sender.sent))
-	}
-	got := readTestRow(t, db, "row-1")
-	if got.status != testStatusPending {
-		t.Fatalf("status = %q, want %s (scheduled for retry)", got.status, testStatusPending)
-	}
-	if got.attemptCount != 1 {
-		t.Fatalf("attempt_count = %d, want 1", got.attemptCount)
+			if len(c.sender.sent) != c.wantDelivered {
+				t.Errorf("sender saw %d messages, want %d", len(c.sender.sent), c.wantDelivered)
+			}
+			env.expect(c.want)
+		})
 	}
 }
 
@@ -379,26 +182,17 @@ func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 	createTestTable(t, db)
 	insertTestRow(t, db, "due-1", 0, -time.Minute)
 	insertTestRow(t, db, "not-due", 0, time.Hour)
-	sender := &mail.FakeSender{}
-	w := newTestWorker(sender)
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	env := &rowEnv{T: t, DB: db}
+	w := newTestWorker(&mail.FakeSender{})
 
 	var handled []string
 	handle := func(ctx context.Context, tx *sql.Tx, w outbox.Worker, r testRow, now time.Time) error {
 		handled = append(handled, r.id)
 		return w.MarkSent(ctx, tx, r.id, now)
 	}
-	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); err != nil {
-		t.Fatalf("ProcessPending: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	env.inTx(func(tx *sql.Tx) error {
+		return w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle)
+	})
 
 	if len(handled) != 1 || handled[0] != "due-1" {
 		t.Fatalf("handled = %v, want [due-1]", handled)
@@ -408,48 +202,44 @@ func TestProcessPending_ClaimsDueRowsInOrderAndSkipsNotYetDue(t *testing.T) {
 	}
 }
 
-func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
+// pendingRun is HandlePending over the claim query in a transaction left
+// uncommitted, so a test can read what it returned.
+func pendingRun(env *rowEnv, query string, handle func(context.Context, *sql.Tx, outbox.Worker, testRow, time.Time) error) error {
+	env.T.Helper()
+	tx := env.DB.BeginAdmin(env.T)
+	err := newTestWorker(&mail.FakeSender{}).HandlePending(env.T.Context(), tx, query, scanTestRow, handle)
 	if err != nil {
-		t.Fatalf("begin: %v", err)
+		return fmt.Errorf("handle pending: %w", err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	return nil
+}
 
+func TestProcessPending_HandleErrorStopsAndPropagates(t *testing.T) {
+	env := newRowEnv(t, 0)
 	wantErr := errors.New("handle boom")
-	handle := func(_ context.Context, _ *sql.Tx, _ outbox.Worker, _ testRow, _ time.Time) error {
+
+	err := pendingRun(env, testClaimQuery, func(context.Context, *sql.Tx, outbox.Worker, testRow, time.Time) error {
 		return wantErr
-	}
-	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); !errors.Is(err, wantErr) {
+	})
+
+	if !errors.Is(err, wantErr) {
 		t.Fatalf("err = %v, want %v", err, wantErr)
 	}
 }
 
 func TestProcessPending_ScanErrorPropagates(t *testing.T) {
-	db := testdb.New(t)
-	createTestTable(t, db)
-	insertTestRow(t, db, "row-1", 0, 0)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
+	env := newRowEnv(t, 0)
 	// Selects one column fewer than scanTestRow expects, so rows.Scan
 	// fails deterministically -- proves ProcessPending's scan-error path
 	// without needing a real DB failure.
 	const badQuery = `SELECT id FROM outbox_test_rows WHERE status = 'pending' LIMIT $1 FOR UPDATE SKIP LOCKED`
-	handle := func(_ context.Context, _ *sql.Tx, _ outbox.Worker, _ testRow, _ time.Time) error {
+
+	err := pendingRun(env, badQuery, func(context.Context, *sql.Tx, outbox.Worker, testRow, time.Time) error {
 		t.Fatal("handle should not run when scan fails")
 		return nil
-	}
-	if err := w.HandlePending(t.Context(), tx, badQuery, scanTestRow, handle); err == nil {
+	})
+
+	if err == nil {
 		t.Fatal("want a scan error, got nil")
 	}
 }
@@ -457,20 +247,14 @@ func TestProcessPending_ScanErrorPropagates(t *testing.T) {
 func TestProcessPending_NoPendingRowsCallsHandleZeroTimes(t *testing.T) {
 	db := testdb.New(t)
 	createTestTable(t, db)
-	w := newTestWorker(&mail.FakeSender{})
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
 	calls := 0
-	handle := func(_ context.Context, _ *sql.Tx, _ outbox.Worker, _ testRow, _ time.Time) error {
+
+	err := pendingRun(&rowEnv{T: t, DB: db}, testClaimQuery, func(context.Context, *sql.Tx, outbox.Worker, testRow, time.Time) error {
 		calls++
 		return nil
-	}
-	if err := w.HandlePending(t.Context(), tx, testClaimQuery, scanTestRow, handle); err != nil {
+	})
+
+	if err != nil {
 		t.Fatalf("ProcessPending: %v", err)
 	}
 	if calls != 0 {

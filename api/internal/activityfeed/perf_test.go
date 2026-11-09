@@ -101,35 +101,7 @@ func TestPracticeQueryPlanAtScale(t *testing.T) {
 		t.Fatalf("seed activity rows: %v", err)
 	}
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
-
-	rows, err := tx.QueryContext(t.Context(), "EXPLAIN (ANALYZE, BUFFERS) "+listPracticeActivityQuery, practiceID)
-	if err != nil {
-		t.Fatalf("explain: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var plan []string
-	t.Logf("EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d rows:", rowCount)
-	for rows.Next() {
-		var line string
-		if err := rows.Scan(&line); err != nil {
-			t.Fatalf("scan explain line: %v", err)
-		}
-		t.Log(line)
-		plan = append(plan, line)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate explain lines: %v", err)
-	}
-
-	assertNoJIT(t, plan)
+	assertNoJIT(t, explainFeedPlan(t, db, practiceID, "EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d rows:", rowCount))
 }
 
 // assertNoJIT fails the test if plan carries a JIT section -- the one
@@ -190,6 +162,14 @@ func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
 		t.Fatalf("seed departed membership rows: %v", err)
 	}
 
+	assertNoJIT(t, explainFeedPlan(t, db, practiceID, "EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d departed Membership subjects:", rowCount))
+}
+
+// explainFeedPlan runs EXPLAIN (ANALYZE, BUFFERS) over the practice-wide
+// feed query as the Practice's own session, logs the plan under label and
+// returns its lines.
+func explainFeedPlan(t *testing.T, db *testdb.DB, practiceID, label string, rowCount int) []string {
+	t.Helper()
 	tx, err := db.App.BeginTx(t.Context(), nil)
 	if err != nil {
 		t.Fatalf("begin tx: %v", err)
@@ -205,7 +185,7 @@ func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
 	}
 	defer func() { _ = rows.Close() }()
 	var plan []string
-	t.Logf("EXPLAIN (ANALYZE, BUFFERS) for practice-wide feed query at %d departed Membership subjects:", rowCount)
+	t.Logf(label, rowCount)
 	for rows.Next() {
 		var line string
 		if err := rows.Scan(&line); err != nil {
@@ -217,6 +197,5 @@ func TestPracticeQueryPlanWithDepartedMembershipSubjects(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate explain lines: %v", err)
 	}
-
-	assertNoJIT(t, plan)
+	return plan
 }

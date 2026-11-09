@@ -11,7 +11,11 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/reqtest"
+	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -49,6 +53,32 @@ func (c *movableClock) set(at time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.at = at
+}
+
+// newBillingServerAt mounts this package's whole surface through
+// billing.Mount with a caller-supplied StripeClient, version history of the
+// Terms and clock, for the tests that move the clock across the date a new
+// price of a Credit starts (#1834). A fixture.Scene fixes its clock at one
+// instant, so these tests keep a server of their own.
+func newBillingServerAt(t *testing.T, db *testdb.DB, uid string, client billing.StripeClient, terms legal.Document, now clock.Clock) (srv *httptest.Server, session string) {
+	t.Helper()
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	billing.Mount(g, ir, client, terms)
+	return httptest.NewServer(clock.Middleware(now)(mux)), authntest.SeedSessionAt(t, db.App, uid, now())
+}
+
+func postPurchase(t *testing.T, srv *httptest.Server, session string, practiceID string, body string) *http.Response {
+	t.Helper()
+	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/billing/purchases", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
+	return resp
+}
+
+func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
+	t.Helper()
+	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing", reqtest.Session(session))
+	return resp
 }
 
 // publish records a version of the Terms as published, the row

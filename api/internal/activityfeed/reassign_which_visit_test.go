@@ -2,13 +2,10 @@ package activityfeed_test
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"net/http"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/activity"
-	"doula-cloud/api/internal/activityfeed"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -31,14 +28,7 @@ func TestPracticeHandler_ReassignmentRowsSayWhichVisitMoved(t *testing.T) {
 	testdb.SeedActivityWithDiff(t, db, practiceID, activity.SubjectEngagement, engagementID, action, actor,
 		jsontext.Value(`{"assignedStaffIdBefore":"`+ownerID+`","assignedStaffIdAfter":"`+ownerID+`"}`))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 3 {
 		t.Fatalf("Items = %d, want 3", len(got.Items))
 	}

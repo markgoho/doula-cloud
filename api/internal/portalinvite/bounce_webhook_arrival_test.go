@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -15,10 +16,8 @@ type arrival struct {
 }
 
 func TestPostBounceWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T) {
-	db := testdb.New(t)
-	_, email := seedSentOutboxRow(t, db)
-	srv := newBounceWebhookServer(db, bounceWebhookTestKey)
-	defer srv.Close()
+	e := newBounceEnv(t, bounceWebhookTestKey)
+	_, email := seedSentOutboxRow(t, e.DB)
 
 	for _, payload := range [][]byte{
 		signedMailgunPayload(t, bounceWebhookTestKey, "failed", "permanent", email, "mg_bounce"),
@@ -27,12 +26,12 @@ func TestPostBounceWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T) {
 		[]byte(`not json`),
 		bytes.Repeat([]byte("a"), (1<<20)+1),
 	} {
-		resp := postBounceWebhook(t, srv, payload)
+		resp := reqtest.Post(t, e.Srv.URL+"/mailgun/webhook", reqtest.Body("", payload))
 		_ = resp.Body.Close()
 	}
 
 	got := []arrival{}
-	for _, a := range testdb.WebhookArrivals(t, db) {
+	for _, a := range testdb.WebhookArrivals(t, e.DB) {
 		if a.Route != "mailgun" {
 			t.Fatalf("arrival on route %q, want mailgun", a.Route)
 		}
