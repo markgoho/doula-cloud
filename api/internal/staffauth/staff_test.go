@@ -3,95 +3,50 @@ package staffauth_test
 import (
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newStaffListServer mounts this package's whole surface through
-// staffauth.Mount, the same call main.go makes on the real GatedRouter --
-// since the Owner/Admin-vs-Doula boundary lives at that mount, not inside
-// the handler (#315).
-func newStaffListServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+// roster reads the Practice's roster, with query appended, as the Staff
+// member at the screen.
+func (e *env) roster(query string) staffauth.Roster {
+	e.T.Helper()
+	return reqtest.Expect[staffauth.Roster](e.T, http.MethodGet, e.PracticeURL("/staff"+query), http.StatusOK, e.SignedIn)
 }
 
-func getStaffList(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	return reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff", reqtest.Session(session))
-}
+// TestListStaffHandler_ReadGate holds ADR-0008's read table at the mount:
+// a Doula may not list Staff, and (#315) an Admin may, which the pre-#315
+// handler's internal RequireOwner check would have refused.
+func TestListStaffHandler_ReadGate(t *testing.T) {
+	cases := []struct {
+		name string
+		role fixture.StaffOption
+		want int
+	}{
+		{"a Doula", fixture.Doula(), http.StatusForbidden},
+		{"an Admin", fixture.Admin(), http.StatusOK},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.role))
 
-func TestListStaffHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-listing-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType) // '{doula}', not owner
-
-	srv, session := newStaffListServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := getStaffList(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusForbidden)
-}
-
-// TestListStaffHandler_AdminSuccess proves ADR-0008's read table widened
-// this route past Owner-only: an Admin membership, which the pre-#315
-// handler's internal RequireOwner check would have 403'd, now reaches it
-// because the mount declares both roles.
-func TestListStaffHandler_AdminSuccess(t *testing.T) {
-	db := testdb.New(t)
-	const adminUID = "admin-lists-staff"
-	practiceID := testdb.SeedPractice(t, db, "Admin Roster Practice")
-	adminID := testdb.SeedStaff(t, db, adminUID)
-	seedMembershipWithRoles(t, db, practiceID, adminID, "{admin}")
-
-	srv, session := newStaffListServer(t, db, adminUID)
-	defer srv.Close()
-
-	resp := getStaffList(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+			reqtest.ExpectStatus(t, http.MethodGet, e.PracticeURL("/staff"), tc.want, e.SignedIn)
+		})
+	}
 }
 
 func TestListStaffHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-lists-staff"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	doula := e.Colleague()
+	zeroRole := e.Colleague(fixture.NoRole())
 
-	doulaID := testdb.SeedStaff(t, db, "doula-on-roster")
-	seedMembership(t, db, practiceID, doulaID) // seeds '{doula}'
+	roster := e.roster("")
 
-	zeroRoleID := testdb.SeedStaff(t, db, "zero-role-on-roster")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ($1, $2, '{}', 'employee')`,
-		practiceID, zeroRoleID,
-	); err != nil {
-		t.Fatalf("seed zero-role membership: %v", err)
-	}
-
-	srv, session := newStaffListServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getStaffList(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-
-	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Members) != 3 {
 		t.Fatalf("members = %+v, want 3 entries", roster.Members)
 	}
@@ -103,17 +58,17 @@ func TestListStaffHandler_Success(t *testing.T) {
 	for _, s := range roster.Members {
 		byID[s.StaffID] = s
 	}
-	owner, ok := byID[ownerID]
+	owner, ok := byID[e.Staff.ID]
 	if !ok || len(owner.Roles) != 1 || owner.Roles[0] != ownerRole {
 		t.Fatalf("owner entry = %+v, want roles [owner]", owner)
 	}
-	doula, ok := byID[doulaID]
-	if !ok || len(doula.Roles) != 1 || doula.Roles[0] != doulaRole {
-		t.Fatalf("doula entry = %+v, want roles [doula]", doula)
+	doulaEntry, ok := byID[doula.ID]
+	if !ok || len(doulaEntry.Roles) != 1 || doulaEntry.Roles[0] != doulaRole {
+		t.Fatalf("doula entry = %+v, want roles [doula]", doulaEntry)
 	}
-	zeroRole, ok := byID[zeroRoleID]
-	if !ok || len(zeroRole.Roles) != 0 {
-		t.Fatalf("zero-role entry = %+v, want no roles", zeroRole)
+	zeroRoleEntry, ok := byID[zeroRole.ID]
+	if !ok || len(zeroRoleEntry.Roles) != 0 {
+		t.Fatalf("zero-role entry = %+v, want no roles", zeroRoleEntry)
 	}
 	if owner.EmploymentType != employeeType {
 		t.Fatalf("owner employmentType = %q, want employee", owner.EmploymentType)
@@ -125,37 +80,23 @@ func TestListStaffHandler_Success(t *testing.T) {
 // member holding no roles, which a single list could not do. It also
 // covers #339's dead-letter flag, whose only read surface is this group.
 func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-sees-invitations"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	inOneHour := time.Now().Add(time.Hour)
 
-	pendingID := seedInvitation(t, db, practiceID, ownerID, "pending@example.com", "{doula}", contractorType, time.Now().Add(time.Hour))
-	deadID := seedInvitation(t, db, practiceID, ownerID, "dead@example.com", "{admin}", employeeType, time.Now().Add(time.Hour))
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason) VALUES ($1, 'dead_lettered', 'retries_exhausted')`, deadID,
-	); err != nil {
-		t.Fatalf("seed dead-lettered outbox row: %v", err)
-	}
+	pendingID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "pending@example.com", "{doula}", contractorType, inOneHour)
+	deadID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "dead@example.com", "{admin}", employeeType, inOneHour)
+	e.Exec(`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason) VALUES ($1, 'dead_lettered', 'retries_exhausted')`, deadID)
 	// A lapsed Invitation is still listed, flagged: it holds this
 	// address's slot in practice_invitations_one_pending until it is
 	// revoked or re-sent, and an Owner who cannot see it cannot act on it.
-	expiredID := seedInvitation(t, db, practiceID, ownerID, "lapsed@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
+	expiredID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "lapsed@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
 	// A revoked Invitation is history, not a pending ask -- it must not
 	// appear in either group.
-	revokedID := seedInvitation(t, db, practiceID, ownerID, "revoked@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, revokedID,
-	); err != nil {
-		t.Fatalf("revoke invitation: %v", err)
-	}
+	revokedID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "revoked@example.com", "{doula}", employeeType, inOneHour)
+	e.Exec(`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, revokedID)
 
-	srv, session := newStaffListServer(t, db, ownerUID)
-	defer srv.Close()
+	roster := e.roster("")
 
-	resp := getStaffList(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Members) != 1 {
 		t.Fatalf("members = %+v, want only the Owner", roster.Members)
 	}
@@ -193,26 +134,13 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 // once, and must read only the newest attempt -- a give-up the Owner has
 // since re-sent past is no longer a warning.
 func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-reinvites-after-a-send"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-	invitationID := seedInvitation(t, db, practiceID, ownerID, "twice-sent@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	invitationID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "twice-sent@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+	e.Exec(`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason, created_at)
+		 VALUES ($1, 'dead_lettered', 'retries_exhausted', now() - interval '1 hour'), ($1, 'pending', NULL, now())`, invitationID)
 
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO staff_invite_outbox (invitation_id, status, dead_letter_reason, created_at)
-		 VALUES ($1, 'dead_lettered', 'retries_exhausted', now() - interval '1 hour'), ($1, 'pending', NULL, now())`,
-		invitationID,
-	); err != nil {
-		t.Fatalf("seed two outbox rows: %v", err)
-	}
+	roster := e.roster("")
 
-	srv, session := newStaffListServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := getStaffList(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	roster := reqtest.Decode[staffauth.Roster](t, resp)
 	if len(roster.Invitations.Items) != 1 {
 		t.Fatalf("invitations = %+v, want exactly 1", roster.Invitations)
 	}
@@ -224,19 +152,10 @@ func TestListStaffHandler_ReInviteAfterASendDoesNotDuplicate(t *testing.T) {
 // TestListStaffHandler_InvalidCursorRejected mirrors
 // message.TestListHandler_InvalidCursorRejected.
 func TestListStaffHandler_InvalidCursorRejected(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-staff-bad-cursor"
-	_, practiceID := seedOwnerMembership(t, db, ownerUID)
-
-	srv, session := newStaffListServer(t, db, ownerUID)
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+cursor, reqtest.Session(session))
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
-		}
+		reqtest.ExpectStatus(t, http.MethodGet, e.PracticeURL("/staff?cursor="+cursor), http.StatusBadRequest, e.SignedIn)
 	}
 }
 
@@ -245,29 +164,20 @@ func TestListStaffHandler_InvalidCursorRejected(t *testing.T) {
 // message.TestListHandler_PaginatesNewestFirst. Members stays whole
 // (#446), so only Invitations has a cursor to walk.
 func TestListStaffHandler_PaginatesInvitationsNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const ownerUID = "owner-staff-paging"
-	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	e := newEnv(t, signedInAs(fixture.Owner()))
 
 	const total = 31 // invitationPageSize (30) + 1, to force a second page
 	for i := range total {
-		seedInvitation(t, db, practiceID, ownerID, fmt.Sprintf("invite-%d@example.com", i), "{doula}", employeeType, time.Now().Add(time.Hour))
+		seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, fmt.Sprintf("invite-%d@example.com", i), "{doula}", employeeType, time.Now().Add(time.Hour))
 	}
 
-	srv, session := newStaffListServer(t, db, ownerUID)
-	defer srv.Close()
-
-	firstResp := getStaffList(t, srv, session, practiceID)
-	defer firstResp.Body.Close()
-	first := reqtest.Decode[staffauth.Roster](t, firstResp)
+	first := e.roster("")
 	if len(first.Invitations.Items) != 30 || !first.Invitations.HasMore || first.Invitations.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Invitations.Items), first.Invitations.HasMore, first.Invitations.NextCursor)
 	}
 
-	secondResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/staff?cursor="+*first.Invitations.NextCursor, reqtest.Session(session))
-	defer secondResp.Body.Close()
-	second := reqtest.Decode[staffauth.Roster](t, secondResp)
+	second := e.roster("?cursor=" + *first.Invitations.NextCursor)
 	if len(second.Invitations.Items) != 1 || second.Invitations.HasMore || second.Invitations.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Invitations.Items), second.Invitations.HasMore, second.Invitations.NextCursor)

@@ -7,20 +7,14 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager) (srv *httptest.Server, seedSession func(uid string) string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
+	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
 }
 
 func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID string, required bool, confirmed bool) *http.Response {

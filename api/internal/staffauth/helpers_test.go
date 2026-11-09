@@ -2,6 +2,8 @@ package staffauth_test
 
 import (
 	"database/sql"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/authn"
@@ -11,6 +13,7 @@ import (
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
+	"doula-cloud/api/internal/testdb"
 )
 
 // env is what a handler test in this package starts from once a Staff
@@ -69,6 +72,22 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 		staffauth.Mount(g, ir, app, spec.verifier, spec.accounts, spec.enq, neverSuppressed)
 	}
 	return &env{Scene: fixture.NewScene(t, mount, spec.scene...), accounts: spec.accounts}
+}
+
+// serveStaffauth mounts this package's whole surface through
+// staffauth.Mount on a server of its own, for a test that seeds by hand
+// and signs in with a session it mints itself.
+func serveStaffauth(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) *httptest.Server {
+	return httptest.NewServer(staffauthMux(db, verifier, accounts, enq))
+}
+
+// staffauthMux is serveStaffauth's handler, for a test that wraps it.
+func staffauthMux(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) *http.ServeMux {
+	mux := http.NewServeMux()
+	g := staffauth.NewGatedRouter(mux, db.App)
+	ir := idempotency.NewRouter(g, db.App)
+	staffauth.Mount(g, ir, db.App, verifier, accounts, enq, neverSuppressed)
+	return mux
 }
 
 // membershipURL is the route of staffID's Membership at the Practice.

@@ -7,20 +7,14 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newChangeEmailServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager, uid string) (*httptest.Server, string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}), authntest.SeedSession(t, db.App, uid)
 }
 
 func putEmail(t *testing.T, srv *httptest.Server, session, body string) *http.Response {

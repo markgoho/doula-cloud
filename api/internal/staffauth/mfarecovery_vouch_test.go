@@ -8,20 +8,14 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newVouchServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, enq tasknudge.Enqueuer) *httptest.Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, authntest.NewFakeAccountManager(), enq, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, verifier, authntest.NewFakeAccountManager(), enq)
 }
 
 func vouchRequest(t *testing.T, srv *httptest.Server, session, practiceID, staffID string, bearer string, confirmed bool) *http.Response {

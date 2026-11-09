@@ -13,7 +13,6 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -21,11 +20,7 @@ import (
 )
 
 func newResetRequestServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 }
 
 func newResetSpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {

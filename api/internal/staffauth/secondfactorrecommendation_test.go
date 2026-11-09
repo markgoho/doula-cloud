@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -25,11 +24,7 @@ type recommendationServer struct {
 
 func newRecommendationServer(t *testing.T, db *testdb.DB) *recommendationServer {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	srv := httptest.NewServer(mux)
+	srv := serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
 	t.Cleanup(srv.Close)
 	return &recommendationServer{t: t, db: db, srv: srv}
 }

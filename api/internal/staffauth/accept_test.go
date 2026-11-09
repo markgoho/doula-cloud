@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -63,11 +62,7 @@ func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.S
 
 func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{})
 }
 
 // TestAcceptInviteHandler_CreatesStaffAndMembership is the accept half of

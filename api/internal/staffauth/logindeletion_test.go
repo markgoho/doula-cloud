@@ -3,45 +3,49 @@ package staffauth_test
 import (
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newDeleteLoginServer mounts the real route table -- not a bare handler
-// -- so every test here goes through the same rate limiter, gated router
-// and session cookie a browser would.
-func newDeleteLoginServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager) *httptest.Server {
+// newDeleter is a Staff member about to delete her own login: a Practice
+// with a second Owner to stay behind, and an Identity Platform account for
+// her. The env mounts the real route table -- not a bare handler -- so
+// every test here goes through the same rate limiter, gated router and
+// session cookie a browser would.
+func newDeleter(t *testing.T, staff ...fixture.StaffOption) *env {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, &tasknudge.FakeEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	e := newSoleStaffEnv(t, staff...)
+	e.Colleague(fixture.Owner())
+	return e
 }
 
-// deleteLogin issues the request under test. confirmed controls the
-// X-Confirmed backstop, which is the only header this endpoint reads.
-func deleteLogin(t *testing.T, srv *httptest.Server, session string, confirmed bool) *http.Response {
+// newSoleStaffEnv is newDeleter with nobody to stay behind: she is the
+// Practice's only Staff member, with an Identity Platform account.
+func newSoleStaffEnv(t *testing.T, staff ...fixture.StaffOption) *env {
 	t.Helper()
-	resp := reqtest.Delete(t, srv.URL+"/api/staff/account", reqtest.Session(session), reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
-	return resp
+	e := newEnv(t, signedInAs(staff...), withAccounts(authntest.NewFakeAccountManager()))
+	e.accounts.Seed(e.Staff.UID, "tasha@example.com", true)
+	return e
 }
 
-// seedCoOwner gives practiceID a second Owner, so the person under test
-// is no longer its last one.
-func seedCoOwner(t *testing.T, db *testdb.DB, practiceID, identityUID string) (staffID string) {
-	t.Helper()
-	return testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
+// deleteLogin issues the request under test as who and requires want.
+// confirmed controls the X-Confirmed backstop, which is the only header
+// this endpoint reads.
+func (e *env) deleteLogin(want int, who reqtest.Option, confirm bool) []byte {
+	e.T.Helper()
+	return reqtest.ExpectBody(e.T, http.MethodDelete, e.URL("/api/staff/account"), want, who, reqtest.HeaderIf(confirm, "X-Confirmed", "true"))
 }
+
+// erase deletes the login of the Staff member at the screen and requires
+// the 204.
+func (e *env) erase() { e.deleteLogin(http.StatusNoContent, e.SignedIn, true) }
 
 // readStaffRow reads the redaction's four columns straight out of the
 // database, past RLS -- the redacted row is unreachable through any
@@ -66,47 +70,48 @@ func countRows(t *testing.T, db *testdb.DB, query string, args ...any) int {
 	return n
 }
 
+// requireNotErased fails unless a refused request left her row and her
+// Identity Platform account as they were.
+func requireNotErased(t *testing.T, e *env) {
+	t.Helper()
+	if _, _, _, deleted := readStaffRow(t, e.DB, e.Staff.ID); deleted {
+		t.Fatal("the refused request redacted her row anyway")
+	}
+	if !e.accounts.Exists(e.Staff.UID) {
+		t.Fatal("the refused request destroyed her Identity Platform account anyway")
+	}
+}
+
 // TestDeleteLoginHandler_RedactsRowAndDestroysAccount is the whole act on
 // the simplest shape there is: a contractor doula at one Practice she does
 // not own.
 func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-deletes-her-own-login"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, contractorType)
-	seedCoOwner(t, db, practiceID, "owner-who-stays-put")
+	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, uid)
+	e.erase()
 
-	resp := deleteLogin(t, srv, session, true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	name, email, identityUID, deleted := readStaffRow(t, db, staffID)
+	name, email, identityUID, deleted := readStaffRow(t, e.DB, e.Staff.ID)
 	if name != staffauth.DeletedStaffName {
 		t.Fatalf("name = %q, want %q", name, staffauth.DeletedStaffName)
 	}
 	if email != staffauth.DeletedStaffEmail {
 		t.Fatalf("email = %q, want %q", email, staffauth.DeletedStaffEmail)
 	}
-	if identityUID != "deleted:"+staffID {
+	if identityUID != "deleted:"+e.Staff.ID {
 		t.Fatalf("identity_uid = %q, want the sentinel derived from the row's own id", identityUID)
 	}
 	if !deleted {
 		t.Fatal("deleted_at is not stamped, so nothing proves the act ran")
 	}
-	if accounts.Exists(uid) {
+	if e.accounts.Exists(e.Staff.UID) {
 		t.Fatal("her Identity Platform account survived, so she can still authenticate")
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID); n != 0 {
+	if n := countRows(t, e.DB, `SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, e.Staff.ID); n != 0 {
 		t.Fatalf("memberships left = %d, want every one ended", n)
 	}
-	if n := countRows(t, db,
+	if n := countRows(t, e.DB,
 		`SELECT count(*) FROM staff_auth_events WHERE staff_id = $1 AND actor_staff_id = $1 AND reason = 'login_deleted'`,
-		staffID); n != 1 {
+		e.Staff.ID); n != 1 {
 		t.Fatalf("login_deleted events = %d, want the act recorded exactly once with her as her own actor", n)
 	}
 }
@@ -116,41 +121,26 @@ func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 // two Practices leaves both in one act, and each Practice's own Activity
 // log carries the 'removed' event naming what the Membership held.
 func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-at-two-practices"
-	firstPractice, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, contractorType)
-	seedCoOwner(t, db, firstPractice, "owner-of-the-first")
-	secondPractice := testdb.SeedPractice(t, db, "Second Practice")
-	testdb.SeedStaffAtPractice(t, db, secondPractice, "owner-of-the-second", []string{ownerRole}, employeeType)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, '{doula,admin}', 'contractor')`,
-		secondPractice, staffID,
-	); err != nil {
-		t.Fatalf("seed second membership: %v", err)
-	}
+	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
+	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
+	fixture.Staff(t, e.DB, second, fixture.Owner())
+	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES ($1, $2, '{doula,admin}', 'contractor')`, second.ID, e.Staff.ID)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	for _, practiceID := range []string{firstPractice, secondPractice} {
-		if n := countRows(t, db,
+	for _, practiceID := range []string{e.Practice.ID, second.ID} {
+		if n := countRows(t, e.DB,
 			`SELECT count(*) FROM activity
 			  WHERE practice_id = $1 AND subject_kind = 'membership' AND subject_id = $2
 			    AND action = 'removed' AND actor_staff_id = $2`,
-			practiceID, staffID); n != 1 {
+			practiceID, e.Staff.ID); n != 1 {
 			t.Fatalf("practice %s: 'removed' events = %d, want exactly one naming her as her own actor", practiceID, n)
 		}
 	}
 
-	diff := testdb.Scalar[string](t, db.Admin, `SELECT diff::text FROM activity
-		  WHERE practice_id = $1 AND subject_id = $2 AND action = 'removed'`, secondPractice, staffID)
+	diff := testdb.Scalar[string](t, e.DB.Admin, `SELECT diff::text FROM activity
+		  WHERE practice_id = $1 AND subject_id = $2 AND action = 'removed'`, second.ID, e.Staff.ID)
 	if !strings.Contains(diff, "admin") || !strings.Contains(diff, contractorType) {
 		t.Fatalf("removal diff = %s, want the roles and employment type the membership held", diff)
 	}
@@ -161,102 +151,50 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 // redaction that overwrote it first would leave her signed in forever on
 // a live cookie.
 func TestDeleteLoginHandler_EndsEverySession(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-signed-in-two-places"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-of-the-only-practice")
+	e := newDeleter(t)
+	otherBrowser := authntest.SeedSession(t, e.DB.App, e.Staff.UID)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
-	otherBrowser := authntest.SeedSession(t, db.App, uid)
-	session := authntest.SeedSession(t, db.App, uid)
-
-	resp := deleteLogin(t, srv, session, true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-	if got := authntest.CountFor(t, db.App, uid); got != 0 {
+	e.erase()
+	if got := authntest.CountFor(t, e.DB.App, e.Staff.UID); got != 0 {
 		t.Fatalf("session rows left = %d, want none anywhere", got)
 	}
 
 	// The token from the browser she was not holding must be dead too --
 	// a live cookie is the whole of a session's credential.
-	after := deleteLogin(t, srv, otherBrowser, true)
-	defer after.Body.Close()
-	if after.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("status on the other browser's live token = %d, want %d", after.StatusCode, http.StatusUnauthorized)
-	}
+	e.deleteLogin(http.StatusUnauthorized, reqtest.Session(otherBrowser), true)
 }
 
-// TestDeleteLoginHandler_RefusesWhileSoleOwner is the first of the two
-// refusals the ticket names, and proves the refusal names the Practice
-// rather than merely saying no.
+// TestDeleteLoginHandler_RefusesWhileSoleOwner is the refusal the ticket
+// names for the last Owner, and proves it names the Practice rather than
+// merely saying no. A Practice inside ADR-0031's 30-day deletion window
+// still needs an Owner too, because letting her go would foreclose the
+// restore that window exists to promise.
 func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "sole-owner-tries-to-leave"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET name = 'Rochester Birth Collective' WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("name the practice: %v", err)
+	cases := []struct {
+		name            string
+		practiceName    string
+		pendingDeletion bool
+	}{
+		{"a Practice in use", "Rochester Birth Collective", false},
+		{"a Practice pending deletion", "Winding Down Doulas", true},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newSoleStaffEnv(t, fixture.Owner())
+			e.Exec(`UPDATE practices SET name = $2 WHERE id = $1`, e.Practice.ID, tc.practiceName)
+			if tc.pendingDeletion {
+				e.Exec(`UPDATE practices
+				    SET deletion_requested_at = now(), deletion_requested_by = $2, deletion_finalize_at = now() + interval '30 days'
+				  WHERE id = $1`, e.Practice.ID, e.Staff.ID)
+			}
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "owner@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+			body := e.deleteLogin(http.StatusConflict, e.SignedIn, true)
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	body, err := readBody(resp)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	if !strings.Contains(body, "Rochester Birth Collective") {
-		t.Fatalf("body = %s, want the practice in the way named", body)
-	}
-	if _, _, _, deleted := readStaffRow(t, db, staffID); deleted {
-		t.Fatal("the refused request redacted her row anyway")
-	}
-	if !accounts.Exists(uid) {
-		t.Fatal("the refused request destroyed her Identity Platform account anyway")
-	}
-}
-
-// TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion is
-// the second refusal: a Practice inside ADR-0031's 30-day window still
-// needs an Owner, because letting her go would foreclose the restore that
-// window exists to promise.
-func TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "sole-owner-of-a-practice-winding-down"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices
-		    SET name = 'Winding Down Doulas', deletion_requested_at = now(),
-		        deletion_requested_by = $2, deletion_finalize_at = now() + interval '30 days'
-		  WHERE id = $1`,
-		practiceID, staffID,
-	); err != nil {
-		t.Fatalf("start the practice's deletion: %v", err)
-	}
-
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "owner@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
-
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusConflict)
-	body, err := readBody(resp)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	if !strings.Contains(body, "Winding Down Doulas") {
-		t.Fatal("a practice pending deletion did not block, so its restore window has no Owner to restore into")
+			if !strings.Contains(string(body), tc.practiceName) {
+				t.Fatalf("body = %s, want the practice in the way named", body)
+			}
+			requireNotErased(t, e)
+		})
 	}
 }
 
@@ -264,24 +202,12 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwnerOfPracticePendingDeletion(t *te
 // side of that filter: once a Practice is finalized nobody can reach it,
 // so being its Owner no longer means anything and must not trap her.
 func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "sole-owner-of-a-finished-practice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET deleted_at = now() WHERE id = $1`, practiceID,
-	); err != nil {
-		t.Fatalf("finalize the practice: %v", err)
-	}
+	e := newSoleStaffEnv(t, fixture.Owner())
+	e.Exec(`UPDATE practices SET deleted_at = now() WHERE id = $1`, e.Practice.ID)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "owner@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
+	if _, _, _, deleted := readStaffRow(t, e.DB, e.Staff.ID); !deleted {
 		t.Fatal("she was refused over a practice nobody can reach any more")
 	}
 }
@@ -290,29 +216,21 @@ func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 // about being the *last* Owner and not about holding the role -- the case
 // that would otherwise make every Owner permanently undeletable.
 func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-with-a-co-owner"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, employeeType)
-	coOwnerID := seedCoOwner(t, db, practiceID, "the-remaining-owner")
-	seedEnrolled(t, db, coOwnerID)
+	e := newSoleStaffEnv(t, fixture.Owner())
+	coOwner := e.Colleague(fixture.Owner())
+	seedEnrolled(t, e.DB, coOwner.ID)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "owner@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
+	if _, _, _, deleted := readStaffRow(t, e.DB, e.Staff.ID); !deleted {
 		t.Fatal("an Owner with a co-Owner was refused")
 	}
 	// #615's rule, inherited from RemoveMembershipHandler: the co-Owner is
 	// newly sole, and has a second factor (#1531), so she is newly
 	// entitled to saved recovery codes.
-	if n := countRows(t, db,
+	if n := countRows(t, e.DB,
 		`SELECT count(*) FROM staff_mfa_recovery_codes
-		  WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, coOwnerID); n == 0 {
+		  WHERE staff_id = $1 AND used_at IS NULL AND revoked_at IS NULL`, coOwner.ID); n == 0 {
 		t.Fatal("the remaining Owner became sole and was not issued saved codes")
 	}
 }
@@ -321,47 +239,37 @@ func TestDeleteLoginHandler_AllowsOwnerWithACoOwner(t *testing.T) {
 // with a deliberate override, at the boundary that can enforce it: the
 // frontend's dialog is not an enforcement point, the header is.
 func TestDeleteLoginHandler_RequiresConfirmation(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-forgets-to-confirm"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-untouched-by-an-unconfirmed-request")
+	e := newDeleter(t)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.deleteLogin(http.StatusBadRequest, e.SignedIn, false)
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), false)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-	if _, _, _, deleted := readStaffRow(t, db, staffID); deleted {
-		t.Fatal("an unconfirmed request deleted her login")
+	requireNotErased(t, e)
+}
+
+// TestDeleteLoginHandler_RefusesWithoutAStaffMember proves the endpoint
+// acts only on the caller's own identity: there is no staff id anywhere in
+// the route or the body, so with no credential there is nobody to act on.
+// A person who holds a live session minted before her staff row existed
+// gets the same MsgNoMatchingStaffAccount shape RotateSavedCodesHandler
+// answers with.
+func TestDeleteLoginHandler_RefusesWithoutAStaffMember(t *testing.T) {
+	cases := []struct {
+		name    string
+		want    int
+		session func(e *env) reqtest.Option
+	}{
+		{"no session", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("") }},
+		{"a session with no staff row", http.StatusNotFound, func(e *env) reqtest.Option {
+			return reqtest.Session(authntest.SeedSession(e.T, e.DB.App, "a-uid-with-no-staff-row"))
+		}},
 	}
-}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
 
-// TestDeleteLoginHandler_RefusesWithoutASession proves the endpoint acts
-// only on the caller's own identity: there is no staff id anywhere in the
-// route or the body, so with no credential there is nobody to act on.
-func TestDeleteLoginHandler_RefusesWithoutASession(t *testing.T) {
-	db := testdb.New(t)
-	srv := newDeleteLoginServer(t, db, authntest.NewFakeAccountManager())
-	defer srv.Close()
-
-	reqtest.ExpectStatus(t, http.MethodDelete, srv.URL+"/api/staff/account", http.StatusUnauthorized, reqtest.Header("X-Confirmed", "true"))
-}
-
-// TestDeleteLoginHandler_RefusesASessionWithNoStaffRow covers the person
-// who holds a live session minted before her staff row existed -- the
-// same MsgNoMatchingStaffAccount shape RotateSavedCodesHandler answers
-// with.
-func TestDeleteLoginHandler_RefusesASessionWithNoStaffRow(t *testing.T) {
-	db := testdb.New(t)
-	srv := newDeleteLoginServer(t, db, authntest.NewFakeAccountManager())
-	defer srv.Close()
-
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, "a-uid-with-no-staff-row"), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
+			e.deleteLogin(tc.want, tc.session(e), true)
+		})
+	}
 }
 
 // TestDeleteLoginHandler_RefusesASecondDelete is the ticket's
@@ -371,30 +279,13 @@ func TestDeleteLoginHandler_RefusesASessionWithNoStaffRow(t *testing.T) {
 // is the refusal, and it is stronger than a 409 -- there is no live
 // credential in existence that can address a deleted login.
 func TestDeleteLoginHandler_RefusesASecondDelete(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-deletes-twice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-watching-a-double-delete")
+	e := newDeleter(t)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
-	session := authntest.SeedSession(t, db.App, uid)
+	e.erase()
+	e.deleteLogin(http.StatusUnauthorized, e.SignedIn, true)
 
-	first := deleteLogin(t, srv, session, true)
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusNoContent {
-		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusNoContent)
-	}
-
-	second := deleteLogin(t, srv, session, true)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusUnauthorized {
-		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusUnauthorized)
-	}
-	if n := countRows(t, db,
-		`SELECT count(*) FROM staff_auth_events WHERE staff_id = $1 AND reason = 'login_deleted'`, staffID); n != 1 {
+	if n := countRows(t, e.DB,
+		`SELECT count(*) FROM staff_auth_events WHERE staff_id = $1 AND reason = 'login_deleted'`, e.Staff.ID); n != 1 {
 		t.Fatalf("login_deleted events = %d, want the act recorded once, not twice", n)
 	}
 }
@@ -404,27 +295,18 @@ func TestDeleteLoginHandler_RefusesASecondDelete(t *testing.T) {
 // commit: a person must never be left with a redacted row and a live
 // account, nor with an account destroyed and a row that still works.
 func TestDeleteLoginHandler_IdentityPlatformFailureRollsEverythingBack(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-whose-idp-call-fails"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-untouched-by-a-failed-delete")
+	e := newDeleter(t)
+	e.accounts.DeleteAccountErr = errors.New("identity platform unreachable")
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	accounts.DeleteAccountErr = errors.New("identity platform unreachable")
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.deleteLogin(http.StatusInternalServerError, e.SignedIn, true)
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusInternalServerError)
-	if _, _, _, deleted := readStaffRow(t, db, staffID); deleted {
+	if _, _, _, deleted := readStaffRow(t, e.DB, e.Staff.ID); deleted {
 		t.Fatal("her row was redacted even though the account delete failed")
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, staffID); n != 1 {
+	if n := countRows(t, e.DB, `SELECT count(*) FROM practice_memberships WHERE staff_id = $1`, e.Staff.ID); n != 1 {
 		t.Fatalf("memberships = %d, want the failed act to have ended none", n)
 	}
-	if got := authntest.CountFor(t, db.App, uid); got != 1 {
+	if got := authntest.CountFor(t, e.DB.App, e.Staff.UID); got != 1 {
 		t.Fatalf("session rows = %d, want the failed act to have ended none", got)
 	}
 }
@@ -433,20 +315,14 @@ func TestDeleteLoginHandler_IdentityPlatformFailureRollsEverythingBack(t *testin
 // idempotency the interface promises: an account Identity Platform
 // already reports absent must not stop the rest of the act.
 func TestDeleteLoginHandler_AbsentIdentityPlatformAccountIsSuccess(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-with-no-idp-account-left"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-a-ghost")
+	e := newDeleter(t)
+	if err := e.accounts.DeleteAccount(t.Context(), e.Staff.UID); err != nil {
+		t.Fatalf("remove the account: %v", err)
+	}
 
-	// Seeded nowhere: the fake holds no account for this uid at all.
-	accounts := authntest.NewFakeAccountManager()
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-	if _, _, _, deleted := readStaffRow(t, db, staffID); !deleted {
+	if _, _, _, deleted := readStaffRow(t, e.DB, e.Staff.ID); !deleted {
 		t.Fatal("an already-absent Identity Platform account stopped the redaction")
 	}
 }
@@ -455,23 +331,13 @@ func TestDeleteLoginHandler_AbsentIdentityPlatformAccountIsSuccess(t *testing.T)
 // to a Staff person: redact the identity, keep the record. Every
 // actor_staff_id still resolves -- to a row that no longer names her.
 func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-with-a-history"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-history")
-	clientID, _ := testdb.SeedEngagement(t, db, practiceID)
-	testdb.SeedActivity(t, db, practiceID, "client", clientID, "created", activity.StaffActor(staffID))
+	e := newDeleter(t)
+	clientID, _ := testdb.SeedEngagement(t, e.DB, e.Practice.ID)
+	testdb.SeedActivity(t, e.DB, e.Practice.ID, "client", clientID, "created", activity.StaffActor(e.Staff.ID))
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	if n := countRows(t, db,
+	if n := countRows(t, e.DB,
 		`SELECT count(*) FROM activity a JOIN staff s ON s.id = a.actor_staff_id
 		  WHERE a.subject_id = $1 AND a.action = 'created'`, clientID); n != 1 {
 		t.Fatalf("resolvable authored rows = %d, want her work to still resolve to the redacted row", n)
@@ -485,37 +351,23 @@ func TestDeleteLoginHandler_KeepsHerAuthoredWork(t *testing.T) {
 // row she left. Nothing queues a close for its issue. One piece is from
 // under her Practice and one is from /account, with no Practice at all.
 func TestDeleteLoginHandler_LeavesHerFeedbackInPlace(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-who-sent-feedback"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-of-a-practice-with-feedback")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser,
+	e := newDeleter(t)
+	e.Exec(`INSERT INTO feedback (id, kind, text, page_url, route_id, app_build, screen_width, browser,
 		     staff_id, practice_id, roles, issue_number, sent_at)
 		 VALUES (gen_random_uuid(), 'not_working', 'the schedule will not save', '/practices/x', '/practices/[practiceId]',
 		         'abc1234', 390, 'Safari 18', $1, $2, '{doula}', 7, now()),
 		        (gen_random_uuid(), 'idea_or_request', 'a dark theme', '/account', '/account',
 		         'abc1234', 390, 'Safari 18', $1, NULL, NULL, 8, now())`,
-		staffID, practiceID,
-	); err != nil {
-		t.Fatalf("seed feedback: %v", err)
-	}
+		e.Staff.ID, e.Practice.ID)
 
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
+	e.erase()
 
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
-
-	if n := countRows(t, db,
+	if n := countRows(t, e.DB,
 		`SELECT count(*) FROM feedback f JOIN staff s ON s.id = f.staff_id
-		  WHERE f.staff_id = $1 AND f.issue_number IN (7, 8) AND f.text <> ''`, staffID); n != 2 {
+		  WHERE f.staff_id = $1 AND f.issue_number IN (7, 8) AND f.text <> ''`, e.Staff.ID); n != 2 {
 		t.Fatalf("her pieces of Feedback = %d, want both still there and still resolving to her redacted row", n)
 	}
-	if n := countRows(t, db, `SELECT count(*) FROM feedback_issue_outbox WHERE act = 'close_erased'`); n != 0 {
+	if n := countRows(t, e.DB, `SELECT count(*) FROM feedback_issue_outbox WHERE act = 'close_erased'`); n != 0 {
 		t.Fatalf("close jobs = %d, want 0 -- a Login deletion closes no issue", n)
 	}
 }
@@ -527,21 +379,10 @@ func TestDeleteLoginHandler_LeavesHerFeedbackInPlace(t *testing.T) {
 // recovery code all dead-letter on an account Identity Platform no longer
 // holds.
 func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "doula-with-mail-in-flight"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, employeeType)
-	seedCoOwner(t, db, practiceID, "owner-whose-mail-is-unaffected")
+	e := newDeleter(t)
+	seedPendingMail(e)
 
-	seedPendingMail(t, db, uid, staffID)
-
-	accounts := authntest.NewFakeAccountManager()
-	accounts.Seed(uid, "tasha@example.com", true)
-	srv := newDeleteLoginServer(t, db, accounts)
-	defer srv.Close()
-
-	resp := deleteLogin(t, srv, authntest.SeedSession(t, db.App, uid), true)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+	e.erase()
 
 	for _, table := range []string{
 		"staff_token_mail_outbox",
@@ -549,7 +390,7 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 		"staff_mfa_recovery_outbox",
 	} {
 		//nolint:gosec // the table name is this test's own literal, from the slice above
-		if n := countRows(t, db,
+		if n := countRows(t, e.DB,
 			`SELECT count(*) FROM `+table+` WHERE status = 'pending'`); n != 0 {
 			t.Fatalf("%s: pending rows = %d, want every one addressed to her resolved", table, n)
 		}
@@ -560,25 +401,18 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 	// exactly who needs to hear it. Suppressing it would hand anyone who
 	// reached her session a way to move her address and then silence the
 	// notice by deleting the login.
-	if n := countRows(t, db,
+	if n := countRows(t, e.DB,
 		`SELECT count(*) FROM staff_email_change_outbox WHERE status = 'pending'`); n != 1 {
 		t.Fatalf("staff_email_change_outbox: pending rows = %d, want the address-change notice still to go out", n)
 	}
 }
 
-// seedPendingMail queues one pending row addressed to uid in each of the
+// seedPendingMail queues one pending row addressed to her in each of the
 // four outbox tables the deletion has to resolve.
-func seedPendingMail(t *testing.T, db *testdb.DB, uid, staffID string) {
-	t.Helper()
-	exec := func(query string, args ...any) {
-		t.Helper()
-		if _, err := db.Admin.ExecContext(t.Context(), query, args...); err != nil {
-			t.Fatalf("seed pending mail: %v", err)
-		}
-	}
-	exec(`INSERT INTO staff_token_mail_outbox (identity_uid, kind, token) VALUES ($1, 'email_verification', 'a-token')`, uid)
-	exec(`INSERT INTO staff_email_change_outbox (identity_uid, old_email) VALUES ($1, 'old@example.com')`, uid)
-	exec(`INSERT INTO session_notice_outbox (identity_uid, kind) VALUES ($1, 'new_signin')`, uid)
-	exec(`INSERT INTO staff_mfa_recovery_outbox (recipient_identity_uid, subject_staff_id, token)
-	      VALUES ($1, $2, '12345678')`, uid, staffID)
+func seedPendingMail(e *env) {
+	e.Exec(`INSERT INTO staff_token_mail_outbox (identity_uid, kind, token) VALUES ($1, 'email_verification', 'a-token')`, e.Staff.UID)
+	e.Exec(`INSERT INTO staff_email_change_outbox (identity_uid, old_email) VALUES ($1, 'old@example.com')`, e.Staff.UID)
+	e.Exec(`INSERT INTO session_notice_outbox (identity_uid, kind) VALUES ($1, 'new_signin')`, e.Staff.UID)
+	e.Exec(`INSERT INTO staff_mfa_recovery_outbox (recipient_identity_uid, subject_staff_id, token)
+	      VALUES ($1, $2, '12345678')`, e.Staff.UID, e.Staff.ID)
 }

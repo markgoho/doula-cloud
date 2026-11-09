@@ -8,7 +8,7 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -19,17 +19,13 @@ import (
 // smallest step either side of a rule's edge.
 const clockEdge = time.Microsecond
 
-// newClockedStaffServer is newStaffListServer behind clock.Middleware
-// fixed at now (#1992), with uid's session seeded at that instant so it
-// is live there.
+// newClockedStaffServer is the whole surface behind clock.Middleware fixed
+// at now (#1992), with uid's session seeded at that instant so it is live
+// there.
 func newClockedStaffServer(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	fixed := clock.Middleware(func() time.Time { return now })
-	srv = httptest.NewServer(fixed(mux))
+	srv = httptest.NewServer(fixed(staffauthMux(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})))
 	t.Cleanup(srv.Close)
 	return srv, authntest.SeedSessionAt(t, db.App, uid, now)
 }
@@ -50,17 +46,10 @@ func TestListStaffHandler_InvitationExpiredAtExpiresAtOnTheRequestClock(t *testi
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			db := testdb.New(t)
-			const ownerUID = "owner-reads-invitation-expiry"
-			ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
-			invitationID := seedInvitation(t, db, practiceID, ownerID, "edge@example.com", "{doula}", employeeType, expiresAt)
+			e := newEnv(t, signedInAs(fixture.Owner()), viaScene(fixture.At(c.now)))
+			invitationID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "edge@example.com", "{doula}", employeeType, expiresAt)
 
-			srv, session := newClockedStaffServer(t, db, ownerUID, c.now)
-			resp := getStaffList(t, srv, session, practiceID)
-			defer resp.Body.Close()
-			reqtest.RequireStatus(t, resp, http.StatusOK)
-
-			roster := reqtest.Decode[staffauth.Roster](t, resp)
+			roster := e.roster("")
 			if len(roster.Invitations.Items) != 1 || roster.Invitations.Items[0].InvitationID != invitationID {
 				t.Fatalf("invitations = %+v, want the one seeded", roster.Invitations.Items)
 			}
@@ -106,20 +95,6 @@ func TestInviteHandler_StampsCreatedAtAndExpiresAtFromOneClock(t *testing.T) {
 	}
 }
 
-// newClockedPingServer is newServer behind clock.Middleware fixed at now
-// (#1992), with uid's session seeded at that instant.
-func newClockedPingServer(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	mux.Handle("/practices/{practiceId}/ping", staffauth.Middleware(db.App)(
-		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }),
-	))
-	fixed := clock.Middleware(func() time.Time { return now })
-	srv = httptest.NewServer(fixed(mux))
-	t.Cleanup(srv.Close)
-	return srv, authntest.SeedSessionAt(t, db.App, uid, now)
-}
-
 // TestMiddleware_ActivityStampStaleAfterADayOnTheRequestClock is #1992's
 // edge for last_active_at: a stamp exactly a day old at the request's
 // clock is still current and is left alone, and one a microsecond older
@@ -138,19 +113,12 @@ func TestMiddleware_ActivityStampStaleAfterADayOnTheRequestClock(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			db := testdb.New(t)
-			const identityUID = "staff-stamped-on-a-fixed-clock"
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, employeeType)
-			if _, err := db.Admin.ExecContext(t.Context(),
-				`UPDATE staff SET last_practice_id = $1, last_active_at = $2 WHERE id = $3`,
-				practiceID, c.stampedAt, staffID); err != nil {
-				t.Fatalf("seed prior stamp: %v", err)
-			}
+			e := newPingEnv(t, fixture.At(now))
+			e.Exec(`UPDATE staff SET last_practice_id = $1, last_active_at = $2 WHERE id = $3`, e.Practice.ID, c.stampedAt, e.Staff.ID)
 
-			srv, session := newClockedPingServer(t, db, identityUID, now)
-			reqtest.ExpectStatus(t, http.MethodGet, pingURL(srv, practiceID), http.StatusOK, reqtest.Session(session))
+			reqtest.ExpectStatus(t, http.MethodGet, e.pingURL(), http.StatusOK, e.SignedIn)
 
-			lastActiveAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, staffID)
+			lastActiveAt := testdb.Scalar[time.Time](t, e.DB.Admin, `SELECT last_active_at FROM staff WHERE id = $1`, e.Staff.ID)
 			if !lastActiveAt.Equal(c.want) {
 				t.Fatalf("last_active_at = %v, want %v", lastActiveAt, c.want)
 			}

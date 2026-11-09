@@ -11,9 +11,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
@@ -37,11 +35,7 @@ func newVerifyRequestServer(t *testing.T, db *testdb.DB, uid string) (*httptest.
 // row, for the tests whose whole subject is a caller who has none.
 func newVerifyRequestServerWithoutStaff(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
+	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}), authntest.SeedSession(t, db.App, uid)
 }
 
 func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http.Response {
@@ -50,11 +44,7 @@ func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http
 }
 
 func newVerifySpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
 }
 
 func postVerifySpend(t *testing.T, srv *httptest.Server, body string) *http.Response {

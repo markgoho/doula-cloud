@@ -8,20 +8,14 @@ import (
 
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
-	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRemoveSecondFactorServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
-	return httptest.NewServer(mux)
+	return serveStaffauth(db, verifier, accounts, tasknudge.NoOpEnqueuer{})
 }
 
 func deleteSecondFactor(t *testing.T, srv *httptest.Server, session, bearer string) *http.Response {
