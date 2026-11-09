@@ -152,7 +152,7 @@ func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
 		wantStatus int
 	}{
 		{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{"admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
 		{"employed doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
 		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}

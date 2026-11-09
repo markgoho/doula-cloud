@@ -17,6 +17,14 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// Names of table rows that more than one table repeats, named once so
+// goconst does not see independent literals across this package's tests.
+const (
+	caseAdmin       = "admin"
+	caseBodyNotJSON = "body is not JSON"
+	caseNoContract  = "no contract"
+)
+
 // env is what a test in this package starts from: a Practice with this
 // package's whole surface mounted on a server, one Staff member at the
 // screen and one Engagement. With no option she is an employee Doula and
@@ -56,11 +64,6 @@ type envOption func(*envSpec)
 // signedInAs shapes the Staff member who is at the screen.
 func signedInAs(opts ...fixture.StaffOption) envOption {
 	return func(s *envSpec) { s.staff = append(s.staff, opts...) }
-}
-
-// withEngagement shapes the Engagement the test is about.
-func withEngagement(opts ...fixture.EngagementOption) envOption {
-	return func(s *envSpec) { s.engagement = append(s.engagement, opts...) }
 }
 
 // withClient shapes the Engagement's Client.
@@ -157,9 +160,9 @@ func (e *env) staff(opts ...fixture.StaffOption) fixture.StaffRecord {
 }
 
 // anotherEngagement is a second Engagement at the Practice.
-func (e *env) anotherEngagement(opts ...fixture.EngagementOption) fixture.EngagementRecord {
+func (e *env) anotherEngagement() fixture.EngagementRecord {
 	e.t.Helper()
-	return fixture.Engagement(e.t, e.db, e.Practice, opts...)
+	return fixture.Engagement(e.t, e.db, e.Practice)
 }
 
 // contractURL is the Staff route of the Engagement's Contract plus path.

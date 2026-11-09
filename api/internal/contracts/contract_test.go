@@ -361,7 +361,7 @@ func TestPutContractHandler_Refusals(t *testing.T) {
 		want   int
 	}{
 		{"contract already sent", statusSent, putting(contracts.MergeFieldValues{clientNameKey: jamieName}), http.StatusConflict},
-		{"body is not JSON", statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{caseBodyNotJSON, statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"unknown merge field key", statusDraft, putting(contracts.MergeFieldValues{"not_a_field": "x"}), http.StatusBadRequest},
 		{"price", statusDraft, putting(contracts.MergeFieldValues{clientNameKey: jamieName, priceKey: "$1"}), http.StatusBadRequest},
 	}

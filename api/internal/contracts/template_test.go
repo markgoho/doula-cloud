@@ -11,12 +11,6 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-const doulaRole = "doula"
-
-// ownerRole is named once so golangci-lint's goconst check doesn't see
-// repeated "owner" literals across this package's test surface.
-const ownerRole = "owner"
-
 // seedContractTemplate seeds a Contract Template row directly (bypassing
 // the handlers under test). Stays local under this name rather than
 // testdb: plans/template_test.go's own seedTemplate writes plan_templates
@@ -175,7 +169,7 @@ func TestGetTemplateHandler_AnyMemberAllowed(t *testing.T) {
 // mount declaration must keep exactly that population, not widen it to
 // Owner and Admin the way most of this package's other role rules do.
 func TestPutTemplateHandler_NonOwnerForbidden(t *testing.T) {
-	cases := map[string]fixture.StaffOption{"doula": fixture.Doula(), "admin": fixture.Admin()}
+	cases := map[string]fixture.StaffOption{"doula": fixture.Doula(), caseAdmin: fixture.Admin()}
 	for name, role := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(role))
@@ -193,7 +187,7 @@ func TestPutTemplateHandler_Refusals(t *testing.T) {
 		name string
 		body reqtest.Option
 	}{
-		{"body is not JSON", reqtest.RawJSON([]byte("not json"))},
+		{caseBodyNotJSON, reqtest.RawJSON([]byte("not json"))},
 		{"empty", reqtest.JSON(contracts.TemplateResponse{Prose: ""})},
 		{"whitespace only", reqtest.JSON(contracts.TemplateResponse{Prose: "   \n\t  "})},
 	}

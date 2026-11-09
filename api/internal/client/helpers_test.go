@@ -1,6 +1,7 @@
 package client_test
 
 import (
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -309,6 +310,35 @@ func newEraseEnv(t *testing.T) *eraseEnv {
 // erasureURL is the route that erases the Client.
 func (e *eraseEnv) erasureURL() string {
 	return e.srv.URL + "/api/practices/" + e.Practice.ID + "/clients/" + e.ClientID + "/erasure"
+}
+
+// activeEngagement is an active birth for the Client.
+func (e *eraseEnv) activeEngagement() (engagementID string) {
+	e.t.Helper()
+	return seedEngagementForClient(e.t, e.db, e.ClientID, e.Practice.ID, "active", "birth")
+}
+
+// paidInvoice is a paid Invoice on a signed Contract on an active birth for
+// the Client.
+func (e *eraseEnv) paidInvoice() (invoiceID string) {
+	e.t.Helper()
+	contractID := seedClientContract(e.t, e.db, e.activeEngagement(), "signed")
+	return seedClientInvoice(e.t, e.db, e.Practice.ID, contractID, "paid", 15000)
+}
+
+// readErasureScope decodes what the erasure's activity row says it swept
+// into scope.
+func (e *eraseEnv) readErasureScope(scope any) {
+	e.t.Helper()
+	var diff []byte
+	if err := e.db.Admin.QueryRowContext(e.t.Context(),
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, e.ClientID,
+	).Scan(&diff); err != nil {
+		e.t.Fatalf("query erased activity row: %v", err)
+	}
+	if err := json.Unmarshal(diff, scope); err != nil {
+		e.t.Fatalf("decode erasure scope: %v", err)
+	}
 }
 
 // detail reads the Client as the Owner.

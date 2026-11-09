@@ -5,7 +5,6 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -24,15 +23,6 @@ import (
 // should ever appear.
 type sendPushNotificationPayload struct {
 	EngagementID string `json:"engagementId"`
-}
-
-func sendContractURL(srv *httptest.Server, practiceID, engagementID string) string {
-	return srv.URL + "/api/practices/" + practiceID + "/engagements/" + engagementID + "/contract/send"
-}
-
-func postSendContract(t *testing.T, srv *httptest.Server, session string, practiceID, engagementID string) *http.Response {
-	t.Helper()
-	return reqtest.Post(t, sendContractURL(srv, practiceID, engagementID), reqtest.Session(session))
 }
 
 func (e *env) send() string {

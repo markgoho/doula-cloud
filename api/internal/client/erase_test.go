@@ -172,21 +172,17 @@ func TestEraseHandler_ShredsHerHistoryWithoutTouchingIt(t *testing.T) {
 // manually recorded Payment's own note, on the same table's other
 // free-text column.
 func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-payment-reversal-reason"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Ada Lovelace", "ada@example.com", "active")
-	contractID := seedClientContract(t, db, engagementID, "signed")
-	invoiceID := seedClientInvoice(t, db, practiceID, contractID, "paid", 15000)
+	e := newEraseEnv(t)
+	invoiceID := e.paidInvoice()
 
 	var paymentID string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
 		invoiceID,
 	).Scan(&paymentID); err != nil {
 		t.Fatalf("seed manual payment: %v", err)
 	}
-	if _, err := db.Admin.ExecContext(t.Context(),
+	if _, err := e.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
 		 VALUES ($1, -15000, now(), 'reversal', $2, 'logged against the wrong invoice')`,
 		invoiceID, paymentID,
@@ -194,30 +190,17 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 		t.Fatalf("seed reversal: %v", err)
 	}
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
-	).Scan(&diff); err != nil {
-		t.Fatalf("query erased activity row: %v", err)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 	var scope struct {
 		PaymentReversalReasons int `json:"paymentReversalReasons"`
 	}
-	if err := json.Unmarshal(diff, &scope); err != nil {
-		t.Fatalf("decode erasure scope: %v", err)
-	}
+	e.readErasureScope(&scope)
 	if scope.PaymentReversalReasons != 1 {
 		t.Fatalf("erasureScope.paymentReversalReasons = %d, want 1", scope.PaymentReversalReasons)
 	}
 
 	var reason *string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT reason FROM payments WHERE invoice_id = $1 AND kind = 'reversal'`, invoiceID,
 	).Scan(&reason); err != nil {
 		t.Fatalf("query reversal reason: %v", err)
@@ -233,21 +216,17 @@ func TestEraseHandler_RedactsPaymentReversalReasons(t *testing.T) {
 // address"). The note must go while the Refund row itself stays: it is
 // the record that money went back, and nothing about her.
 func TestEraseHandler_RedactsRefundNote(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-refund-note"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Ada Lovelace", "ada@example.com", "active")
-	contractID := seedClientContract(t, db, engagementID, "signed")
-	invoiceID := seedClientInvoice(t, db, practiceID, contractID, "paid", 15000)
+	e := newEraseEnv(t)
+	invoiceID := e.paidInvoice()
 
 	var paymentID string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check') RETURNING id`,
 		invoiceID,
 	).Scan(&paymentID); err != nil {
 		t.Fatalf("seed manual payment: %v", err)
 	}
-	if _, err := db.Admin.ExecContext(t.Context(),
+	if _, err := e.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, method, note)
 		 VALUES ($1, -15000, now(), 'refund', $2, 'check', 'check #2201 mailed to 12 Elm St')`,
 		invoiceID, paymentID,
@@ -255,16 +234,11 @@ func TestEraseHandler_RedactsRefundNote(t *testing.T) {
 		t.Fatalf("seed refund: %v", err)
 	}
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 
 	var note *string
 	var amount int64
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT note, amount_cents FROM payments WHERE invoice_id = $1 AND kind = 'refund'`, invoiceID,
 	).Scan(&note, &amount); err != nil {
 		t.Fatalf("query refund after erasure: %v", err)
@@ -285,14 +259,10 @@ func TestEraseHandler_RedactsRefundNote(t *testing.T) {
 // (#1034). Every other erasure test's payment fixture uses method =
 // 'check', which never exercised this path.
 func TestEraseHandler_RedactsOtherMethodPaymentNote(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "owner-erase-payment-other-method-note"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	clientID, engagementID := testdb.SeedEngagementInStatus(t, db, practiceID, "Ada Lovelace", "ada@example.com", "active")
-	contractID := seedClientContract(t, db, engagementID, "signed")
-	invoiceID := seedClientInvoice(t, db, practiceID, contractID, "paid", 15000)
+	e := newEraseEnv(t)
+	invoiceID := e.paidInvoice()
 
-	if _, err := db.Admin.ExecContext(t.Context(),
+	if _, err := e.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method, note)
 		 VALUES ($1, 15000, now(), 'manual', 'other', 'wire transfer via her employer')`,
 		invoiceID,
@@ -300,30 +270,17 @@ func TestEraseHandler_RedactsOtherMethodPaymentNote(t *testing.T) {
 		t.Fatalf("seed other-method payment: %v", err)
 	}
 
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-
-	resp := postErasure(t, session, srv, practiceID, clientID)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusOK)
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, clientID,
-	).Scan(&diff); err != nil {
-		t.Fatalf("query erased activity row: %v", err)
-	}
+	reqtest.ExpectStatus(t, http.MethodPost, e.erasureURL(), http.StatusOK, e.signedIn)
 	var scope struct {
 		PaymentNotes int `json:"paymentNotes"`
 	}
-	if err := json.Unmarshal(diff, &scope); err != nil {
-		t.Fatalf("decode erasure scope: %v", err)
-	}
+	e.readErasureScope(&scope)
 	if scope.PaymentNotes != 1 {
 		t.Fatalf("erasureScope.paymentNotes = %d, want 1", scope.PaymentNotes)
 	}
 
 	var note *string
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := e.db.Admin.QueryRowContext(t.Context(),
 		`SELECT note FROM payments WHERE invoice_id = $1 AND method = 'other'`, invoiceID,
 	).Scan(&note); err != nil {
 		t.Fatalf("query other-method payment note: %v", err)
@@ -471,17 +428,6 @@ func readActivityRows(t *testing.T, db *testdb.DB, clientID string) []string {
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate activity: %v", err)
-	}
-	return out
-}
-
-func readDetail(t *testing.T, session string, srv *httptest.Server, practiceID, clientID string) client.DetailResponse {
-	t.Helper()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients/"+clientID)
-	defer resp.Body.Close()
-	var out client.DetailResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode detail: %v", err)
 	}
 	return out
 }

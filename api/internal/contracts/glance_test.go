@@ -46,7 +46,7 @@ func TestClientContractGlance(t *testing.T) {
 		t.Fatalf("sign contract: %v", err)
 	}
 	glance, found := read(t)
-	if !found || glance.Status != "signed" {
+	if !found || glance.Status != statusSigned {
 		t.Fatalf("glance = %+v, found = %v, want a signed Contract", glance, found)
 	}
 	if glance.SignedAt == nil || glance.SignedAt.UTC().Format("2006-01-02") != "2026-08-14" {

@@ -76,8 +76,8 @@ func TestPostVoidRequestHandler_Refusals(t *testing.T) {
 		body   reqtest.Option
 		want   int
 	}{
-		{"no contract", false, reasoned("asking"), http.StatusNotFound},
-		{"body is not JSON", true, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{caseNoContract, false, reasoned("asking"), http.StatusNotFound},
+		{caseBodyNotJSON, true, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"empty reason", true, reasoned(""), http.StatusBadRequest},
 		{"whitespace reason", true, reasoned("   "), http.StatusBadRequest},
 	}
@@ -184,7 +184,7 @@ func TestPostVoidRequestDeclineHandler_RefusedByRole(t *testing.T) {
 		wantStatus int
 	}{
 		{"practice owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{"admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
 		{"employed doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
 		{"doula, contractor", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
@@ -291,8 +291,8 @@ func TestPostVoidRequestDeclineHandler_Refusals(t *testing.T) {
 		want      int
 	}{
 		{"request id is not a uuid", true, func(*env) string { return "not-a-uuid" }, reasoned("declining"), http.StatusBadRequest},
-		{"no contract", false, func(*env) string { return noSuchRequestID }, reasoned("declining"), http.StatusNotFound},
-		{"body is not JSON", true, (*env).openRequest, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{caseNoContract, false, func(*env) string { return noSuchRequestID }, reasoned("declining"), http.StatusNotFound},
+		{caseBodyNotJSON, true, (*env).openRequest, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"empty reason", true, (*env).openRequest, reasoned(""), http.StatusBadRequest},
 	}
 	for _, c := range cases {

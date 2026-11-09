@@ -73,7 +73,7 @@ func TestPutContractAmountHandler_RefusedByRole(t *testing.T) {
 		staff      []fixture.StaffOption
 		wantStatus int
 	}{
-		{"admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
 		{"employee doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
 		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
@@ -157,11 +157,11 @@ func TestPutContractAmountHandler_Refusals(t *testing.T) {
 	}{
 		{"zero", statusDraft, amounting(0), http.StatusBadRequest},
 		{"negative", statusDraft, amounting(-100), http.StatusBadRequest},
-		{"body is not JSON", statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
+		{caseBodyNotJSON, statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"sent", statusSent, amounting(20000), http.StatusConflict},
-		{"signed", statusSigned, amounting(20000), http.StatusConflict},
+		{statusSigned, statusSigned, amounting(20000), http.StatusConflict},
 		{"voided", statusVoided, amounting(20000), http.StatusConflict},
-		{"no contract", "", amounting(20000), http.StatusNotFound},
+		{caseNoContract, "", amounting(20000), http.StatusNotFound},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
