@@ -43,7 +43,7 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 	srv, session := newPracticeInvoiceServerAt(t, db, uid, now)
 	defer srv.Close()
 
-	whole := readPracticeInvoices(t, srv, session, practiceID, "", false)
+	whole := readPracticeInvoices(t, srv, session, practiceID)
 	if whole.OverdueCents != 15000 || whole.OverdueCount != 1 {
 		t.Fatalf("overdue totals = (%d, %d), want (15000, 1)", whole.OverdueCents, whole.OverdueCount)
 	}
@@ -56,7 +56,7 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 		t.Fatalf("unnarrowed items = %d, want 3", len(whole.Items))
 	}
 
-	narrowed := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "", "overdue=true")
+	narrowed := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true")
 	if len(narrowed.Items) != 1 || narrowed.Items[0].ID != lateID {
 		t.Fatalf("overdue items = %+v, want only %q", narrowed.Items, lateID)
 	}
@@ -100,7 +100,7 @@ func TestGetPracticeInvoicesHandler_OverdueBeatsUnpaid(t *testing.T) {
 			srv, session := newPracticeInvoiceServerAt(t, db, uid, now)
 			defer srv.Close()
 
-			out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "", "overdue=true"+"&"+"unpaid=true")
+			out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true&unpaid=true")
 			if len(out.Items) != 1 || out.Items[0].ID != lateID {
 				t.Fatalf("items = %+v, want only the overdue %q", out.Items, lateID)
 			}
@@ -149,7 +149,7 @@ func TestGetPracticeInvoicesHandler_EmptyBookHasNoOverdue(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "", "overdue=true")
+	out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true")
 	if out.OverdueCents != 0 || out.OverdueCount != 0 || len(out.Items) != 0 {
 		t.Fatalf("empty book = (%d, %d, %d items), want all zero", out.OverdueCents, out.OverdueCount, len(out.Items))
 	}

@@ -1,9 +1,7 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -13,21 +11,6 @@ import (
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
-
-func postPaymentBody(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID, body string) *http.Response {
-	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/practices/"+practiceID+"/invoices/"+invoiceID+"/payments", reqtest.RawJSON([]byte(body)), reqtest.Session(session))
-	return resp
-}
-
-func postPayment(t *testing.T, srv *httptest.Server, session, practiceID, invoiceID string, method payments.PaymentMethod, note, paidOn string) *http.Response {
-	t.Helper()
-	body, err := json.Marshal(payments.RecordPaymentRequest{Method: method, Note: note, PaidOn: paidOn})
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	return postPaymentBody(t, srv, session, practiceID, invoiceID, string(body))
-}
 
 // seedByHandInvoiceAmountCents is the fixed amount every caller of
 // seedByHandInvoice wants -- none of them are testing the amount, so it
@@ -69,14 +52,20 @@ func todayInSeededZone(t *testing.T) string {
 // and an open by-hand Invoice against it.
 func (e *env) byHandInvoice() (engagementID, invoiceID string) {
 	e.t.Helper()
-	engagementID, contractID := e.signedContract()
+	return e.byHandInvoiceFor()
+}
+
+// byHandInvoiceFor is byHandInvoice on an Engagement shaped by opts.
+func (e *env) byHandInvoiceFor(opts ...fixture.EngagementOption) (engagementID, invoiceID string) {
+	e.t.Helper()
+	engagementID, contractID := e.signedContract(opts...)
 	return engagementID, seedByHandInvoice(e.t, e.db, e.Practice.ID, contractID)
 }
 
 // signedContract seeds an Engagement at the Practice with a signed Contract.
-func (e *env) signedContract() (engagementID, contractID string) {
+func (e *env) signedContract(opts ...fixture.EngagementOption) (engagementID, contractID string) {
 	e.t.Helper()
-	engagementID = fixture.Engagement(e.t, e.db, e.Practice).ID
+	engagementID = fixture.Engagement(e.t, e.db, e.Practice, opts...).ID
 	return engagementID, seedSignedContract(e.t, e.db, engagementID)
 }
 

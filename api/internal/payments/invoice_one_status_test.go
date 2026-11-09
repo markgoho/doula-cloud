@@ -46,7 +46,7 @@ func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {
 
 	counts := map[string]int{}
 
-	book := readPracticeInvoices(t, srv, ownerSession, me.practiceID, "", false)
+	book := readPracticeInvoices(t, srv, ownerSession, me.practiceID)
 	if len(book.Items) != 1 || book.Items[0].ID != invoiceID || book.Items[0].Status != invoiceStatusOpen {
 		t.Fatalf("Practice-wide items = %+v, want the one open Invoice", book.Items)
 	}
@@ -57,7 +57,7 @@ func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {
 		if s.uid != ownerUID {
 			session = authntest.SeedSessionAt(t, db.App, s.uid, now)
 		}
-		resp := getInvoices(t, srv, session, me.practiceID, me.engagementID, "")
+		resp := getInvoices(t, srv, session, me.practiceID, me.engagementID)
 		var section payments.ListInvoicesResponse
 		err := json.UnmarshalRead(resp.Body, &section)
 		_ = resp.Body.Close()
@@ -73,7 +73,7 @@ func TestAnOverdueInvoiceReadsOverdueInEveryView(t *testing.T) {
 	const contractorUID = "one-status-contractor"
 	contractorID := testdb.SeedStaffAtPractice(t, db, me.practiceID, contractorUID, []string{doulaRole}, "contractor")
 	testdb.SeedGrantedAttachment(t, db, me.engagementID, contractorID)
-	resp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID, "")
+	resp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID)
 	var rows payments.ContractorInvoicesResponse
 	err := json.UnmarshalRead(resp.Body, &rows)
 	_ = resp.Body.Close()

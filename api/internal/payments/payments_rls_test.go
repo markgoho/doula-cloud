@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -32,11 +33,8 @@ func seedPayment(t *testing.T, db *testdb.DB, invoiceID, stripePaymentReference 
 // all rows when app.current_practice_id is unset.
 func TestRLS_PaymentsFailsClosedWithNoSessionVarSet(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Some Practice")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_rls_closed", "paid", 5000, time.Now())
-	seedPayment(t, db, invoiceID, "pi_rls_closed", 5000, time.Now())
+	invoice := seedBilled(t, db, fixture.Practice(t, db), "in_rls_closed", invoiceStatusPaid, 5000)
+	seedPayment(t, db, invoice.invoiceID, "pi_rls_closed", 5000, time.Now())
 
 	count := testdb.Scalar[int](t, db.App, `SELECT count(*) FROM payments`)
 	if count != 0 {
@@ -49,18 +47,13 @@ func TestRLS_PaymentsFailsClosedWithNoSessionVarSet(t *testing.T) {
 // -> practice_id chain) -- Practice B's stay invisible.
 func TestRLS_PaymentsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	contractA := seedDraftContract(t, db, engagementA)
-	contractB := seedDraftContract(t, db, engagementB)
-	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_a", "paid", 5000, time.Now())
-	invoiceB := seedInvoice(t, db, practiceB, contractB, "in_rls_b", "paid", 7000, time.Now())
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	invoiceA := seedBilled(t, db, practiceA, "in_rls_a", invoiceStatusPaid, 5000).invoiceID
+	invoiceB := seedBilled(t, db, practiceB, "in_rls_b", invoiceStatusPaid, 7000).invoiceID
 	paymentA := seedPayment(t, db, invoiceA, "pi_rls_a", 5000, time.Now())
 	seedPayment(t, db, invoiceB, "pi_rls_b", 7000, time.Now())
 
-	tx := db.BeginAs(t, testdb.Practice(practiceA))
+	tx := db.BeginAs(t, testdb.Practice(practiceA.ID))
 	visibleIDs := testdb.Column[string](t, tx, `SELECT id FROM payments`)
 
 	if len(visibleIDs) != 1 || visibleIDs[0] != paymentA {
@@ -74,13 +67,10 @@ func TestRLS_PaymentsVisibilityIsScopedToCurrentPractice(t *testing.T) {
 // rejects it.
 func TestRLS_PaymentsCannotInsertForAnotherPracticesInvoice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	contractA := seedDraftContract(t, db, engagementA)
-	invoiceA := seedInvoice(t, db, practiceA, contractA, "in_rls_insert", invoiceStatusOpen, 5000, time.Now())
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	invoiceA := seedBilled(t, db, practiceA, "in_rls_insert", invoiceStatusOpen, 5000).invoiceID
 
-	tx := db.BeginAs(t, testdb.Practice(practiceB))
+	tx := db.BeginAs(t, testdb.Practice(practiceB.ID))
 	_, err := tx.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_rls_insert', 5000, now(), 'stripe')`,
 		invoiceA,

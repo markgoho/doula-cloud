@@ -2,11 +2,10 @@ package payments_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
@@ -33,22 +32,6 @@ func clientOfEngagement(t *testing.T, db *testdb.DB, engagementID string) string
 	return clientID
 }
 
-// createdInvoice posts an Invoice and returns the created row's view,
-// failing the test on any non-201.
-func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, engagementID string) payments.InvoiceView {
-	t.Helper()
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-	var out payments.InvoiceView
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return out
-}
-
 // TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer proves #780's
 // central rule at the seam that decides it: a Client has at most one
 // Stripe Customer per connected account, so her second Invoice bills the
@@ -57,24 +40,16 @@ func createdInvoice(t *testing.T, srv *httptest.Server, session, practiceID, eng
 // Stripe account, which is not the single Customer GLOSSARY.md's Erasure
 // entry has always described.
 func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-one-customer"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	const accountID = "acct_one_customer"
-	seedConnectAccount(t, db, practiceID, accountID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected())
+	engagementID, _ := e.signedContract()
 
-	client := payments.NewFakeClient()
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
-
-	first := createdInvoice(t, srv, session, practiceID, engagementID)
-	second := createdInvoice(t, srv, session, practiceID, engagementID)
+	first := e.raise(engagementID)
+	second := e.raise(engagementID)
 	if first.ID == second.ID {
 		t.Fatal("both posts returned the same Invoice, want two")
 	}
 
+	client := e.Stripe
 	if len(client.CreateCustomerCalls) != 1 {
 		t.Fatalf("CreateCustomer calls = %d, want 1 across two Invoices", len(client.CreateCustomerCalls))
 	}
@@ -87,7 +62,7 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 			client.CreateInvoiceCalls[1].CustomerID, billed)
 	}
 
-	mapped, createdBy := mappedCustomer(t, db, clientOfEngagement(t, db, engagementID), accountID)
+	mapped, createdBy := mappedCustomer(t, e.db, clientOfEngagement(t, e.db, engagementID), e.AccountID)
 	if mapped != billed {
 		t.Fatalf("mapped customer = %q, want the billed %q", mapped, billed)
 	}
@@ -102,30 +77,20 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 // product finds a Customer and creates none. This is what lets api/ carry
 // no test-only parameter at all.
 func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-preallocated"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	const accountID = "acct_preallocated"
-	seedConnectAccount(t, db, practiceID, accountID)
-
-	clientID := clientOfEngagement(t, db, engagementID)
+	e := newEnv(t, signedInAs(fixture.Doula()), connected())
+	engagementID, _ := e.signedContract()
 	const preAllocated = "cus_on_a_test_clock"
-	if _, err := db.Admin.ExecContext(t.Context(),
+	if _, err := e.db.Admin.ExecContext(t.Context(),
 		`INSERT INTO client_stripe_customers (practice_id, client_id, stripe_account_id, stripe_customer_id)
 		 VALUES ($1, $2, $3, $4)`,
-		practiceID, clientID, accountID, preAllocated,
+		e.Practice.ID, clientOfEngagement(t, e.db, engagementID), e.AccountID, preAllocated,
 	); err != nil {
 		t.Fatalf("seed pre-allocated customer: %v", err)
 	}
 
-	client := payments.NewFakeClient()
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.raise(engagementID)
 
-	createdInvoice(t, srv, session, practiceID, engagementID)
-
+	client := e.Stripe
 	if len(client.CreateCustomerCalls) != 0 {
 		t.Fatalf("CreateCustomer calls = %d, want 0 -- the Customer was already allocated", len(client.CreateCustomerCalls))
 	}
@@ -141,28 +106,12 @@ func TestPostInvoiceHandler_PreExistingMappingIsUsedUnchanged(t *testing.T) {
 // failure while making the Customer stops before any Invoice is raised --
 // neither at Stripe nor in this database.
 func TestPostInvoiceHandler_CustomerFailureRaisesNoInvoice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-customer-fails"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	seedSignedContract(t, db, engagementID)
-	seedConnectAccount(t, db, practiceID, "acct_customer_fails")
+	stripe := payments.NewFakeClient()
+	stripe.CreateCustomerErr = errStripeFake
+	e := newEnv(t, signedInAs(fixture.Doula()), withStripe(stripe), connected())
+	engagementID, _ := e.signedContract()
 
-	client := payments.NewFakeClient()
-	client.CreateCustomerErr = errStripeFake
-	srv, session := newInvoiceServer(t, db, uid, client)
-	defer srv.Close()
+	e.refuseRaise(engagementID, http.StatusInternalServerError)
 
-	resp := postInvoice(t, srv, session, practiceID, engagementID)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-	if len(client.CreateInvoiceCalls) != 0 {
-		t.Fatalf("CreateInvoice calls = %d, want 0", len(client.CreateInvoiceCalls))
-	}
-	invoices := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM invoices`)
-	if invoices != 0 {
-		t.Fatalf("invoices rows = %d, want 0", invoices)
-	}
+	e.requireNothingRaised()
 }

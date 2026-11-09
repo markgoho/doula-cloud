@@ -44,6 +44,9 @@ type env struct {
 	Staff    fixture.StaffRecord
 	Stripe   *payments.FakeClient
 
+	// AccountID is the Stripe Connect account connected() gave the Practice.
+	AccountID string
+
 	signedIn reqtest.Option
 }
 
@@ -55,9 +58,39 @@ type envSpec struct {
 	website string
 
 	billingMode payments.BillingMode
+	connect     *connectSpec
+}
+
+type connectSpec struct {
+	cardStatus   string
+	billingUnset bool
 }
 
 type envOption func(*envSpec)
+
+// connected gives the Practice a Stripe Connect account that can take a
+// Client's payment: an account the fake Stripe client made, with
+// card_payments active and the billing mode answered "stripe".
+func connected() envOption { return connectedWithCardStatus("active") }
+
+// connectedWithCardStatus is connected with an explicit card_payments
+// status, for an account left restricted by an abandoned onboarding.
+func connectedWithCardStatus(status string) envOption {
+	return func(s *envSpec) { s.connect = &connectSpec{cardStatus: status} }
+}
+
+// connectAccountOnly gives the Practice a Stripe Connect account id and
+// nothing else, the way an onboarding that has not yet been confirmed by a
+// webhook leaves it.
+func connectAccountOnly() envOption {
+	return func(s *envSpec) { s.connect = &connectSpec{} }
+}
+
+// connectedBillingUnset is connected with the billing-mode question still
+// unanswered, for the first Invoice that answers it.
+func connectedBillingUnset() envOption {
+	return func(s *envSpec) { s.connect = &connectSpec{cardStatus: "active", billingUnset: true} }
+}
 
 // signedInAs shapes the Staff member who is at the screen.
 func signedInAs(opts ...fixture.StaffOption) envOption {
@@ -112,6 +145,9 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 	if spec.website != "" {
 		seedDeclaredWebsite(t, db, e.Practice.ID, spec.website)
 	}
+	if c := spec.connect; c != nil {
+		e.connect(c)
+	}
 	if spec.billingMode != "" {
 		testdb.SeedBillingMode(t, db, e.Practice.ID, string(spec.billingMode))
 	}
@@ -129,6 +165,31 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 	e.srv = httptest.NewServer(handler)
 	t.Cleanup(e.srv.Close)
 	return e
+}
+
+func (e *env) connect(c *connectSpec) {
+	e.t.Helper()
+	accountID, err := e.Stripe.CreateAccount(e.t.Context(), payments.AccountProfile{
+		PracticeID:   e.Practice.ID,
+		PracticeName: fixturePracticeName,
+		BusinessURL:  fixtureOwnSiteURL,
+	})
+	if err != nil {
+		e.t.Fatalf("fixture CreateAccount: %v", err)
+	}
+	e.AccountID = accountID
+	if c.cardStatus == "" {
+		if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, e.Practice.ID); err != nil {
+			e.t.Fatalf("seed connect account id: %v", err)
+		}
+		return
+	}
+	seedConnectAccountWithCardStatus(e.t, e.db, e.Practice.ID, accountID, c.cardStatus)
+	if c.billingUnset {
+		if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE practices SET billing_mode = NULL WHERE id = $1`, e.Practice.ID); err != nil {
+			e.t.Fatalf("unset billing mode: %v", err)
+		}
+	}
 }
 
 // as signs a request in as who.

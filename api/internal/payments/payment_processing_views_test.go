@@ -56,12 +56,12 @@ func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
 		}
 	}
 
-	for _, it := range readPracticeInvoices(t, srv, ownerSession, me.practiceID, "", false).Items {
+	for _, it := range readPracticeInvoices(t, srv, ownerSession, me.practiceID).Items {
 		check("Practice-wide list", it.ID, it.Status, it.PaymentProcessing)
 	}
 
 	var section payments.ListInvoicesResponse
-	sectionResp := getInvoices(t, srv, ownerSession, me.practiceID, me.engagementID, "")
+	sectionResp := getInvoices(t, srv, ownerSession, me.practiceID, me.engagementID)
 	defer sectionResp.Body.Close()
 	decodeInvoices(t, sectionResp, &section)
 	for _, it := range section.Items {
@@ -72,7 +72,7 @@ func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
 	contractorID := testdb.SeedStaffAtPractice(t, db, me.practiceID, contractorUID, []string{doulaRole}, "contractor")
 	testdb.SeedGrantedAttachment(t, db, me.engagementID, contractorID)
 	var rows payments.ContractorInvoicesResponse
-	rowsResp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID, "")
+	rowsResp := getInvoices(t, srv, authntest.SeedSessionAt(t, db.App, contractorUID, now), me.practiceID, me.engagementID)
 	defer rowsResp.Body.Close()
 	decodeInvoices(t, rowsResp, &rows)
 	for _, it := range rows.Items {

@@ -1,29 +1,27 @@
 package payments_test
 
 import (
-	"encoding/json/v2"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/payments"
-	"doula-cloud/api/internal/testdb"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 )
 
 const recordedNote = "Bank transfer from Imani Brooks, reference IB-0950"
 
-// seedPaidByHand is one by-hand Invoice paid by a bank transfer with a
-// note, as Record payment leaves it (#271).
-func seedPaidByHand(t *testing.T, db *testdb.DB, practiceID, engagementID string) {
-	t.Helper()
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	seedManualPayment(t, db, invoiceID, "bank_transfer", recordedNote)
-	if _, err := db.Admin.ExecContext(t.Context(),
+// paidByHandEngagement is one by-hand Invoice paid by a bank transfer with
+// a note, as Record payment leaves it (#271), on a new Engagement.
+func (e *env) paidByHandEngagement(opts ...fixture.EngagementOption) (engagementID string) {
+	e.t.Helper()
+	engagementID, invoiceID := e.byHandInvoiceFor(opts...)
+	seedManualPayment(e.t, e.db, invoiceID, "bank_transfer", recordedNote)
+	if _, err := e.db.Admin.ExecContext(e.t.Context(),
 		`UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1`, invoiceID); err != nil {
-		t.Fatalf("mark invoice paid: %v", err)
+		e.t.Fatalf("mark invoice paid: %v", err)
 	}
+	return engagementID
 }
 
 // TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid proves #2241:
@@ -33,35 +31,24 @@ func seedPaidByHand(t *testing.T, db *testdb.DB, practiceID, engagementID string
 func TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid(t *testing.T) {
 	cases := []struct {
 		name       string
-		role       string
+		who        fixture.StaffOption
 		isAttached bool
 	}{
-		{"owner", ownerRole, false},
-		{adminRole, adminRole, false},
-		{"employee doula", doulaRole, true},
+		{"owner", fixture.Owner(), false},
+		{adminRole, fixture.Admin(), false},
+		{"employee doula", fixture.Doula(), true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			db := testdb.New(t)
-			uid := "invoice-method-" + strings.ReplaceAll(tc.name, " ", "-")
-			practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{tc.role}, "employee")
-			_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Imani Brooks", "imani@example.com")
+			e := newEnv(t, signedInAs(tc.who))
+			var opts []fixture.EngagementOption
 			if tc.isAttached {
-				testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
+				opts = append(opts, fixture.WithDoula(e.Staff))
 			}
-			seedPaidByHand(t, db, practiceID, engagementID)
-			srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-			defer srv.Close()
+			engagementID := e.paidByHandEngagement(opts...)
 
-			resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-			defer resp.Body.Close()
-			if resp.StatusCode != http.StatusOK {
-				t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-			}
-			var out payments.ListInvoicesResponse
-			if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-				t.Fatalf("decode: %v", err)
-			}
+			out := e.listInvoices(engagementID)
+
 			if len(out.Items) != 1 {
 				t.Fatalf("items = %d, want 1", len(out.Items))
 			}
@@ -77,23 +64,13 @@ func TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid(t *testing.T) {
 // note belong to a by-hand Payment only: a card Payment Stripe collected
 // has neither.
 func TestGetInvoicesHandler_ACardPaymentCarriesNoMethod(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-method-card"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	invoiceID := seedByHandInvoice(t, db, practiceID, contractID)
-	seedStripePayment(t, db, invoiceID, seedByHandInvoiceAmountCents, "pi_method_card")
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t)
+	engagementID, invoiceID := e.byHandInvoice()
+	seedStripePayment(t, e.db, invoiceID, seedByHandInvoiceAmountCents, "pi_method_card")
 
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	if strings.Contains(string(raw), "activePaymentMethod") || strings.Contains(string(raw), "activePaymentNote") {
+	raw := string(reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn))
+
+	if strings.Contains(raw, "activePaymentMethod") || strings.Contains(raw, "activePaymentNote") {
 		t.Fatalf("a card Payment carries a method or note: %s", raw)
 	}
 }
@@ -102,25 +79,11 @@ func TestGetInvoicesHandler_ACardPaymentCarriesNoMethod(t *testing.T) {
 // boundary: a contractor never reads a Payment against an Invoice
 // (ADR-0008, #2094), so neither the method nor the note reaches her.
 func TestGetInvoicesHandler_AContractorNeverReadsHowItWasPaid(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "invoice-method-contractor"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Imani Brooks", "imani@example.com")
-	testdb.SeedGrantedAttachment(t, db, engagementID, staffID)
-	seedPaidByHand(t, db, practiceID, engagementID)
-	srv, session := newInvoiceServer(t, db, uid, payments.NewFakeClient())
-	defer srv.Close()
+	e := newEnv(t, signedInAs(fixture.Contractor()))
+	engagementID := e.paidByHandEngagement(fixture.WithDoula(e.Staff))
 
-	resp := getInvoices(t, srv, session, practiceID, engagementID, "")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	raw, err := io.ReadAll(resp.Body)
-	if err != nil {
-		t.Fatalf("read body: %v", err)
-	}
-	body := string(raw)
+	body := string(reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn))
+
 	for _, leak := range []string{"bank_transfer", "IB-0950", "activePaymentMethod", "activePaymentNote"} {
 		if strings.Contains(body, leak) {
 			t.Fatalf("a contractor's Invoice list carries %q: %s", leak, body)

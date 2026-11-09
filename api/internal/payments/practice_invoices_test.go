@@ -1,16 +1,15 @@
 package payments_test
 
 import (
-	"encoding/base64"
 	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
@@ -35,56 +34,33 @@ func newPracticeInvoiceServer(t *testing.T, db *testdb.DB, uid string) (srv *htt
 	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
 }
 
-func getPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) *http.Response {
-	t.Helper()
-	narrowing := ""
-	if unpaidOnly {
-		narrowing = "unpaid=true"
-	}
-	return getPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
-}
-
-// getPracticeInvoicesNarrowed is getPracticeInvoices with the narrowing
-// written as the query parameter itself, so #768's ?overdue=true reads
-// the same way #427's ?unpaid=true does without a second boolean that
-// only one of the two callers ever sets.
-func getPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, cursor, narrowing string) *http.Response {
+// getPracticeInvoicesNarrowed reads the Practice's Invoice book with the
+// narrowing written as the query parameter itself (#768's ?overdue=true,
+// #427's ?unpaid=true).
+func getPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, narrowing string) *http.Response {
 	t.Helper()
 	url := srv.URL + "/api/practices/" + practiceID + "/invoices"
-	params := make([]string, 0, 2)
 	if narrowing != "" {
-		params = append(params, narrowing)
+		url += "?" + narrowing
 	}
-	if cursor != "" {
-		params = append(params, "cursor="+cursor)
-	}
-	if len(params) > 0 {
-		url += "?" + strings.Join(params, "&")
-	}
-	resp := reqtest.Get(t, url, reqtest.Session(session))
-	return resp
+	return reqtest.Get(t, url, reqtest.Session(session))
 }
 
-// readPracticeInvoices requests one page and decodes it, closing the body
-// itself: the response never crosses back to the caller, which is both
+// readPracticeInvoices reads the whole book and decodes it, closing the
+// body itself: the response never crosses back to the caller, which is both
 // what bodyclose wants to see and one less thing for every test to
-// remember. The invalid-cursor test, which asserts a status rather than a
-// body, uses getPracticeInvoices directly.
-func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID, cursor string, unpaidOnly bool) payments.PracticeInvoicesResponse {
+// remember.
+func readPracticeInvoices(t *testing.T, srv *httptest.Server, session, practiceID string) payments.PracticeInvoicesResponse {
 	t.Helper()
-	narrowing := ""
-	if unpaidOnly {
-		narrowing = "unpaid=true"
-	}
-	return readPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
+	return readPracticeInvoicesNarrowed(t, srv, session, practiceID, "")
 }
 
 // readPracticeInvoicesNarrowed is readPracticeInvoices over an explicit
 // query-parameter narrowing -- #768's ?overdue=true, and the both-set
 // case that proves overdue wins.
-func readPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, cursor, narrowing string) payments.PracticeInvoicesResponse {
+func readPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, practiceID, narrowing string) payments.PracticeInvoicesResponse {
 	t.Helper()
-	resp := getPracticeInvoicesNarrowed(t, srv, session, practiceID, cursor, narrowing)
+	resp := getPracticeInvoicesNarrowed(t, srv, session, practiceID, narrowing)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
@@ -96,29 +72,46 @@ func readPracticeInvoicesNarrowed(t *testing.T, srv *httptest.Server, session, p
 	return out
 }
 
+// practiceInvoicesPath is the Practice-wide Invoice book, narrowed by the
+// query parameters given: ?unpaid=true (#427), ?overdue=true (#768) and
+// ?cursor=.
+func practiceInvoicesPath(query ...string) string {
+	path := "/invoices"
+	for i, q := range query {
+		sep := "&"
+		if i == 0 {
+			sep = "?"
+		}
+		path += sep + q
+	}
+	return path
+}
+
+// practiceInvoices reads one page of the Practice's Invoice book as the
+// Staff member at the screen.
+func (e *env) practiceInvoices(query ...string) payments.PracticeInvoicesResponse {
+	e.t.Helper()
+	return reqtest.Expect[payments.PracticeInvoicesResponse](e.t, http.MethodGet, e.url(practiceInvoicesPath(query...)), http.StatusOK, e.signedIn)
+}
+
 // TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst is gap
 // RA-G7 itself: one list answering "who owes us money" without opening
 // every Engagement in turn. Each row names the Client and her Engagement,
 // so the list is a way in rather than a wall of amounts.
 func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-list"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementA := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	clientB, engagementB := testdb.SeedNamedEngagement(t, db, practiceID, "Bea Client", "bea@example.com")
+	e := newEnv(t)
+	engagementA, contractA := e.contractWithStatus("draft", fixture.NewClient(fixture.ClientName("Ada Client")))
+	bea := fixture.Engagement(t, e.db, e.Practice, fixture.NewClient(fixture.ClientName("Bea Client")))
 	// #2114: a list of Clients names each in full, so the preferred name
 	// is followed by the family name.
-	testdb.NameClient(t, db, clientB, "Bea", "Okafor")
-	contractA := seedDraftContract(t, db, engagementA)
-	contractB := seedDraftContract(t, db, engagementB)
+	testdb.NameClient(t, e.db, bea.Client.ID, "Bea", "Okafor")
+	contractB := seedDraftContract(t, e.db, bea.ID)
 	base := time.Now().Add(-time.Hour)
-	older := seedInvoice(t, db, practiceID, contractA, "in_prac_a", invoiceStatusOpen, 15000, base)
-	newer := seedInvoice(t, db, practiceID, contractB, "in_prac_b", invoiceStatusOpen, 25000, base.Add(time.Minute))
+	older := seedInvoice(t, e.db, e.Practice.ID, contractA, "in_prac_a", invoiceStatusOpen, 15000, base)
+	newer := seedInvoice(t, e.db, e.Practice.ID, contractB, "in_prac_b", invoiceStatusOpen, 25000, base.Add(time.Minute))
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 2 {
 		t.Fatalf("items = %d, want 2", len(out.Items))
 	}
@@ -128,8 +121,8 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 	if out.Items[0].ClientName != "Bea Okafor" || out.Items[1].ClientName != "Ada Client" {
 		t.Fatalf("client names = [%q %q], want [Bea Okafor Ada Client]", out.Items[0].ClientName, out.Items[1].ClientName)
 	}
-	if out.Items[0].EngagementID != engagementB || out.Items[1].EngagementID != engagementA {
-		t.Fatalf("engagement ids = [%q %q], want [%q %q]", out.Items[0].EngagementID, out.Items[1].EngagementID, engagementB, engagementA)
+	if out.Items[0].EngagementID != bea.ID || out.Items[1].EngagementID != engagementA {
+		t.Fatalf("engagement ids = [%q %q], want [%q %q]", out.Items[0].EngagementID, out.Items[1].EngagementID, bea.ID, engagementA)
 	}
 	if out.HasMore {
 		t.Fatal("hasMore = true, want false")
@@ -142,23 +135,18 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 // as neither (a draft never reached the Client, a void was canceled, an
 // uncollectible was written off).
 func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-totals"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus("draft")
 	base := time.Now().Add(-time.Hour)
-	seedInvoice(t, db, practiceID, contractID, "in_tot_open1", invoiceStatusOpen, 15000, base)
-	seedInvoice(t, db, practiceID, contractID, "in_tot_open2", invoiceStatusOpen, 5000, base.Add(time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_tot_paid", "paid", 30000, base.Add(2*time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_tot_draft", "draft", 99900, base.Add(3*time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_tot_void", "void", 88800, base.Add(4*time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_tot_unc", "uncollectible", 77700, base.Add(5*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_open1", invoiceStatusOpen, 15000, base)
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_open2", invoiceStatusOpen, 5000, base.Add(time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_paid", invoiceStatusPaid, 30000, base.Add(2*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_draft", invoiceStatusDraft, 99900, base.Add(3*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_void", invoiceStatusVoid, 88800, base.Add(4*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_tot_unc", invoiceStatusUncollectible, 77700, base.Add(5*time.Second))
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if out.OutstandingCents != 20000 {
 		t.Fatalf("outstandingCents = %d, want 20000", out.OutstandingCents)
 	}
@@ -175,24 +163,18 @@ func TestGetPracticeInvoicesHandler_TotalsCoverTheWholeBook(t *testing.T) {
 // 00024_invoices.sql already enforces, so a bug in either one alone
 // cannot leak another Practice's book.
 func TestGetPracticeInvoicesHandler_ExcludesOtherPractices(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-tenancy"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, mine := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	mineContract := seedDraftContract(t, db, mine)
-	mineInvoice := seedInvoice(t, db, practiceID, mineContract, "in_mine", invoiceStatusOpen, 1000, time.Now())
+	e := newEnv(t)
+	_, mineContract := e.contractWithStatus("draft")
+	mine := seedInvoice(t, e.db, e.Practice.ID, mineContract, "in_mine", invoiceStatusOpen, 1000, time.Now())
 
-	otherPractice := testdb.SeedPractice(t, db, "Another Practice")
-	_, theirs := testdb.SeedNamedEngagement(t, db, otherPractice, "Zoe Client", "zoe@example.com")
-	theirsContract := seedDraftContract(t, db, theirs)
-	seedInvoice(t, db, otherPractice, theirsContract, "in_theirs", invoiceStatusOpen, 500000, time.Now())
+	other := fixture.Practice(t, e.db)
+	theirs := fixture.Engagement(t, e.db, other)
+	seedInvoice(t, e.db, other.ID, seedDraftContract(t, e.db, theirs.ID), "in_theirs", invoiceStatusOpen, 500000, time.Now())
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
-	if len(out.Items) != 1 || out.Items[0].ID != mineInvoice {
-		t.Fatalf("items = %+v, want only %q", out.Items, mineInvoice)
+	if len(out.Items) != 1 || out.Items[0].ID != mine {
+		t.Fatalf("items = %+v, want only %q", out.Items, mine)
 	}
 	if out.OutstandingCents != 1000 {
 		t.Fatalf("outstandingCents = %d, want 1000", out.OutstandingCents)
@@ -202,14 +184,10 @@ func TestGetPracticeInvoicesHandler_ExcludesOtherPractices(t *testing.T) {
 // TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList proves a Practice
 // that has never billed gets a 200 with zero totals, not a 404.
 func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-empty"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 0 {
 		t.Fatalf("items = %d, want 0", len(out.Items))
 	}
@@ -222,20 +200,15 @@ func TestGetPracticeInvoicesHandler_EmptyBookIsAnEmptyList(t *testing.T) {
 // envelope's clientsCanPay (#2311) is the stored column the Practice
 // session reads, on an empty book as on any other.
 func TestGetPracticeInvoicesHandler_ClientsCanPayIsTheStoredFact(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-clients-can-pay"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); out.ClientsCanPay {
+	if out := e.practiceInvoices(); out.ClientsCanPay {
 		t.Fatal("clientsCanPay = true before the column is active, want false")
 	}
 
-	testdb.SeedClientsCanPay(t, db, practiceID)
+	testdb.SeedClientsCanPay(t, e.db, e.Practice.ID)
 
-	if out := readPracticeInvoices(t, srv, session, practiceID, "", false); !out.ClientsCanPay {
+	if out := e.practiceInvoices(); !out.ClientsCanPay {
 		t.Fatal("clientsCanPay = false once the column is active, want true")
 	}
 }
@@ -246,21 +219,16 @@ func TestGetPracticeInvoicesHandler_ClientsCanPayIsTheStoredFact(t *testing.T) {
 // day the recorder typed (#1965), not that day's UTC midnight read in New
 // York, which is the day before.
 func TestGetPracticeInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-paid-at"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-	invoiceID := seedInvoice(t, db, practiceID, contractID, "in_paid_at", "paid", 4200, time.Now())
-	seedManualPayment(t, db, invoiceID, methodCheck, "")
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus("draft")
+	invoiceID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_paid_at", invoiceStatusPaid, 4200, time.Now())
+	seedManualPayment(t, e.db, invoiceID, methodCheck, "")
+	if _, err := e.db.Admin.ExecContext(t.Context(), `UPDATE invoices SET paid_at = '2026-10-25T00:00:00Z' WHERE id = $1`, invoiceID); err != nil {
 		t.Fatalf("set paid_at: %v", err)
 	}
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices()
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", false)
 	if len(out.Items) != 1 {
 		t.Fatalf("items = %d, want 1", len(out.Items))
 	}
@@ -269,28 +237,30 @@ func TestGetPracticeInvoicesHandler_ByHandPaidOnIsTheTypedDay(t *testing.T) {
 	}
 }
 
+// seedOpenInvoices seeds n open Invoices against one Contract at the
+// Practice, oldest first, and returns the Contract and the Invoice ids in
+// that order.
+func (e *env) seedOpenInvoices(n int) (contractID string, invoiceIDs []string) {
+	e.t.Helper()
+	_, contractID = e.contractWithStatus("draft")
+	base := time.Now().Add(-time.Hour)
+	for i := range n {
+		invoiceIDs = append(invoiceIDs, seedInvoice(e.t, e.db, e.Practice.ID, contractID, "in_prac_page_"+strconv.Itoa(i),
+			invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second)))
+	}
+	return contractID, invoiceIDs
+}
+
 // TestGetPracticeInvoicesHandler_PaginatesWithCursor proves a book larger
 // than one page sets hasMore/nextCursor, that the cursor resumes exactly
 // where the first page stopped, and that the totals stay whole-book on
 // every page.
 func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-paginate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-
+	e := newEnv(t)
 	const total = 31
-	base := time.Now().Add(-time.Hour)
-	ids := make([]string, total)
-	for i := range total {
-		ids[i] = seedInvoice(t, db, practiceID, contractID, "in_prac_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
-	}
+	_, ids := e.seedOpenInvoices(total)
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	first := readPracticeInvoices(t, srv, session, practiceID, "", false)
+	first := e.practiceInvoices()
 	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
 		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
 	}
@@ -301,7 +271,7 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 		t.Fatalf("first page items[0] = %q, want %q (newest)", first.Items[0].ID, ids[total-1])
 	}
 
-	second := readPracticeInvoices(t, srv, session, practiceID, *first.NextCursor, false)
+	second := e.practiceInvoices("cursor=" + *first.NextCursor)
 	if second.HasMore {
 		t.Fatal("second page hasMore = true, want false")
 	}
@@ -317,24 +287,12 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 // caller-supplied cursor that cannot decode is refused rather than
 // silently returning the wrong page.
 func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-bad-cursor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	cases := map[string]string{
-		"not valid base64":            "!!!not-valid-base64!!!",
-		"valid base64, no separator":  base64.URLEncoding.EncodeToString([]byte("nosep")),
-		"valid base64, bad timestamp": base64.URLEncoding.EncodeToString([]byte("not-a-time|some-id")),
-	}
-	for name, cursor := range cases {
-		resp := getPracticeInvoices(t, srv, session, practiceID, cursor, false)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, want %d", name, resp.StatusCode, http.StatusBadRequest)
-		}
+	for name, cursor := range invalidCursors {
+		t.Run(name, func(*testing.T) {
+			e.expect(http.MethodGet, practiceInvoicesPath("cursor="+cursor), http.StatusBadRequest)
+		})
 	}
 }
 
@@ -344,22 +302,17 @@ func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 // void or uncollectible Invoice is left out and the totals stay
 // whole-book regardless of the filter.
 func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-unpaid-filter"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus("draft")
 	base := time.Now().Add(-time.Hour)
-	openID := seedInvoice(t, db, practiceID, contractID, "in_unpaid_open", invoiceStatusOpen, 15000, base)
-	seedInvoice(t, db, practiceID, contractID, "in_unpaid_paid", "paid", 30000, base.Add(time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_unpaid_draft", "draft", 99900, base.Add(2*time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_unpaid_void", "void", 88800, base.Add(3*time.Second))
-	seedInvoice(t, db, practiceID, contractID, "in_unpaid_unc", "uncollectible", 77700, base.Add(4*time.Second))
+	openID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_open", invoiceStatusOpen, 15000, base)
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_paid", invoiceStatusPaid, 30000, base.Add(time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_draft", invoiceStatusDraft, 99900, base.Add(2*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_void", invoiceStatusVoid, 88800, base.Add(3*time.Second))
+	seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_unc", invoiceStatusUncollectible, 77700, base.Add(4*time.Second))
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
+	out := e.practiceInvoices("unpaid=true")
 
-	out := readPracticeInvoices(t, srv, session, practiceID, "", true)
 	if len(out.Items) != 1 || out.Items[0].ID != openID {
 		t.Fatalf("items = %+v, want only %q", out.Items, openID)
 	}
@@ -377,24 +330,12 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
 // stopped, and a paid Invoice interleaved among them never appears on
 // either page.
 func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-unpaid-paginate"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
-
+	e := newEnv(t)
 	const totalOpen = 31
-	base := time.Now().Add(-time.Hour)
-	ids := make([]string, totalOpen)
-	for i := range totalOpen {
-		ids[i] = seedInvoice(t, db, practiceID, contractID, "in_unpaid_page_"+strconv.Itoa(i), invoiceStatusOpen, int64(1000+i), base.Add(time.Duration(i)*time.Second))
-	}
-	paidID := seedInvoice(t, db, practiceID, contractID, "in_unpaid_page_paid", "paid", 5000, base.Add(time.Duration(totalOpen)*time.Second))
+	contractID, ids := e.seedOpenInvoices(totalOpen)
+	paidID := seedInvoice(t, e.db, e.Practice.ID, contractID, "in_unpaid_page_paid", invoiceStatusPaid, 5000, time.Now())
 
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	first := readPracticeInvoices(t, srv, session, practiceID, "", true)
+	first := e.practiceInvoices("unpaid=true")
 	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
 		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
 	}
@@ -410,7 +351,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 		}
 	}
 
-	second := readPracticeInvoices(t, srv, session, practiceID, *first.NextCursor, true)
+	second := e.practiceInvoices("unpaid=true", "cursor="+*first.NextCursor)
 	if second.HasMore {
 		t.Fatal("second page hasMore = true, want false")
 	}
@@ -419,40 +360,26 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	}
 }
 
-// TestGetPracticeInvoicesHandler_EmployedDoulaSees proves ADR-0008's
-// money row as amended by #282: an employed Doula reaches the
-// Practice-wide Invoice book the same as an Owner or Admin.
-func TestGetPracticeInvoicesHandler_EmployedDoulaSees(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-employee"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
-
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getPracticeInvoices(t, srv, session, practiceID, "", false)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
+// TestGetPracticeInvoicesHandler_RolesReachTheBook proves ADR-0008's money
+// row as amended by #282: an employed Doula reaches the Practice-wide
+// Invoice book the same as an Owner or Admin. A contractor is refused by
+// the handler's own staffauth.RequireNotAmbientContractor check, not just
+// by the role the GatedRouter mount declares, which
+// api/gate_guardrail_test.go already covers but cannot behaviorally test.
+func TestGetPracticeInvoicesHandler_RolesReachTheBook(t *testing.T) {
+	cases := []struct {
+		name string
+		who  []fixture.StaffOption
+		want int
+	}{
+		{"an Owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
+		{"an employed Doula", []fixture.StaffOption{fixture.Doula()}, http.StatusOK},
+		{"a contractor Doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
-}
-
-// TestGetPracticeInvoicesHandler_RefusesAContractor proves the handler's
-// internal staffauth.RequireNotAmbientContractor check actually rejects
-// a contractor caller -- not just declares the role at the GatedRouter
-// mount, which api/gate_guardrail_test.go already covers but cannot
-// behaviorally test.
-func TestGetPracticeInvoicesHandler_RefusesAContractor(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-contractor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "contractor")
-
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getPracticeInvoices(t, srv, session, practiceID, "", false)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.who...))
+			e.expect(http.MethodGet, practiceInvoicesPath(), tc.want)
+		})
 	}
 }

@@ -26,12 +26,12 @@ func TestStaffInvoiceLists_RaisedOnIsThePracticesDay(t *testing.T) {
 	srv, session := newPracticeInvoiceServer(t, db, uid)
 	defer srv.Close()
 
-	book := readPracticeInvoices(t, srv, session, practiceID, "", false)
+	book := readPracticeInvoices(t, srv, session, practiceID)
 	if len(book.Items) != 1 || book.Items[0].RaisedOn != dayOct25 {
 		t.Fatalf("Practice list items = %+v, want raisedOn %s", book.Items, dayOct25)
 	}
 
-	listResp := getInvoices(t, srv, session, practiceID, engagementID, "")
+	listResp := getInvoices(t, srv, session, practiceID, engagementID)
 	defer listResp.Body.Close()
 	var section payments.ListInvoicesResponse
 	if err := json.UnmarshalRead(listResp.Body, &section); err != nil {

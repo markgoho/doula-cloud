@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -54,12 +55,9 @@ func TestRLS_InvoicesClientReadsEveryStatusButDraft(t *testing.T) {
 	for status, want := range cases {
 		t.Run(status, func(t *testing.T) {
 			db := testdb.New(t)
-			practiceID := testdb.SeedPractice(t, db, "Practice")
-			clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-			contractID := seedSignedContract(t, db, engagementID)
-			seedInvoice(t, db, practiceID, contractID, "in_client_"+status, status, 5000, time.Now())
+			mine := seedBilled(t, db, fixture.Practice(t, db), "in_client_"+status, status, 5000)
 
-			if got := visibleCount(t, clientTx(t, db, clientID), "invoices"); got != want {
+			if got := visibleCount(t, clientTx(t, db, mine.clientID), "invoices"); got != want {
 				t.Fatalf("Client sees %d %s Invoices, want %d", got, status, want)
 			}
 		})
@@ -71,19 +69,15 @@ func TestRLS_InvoicesClientReadsEveryStatusButDraft(t *testing.T) {
 // an Invoice at another Practice, both stay invisible.
 func TestRLS_InvoicesClientCannotReadAnotherClientsOrPracticesInvoice(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	_, engagementSibling := testdb.SeedNamedEngagement(t, db, practiceA, "Client Sibling", "sibling@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	own := seedInvoice(t, db, practiceA, seedSignedContract(t, db, engagementA), "in_client_own", invoiceStatusOpen, 5000, time.Now())
-	seedInvoice(t, db, practiceA, seedSignedContract(t, db, engagementSibling), "in_client_sibling", invoiceStatusOpen, 6000, time.Now())
-	seedInvoice(t, db, practiceB, seedSignedContract(t, db, engagementB), "in_client_other_practice", invoiceStatusOpen, 7000, time.Now())
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	own := seedBilled(t, db, practiceA, "in_client_own", invoiceStatusOpen, 5000)
+	seedBilled(t, db, practiceA, "in_client_sibling", invoiceStatusOpen, 6000)
+	seedBilled(t, db, practiceB, "in_client_other_practice", invoiceStatusOpen, 7000)
 
-	tx := clientTx(t, db, clientA)
+	tx := clientTx(t, db, own.clientID)
 	id := testdb.Scalar[string](t, tx, `SELECT id FROM invoices`)
-	if id != own {
-		t.Fatalf("visible Invoice = %q, want %q", id, own)
+	if id != own.invoiceID {
+		t.Fatalf("visible Invoice = %q, want %q", id, own.invoiceID)
 	}
 	if got := visibleCount(t, tx, "invoices"); got != 1 {
 		t.Fatalf("Client A sees %d Invoices, want 1", got)
@@ -95,12 +89,10 @@ func TestRLS_InvoicesClientCannotReadAnotherClientsOrPracticesInvoice(t *testing
 // touches no row.
 func TestRLS_InvoicesClientCannotWrite(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	contractID := seedSignedContract(t, db, engagementID)
-	seedInvoice(t, db, practiceID, contractID, "in_client_write", invoiceStatusOpen, 5000, time.Now())
+	practice := fixture.Practice(t, db)
+	mine := seedBilled(t, db, practice, "in_client_write", invoiceStatusOpen, 5000)
 
-	tx := clientTx(t, db, clientID)
+	tx := clientTx(t, db, mine.clientID)
 	res, err := tx.ExecContext(t.Context(), `UPDATE invoices SET status = 'paid'`)
 	if err != nil {
 		t.Fatalf("update invoices: %v", err)
@@ -111,7 +103,7 @@ func TestRLS_InvoicesClientCannotWrite(t *testing.T) {
 
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, amount_cents, reference, due_at) VALUES ($1, $2, 'in_client_insert', 5000, 'in_client_insert', now())`,
-		practiceID, contractID,
+		practice.ID, mine.contractID,
 	); err == nil {
 		t.Fatal("expected a Client-portal insert into invoices to be rejected by RLS, got no error")
 	}
@@ -122,19 +114,15 @@ func TestRLS_InvoicesClientCannotWrite(t *testing.T) {
 // Client's and another Practice's are not.
 func TestRLS_PaymentsClientReadsOwnPaymentsOnly(t *testing.T) {
 	db := testdb.New(t)
-	practiceA := testdb.SeedPractice(t, db, "Practice A")
-	practiceB := testdb.SeedPractice(t, db, "Practice B")
-	clientA, engagementA := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "a@example.com")
-	_, engagementSibling := testdb.SeedNamedEngagement(t, db, practiceA, "Client Sibling", "sibling@example.com")
-	_, engagementB := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "b@example.com")
-	own := seedInvoice(t, db, practiceA, seedSignedContract(t, db, engagementA), "in_pay_own", invoiceStatusPaid, 5000, time.Now())
-	sibling := seedInvoice(t, db, practiceA, seedSignedContract(t, db, engagementSibling), "in_pay_sibling", invoiceStatusPaid, 6000, time.Now())
-	other := seedInvoice(t, db, practiceB, seedSignedContract(t, db, engagementB), "in_pay_other", invoiceStatusPaid, 7000, time.Now())
-	ownPayment := seedPayment(t, db, own, "pi_client_own", 5000, time.Now())
-	seedPayment(t, db, sibling, "pi_client_sibling", 6000, time.Now())
-	seedPayment(t, db, other, "pi_client_other", 7000, time.Now())
+	practiceA, practiceB := fixture.Practice(t, db), fixture.Practice(t, db)
+	own := seedBilled(t, db, practiceA, "in_pay_own", invoiceStatusPaid, 5000)
+	sibling := seedBilled(t, db, practiceA, "in_pay_sibling", invoiceStatusPaid, 6000)
+	other := seedBilled(t, db, practiceB, "in_pay_other", invoiceStatusPaid, 7000)
+	ownPayment := seedPayment(t, db, own.invoiceID, "pi_client_own", 5000, time.Now())
+	seedPayment(t, db, sibling.invoiceID, "pi_client_sibling", 6000, time.Now())
+	seedPayment(t, db, other.invoiceID, "pi_client_other", 7000, time.Now())
 
-	tx := clientTx(t, db, clientA)
+	tx := clientTx(t, db, own.clientID)
 	id := testdb.Scalar[string](t, tx, `SELECT id FROM payments`)
 	if id != ownPayment {
 		t.Fatalf("visible Payment = %q, want %q", id, ownPayment)
@@ -149,12 +137,10 @@ func TestRLS_PaymentsClientReadsOwnPaymentsOnly(t *testing.T) {
 // invoices one.
 func TestRLS_PaymentsClientCannotReadPaymentOnDraftInvoice(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	invoiceID := seedInvoice(t, db, practiceID, seedSignedContract(t, db, engagementID), "in_pay_draft", invoiceStatusDraft, 5000, time.Now())
-	seedPayment(t, db, invoiceID, "pi_client_draft", 5000, time.Now())
+	draft := seedBilled(t, db, fixture.Practice(t, db), "in_pay_draft", invoiceStatusDraft, 5000)
+	seedPayment(t, db, draft.invoiceID, "pi_client_draft", 5000, time.Now())
 
-	if got := visibleCount(t, clientTx(t, db, clientID), "payments"); got != 0 {
+	if got := visibleCount(t, clientTx(t, db, draft.clientID), "payments"); got != 0 {
 		t.Fatalf("Client sees %d Payments on a draft Invoice, want 0", got)
 	}
 }
@@ -163,14 +149,12 @@ func TestRLS_PaymentsClientCannotReadPaymentOnDraftInvoice(t *testing.T) {
 // INSERT on payments.
 func TestRLS_PaymentsClientCannotWrite(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Practice")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Jordan Client", "jordan@example.com")
-	invoiceID := seedInvoice(t, db, practiceID, seedSignedContract(t, db, engagementID), "in_pay_write", invoiceStatusOpen, 5000, time.Now())
+	open := seedBilled(t, db, fixture.Practice(t, db), "in_pay_write", invoiceStatusOpen, 5000)
 
-	tx := clientTx(t, db, clientID)
+	tx := clientTx(t, db, open.clientID)
 	if _, err := tx.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind) VALUES ($1, 'pi_client_insert', 5000, now(), 'stripe')`,
-		invoiceID,
+		open.invoiceID,
 	); err == nil {
 		t.Fatal("expected a Client-portal insert into payments to be rejected by RLS, got no error")
 	}
