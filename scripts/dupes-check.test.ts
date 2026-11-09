@@ -183,7 +183,7 @@ describe('render', () => {
       '  api/a.go:5-20  duplicates  api/b.go:60-75  (16 lines, go)'
     );
     const out = render([hit], []);
-    expect(out).toContain('1 clone overlap');
+    expect(out).toContain('1 clone overlaps lines');
     expect(out).toContain('api/a.go:5-20');
     expect(out).toContain('api/b.go:60-75');
     expect(out).toContain(HINT);

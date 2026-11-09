@@ -126,7 +126,7 @@ export function render(failing: Clone[], markers: Finding[]): string {
   const out: string[] = [];
   if (failing.length > 0) {
     out.push(
-      `${failing.length} clone${failing.length === 1 ? '' : 's'} overlap lines this change adds or changes:`,
+      `${failing.length === 1 ? '1 clone overlaps' : `${failing.length} clones overlap`} lines this change adds or changes:`,
       ...failing.map(renderClone),
       '',
       HINT
