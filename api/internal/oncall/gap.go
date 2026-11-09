@@ -153,6 +153,19 @@ func (c gapWrite) mayWriteFor(staffID string) bool {
 	return c.isOwnerAdmin || staffID == c.actorID
 }
 
+// accept refuses a request that names nobody, or a colleague a Doula may
+// not write for, and otherwise returns validate's facts to store.
+func (c gapWrite) accept(w http.ResponseWriter, req GapRequest) (gapFacts, bool) {
+	if refuseNoStaffID(w, req) {
+		return gapFacts{}, false
+	}
+	if !c.mayWriteFor(req.StaffID) {
+		apierr.Write(w, http.StatusForbidden, apierr.CodeForbidden, MsgOnlyYourOwnGap, nil)
+		return gapFacts{}, false
+	}
+	return c.validate(w, req)
+}
+
 // validate checks req against the Engagement's window and Attachments,
 // returning the facts to store or writing the refusal itself.
 func (c gapWrite) validate(w http.ResponseWriter, req GapRequest) (gapFacts, bool) {

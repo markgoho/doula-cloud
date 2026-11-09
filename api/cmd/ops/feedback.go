@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/feedback"
 	"doula-cloud/api/internal/pagecursor"
@@ -136,9 +135,8 @@ func feedbackRead(db *sql.DB, repo string) http.HandlerFunc {
 			writeInternal(w)
 			return
 		}
-		if _, err := recordAct(r.Context(), tx, signedIn(r), actFeedbackRead, feedbackSubject(piece.ID), nil, nil, clock.Now(r.Context())); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !recordRead(w, r, tx, actFeedbackRead, feedbackSubject(piece.ID), nil) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		if !dbtx.Commit(w, tx) {

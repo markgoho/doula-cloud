@@ -115,6 +115,15 @@ func (c *Call) setID(wildcard, id string) {
 	c.ids[wildcard] = id
 }
 
+// Confirmed refuses a request that does not carry the X-Confirmed header
+// (RequireConfirmed): the backstop for an act the frontend asks a person
+// to confirm first.
+func Confirmed() Option {
+	return func(w http.ResponseWriter, r *http.Request, _ *Call) bool {
+		return RequireConfirmed(w, r)
+	}
+}
+
 // EngagementID declares the {engagementId} wildcard as a UUID and sets
 // Call.EngagementID. It checks nothing else: a handler that decides for
 // itself whether the Engagement is reachable, and what to say when it is

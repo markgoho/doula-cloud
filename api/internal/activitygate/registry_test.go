@@ -26,9 +26,9 @@ new kind in neither fails here until somebody decides which it is.
 
 What it reads is both shapes a write site can name a subject kind in:
 the exported Subject* constants in activity/actions.go, which is how
-almost every writer names one, and any `SubjectKind: "literal"` an
-activity.Entry is built with directly, which is how clientfieldtemplate
-still does it. Lexical rather than a go/ast parse, for the reason
+every writer names one, and any `SubjectKind: "literal"` an
+activity.Entry is built with directly, should a writer ever spell one
+that way. Lexical rather than a go/ast parse, for the reason
 activityPhrases.usage.spec.ts gives for its own regexes: gofmt already
 puts one constant per line, and parsing would buy nothing.
 */

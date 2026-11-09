@@ -10,7 +10,6 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pagecursor"
 )
@@ -149,9 +148,8 @@ func practiceList(db *sql.DB, deleted bool) http.HandlerFunc {
 		for _, p := range page.Items {
 			read.PracticeIDs = append(read.PracticeIDs, p.ID)
 		}
-		if _, err := recordAct(r.Context(), tx, signedIn(r), actOwnerContactRead, nil, read, nil, clock.Now(r.Context())); err != nil {
-			// coverage:ignore reason: DB failure, not exercised by unit tests
-			writeInternal(w)
+		if !recordRead(w, r, tx, actOwnerContactRead, nil, read) {
+			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
 		if !dbtx.Commit(w, tx) {

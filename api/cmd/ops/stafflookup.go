@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 )
 
@@ -97,9 +96,8 @@ func staffLookup(db *sql.DB) http.HandlerFunc {
 			for _, s := range found {
 				read.StaffIDs = append(read.StaffIDs, s.StaffID)
 			}
-			if _, err := recordAct(r.Context(), tx, signedIn(r), actStaffLookup, nil, read, nil, clock.Now(r.Context())); err != nil {
-				// coverage:ignore reason: DB failure, not exercised by unit tests
-				writeInternal(w)
+			if !recordRead(w, r, tx, actStaffLookup, nil, read) {
+				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return
 			}
 		}

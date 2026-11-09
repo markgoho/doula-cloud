@@ -29,19 +29,15 @@ import (
 // attached to. Must be mounted through
 // idempotency.Router.ExemptGated.
 func PostVoidContractHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		id, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		if ok, refusal := TransitionVoid.Check(Status(status)); !ok {
+	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
+		if ok, refusal := TransitionVoid.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
 		if _, err := c.Tx.ExecContext(r.Context(),
 			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			string(StatusVoided), id,
+			string(StatusVoided), ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -64,28 +60,28 @@ func PostVoidContractHandler() http.Handler {
 			`UPDATE contract_void_requests
 			    SET status = 'voided', decided_by = $1, decided_at = now()
 			  WHERE contract_id = $2 AND status = 'open'`,
-			c.StaffID, id,
+			c.StaffID, ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		voidRequests, err := listVoidRequests(r.Context(), c.Tx, id)
+		voidRequests, err := listVoidRequests(r.Context(), c.Tx, ct.ID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 
-		mergeFields := extractMergeFields(prose)
+		mergeFields := extractMergeFields(ct.Prose)
 		out := ContractResponse{
 			EngagementID:    c.EngagementID,
 			Status:          string(StatusVoided),
-			Prose:           prose,
+			Prose:           ct.Prose,
 			MergeFields:     mergeFields,
-			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
-			AmountChangedAt: amountChangedAt,
+			Values:          withResolvedPrice(mergeFields, ct.Values.nonEmpty(), ct.AmountCents),
+			AmountChangedAt: ct.AmountChangedAt,
 			VoidRequests:    voidRequests,
 		}
 		writeContract(w, r, c, http.StatusOK, out)

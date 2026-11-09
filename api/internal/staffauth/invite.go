@@ -257,9 +257,6 @@ func AddressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address
 func RevokeInvitationHandler() http.Handler {
 	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
 		tx, practiceID := c.Tx, c.PracticeID
-		if !RequireConfirmed(w, r) {
-			return
-		}
 		actorStaffID := c.StaffID
 
 		invitationID := c.ID("invitationId")
@@ -280,7 +277,7 @@ func RevokeInvitationHandler() http.Handler {
 		}
 
 		w.WriteHeader(http.StatusNoContent)
-	}, PathID("invitation", "invitationId"))
+	}, PathID("invitation", "invitationId"), Confirmed())
 }
 
 // NormalizeAddress is the one spelling of an email address this package

@@ -51,19 +51,19 @@ func ClientContractGlance(ctx context.Context, tx *sql.Tx, engagementID string) 
 // mounted behind clientauth.Middleware.
 func ClientGetContractHandler() http.Handler {
 	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
-		_, prose, status, values, amountCents, amountChangedAt, ok := requireContract(w, r, c.Tx, c.EngagementID)
+		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
-		mergeFields := extractMergeFields(prose)
+		mergeFields := extractMergeFields(ct.Prose)
 
 		out := ContractResponse{
 			EngagementID:    c.EngagementID,
-			Status:          status,
-			Prose:           prose,
+			Status:          ct.Status,
+			Prose:           ct.Prose,
 			MergeFields:     mergeFields,
-			Values:          withResolvedPrice(mergeFields, values.nonEmpty(), amountCents),
-			AmountChangedAt: amountChangedAt,
+			Values:          withResolvedPrice(mergeFields, ct.Values.nonEmpty(), ct.AmountCents),
+			AmountChangedAt: ct.AmountChangedAt,
 		}
 		writeClientContract(w, r, c.Tx, http.StatusOK, out)
 	})

@@ -23,23 +23,12 @@ import (
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
-		c, ok := beginGapWrite(w, r, call)
-		if !ok {
-			return
-		}
+	return gapHandler(func(w http.ResponseWriter, r *http.Request, _ staffauth.Call, c gapWrite) {
 		var req GapRequest
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		if refuseNoStaffID(w, req) {
-			return
-		}
-		if !c.mayWriteFor(req.StaffID) {
-			apierr.Write(w, http.StatusForbidden, apierr.CodeForbidden, MsgOnlyYourOwnGap, nil)
-			return
-		}
-		facts, ok := c.validate(w, req)
+		facts, ok := c.accept(w, req)
 		if !ok {
 			return
 		}
@@ -69,11 +58,7 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
-		c, ok := beginGapWrite(w, r, call)
-		if !ok {
-			return
-		}
+	return gapHandler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call, c gapWrite) {
 		gapID := call.ID("gapId")
 		var req GapRequest
 		if !apierr.DecodeJSON(w, r, &req) {
@@ -84,14 +69,7 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 		if !ok {
 			return
 		}
-		if refuseNoStaffID(w, req) {
-			return
-		}
-		if !c.mayWriteFor(req.StaffID) {
-			apierr.Write(w, http.StatusForbidden, apierr.CodeForbidden, MsgOnlyYourOwnGap, nil)
-			return
-		}
-		after, ok := c.validate(w, req)
+		after, ok := c.accept(w, req)
 		if !ok {
 			return
 		}
@@ -121,11 +99,7 @@ func UpdateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 //
 // Must be mounted behind staffauth.Middleware and AttachingWrite.
 func ClearGapHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
-		c, ok := beginGapWrite(w, r, call)
-		if !ok {
-			return
-		}
+	return gapHandler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call, c gapWrite) {
 		gapID := call.ID("gapId")
 		before, ok := lockGapFor(w, r, c, gapID)
 		if !ok {
@@ -148,6 +122,19 @@ func ClearGapHandler() http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}, staffauth.EngagementID(), staffauth.PathID("gap", "gapId"))
+}
+
+// gapHandler is staffauth.Handler for a route that writes a coverage gap:
+// beginGapWrite has already resolved the Engagement's window and the
+// caller's standing, and refused when there is none, before fn runs.
+func gapHandler(fn func(w http.ResponseWriter, r *http.Request, call staffauth.Call, c gapWrite), opts ...staffauth.Option) http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, call staffauth.Call) {
+		c, ok := beginGapWrite(w, r, call)
+		if !ok {
+			return
+		}
+		fn(w, r, call, c)
+	}, opts...)
 }
 
 // lockGapFor locks a live gap on the request's Engagement and checks the

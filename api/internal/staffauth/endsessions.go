@@ -35,9 +35,6 @@ import (
 func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 	return Handler(func(w http.ResponseWriter, r *http.Request, c Call) {
 		tx, practiceID := c.Tx, c.PracticeID
-		if !RequireConfirmed(w, r) {
-			return
-		}
 		actorStaffID := c.StaffID
 		targetStaffID := r.PathValue("staffId")
 
@@ -95,7 +92,7 @@ func EndSessionsHandler(enq tasknudge.Enqueuer) http.Handler {
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.SessionNotice))
 
 		w.WriteHeader(http.StatusNoContent)
-	})
+	}, Confirmed())
 }
 
 // endAllSessionsAndNotify ends every session identityUID holds and

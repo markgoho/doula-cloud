@@ -202,9 +202,6 @@ func StatusHandler() http.Handler {
 func InitiateHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
-		if !staffauth.RequireConfirmed(w, r) {
-			return
-		}
 
 		state, err := readDeletionState(r.Context(), tx, practiceID, true)
 		if err != nil {
@@ -280,7 +277,7 @@ func InitiateHandler() http.Handler {
 		}
 
 		apierr.WriteJSON(w, http.StatusOK, InitiateResponse{DeletionRequestedAt: now, FinalizeAt: finalizeAt})
-	})
+	}, staffauth.Confirmed())
 }
 
 // RestoreHandler undoes a pending deletion at any point before

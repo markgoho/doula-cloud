@@ -55,26 +55,26 @@ func PutContractAmountHandler() http.Handler {
 			return
 		}
 
-		id, _, status, _, before, _, ok := requireContract(w, r, c.Tx, c.EngagementID)
+		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
 		if !ok {
 			return
 		}
-		if ok, refusal := TransitionOverrideAmount.Check(Status(status)); !ok {
+		if ok, refusal := TransitionOverrideAmount.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
 
-		if before != req.AmountCents {
+		if ct.AmountCents != req.AmountCents {
 			if _, err := c.Tx.ExecContext(r.Context(),
 				`UPDATE contracts SET amount_cents = $1, amount_overridden = true, amount_changed_at = now() WHERE id = $2`,
-				req.AmountCents, id,
+				req.AmountCents, ct.ID,
 			); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
 
-			diffJSON, err := json.Marshal(activity.AmountDiff{AmountCentsBefore: before, AmountCentsAfter: req.AmountCents})
+			diffJSON, err := json.Marshal(activity.AmountDiff{AmountCentsBefore: ct.AmountCents, AmountCentsAfter: req.AmountCents})
 			if err != nil {
 				// coverage:ignore reason: marshal of a fixed, always-serializable struct never fails
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
