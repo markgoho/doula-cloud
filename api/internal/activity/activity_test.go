@@ -1,6 +1,7 @@
 package activity_test
 
 import (
+	"database/sql"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"slices"
@@ -8,164 +9,95 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
-type row struct {
-	SubjectKind   string
-	SubjectID     string
-	Action        string
-	ActorKind     string
-	ActorStaffID  *string
-	ActorClientID *string
-}
-
-func readRow(t *testing.T, db *testdb.DB, practiceID string) row {
-	t.Helper()
-	var r row
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT subject_kind, subject_id, action, actor_kind::text, actor_staff_id, actor_client_id
-		 FROM activity WHERE practice_id = $1`, practiceID,
-	).Scan(&r.SubjectKind, &r.SubjectID, &r.Action, &r.ActorKind, &r.ActorStaffID, &r.ActorClientID); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
-	return r
-}
-
 func TestRecord_StaffActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	staffID := testdb.SeedStaff(t, db, "record-staff-actor")
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	p := fixture.Practice(t, db)
+	staff := fixture.Staff(t, db, p)
 
 	diff, _ := json.Marshal(map[string]string{"note": "hello"})
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Admin, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: "membership",
-		SubjectID:   staffID,
+		SubjectID:   staff.ID,
 		Action:      "joined",
 		Diff:        diff,
-		Actor:       activity.StaffActor(staffID),
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+		Actor:       activity.StaffActor(staff.ID),
+	})
 
-	r := readRow(t, db, practiceID)
-	if r.ActorKind != "staff" || r.ActorStaffID == nil || *r.ActorStaffID != staffID || r.ActorClientID != nil {
-		t.Fatalf("row = %+v, want a staff actor naming %q", r, staffID)
+	r := readRow(t, db, p.ID)
+	if r.ActorKind != "staff" || r.ActorStaffID == nil || *r.ActorStaffID != staff.ID || r.ActorClientID != nil {
+		t.Fatalf("row = %+v, want a staff actor naming %q", r, staff.ID)
 	}
-	if r.SubjectKind != "membership" || r.SubjectID != staffID || r.Action != "joined" {
-		t.Fatalf("row = %+v, want subject membership/%q joined", r, staffID)
+	if r.SubjectKind != "membership" || r.SubjectID != staff.ID || r.Action != "joined" {
+		t.Fatalf("row = %+v, want subject membership/%q joined", r, staff.ID)
 	}
 }
 
 func TestRecordPracticeChange_NamesThePracticeAsSubjectAndTheStaffMemberAsActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	staffID := testdb.SeedStaff(t, db, "record-practice-change")
+	p := fixture.Practice(t, db)
+	staff := fixture.Staff(t, db, p)
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := activity.RecordPracticeChange(t.Context(), tx, practiceID, staffID, "name_changed", map[string]string{"nameAfter": "New"}); err != nil {
+	if err := inTx(t, db.Admin, func(tx *sql.Tx) error {
+		return activity.RecordPracticeChange(t.Context(), tx, p.ID, staff.ID, "name_changed", map[string]string{"nameAfter": "New"})
+	}); err != nil {
 		t.Fatalf("RecordPracticeChange: %v", err)
 	}
 
-	var got row
-	var diff []byte
-	if err := tx.QueryRowContext(t.Context(),
-		`SELECT subject_kind, subject_id, action, actor_kind::text, actor_staff_id, diff
-		 FROM activity WHERE practice_id = $1`, practiceID,
-	).Scan(&got.SubjectKind, &got.SubjectID, &got.Action, &got.ActorKind, &got.ActorStaffID, &diff); err != nil {
-		t.Fatalf("read activity row: %v", err)
-	}
-	if got.SubjectKind != activity.SubjectPractice || got.SubjectID != practiceID || got.Action != "name_changed" ||
-		got.ActorKind != "staff" || got.ActorStaffID == nil || *got.ActorStaffID != staffID {
+	got := readRow(t, db, p.ID)
+	if got.SubjectKind != activity.SubjectPractice || got.SubjectID != p.ID || got.Action != "name_changed" ||
+		got.ActorKind != "staff" || got.ActorStaffID == nil || *got.ActorStaffID != staff.ID {
 		t.Fatalf("row = %+v, want the Practice as subject and the Staff member as actor", got)
 	}
-	if string(diff) != `{"nameAfter": "New"}` {
-		t.Fatalf("diff = %s", diff)
+	if got.Diff != `{"nameAfter": "New"}` {
+		t.Fatalf("diff = %s", got.Diff)
 	}
 }
 
 func TestRecord_ClientActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
+	p := fixture.Practice(t, db)
+	client := fixture.Client(t, db, p)
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Admin, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: "contract",
-		SubjectID:   clientID,
+		SubjectID:   client.ID,
 		Action:      "signed",
 		Diff:        jsontext.Value(`{}`),
-		Actor:       activity.ClientActor(clientID),
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+		Actor:       activity.ClientActor(client.ID),
+	})
 
-	r := readRow(t, db, practiceID)
-	if r.ActorKind != "client" || r.ActorClientID == nil || *r.ActorClientID != clientID || r.ActorStaffID != nil {
-		t.Fatalf("row = %+v, want a client actor naming %q", r, clientID)
+	r := readRow(t, db, p.ID)
+	if r.ActorKind != "client" || r.ActorClientID == nil || *r.ActorClientID != client.ID || r.ActorStaffID != nil {
+		t.Fatalf("row = %+v, want a client actor naming %q", r, client.ID)
 	}
 }
 
 func TestRecord_SystemActor(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	p := fixture.Practice(t, db)
+	staff := fixture.Staff(t, db, p)
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	staffID := testdb.SeedStaff(t, db, "record-system-actor")
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Admin, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: "offer",
-		SubjectID:   staffID,
+		SubjectID:   staff.ID,
 		Action:      "superseded",
 		Diff:        nil,
 		Actor:       activity.SystemActor(),
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	})
 
-	r := readRow(t, db, practiceID)
+	r := readRow(t, db, p.ID)
 	if r.ActorKind != "system" || r.ActorStaffID != nil || r.ActorClientID != nil {
 		t.Fatalf("row = %+v, want a system actor naming nobody", r)
 	}
-
-	var diffJSON string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT diff::text FROM activity WHERE practice_id = $1`, practiceID).Scan(&diffJSON); err != nil {
-		t.Fatalf("read diff: %v", err)
-	}
-	if diffJSON != "{}" {
-		t.Fatalf("diff = %q, want a nil Diff to fall back to an empty object", diffJSON)
+	if r.Diff != "{}" {
+		t.Fatalf("diff = %q, want a nil Diff to fall back to an empty object", r.Diff)
 	}
 }
 
@@ -174,34 +106,20 @@ func TestRecord_SystemActor(t *testing.T) {
 // instant in created_at, not the database's now().
 func TestRecord_CreatedAtIsTheCallersInstant(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	staffID := testdb.SeedStaff(t, db, "record-created-at")
+	p := fixture.Practice(t, db)
+	staff := fixture.Staff(t, db, p)
 	at := time.Date(2026, 10, 23, 9, 15, 0, 0, time.UTC)
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Admin, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
+		SubjectID:   p.ID,
 		Action:      "terms_accepted",
-		Actor:       activity.StaffActor(staffID),
+		Actor:       activity.StaffActor(staff.ID),
 		CreatedAt:   at,
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	})
 
-	var got time.Time
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT created_at FROM activity WHERE practice_id = $1`, practiceID).Scan(&got); err != nil {
-		t.Fatalf("read created_at: %v", err)
-	}
-	if !got.Equal(at) {
+	if got := readRow(t, db, p.ID).CreatedAt; !got.Equal(at) {
 		t.Fatalf("created_at = %s, want %s", got, at)
 	}
 }
@@ -211,11 +129,7 @@ func TestRecord_CreatedAtIsTheCallersInstant(t *testing.T) {
 // a drift here silently widens or narrows what an employed Doula or a
 // contractor can read on her Engagement ledger.
 func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
-	got := map[activity.EngagementAction]bool{}
-	for _, a := range activity.MoneyActions() {
-		got[a] = true
-	}
-	want := []activity.EngagementAction{
+	requireExactly(t, "MoneyActions()", activity.MoneyActions(), []activity.EngagementAction{
 		activity.ActionContractPriced,
 		activity.ActionContractAmountOverridden,
 		activity.ActionContractAmountRepriced,
@@ -230,26 +144,13 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		activity.ActionPaymentRefunded,
 		activity.ActionContractorFeePaid,
 		activity.ActionContractorFeePaymentReversed,
-	}
-	if len(got) != len(want) {
-		t.Fatalf("MoneyActions() = %v, want exactly %v", activity.MoneyActions(), want)
-	}
-	for _, a := range want {
-		if !got[a] {
-			t.Errorf("MoneyActions() missing %q", a)
-		}
-	}
+	})
 }
 
 // TestMoneyActions_Sorted proves the deterministic ordering
 // engagement.ListActivityHandler's SQL-literal clause relies on.
 func TestMoneyActions_Sorted(t *testing.T) {
-	got := activity.MoneyActions()
-	for i := 1; i < len(got); i++ {
-		if got[i-1] >= got[i] {
-			t.Fatalf("MoneyActions() not sorted at index %d: %v", i, got)
-		}
-	}
+	requireStrictlySorted(t, "MoneyActions()", activity.MoneyActions())
 }
 
 // TestStaffingActions_ContainsExactlyTheRosterSet pins the set GLOSSARY.md's
@@ -266,11 +167,7 @@ func TestMoneyActions_Sorted(t *testing.T) {
 // here would either leak the Practice's own facts to a Client or hide a
 // fact she is owed.
 func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
-	got := map[activity.EngagementAction]bool{}
-	for _, a := range activity.StaffingActions() {
-		got[a] = true
-	}
-	want := []activity.EngagementAction{
+	requireExactly(t, "StaffingActions()", activity.StaffingActions(), []activity.EngagementAction{
 		activity.ActionOfferSent,
 		activity.ActionOfferAccepted,
 		activity.ActionOfferDeclined,
@@ -305,27 +202,14 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionPortalInviteRefused,
 		// #2520: a Draft she has not been sent.
 		activity.ActionContractEdited,
-	}
-	if len(got) != len(want) {
-		t.Fatalf("StaffingActions() = %v, want exactly %v", activity.StaffingActions(), want)
-	}
-	for _, a := range want {
-		if !got[a] {
-			t.Errorf("StaffingActions() missing %q", a)
-		}
-	}
+	})
 }
 
 // TestStaffingActions_Sorted proves the deterministic ordering a caller
 // building a SQL exclusion clause relies on, the same way MoneyActions'
 // own ordering test does.
 func TestStaffingActions_Sorted(t *testing.T) {
-	got := activity.StaffingActions()
-	for i := 1; i < len(got); i++ {
-		if got[i-1] >= got[i] {
-			t.Fatalf("StaffingActions() not sorted at index %d: %v", i, got)
-		}
-	}
+	requireStrictlySorted(t, "StaffingActions()", activity.StaffingActions())
 }
 
 // TestBirthPlanActions_NamesEveryBirthPlanAction proves #2219's set holds
@@ -357,43 +241,23 @@ func TestBirthPlanActions_NamesEveryBirthPlanAction(t *testing.T) {
 // where a plain Record call from the same session does not.
 func TestRecord_ScopedToLetsAWriteOutsideStaffauthMiddlewarePassRLS(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	clientID := testdb.SeedNamedClient(t, db, practiceID, "Test Client", "")
-
-	// Proved in its own transaction: a failed statement aborts the rest
-	// of a Postgres transaction (SQLSTATE 25P02), so the RLS failure and
-	// the ScopedTo success below cannot share one tx.
-	func() {
-		tx, err := db.App.BeginTx(t.Context(), nil)
-		if err != nil {
-			t.Fatalf("begin: %v", err)
-		}
-		defer func() { _ = tx.Rollback() }()
-
-		if err := activity.Record(t.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectEngagement,
-			SubjectID:   clientID,
-			Action:      "contract_signed",
-			Actor:       activity.ClientActor(clientID),
-		}); err == nil {
-			t.Fatal("expected Record to fail RLS with no app.current_practice_id set, got no error")
-		}
-	}()
-
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	p := fixture.Practice(t, db)
+	client := fixture.Client(t, db, p)
+	entry := activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   clientID,
+		SubjectID:   client.ID,
 		Action:      "contract_signed",
-		Actor:       activity.ClientActor(clientID),
-	}, activity.ScopedTo(practiceID)); err != nil {
+		Actor:       activity.ClientActor(client.ID),
+	}
+
+	// Each write is its own transaction: a failed statement aborts the
+	// rest of a Postgres transaction (SQLSTATE 25P02), so the RLS failure
+	// and the ScopedTo success cannot share one.
+	if err := record(t, db.App, entry); err == nil {
+		t.Fatal("expected Record to fail RLS with no app.current_practice_id set, got no error")
+	}
+	if err := record(t, db.App, entry, activity.ScopedTo(p.ID)); err != nil {
 		t.Fatalf("Record with ScopedTo: %v", err)
 	}
 }

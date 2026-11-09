@@ -35,21 +35,34 @@ const (
 // CanAccessEngagement/CanAccessClient's own RLS-bound queries rely on).
 func buildReader(t *testing.T, db *testdb.DB, practiceID, staffID string, roles []string, employmentType string) (staffauth.Reader, *sql.Tx) {
 	t.Helper()
-	tx := beginScopedTx(t, db, practiceID)
-	return staffauth.NewReader(staffID, roles, employmentType), tx
+	return staffauth.NewReader(staffID, roles, employmentType), db.BeginAs(t, testdb.Practice(practiceID))
 }
 
-func beginScopedTx(t *testing.T, db *testdb.DB, practiceID string) *sql.Tx {
+// accessCase is one reader and whether the gate lets her reach a subject.
+type accessCase struct {
+	name           string
+	staffID        string
+	roles          []string
+	employmentType string
+	want           bool
+}
+
+// requireAccess runs each case as a subtest asking whether her reader
+// reaches the subject of kind and subjectID.
+func requireAccess(t *testing.T, db *testdb.DB, practiceID, kind, subjectID string, cases []accessCase) {
 	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin tx: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			reader, tx := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
+			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, kind, subjectID)
+			if err != nil {
+				t.Fatalf("CanAccessSubject: %v", err)
+			}
+			if got != tc.want {
+				t.Fatalf("CanAccessSubject(%s) = %v, want %v", kind, got, tc.want)
+			}
+		})
 	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set practice id: %v", err)
-	}
-	return tx
 }
 
 // TestCanAccessSubject_UnregisteredKindRefused proves AC6: a subject kind
@@ -84,44 +97,37 @@ func TestCanSeeAction_UnregisteredKindRefused(t *testing.T) {
 	}
 }
 
+// requireOwnerAndContractorAccess seeds an Engagement and its Client at a
+// new Practice, with an Owner and two contractors, one granted an
+// Attachment to the Engagement, and requires the gate to let the Owner
+// and the attached contractor reach the subject of kind and the
+// unattached contractor not.
+func requireOwnerAndContractorAccess(t *testing.T, practiceName, kind string) {
+	t.Helper()
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, practiceName)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	subjectID := map[string]string{activity.SubjectEngagement: engagementID, activity.SubjectClient: clientID}[kind]
+
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-owner", []string{ownerRole}, employeeType)
+	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-contractor-unattached", []string{doulaRole}, contractorType)
+	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-contractor-attached", []string{doulaRole}, contractorType)
+	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+
+	requireAccess(t, db, practiceID, kind, subjectID, []accessCase{
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
+		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
+	})
+}
+
 // TestCanAccessSubject_Engagement proves the shared gate's engagement Rule
 // reproduces the ADR-0008 read table engagement.ListActivityHandler used
 // to check inline: Owner reaches; a contractor with no granted attachment
 // does not; a contractor with one does. Mirrors
 // staffauth_test.TestReader_CanAccessEngagement's own cases, one layer up.
 func TestCanAccessSubject_Engagement(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Gate Engagement Access Practice")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-owner", []string{ownerRole}, employeeType)
-	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-unattached", []string{doulaRole}, contractorType)
-	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-attached", []string{doulaRole}, contractorType)
-	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
-
-	cases := []struct {
-		name           string
-		staffID        string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
-		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
-			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectEngagement, engagementID)
-			if err != nil {
-				t.Fatalf("CanAccessSubject: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessSubject(engagement) = %v, want %v", got, tc.want)
-			}
-		})
-	}
+	requireOwnerAndContractorAccess(t, "Gate Engagement Access Practice", activity.SubjectEngagement)
 }
 
 // TestRestrictedActions_Engagement pins the exact literal action strings
@@ -209,38 +215,7 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 // Engagements, per ADR-0017. Mirrors
 // staffauth_test.TestReader_CanAccessClient one layer up.
 func TestCanAccessSubject_Client(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Gate Client Access Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-owner", []string{ownerRole}, employeeType)
-	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-unattached", []string{doulaRole}, contractorType)
-	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-attached", []string{doulaRole}, contractorType)
-	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
-
-	cases := []struct {
-		name           string
-		staffID        string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
-		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := buildReader(t, db, practiceID, tc.staffID, tc.roles, tc.employmentType)
-			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectClient, clientID)
-			if err != nil {
-				t.Fatalf("CanAccessSubject: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessSubject(client) = %v, want %v", got, tc.want)
-			}
-		})
-	}
+	requireOwnerAndContractorAccess(t, "Gate Client Access Practice", activity.SubjectClient)
 }
 
 // TestCanAccessSubject_ClientFieldTemplateUnregistered pins #485's AC5
@@ -302,29 +277,12 @@ func TestCanAccessSubject_Membership(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Gate Membership Access Practice")
 	subjectID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-membership-subject", []string{doulaRole}, employeeType)
 
-	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerReachesCase, []string{ownerRole}, employeeType, true},
-		{"admin reaches", []string{adminRole}, employeeType, true},
-		{"employee doula refused", []string{doulaRole}, employeeType, false},
-		{"contractor doula refused", []string{doulaRole}, contractorType, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := buildReader(t, db, practiceID, subjectID, tc.roles, tc.employmentType)
-			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectMembership, subjectID)
-			if err != nil {
-				t.Fatalf("CanAccessSubject: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessSubject(membership) = %v, want %v", got, tc.want)
-			}
-		})
-	}
+	requireAccess(t, db, practiceID, activity.SubjectMembership, subjectID, []accessCase{
+		{ownerReachesCase, subjectID, []string{ownerRole}, employeeType, true},
+		{"admin reaches", subjectID, []string{adminRole}, employeeType, true},
+		{"employee doula refused", subjectID, []string{doulaRole}, employeeType, false},
+		{"contractor doula refused", subjectID, []string{doulaRole}, contractorType, false},
+	})
 }
 
 // TestCanSeeAction_MembershipRestrictsNothing pins the other half of the
@@ -333,17 +291,13 @@ func TestCanAccessSubject_Membership(t *testing.T) {
 // who reaches one is already inside ADR-0008's money tier, and no
 // Membership action carries what the Practice charges.
 func TestCanSeeAction_MembershipRestrictsNothing(t *testing.T) {
-	if got := activitygate.RestrictedActions(activity.SubjectMembership); got != nil {
-		t.Fatalf("RestrictedActions(membership) = %v, want nil", got)
-	}
-	owner := staffauth.NewReader("owner-id", []string{ownerRole}, employeeType)
 	// The write side's own vocabulary, not a copy of it: a sixth
 	// Membership action is one this test covers the moment it is named.
+	var actions []string
 	for _, action := range activity.MembershipActions() {
-		if !activitygate.CanSeeAction(owner, activity.SubjectMembership, string(action)) {
-			t.Errorf("CanSeeAction(owner, membership, %q) = false, want true", action)
-		}
+		actions = append(actions, string(action))
 	}
+	requireRestrictsNothing(t, activity.SubjectMembership, actions)
 }
 
 // TestCanAccessSubject_Practice proves #1255's Rule: an Owner and an
@@ -359,29 +313,12 @@ func TestCanAccessSubject_Practice(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Gate Practice Access Practice")
 	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-practice-owner", []string{ownerRole}, employeeType)
 
-	cases := []struct {
-		name           string
-		roles          []string
-		employmentType string
-		want           bool
-	}{
-		{ownerReachesCase, []string{ownerRole}, employeeType, true},
-		{"admin reaches", []string{adminRole}, employeeType, true},
-		{"employee doula refused", []string{doulaRole}, employeeType, false},
-		{"contractor doula refused", []string{doulaRole}, contractorType, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			reader, tx := buildReader(t, db, practiceID, ownerID, tc.roles, tc.employmentType)
-			got, err := activitygate.CanAccessSubject(t.Context(), tx, reader, activity.SubjectPractice, practiceID)
-			if err != nil {
-				t.Fatalf("CanAccessSubject: %v", err)
-			}
-			if got != tc.want {
-				t.Fatalf("CanAccessSubject(practice) = %v, want %v", got, tc.want)
-			}
-		})
-	}
+	requireAccess(t, db, practiceID, activity.SubjectPractice, practiceID, []accessCase{
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
+		{"admin reaches", ownerID, []string{adminRole}, employeeType, true},
+		{"employee doula refused", ownerID, []string{doulaRole}, employeeType, false},
+		{"contractor doula refused", ownerID, []string{doulaRole}, contractorType, false},
+	})
 }
 
 // TestCanSeeAction_PracticeRestrictsNothing is TestCanSeeAction_MembershipRestrictsNothing's
@@ -403,13 +340,20 @@ func TestCanAccessSubject_Practice(t *testing.T) {
 // literal strings (staffauth/mfarequired.go, export/entities.go) rather
 // than invented.
 func TestCanSeeAction_PracticeRestrictsNothing(t *testing.T) {
-	if got := activitygate.RestrictedActions(activity.SubjectPractice); got != nil {
-		t.Fatalf("RestrictedActions(practice) = %v, want nil", got)
+	requireRestrictsNothing(t, activity.SubjectPractice, []string{"mfa_required_enabled", "mfa_required_disabled", "practice_data_exported"})
+}
+
+// requireRestrictsNothing fails if kind holds back any of actions from an
+// Owner who reaches the subject, or names a restricted set at all.
+func requireRestrictsNothing(t *testing.T, kind string, actions []string) {
+	t.Helper()
+	if got := activitygate.RestrictedActions(kind); got != nil {
+		t.Fatalf("RestrictedActions(%s) = %v, want nil", kind, got)
 	}
 	owner := staffauth.NewReader("owner-id", []string{ownerRole}, employeeType)
-	for _, action := range []string{"mfa_required_enabled", "mfa_required_disabled", "practice_data_exported"} {
-		if !activitygate.CanSeeAction(owner, activity.SubjectPractice, action) {
-			t.Errorf("CanSeeAction(owner, practice, %q) = false, want true", action)
+	for _, action := range actions {
+		if !activitygate.CanSeeAction(owner, kind, action) {
+			t.Errorf("CanSeeAction(owner, %s, %q) = false, want true", kind, action)
 		}
 	}
 }

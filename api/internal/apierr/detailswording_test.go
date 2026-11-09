@@ -5,7 +5,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"io/fs"
 	"path/filepath"
 	"sort"
 	"strconv"
@@ -87,20 +86,14 @@ func runDetailGate(t *testing.T, collect func(file *ast.File, fset *token.FileSe
 	t.Helper()
 	root := apiModuleRoot
 
-	byDir := map[string][]string{}
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		dir := filepath.Dir(path)
-		byDir[dir] = append(byDir[dir], path)
-		return nil
-	})
+	allPaths, err := productionGoFiles(root)
 	if err != nil {
 		t.Fatalf("walk api module: %v", err)
+	}
+	byDir := map[string][]string{}
+	for _, path := range allPaths {
+		dir := filepath.Dir(path)
+		byDir[dir] = append(byDir[dir], path)
 	}
 
 	var offenses []string
@@ -442,35 +435,18 @@ func f(w W) {
 	apierr.FieldDetails("amountCents", "Enter a valid amount")
 }
 `
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "p.go", src, 0)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	consts := map[string]string{}
-	collectStringConsts(file, consts)
+	fset, file, consts := parseSnippet(t, src)
 	if consts["MsgBad"] != "Password is required" {
 		t.Fatalf("consts = %v, want MsgBad resolved", consts)
 	}
 
-	got := detailOffenses(file, fset, "p.go", consts, true)
-	sort.Strings(got)
-	want := []string{
+	assertSorted(t, "offenses", detailOffenses(file, fset, "p.go", consts, true), []string{
 		`p.go:10: "Please select a role" contains "please"`,
 		`p.go:13: "Enter a valid number of days" contains "valid"`,
 		`p.go:14: "Enter a valid amount" contains "valid"`,
 		`p.go:6: "Enter a valid address" contains "valid"`,
 		`p.go:7: "Password is required" contains "required"`,
-	}
-	sort.Strings(want)
-	if len(got) != len(want) {
-		t.Fatalf("offenses = %v, want %v", got, want)
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Fatalf("offenses = %v, want %v", got, want)
-		}
-	}
+	})
 }
 
 // TestIdentifierOffensesCatchesABareIdentifierOpener is
@@ -503,32 +479,15 @@ func f(w W) {
 	apierr.FieldDetails("amountCents", "amountCents must be positive")
 }
 `
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "p.go", src, 0)
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	consts := map[string]string{}
-	collectStringConsts(file, consts)
+	fset, file, consts := parseSnippet(t, src)
 
-	got := identifierOffenses(file, fset, "p.go", consts, true)
-	sort.Strings(got)
-	want := []string{
+	assertSorted(t, "offenses", identifierOffenses(file, fset, "p.go", consts, true), []string{
 		`p.go:13: "mode must be \"own\" or \"hosted\"" opens with "mode", its own key`,
 		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
 		`p.go:17: "amountCents must be positive" opens with "amountCents", its own key`,
 		`p.go:8: "paidOn cannot be in the future" opens with "paidOn", its own key`,
 		`p.go:9: "netDays is out of range" opens with "netDays", its own key`,
-	}
-	sort.Strings(want)
-	if len(got) != len(want) {
-		t.Fatalf("offenses = %v, want %v", got, want)
-	}
-	for i := range got {
-		if got[i] != want[i] {
-			t.Fatalf("offenses = %v, want %v", got, want)
-		}
-	}
+	})
 
 	// dirImportsApierr=false is website.go's own shape: a directory
 	// where some other file, not this one, imports apierr and sends what
@@ -537,19 +496,8 @@ func f(w W) {
 	// structuralFieldNames -- but a WriteFieldError or FieldDetails call
 	// still can't exist in a file that doesn't import apierr, so those
 	// two shapes are unaffected either way.
-	gotUnimported := identifierOffenses(file, fset, "p.go", consts, false)
-	sort.Strings(gotUnimported)
-	wantUnimported := []string{
+	assertSorted(t, "offenses with dirImportsApierr=false", identifierOffenses(file, fset, "p.go", consts, false), []string{
 		`p.go:15: "reason cannot be blank" opens with "reason", its own key`,
 		`p.go:17: "amountCents must be positive" opens with "amountCents", its own key`,
-	}
-	sort.Strings(wantUnimported)
-	if len(gotUnimported) != len(wantUnimported) {
-		t.Fatalf("offenses with dirImportsApierr=false = %v, want %v", gotUnimported, wantUnimported)
-	}
-	for i := range gotUnimported {
-		if gotUnimported[i] != wantUnimported[i] {
-			t.Fatalf("offenses with dirImportsApierr=false = %v, want %v", gotUnimported, wantUnimported)
-		}
-	}
+	})
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -13,107 +14,67 @@ const creditsRefunded = "credits_refunded"
 
 func TestRecord_OperatorActorWrittenByOpsRuntime(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	p := fixture.Practice(t, db)
 	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 	at := time.Date(2026, 10, 30, 14, 0, 0, 0, time.UTC)
 
-	tx, err := db.Ops.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
 	diff, _ := json.Marshal(map[string]int{"credits": 3})
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Ops, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
+		SubjectID:   p.ID,
 		Action:      creditsRefunded,
 		Diff:        diff,
 		Actor:       activity.OperatorActor(actID),
 		CreatedAt:   at,
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	})
 
-	var (
-		actorKind, action, subjectKind, subjectID, gotActID string
-		gotDiff                                             []byte
-		createdAt                                           time.Time
-		staffID, clientID                                   *string
-	)
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_kind::text, action, subject_kind, subject_id, actor_operator_act_id, diff, created_at, actor_staff_id, actor_client_id
-		   FROM activity WHERE practice_id = $1`, practiceID,
-	).Scan(&actorKind, &action, &subjectKind, &subjectID, &gotActID, &gotDiff, &createdAt, &staffID, &clientID); err != nil {
-		t.Fatalf("read activity row: %v", err)
+	r := readRow(t, db, p.ID)
+	if r.ActorKind != "operator" || r.ActorOperatorActID == nil || *r.ActorOperatorActID != actID || r.ActorStaffID != nil || r.ActorClientID != nil {
+		t.Fatalf("row = %+v, want an operator actor keyed to %s", r, actID)
 	}
-	if actorKind != "operator" || gotActID != actID || staffID != nil || clientID != nil {
-		t.Fatalf("actor = (%s, act %s, staff %v, client %v), want operator keyed to %s", actorKind, gotActID, staffID, clientID, actID)
+	if r.Action != creditsRefunded || r.SubjectKind != "practice" || r.SubjectID != p.ID {
+		t.Fatalf("row = %+v, want credits_refunded on practice/%s", r, p.ID)
 	}
-	if action != creditsRefunded || subjectKind != "practice" || subjectID != practiceID {
-		t.Fatalf("row = (%s, %s/%s), want credits_refunded on practice/%s", action, subjectKind, subjectID, practiceID)
+	if r.Diff != `{"credits": 3}` {
+		t.Fatalf("diff = %s, want {\"credits\": 3}", r.Diff)
 	}
-	if string(gotDiff) != `{"credits": 3}` {
-		t.Fatalf("diff = %s, want {\"credits\": 3}", gotDiff)
-	}
-	if !createdAt.Equal(at) {
-		t.Fatalf("created_at = %v, want %v", createdAt, at)
+	if !r.CreatedAt.Equal(at) {
+		t.Fatalf("created_at = %v, want %v", r.CreatedAt, at)
 	}
 }
 
 func TestRecord_OperatorActorWithoutADiffRecordsAnEmptyOne(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	p := fixture.Practice(t, db)
 	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 
-	tx, err := db.Ops.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	mustRecord(t, db.Ops, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
+		SubjectID:   p.ID,
 		Action:      "founding_grant_issued",
 		Actor:       activity.OperatorActor(actID),
 		CreatedAt:   time.Date(2026, 10, 30, 14, 0, 0, 0, time.UTC),
-	}); err != nil {
-		t.Fatalf("record: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	})
 
-	var diff []byte
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT diff FROM activity WHERE practice_id = $1`, practiceID).Scan(&diff); err != nil {
-		t.Fatalf("read diff: %v", err)
-	}
-	if string(diff) != `{}` {
+	if diff := readRow(t, db, p.ID).Diff; diff != `{}` {
 		t.Fatalf("diff = %s, want {}", diff)
 	}
 }
 
 func TestRecord_AppRuntimeCannotWriteAnOperatorRow(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
+	p := fixture.Practice(t, db)
 	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	err = activity.Record(t.Context(), tx, activity.Entry{
-		PracticeID:  practiceID,
+	err := record(t, db.App, activity.Entry{
+		PracticeID:  p.ID,
 		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
+		SubjectID:   p.ID,
 		Action:      creditsRefunded,
 		Actor:       activity.OperatorActor(actID),
-	}, activity.ScopedTo(practiceID))
+	}, activity.ScopedTo(p.ID))
 	if err == nil {
 		t.Fatal("app_runtime wrote an operator row, want it refused")
 	}
@@ -121,9 +82,9 @@ func TestRecord_AppRuntimeCannotWriteAnOperatorRow(t *testing.T) {
 
 func TestOperatorActActorName_NamesTheOperatorOnlyAtThePracticeTheRowIsAt(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Acted On Practice")
-	otherPracticeID := testdb.SeedPractice(t, db, "Other Practice")
-	actID := testdb.SeedOperatorActivity(t, db, practiceID, activity.SubjectPractice, practiceID, creditsRefunded, "Mark Goho", time.Now())
+	p := fixture.Practice(t, db, fixture.PracticeName("Acted On Practice"))
+	other := fixture.Practice(t, db, fixture.PracticeName("Other Practice"))
+	actID := testdb.SeedOperatorActivity(t, db, p.ID, activity.SubjectPractice, p.ID, creditsRefunded, "Mark Goho", time.Now())
 	strayActID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 
 	for _, tc := range []struct {
@@ -132,23 +93,15 @@ func TestOperatorActActorName_NamesTheOperatorOnlyAtThePracticeTheRowIsAt(t *tes
 		actID      string
 		want       *string
 	}{
-		{"the Practice the row is at", practiceID, actID, new("Mark Goho")},
-		{"another Practice", otherPracticeID, actID, nil},
-		{"an act no row at the Practice points at", practiceID, strayActID, nil},
+		{"the Practice the row is at", p.ID, actID, new("Mark Goho")},
+		{"another Practice", other.ID, actID, nil},
+		{"an act no row at the Practice points at", p.ID, strayActID, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx, err := db.App.BeginTx(t.Context(), nil)
-			if err != nil {
-				t.Fatalf("begin: %v", err)
-			}
-			defer func() { _ = tx.Rollback() }()
-			if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, tc.practiceID); err != nil {
-				t.Fatalf("scope: %v", err)
-			}
-			var got *string
-			if err := tx.QueryRowContext(t.Context(), `SELECT operator_act_actor_name($1)`, tc.actID).Scan(&got); err != nil {
-				t.Fatalf("operator_act_actor_name: %v", err)
-			}
+			tx := db.BeginAs(t, testdb.Practice(tc.practiceID))
+
+			got := testdb.Scalar[*string](t, tx, `SELECT operator_act_actor_name($1)`, tc.actID)
+
 			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
 				t.Fatalf("name = %v, want %v", got, tc.want)
 			}
@@ -168,21 +121,21 @@ func TestOperatorActorName_IsThePersonsNameWithDoulaCloud(t *testing.T) {
 
 func TestActivity_AnOperatorRowMustNameItsAct(t *testing.T) {
 	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	staffID := testdb.SeedStaff(t, db, "operator-check-staff")
+	p := fixture.Practice(t, db)
+	staff := fixture.Staff(t, db, p)
 	actID := testdb.SeedOperatorAct(t, db, "Mark Goho")
 
 	for name, statement := range map[string]string{
 		"operator without an act": `INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind)
 			VALUES ($1, 'practice', $1, 'x', '{}', 'operator')`,
 		"operator with a staff id too": `INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_operator_act_id, actor_staff_id)
-			VALUES ($1, 'practice', $1, 'x', '{}', 'operator', '` + actID + `', '` + staffID + `')`,
+			VALUES ($1, 'practice', $1, 'x', '{}', 'operator', '` + actID + `', '` + staff.ID + `')`,
 		"staff with an act": `INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_operator_act_id, actor_staff_id)
-			VALUES ($1, 'practice', $1, 'x', '{}', 'staff', '` + actID + `', '` + staffID + `')`,
+			VALUES ($1, 'practice', $1, 'x', '{}', 'staff', '` + actID + `', '` + staff.ID + `')`,
 		"system with an act": `INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_operator_act_id)
 			VALUES ($1, 'practice', $1, 'x', '{}', 'system', '` + actID + `')`,
 	} {
-		if _, err := db.Admin.ExecContext(t.Context(), statement, practiceID); err == nil {
+		if _, err := db.Admin.ExecContext(t.Context(), statement, p.ID); err == nil {
 			t.Errorf("%s: inserted, want the activity_actor CHECK to refuse it", name)
 		}
 	}

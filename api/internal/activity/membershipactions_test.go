@@ -56,10 +56,7 @@ func TestMembershipActions_HoldsEveryConstant(t *testing.T) {
 }
 
 func TestMembershipActions_Sorted(t *testing.T) {
-	got := activity.MembershipActions()
-	if !slices.IsSorted(got) {
-		t.Fatalf("MembershipActions() = %v, want sorted -- a caller building a query string needs a deterministic order", got)
-	}
+	requireStrictlySorted(t, "MembershipActions()", activity.MembershipActions())
 }
 
 // TestMembershipActions_DeclaresEveryConstantWithItsType closes the one

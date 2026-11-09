@@ -62,22 +62,7 @@ func TestFreezeTrigger_OpensForTheCorrectionDoor(t *testing.T) {
 	db := testdb.New(t)
 	e := seedFrozenEngagement(t, db)
 
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
-		t.Fatalf("open the door: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = 'live_birth' WHERE id = $1`, e.ID); err != nil {
-		t.Fatalf("corrected update: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("commit: %v", err)
-	}
+	db.ExecCorrectingOutcome(t, `UPDATE engagements SET birth_outcome = 'live_birth' WHERE id = $1`, e.ID)
 }
 
 // TestFreezeTrigger_LeavesEveryOtherColumnAlone is the regression this

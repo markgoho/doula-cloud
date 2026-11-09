@@ -1,16 +1,12 @@
 package clientfieldtemplate_test
 
 import (
-	"bytes"
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/clientfieldtemplate"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -19,103 +15,76 @@ const (
 	shortTextType    = "short_text"
 	firstFieldLabel  = "First"
 	secondFieldLabel = "Second"
-	// ownerRole and doulaRole are named once so golangci-lint's goconst
-	// check doesn't see repeated literals across this package's test
-	// surface.
-	ownerRole = "owner"
-	doulaRole = "doula"
+	// intakeNoteField is a one-field template as the database stores it.
+	intakeNoteField = `[{"id":"f1","type":"short_text","label":"Intake note","order":0,"archived":false}]`
 )
 
-// seedTemplate seeds a client_field_templates row directly (bypassing the
-// handlers under test). Stays local: testdb has no client-field-template
-// export, and plans and contracts each have their own same-shaped
-// seedPlanTemplate/seedContractTemplate against different tables -- no
-// shared behavior to hoist.
-func seedTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON string) {
-	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`,
-		practiceID, fieldsJSON,
-	); err != nil {
-		t.Fatalf("seed template: %v", err)
-	}
+// env is what a test in this package starts from: a Practice with the
+// Client Field Template routes mounted and one Staff member at the
+// screen, an employee Doula unless a test says otherwise.
+type env struct {
+	*fixture.Scene
 }
+
+// newEnv mounts this package's routes through clientfieldtemplate.Mount,
+// the same call main.go makes on the real GatedRouter and
+// idempotency.Router.
+func newEnv(t *testing.T, staff ...fixture.StaffOption) *env {
+	t.Helper()
+	return &env{fixture.NewScene(t, fixture.Routes(clientfieldtemplate.Mount), fixture.SignedInAs(staff...))}
+}
+
+func (e *env) url() string { return e.PracticeURL("/client-field-template") }
+
+// seedIntakeNote seeds a client_field_templates row of one field directly
+// (bypassing the handlers under test).
+func (e *env) seedIntakeNote() {
+	e.T.Helper()
+	e.Exec(`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`, e.Practice.ID, intakeNoteField)
+}
+
+// template reads the template as the Staff member at the screen.
+func (e *env) template() clientfieldtemplate.TemplateResponse {
+	e.T.Helper()
+	return reqtest.Expect[clientfieldtemplate.TemplateResponse](e.T, http.MethodGet, e.url(), http.StatusOK, e.SignedIn)
+}
+
+// putBody sends body as a PUT and requires want.
+func (e *env) putBody(body reqtest.Option, want int) {
+	e.T.Helper()
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.url(), want, e.SignedIn, body)
+}
+
+// putFields puts fields and requires want.
+func (e *env) putFields(want int, fields ...clientfieldtemplate.Field) {
+	e.T.Helper()
+	e.putBody(reqtest.JSON(clientfieldtemplate.TemplateResponse{Fields: fields}), want)
+}
+
+// putFieldsOK puts fields, requires 200 and returns the template it saved.
+func (e *env) putFieldsOK(fields ...clientfieldtemplate.Field) clientfieldtemplate.TemplateResponse {
+	e.T.Helper()
+	return reqtest.Expect[clientfieldtemplate.TemplateResponse](e.T, http.MethodPut, e.url(), http.StatusOK, e.SignedIn,
+		reqtest.JSON(clientfieldtemplate.TemplateResponse{Fields: fields}))
+}
+
+// shortText is a short-text field with a label.
+func shortText(id, label string) clientfieldtemplate.Field {
+	return clientfieldtemplate.Field{ID: id, Type: shortTextType, Label: label}
+}
+
+const templateAuditRows = `FROM activity WHERE practice_id = $1 AND subject_kind = 'client_field_template'`
 
 // auditEventCount counts activity rows (subject_kind
-// 'client_field_template', ADR-0022) for practiceID.
-func auditEventCount(t *testing.T, db *testdb.DB, practiceID string) int {
-	t.Helper()
-	var count int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'client_field_template'`, practiceID,
-	).Scan(&count); err != nil {
-		t.Fatalf("count audit events: %v", err)
-	}
-	return count
+// 'client_field_template', ADR-0022) for the Practice.
+func (e *env) auditEventCount() int {
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin, `SELECT count(*) `+templateAuditRows, e.Practice.ID)
 }
 
-// lastAuditActor reads the actor_staff_id of the most recent activity
-// row (subject_kind 'client_field_template') for practiceID.
-func lastAuditActor(t *testing.T, db *testdb.DB, practiceID string) string {
-	t.Helper()
-	var actorID string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT actor_staff_id FROM activity
-		 WHERE practice_id = $1 AND subject_kind = 'client_field_template' ORDER BY created_at DESC LIMIT 1`,
-		practiceID,
-	).Scan(&actorID); err != nil {
-		t.Fatalf("read last audit actor: %v", err)
-	}
-	return actorID
-}
-
-func newServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	clientfieldtemplate.Mount(g, ir)
-	return httptest.NewServer(mux), authntest.SeedSession(t, db.App, uid)
-}
-
-func templatePath(practiceID string) string {
-	return "/api/practices/" + practiceID + "/client-field-template"
-}
-
-func getTemplate(t *testing.T, srv *httptest.Server, session, practiceID string) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, srv.URL+templatePath(practiceID), nil)
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-func putTemplateRaw(t *testing.T, srv *httptest.Server, session, practiceID string, body []byte) *http.Response {
-	t.Helper()
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPut, srv.URL+templatePath(practiceID), bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("build request: %v", err)
-	}
-	authntest.AddSessionCookie(req, session)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("request: %v", err)
-	}
-	return resp
-}
-
-func putTemplate(t *testing.T, srv *httptest.Server, session, practiceID string, body clientfieldtemplate.TemplateResponse) *http.Response {
-	t.Helper()
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	return putTemplateRaw(t, srv, session, practiceID, payload)
+// lastAuditActor is the actor_staff_id of the most recent activity row
+// (subject_kind 'client_field_template') for the Practice.
+func (e *env) lastAuditActor() string {
+	e.T.Helper()
+	return testdb.Scalar[string](e.T, e.DB.Admin, `SELECT actor_staff_id `+templateAuditRows+` ORDER BY created_at DESC LIMIT 1`, e.Practice.ID)
 }

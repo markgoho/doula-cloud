@@ -1,9 +1,10 @@
 package clientfieldtemplate_test
 
 import (
-	"database/sql"
+	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -12,126 +13,62 @@ import (
 // handlers -- proving AC1's "at both seams" holds at the database seam,
 // not only PutHandler's own RequireOwnerOrAdmin check.
 
-// beginAs opens a tx on db.App and sets app.current_practice_id and
-// app.current_staff_id on it -- the pattern engagementrequest/rls_test.go
-// and plans/rls_test.go's sibling tests already use.
-func beginAs(t *testing.T, db *testdb.DB, practiceID, staffID string) *sql.Tx {
-	t.Helper()
-	tx, err := db.App.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	t.Cleanup(func() { _ = tx.Rollback() })
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
-		t.Fatalf("set current_practice_id: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.current_staff_id', $1, true)`, staffID); err != nil {
-		t.Fatalf("set current_staff_id: %v", err)
-	}
-	return tx
-}
-
-func seedStaffID(t *testing.T, db *testdb.DB, identityUID string) string {
-	t.Helper()
-	var staffID string
-	if err := db.Admin.QueryRowContext(t.Context(), `SELECT id FROM staff WHERE identity_uid = $1`, identityUID).Scan(&staffID); err != nil {
-		t.Fatalf("read seeded staff id: %v", err)
-	}
-	return staffID
-}
-
 // TestRLS_SelectFailsClosedWithNoSessionVarSet proves client_field_templates
 // denies all rows when app.current_practice_id is never set.
 func TestRLS_SelectFailsClosedWithNoSessionVarSet(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-fail-closed", []string{ownerRole}, "employee")
-	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Note","order":0,"archived":false}]`)
+	e := newEnv(t, fixture.Owner())
+	e.seedIntakeNote()
 
-	var count int
-	if err := db.App.QueryRowContext(t.Context(), `SELECT count(*) FROM client_field_templates`).Scan(&count); err != nil {
-		t.Fatalf("query client_field_templates with no session vars set: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("expected 0 rows with no session variable set, got %d", count)
-	}
+	testdb.RequireFailsClosed(t, e.DB, "client_field_templates")
 }
 
 // TestRLS_SelectScopedToCurrentPracticeAndAnyRole proves a Doula's
 // session (any Staff role, per the sibling GET handler) reads its own
 // Practice's row and not another Practice's.
 func TestRLS_SelectScopedToCurrentPracticeAndAnyRole(t *testing.T) {
-	db := testdb.New(t)
-	practiceA, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-select-a", []string{doulaRole}, "employee")
-	practiceB, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-select-b", []string{ownerRole}, "employee")
-	seedTemplate(t, db, practiceA, `[{"id":"a","type":"short_text","label":"A","order":0,"archived":false}]`)
-	seedTemplate(t, db, practiceB, `[{"id":"b","type":"short_text","label":"B","order":0,"archived":false}]`)
+	e := newEnv(t)
+	e.seedIntakeNote()
+	other := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
+	e.Exec(`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`, other.ID, intakeNoteField)
 
-	tx := beginAs(t, db, practiceA, seedStaffID(t, db, "rls-select-a"))
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID), testdb.Staff(e.Staff.ID))
 
-	var visible []string
-	rows, err := tx.QueryContext(t.Context(), `SELECT practice_id FROM client_field_templates`)
-	if err != nil {
-		t.Fatalf("query client_field_templates: %v", err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		visible = append(visible, id)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("iterate rows: %v", err)
-	}
-	if len(visible) != 1 || visible[0] != practiceA {
-		t.Fatalf("visible practice_ids = %v, want only %q", visible, practiceA)
+	if visible := testdb.Column[string](t, tx, `SELECT practice_id FROM client_field_templates`); !slices.Equal(visible, []string{e.Practice.ID}) {
+		t.Fatalf("visible practice_ids = %v, want only %q", visible, e.Practice.ID)
 	}
 }
 
-// TestRLS_DoulaInsertRefused proves client_field_templates_insert refuses
-// a Doula's INSERT independent of PutHandler's own Go-level check.
-func TestRLS_DoulaInsertRefused(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-doula", []string{doulaRole}, "employee")
-	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-doula"))
-
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, '[]'::jsonb)`, practiceID,
-	)
-	if err == nil {
-		t.Fatal("expected client_field_templates_insert to refuse a Doula's INSERT, got no error")
+// TestRLS_InsertIsOwnerOrAdminOnly proves client_field_templates_insert
+// refuses a Doula's INSERT independent of PutHandler's own Go-level check,
+// admits an Owner (so the refusal is the role gate working, not a blanket
+// one), and admits an Admin (RequireOwnerOrAdmin's widened half, held in
+// RLS too, not only in Go).
+func TestRLS_InsertIsOwnerOrAdminOnly(t *testing.T) {
+	cases := []struct {
+		name    string
+		staff   fixture.StaffOption
+		allowed bool
+	}{
+		{"a Doula is refused", fixture.Doula(), false},
+		{"an Owner is admitted", fixture.Owner(), true},
+		{"an Admin is admitted", fixture.Admin(), true},
 	}
-}
 
-// TestRLS_OwnerInsertAllowed proves the same policy admits an Owner, so
-// the Doula refusal above is the role gate working, not a blanket
-// refusal.
-func TestRLS_OwnerInsertAllowed(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-owner", []string{ownerRole}, "employee")
-	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-owner"))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t, tc.staff)
+			tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID), testdb.Staff(e.Staff.ID))
 
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, '[]'::jsonb)`, practiceID,
-	)
-	if err != nil {
-		t.Fatalf("expected an Owner's INSERT to be admitted, got: %v", err)
-	}
-}
+			_, err := tx.ExecContext(t.Context(),
+				`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, '[]'::jsonb)`, e.Practice.ID)
 
-// TestRLS_AdminInsertAllowed proves RequireOwnerOrAdmin's widened half
-// holds in RLS too, not only in Go.
-func TestRLS_AdminInsertAllowed(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-insert-admin", []string{"admin"}, "employee")
-	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-insert-admin"))
-
-	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, '[]'::jsonb)`, practiceID,
-	)
-	if err != nil {
-		t.Fatalf("expected an Admin's INSERT to be admitted, got: %v", err)
+			if tc.allowed && err != nil {
+				t.Fatalf("expected the INSERT to be admitted, got: %v", err)
+			}
+			if !tc.allowed && err == nil {
+				t.Fatal("expected client_field_templates_insert to refuse the INSERT, got no error")
+			}
+		})
 	}
 }
 
@@ -140,22 +77,11 @@ func TestRLS_AdminInsertAllowed(t *testing.T) {
 // was a bare ALL-commands, any-role grant, and this is the regression
 // test pinning the fix.
 func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-update-doula", []string{doulaRole}, "employee")
-	seedTemplate(t, db, practiceID, `[{"id":"f1","type":"short_text","label":"Note","order":0,"archived":false}]`)
-	tx := beginAs(t, db, practiceID, seedStaffID(t, db, "rls-update-doula"))
+	e := newEnv(t)
+	e.seedIntakeNote()
+	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID), testdb.Staff(e.Staff.ID))
 
-	result, err := tx.ExecContext(t.Context(),
-		`UPDATE client_field_templates SET fields = '[]'::jsonb WHERE practice_id = $1`, practiceID,
-	)
-	if err != nil {
-		t.Fatalf("update client_field_templates: %v", err)
-	}
-	rows, err := result.RowsAffected()
-	if err != nil {
-		t.Fatalf("rows affected: %v", err)
-	}
-	if rows != 0 {
+	if rows := testdb.RowsAffected(t, tx, `UPDATE client_field_templates SET fields = '[]'::jsonb WHERE practice_id = $1`, e.Practice.ID); rows != 0 {
 		t.Fatalf("expected 0 rows affected by a Doula's UPDATE, got %d", rows)
 	}
 }
@@ -171,37 +97,27 @@ func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
 // for every subject_kind, not a carve-out per predecessor table; see
 // 00051_activity_log.sql's comment). That role check still runs where
 // it can actually be enforced: PutHandler behind
-// staffauth.RequireOwnerOrAdmin (TestPutHandler_DoulaForbidden), the
-// same seam every other Staff-write endpoint in this repo relies on.
+// staffauth.RequireOwnerOrAdmin (TestPutHandler_RoleAndBodyBoundaries),
+// the same seam every other Staff-write endpoint in this repo relies on.
 func TestRLS_ActivityIsScopedToCurrentPractice(t *testing.T) {
-	db := testdb.New(t)
-	mine, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-activity-mine", []string{ownerRole}, "employee")
-	mineID := seedStaffID(t, db, "rls-activity-mine")
-	theirs, _ := testdb.SeedStaffAtNewPractice(t, db, "rls-activity-theirs", []string{ownerRole}, "employee")
-
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
+	e := newEnv(t, fixture.Owner())
+	theirs := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
+	e.Exec(`INSERT INTO activity (practice_id, subject_kind, subject_id, action, diff, actor_kind, actor_staff_id)
 		 VALUES ($1, 'client_field_template', $1, 'updated', '{}'::jsonb, 'staff', $2)`,
-		mine, mineID,
-	); err != nil {
-		t.Fatalf("seed activity row: %v", err)
-	}
+		e.Practice.ID, e.Staff.ID)
 
 	for _, tc := range []struct {
 		name       string
 		practiceID string
 		want       int
 	}{
-		{"own practice", mine, 1},
-		{"another practice", theirs, 0},
+		{"own practice", e.Practice.ID, 1},
+		{"another practice", theirs.ID, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tx := beginAs(t, db, tc.practiceID, mineID)
-			var count int
-			if err := tx.QueryRowContext(t.Context(), `SELECT count(*) FROM activity`).Scan(&count); err != nil {
-				t.Fatalf("count activity: %v", err)
-			}
-			if count != tc.want {
+			tx := e.DB.BeginAs(t, testdb.Practice(tc.practiceID), testdb.Staff(e.Staff.ID))
+
+			if count := testdb.Scalar[int](t, tx, `SELECT count(*) FROM activity`); count != tc.want {
 				t.Fatalf("visible activity rows = %d, want %d", count, tc.want)
 			}
 		})

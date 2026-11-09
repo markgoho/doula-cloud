@@ -22,13 +22,11 @@ import (
 // where that stops being a coincidence: a fix to the skip rules had to be
 // made in every copy or in none.
 func walkProductionFiles(root string, visit func(rel string, fset *token.FileSet, file *ast.File)) error {
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
+	paths, err := productionGoFiles(root)
+	if err != nil {
+		return err
+	}
+	for _, path := range paths {
 		rel, err := filepath.Rel(root, path)
 		if err != nil {
 			return fmt.Errorf("rel %s: %w", path, err)
@@ -40,13 +38,41 @@ func walkProductionFiles(root string, visit func(rel string, fset *token.FileSet
 			return fmt.Errorf("parse %s: %w", path, err)
 		}
 		visit(rel, fset, file)
+	}
+	return nil
+}
+
+// productionGoFiles lists every non-test .go file under root.
+func productionGoFiles(root string) ([]string, error) {
+	var paths []string
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		paths = append(paths, path)
 		return nil
 	})
 	if err != nil {
 		// coverage:ignore reason: a filesystem walk failure over the module's own source, not reachable from a test
-		return fmt.Errorf("walk %s: %w", root, err)
+		return nil, fmt.Errorf("walk %s: %w", root, err)
 	}
-	return nil
+	return paths, nil
+}
+
+// selectorCalls hands visit every call in file whose function is a
+// selector, `x.Name(...)`.
+func selectorCalls(file *ast.File, visit func(call *ast.CallExpr, sel *ast.SelectorExpr)) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		if call, ok := n.(*ast.CallExpr); ok {
+			if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+				visit(call, sel)
+			}
+		}
+		return true
+	})
 }
 
 // TestNoDirectHTTPError is the Go-side equivalent of app/src/lib's
@@ -66,21 +92,10 @@ func TestNoDirectHTTPError(t *testing.T) {
 			return
 		}
 
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
+		selectorCalls(file, func(call *ast.CallExpr, sel *ast.SelectorExpr) {
+			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "http" && sel.Sel.Name == "Error" {
+				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String())
 			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || ident.Name != "http" || sel.Sel.Name != "Error" {
-				return true
-			}
-			offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String())
-			return true
 		})
 	})
 	if err != nil {
@@ -139,21 +154,12 @@ func TestNoDirectJSONUsage(t *testing.T) {
 			return
 		}
 
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-
+		selectorCalls(file, func(call *ast.CallExpr, sel *ast.SelectorExpr) {
 			// json.MarshalWrite(...) / json.UnmarshalRead(...)
 			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "json" &&
 				(sel.Sel.Name == "MarshalWrite" || sel.Sel.Name == "UnmarshalRead") {
 				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String()+": json."+sel.Sel.Name)
-				return true
+				return
 			}
 
 			// anything.Header().Set("Content-Type", "application/json") --
@@ -165,15 +171,14 @@ func TestNoDirectJSONUsage(t *testing.T) {
 			if _, isCall := sel.X.(*ast.CallExpr); sel.Sel.Name == "Set" && isCall && len(call.Args) == 2 {
 				key, ok := call.Args[0].(*ast.BasicLit)
 				if !ok || key.Kind != token.STRING || key.Value != `"Content-Type"` {
-					return true
+					return
 				}
 				value, ok := call.Args[1].(*ast.BasicLit)
 				if !ok || value.Kind != token.STRING || value.Value != `"application/json"` {
-					return true
+					return
 				}
 				offenses = append(offenses, rel+":"+fset.Position(call.Pos()).String()+": Content-Type: application/json")
 			}
-			return true
 		})
 	})
 	if err != nil {

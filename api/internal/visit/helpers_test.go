@@ -112,26 +112,7 @@ func seedVisitCreatedAt(t *testing.T, db *testdb.DB, engagementID, staffID strin
 // first, inside the one transaction the setting has to survive in.
 func setPregnancyEnded(t *testing.T, db *testdb.DB, engagementID, outcome, endedOn string) {
 	t.Helper()
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("set pregnancy ended: begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if _, err := tx.ExecContext(t.Context(),
-		`SELECT set_config('app.allow_outcome_correction', 'on', true)`); err != nil {
-		t.Fatalf("set pregnancy ended: open correction door: %v", err)
-	}
-	if _, err := tx.ExecContext(t.Context(),
-		`UPDATE engagements SET birth_outcome = $1, pregnancy_ended_on = $2 WHERE id = $3`,
-		outcome, endedOn, engagementID,
-	); err != nil {
-		t.Fatalf("set pregnancy ended: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("set pregnancy ended: commit: %v", err)
-	}
+	db.ExecCorrectingOutcome(t, `UPDATE engagements SET birth_outcome = $1, pregnancy_ended_on = $2 WHERE id = $3`, outcome, endedOn, engagementID)
 }
 
 // env is what a test in this package starts from: a Practice with this
