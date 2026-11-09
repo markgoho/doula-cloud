@@ -2,7 +2,6 @@ package activityfeed_test
 
 import (
 	"encoding/json/v2"
-	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -43,18 +42,7 @@ func TestPracticeHandler_SurfacesEveryMembershipEvent(t *testing.T) {
 		testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, subjectID, action, activity.StaffActor(ownerID))
 	}
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 
 	seen := map[string]activityfeed.Entry{}
 	for _, entry := range got.Items {
@@ -106,15 +94,7 @@ func TestPracticeHandler_NamesADepartedMembershipSubject(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectMembership, departedID, string(activity.ActionMembershipRemoved), activity.StaffActor(departedID))
 	testdb.RemoveMembership(t, db, departedID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 1 {
 		t.Fatalf("Items = %+v, want 1", got.Items)
 	}
@@ -146,15 +126,7 @@ func TestPracticeHandler_RedactedDepartedSubjectReadsAsAFormerColleague(t *testi
 	testdb.RemoveMembership(t, db, departedID)
 	testdb.RedactDeletedLogin(t, db, departedID)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 1 {
 		t.Fatalf("Items = %+v, want 1", got.Items)
 	}

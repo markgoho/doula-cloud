@@ -2,18 +2,32 @@ package portalinvite_test
 
 import (
 	"database/sql"
-	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/apierrtest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/portalinvite"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
+
+// invite posts the portal invite of engagementID as the Staff member at
+// the screen and requires the status want.
+func invite(s *fixture.Scene, engagementID string, want int) {
+	s.T.Helper()
+	reqtest.ExpectStatus(s.T, http.MethodPost, s.PracticeURL(invitePath(engagementID)), want, s.SignedIn)
+}
+
+// inviteSucceeding posts an invite that succeeds with status want and
+// returns its body.
+func inviteSucceeding(s *fixture.Scene, engagementID string, want int) portalinvite.InviteResponse {
+	s.T.Helper()
+	return reqtest.Expect[portalinvite.InviteResponse](s.T, http.MethodPost, s.PracticeURL(invitePath(engagementID)), want, s.SignedIn)
+}
 
 // inviteTokenExpiresAt reads back the current invite_token_expires_at for
 // portalUserID, so a test can prove a re-invite moves it forward rather
@@ -24,118 +38,59 @@ func inviteTokenExpiresAt(t *testing.T, db *testdb.DB, portalUserID string) time
 	return expiresAt
 }
 
-func TestInviteHandler_EngagementNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-engagement-not-found"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+func TestInviteHandler_RefusesAnEngagementItCannotUse(t *testing.T) {
+	for name, c := range map[string]struct {
+		engagementID string
+		want         int
+	}{
+		"one that does not exist":  {unknownUUID, http.StatusNotFound},
+		"an id that is not a uuid": {notAUUID, http.StatusBadRequest},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := newInviteScene(t)
 
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postInvite(t, srv, session, practiceID, "00000000-0000-0000-0000-000000000000")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusNotFound)
-	}
-}
-
-func TestInviteHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-invalid-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postInvite(t, srv, session, practiceID, "not-a-uuid")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+			invite(s, c.engagementID, c.want)
+		})
 	}
 }
 
 func TestInviteHandler_Success(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-success-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "New Client", "new@example.com")
+	s := newInviteScene(t, invitedClient("New Client", "new@example.com"))
 
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
+	out := inviteSucceeding(s, s.Engagement.ID, http.StatusCreated)
 
-	resp := postInvite(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-
-	var out portalinvite.InviteResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.ClientPortalUserID == "" || out.InviteToken == "" {
 		t.Fatalf("expected non-empty ids, got %+v", out)
 	}
-
 	var gotClientID string
 	var identityUIDCol sql.NullString
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := s.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT client_id, identity_uid FROM client_portal_users WHERE id = $1`, out.ClientPortalUserID,
 	).Scan(&gotClientID, &identityUIDCol); err != nil {
 		t.Fatalf("query pending row: %v", err)
 	}
-	if gotClientID != clientID {
-		t.Fatalf("client_id = %q, want %q", gotClientID, clientID)
+	if gotClientID != s.Engagement.Client.ID {
+		t.Fatalf("client_id = %q, want %q", gotClientID, s.Engagement.Client.ID)
 	}
 	if identityUIDCol.Valid {
 		t.Fatalf("expected pending row to have no identity_uid yet, got %q", identityUIDCol.String)
 	}
-
-	outboxStatus := testdb.Scalar[string](t, db.Admin, `SELECT status FROM portal_invite_outbox WHERE client_portal_user_id = $1`, out.ClientPortalUserID)
+	outboxStatus := testdb.Scalar[string](t, s.DB.Admin, `SELECT status FROM portal_invite_outbox WHERE client_portal_user_id = $1`, out.ClientPortalUserID)
 	if outboxStatus != testOutboxStatusPending {
 		t.Fatalf("outbox status = %q, want %s", outboxStatus, testOutboxStatusPending)
 	}
 }
 
 func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-reinvite-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Reinvited Client", "reinvited@example.com")
+	s := newInviteScene(t, invitedClient("Reinvited Client", "reinvited@example.com"))
 
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	first := postInvite(t, srv, session, practiceID, engagementID)
-	var firstOut portalinvite.InviteResponse
-	if err := json.UnmarshalRead(first.Body, &firstOut); err != nil {
-		t.Fatalf("decode first response: %v", err)
-	}
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusCreated {
-		t.Fatalf("first status = %d, want %d", first.StatusCode, http.StatusCreated)
-	}
-	firstExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
+	firstOut := inviteSucceeding(s, s.Engagement.ID, http.StatusCreated)
+	firstExpiresAt := inviteTokenExpiresAt(t, s.DB, firstOut.ClientPortalUserID)
 	// #2522: a refused accept on the first token is a fact about that
 	// token; rotating it asks again.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE client_portal_users SET access_refused_at = now() WHERE id = $1`, firstOut.ClientPortalUserID,
-	); err != nil {
-		t.Fatalf("mark refused: %v", err)
-	}
+	s.Exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE id = $1`, firstOut.ClientPortalUserID)
 
-	second := postInvite(t, srv, session, practiceID, engagementID)
-	defer second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-	var secondOut portalinvite.InviteResponse
-	if err := json.UnmarshalRead(second.Body, &secondOut); err != nil {
-		t.Fatalf("decode second response: %v", err)
-	}
+	secondOut := inviteSucceeding(s, s.Engagement.ID, http.StatusOK)
 
 	if secondOut.ClientPortalUserID != firstOut.ClientPortalUserID {
 		t.Fatalf("re-invite created a second row: %q != %q", secondOut.ClientPortalUserID, firstOut.ClientPortalUserID)
@@ -143,17 +98,15 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	if secondOut.InviteToken == firstOut.InviteToken {
 		t.Fatalf("expected invite_token to rotate, got the same token twice")
 	}
-	secondExpiresAt := inviteTokenExpiresAt(t, db, firstOut.ClientPortalUserID)
+	secondExpiresAt := inviteTokenExpiresAt(t, s.DB, firstOut.ClientPortalUserID)
 	if !secondExpiresAt.After(firstExpiresAt) {
 		t.Fatalf("expected invite_token_expires_at to move forward on re-invite, first=%v second=%v", firstExpiresAt, secondExpiresAt)
 	}
-	stillRefused := testdb.Scalar[bool](t, db.Admin, `SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE id = $1`, firstOut.ClientPortalUserID)
+	stillRefused := testdb.Scalar[bool](t, s.DB.Admin, `SELECT access_refused_at IS NOT NULL FROM client_portal_users WHERE id = $1`, firstOut.ClientPortalUserID)
 	if stillRefused {
 		t.Fatal("access_refused_at survived the re-invite, want it cleared with the rotated token")
 	}
-
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM client_portal_users WHERE client_id = (SELECT client_id FROM client_portal_users WHERE id = $1)`,
-		firstOut.ClientPortalUserID)
+	count := testdb.Scalar[int](t, s.DB.Admin, `SELECT count(*) FROM client_portal_users WHERE client_id = $1`, s.Engagement.Client.ID)
 	if count != 1 {
 		t.Fatalf("expected exactly one row for the client after re-invite, got %d", count)
 	}
@@ -162,7 +115,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	// ON CONFLICT), rather than forking a second one racing to send the
 	// same portal user's invite.
 	var outboxCount, outboxAttemptCount int
-	if err := db.Admin.QueryRowContext(t.Context(),
+	if err := s.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT count(*), max(attempt_count) FROM portal_invite_outbox WHERE client_portal_user_id = $1`,
 		firstOut.ClientPortalUserID,
 	).Scan(&outboxCount, &outboxAttemptCount); err != nil {
@@ -177,129 +130,82 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 }
 
 func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-already-accepted-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	clientID, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Accepted Client", "accepted@example.com")
-	testdb.SeedPortalAccount(t, db, "already-accepted-uid", "already-accepted-uid@example.com")
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted-uid', $1)`,
-		clientID,
-	); err != nil {
-		t.Fatalf("seed accepted portal user: %v", err)
-	}
+	s := newInviteScene(t, invitedClient("Accepted Client", "accepted@example.com"))
+	testdb.SeedPortalAccount(t, s.DB, "already-accepted-uid", "already-accepted-uid@example.com")
+	s.Exec(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted-uid', $1)`, s.Engagement.Client.ID)
 
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
+	out := reqtest.Expect[apierr.APIError](t, http.MethodPost, s.PracticeURL(invitePath(s.Engagement.ID)), http.StatusConflict, s.SignedIn)
 
-	resp := postInvite(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
-	}
-
-	out := apierrtest.Decode(t, resp)
 	if out.Code != apierr.CodeConflict {
 		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeConflict)
 	}
 }
 
-// TestInviteHandler_SuppressedAddressRefused is #789's AC: a portal
-// invite to a currently-suppressed address is refused at the endpoint,
-// names Blocked email addresses, and queues no outbox row.
-func TestInviteHandler_SuppressedAddressRefused(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-suppressed-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
+// TestInviteHandler_SuppressedAddress is #789's ACs: a portal invite to a
+// currently-suppressed address is refused at the endpoint, names Blocked
+// email addresses, and queues no outbox row; a suppression that has been
+// cleared (#744) lets the same invite through unchanged; and a Client with
+// no address on file (ADR-0017) has nothing to check, so the invite
+// proceeds exactly as it did before -- the outbox dead-letters it later
+// for its own, separate reason ("client has no email on file").
+func TestInviteHandler_SuppressedAddress(t *testing.T) {
 	const email = "suppressed@example.com"
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Suppressed Client", email)
-	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-789"); err != nil {
-		t.Fatalf("seed suppression: %v", err)
+	suppress := func(t *testing.T, db *testdb.DB) {
+		t.Helper()
+		if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-789"); err != nil {
+			t.Fatalf("seed suppression: %v", err)
+		}
 	}
-
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postInvite(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusConflict)
+	cases := []struct {
+		name  string
+		email string
+		setUp func(t *testing.T, db *testdb.DB)
+		want  int
+	}{
+		{name: "a suppressed address is refused", email: email, setUp: suppress, want: http.StatusConflict},
+		{
+			name: "a cleared suppression lets the invite through", email: email, want: http.StatusCreated,
+			setUp: func(t *testing.T, db *testdb.DB) {
+				suppress(t, db)
+				if _, err := db.Admin.ExecContext(t.Context(),
+					`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`, mailsuppress.Normalize(email),
+				); err != nil {
+					t.Fatalf("clear suppression: %v", err)
+				}
+			},
+		},
+		{name: "no email on file skips the check", want: http.StatusCreated},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := newInviteScene(t, invitedClient("Suppression Client", c.email))
+			if c.setUp != nil {
+				c.setUp(t, s.DB)
+			}
 
-	out := apierrtest.Decode(t, resp)
-	if out.Code != apierr.CodeFailedPrecondition {
-		t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
-	}
-	if !strings.Contains(out.Message, "Blocked email addresses") {
-		t.Fatalf("message = %q, want it to name Blocked email addresses", out.Message)
-	}
-	if out.Details["email"] == "" {
-		t.Fatalf("expected a field-keyed details entry for email, got %+v", out.Details)
-	}
-
-	portalUserCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM client_portal_users pu JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email)
-	if portalUserCount != 0 {
-		t.Fatalf("expected no client_portal_users row for a refused invite, got %d", portalUserCount)
-	}
-
-	outboxCount := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM portal_invite_outbox o
-		 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
-		 JOIN clients c ON c.id = pu.client_id WHERE c.email = $1`, email)
-	if outboxCount != 0 {
-		t.Fatalf("expected no portal_invite_outbox row for a refused invite, got %d", outboxCount)
-	}
-}
-
-// TestInviteHandler_ClearedSuppressionAllowsInvite is #789's AC: a
-// suppression that has been cleared (#744) lets the same invite through
-// unchanged.
-func TestInviteHandler_ClearedSuppressionAllowsInvite(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-cleared-suppression-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	const email = "cleared@example.com"
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Cleared Client", email)
-	if err := mailsuppress.Record(t.Context(), db.Admin, email, mailsuppress.CauseBounce, "evt-789-cleared"); err != nil {
-		t.Fatalf("seed suppression: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE email_suppressions SET cleared_at = now() WHERE address = $1`,
-		mailsuppress.Normalize(email),
-	); err != nil {
-		t.Fatalf("clear suppression: %v", err)
-	}
-
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postInvite(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
-	}
-}
-
-// TestInviteHandler_NoEmailOnFileSkipsSuppressionCheck is #789's other
-// edge of the same guard: a Client with no address on file (ADR-0017)
-// has nothing to check for suppression, so the invite proceeds exactly
-// as it did before this ticket -- the outbox dead-letters it later for
-// its own, separate reason ("client has no email on file").
-func TestInviteHandler_NoEmailOnFileSkipsSuppressionCheck(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "invite-no-email-staff"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "No Email Client", "")
-
-	srv, session := newInviteServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := postInvite(t, srv, session, practiceID, engagementID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusCreated {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+			if c.want != http.StatusConflict {
+				invite(s, s.Engagement.ID, c.want)
+				return
+			}
+			out := reqtest.Expect[apierr.APIError](t, http.MethodPost, s.PracticeURL(invitePath(s.Engagement.ID)), c.want, s.SignedIn)
+			if out.Code != apierr.CodeFailedPrecondition {
+				t.Fatalf("code = %q, want %q", out.Code, apierr.CodeFailedPrecondition)
+			}
+			if !strings.Contains(out.Message, "Blocked email addresses") {
+				t.Fatalf("message = %q, want it to name Blocked email addresses", out.Message)
+			}
+			if out.Details["email"] == "" {
+				t.Fatalf("expected a field-keyed details entry for email, got %+v", out.Details)
+			}
+			portalUserCount := testdb.Scalar[int](t, s.DB.Admin, `SELECT count(*) FROM client_portal_users WHERE client_id = $1`, s.Engagement.Client.ID)
+			if portalUserCount != 0 {
+				t.Fatalf("expected no client_portal_users row for a refused invite, got %d", portalUserCount)
+			}
+			outboxCount := testdb.Scalar[int](t, s.DB.Admin, `SELECT count(*) FROM portal_invite_outbox o
+				 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id WHERE pu.client_id = $1`, s.Engagement.Client.ID)
+			if outboxCount != 0 {
+				t.Fatalf("expected no portal_invite_outbox row for a refused invite, got %d", outboxCount)
+			}
+		})
 	}
 }

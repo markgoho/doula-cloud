@@ -2,12 +2,12 @@ package portalinvite_test
 
 import (
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -18,9 +18,9 @@ import (
 // confirmed. ADR-0026 makes the invitation the first magic link, so this
 // is a Client sign-in and #610 governs it exactly as it governs a later
 // one.
-func postAcceptWithSession(t *testing.T, srv *httptest.Server, inviteToken, cookieToken string, confirmed bool) *http.Response {
+func postAcceptWithSession(t *testing.T, s *fixture.Scene, inviteToken, cookieToken string, confirmed bool) *http.Response {
 	t.Helper()
-	resp := reqtest.Post(t, srv.URL+"/api/portal/accept-invite",
+	resp := reqtest.Post(t, s.URL("/api/portal/accept-invite"),
 		reqtest.JSON(portalinvite.AcceptInviteRequest{InviteToken: inviteToken}),
 		reqtest.Session(cookieToken),
 		reqtest.HeaderIf(confirmed, "X-Confirmed", "true"))
@@ -34,13 +34,12 @@ func countSessionsFor(t *testing.T, db *testdb.DB, identityUID string) int {
 }
 
 func TestAcceptInviteHandler_UnconfirmedStaffSessionWarnsAndClaimsNothing(t *testing.T) {
-	db := testdb.New(t)
+	s := newAcceptScene(t)
+	db := s.DB
 	clientID, inviteToken := seedPendingPortalInvite(t, db)
 	staffToken := authntest.SeedSession(t, db.App, "staff-uid")
-	srv := newAcceptServer(db)
-	defer srv.Close()
 
-	resp := postAcceptWithSession(t, srv, inviteToken, staffToken, false)
+	resp := postAcceptWithSession(t, s, inviteToken, staffToken, false)
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusConflict {
@@ -60,7 +59,7 @@ func TestAcceptInviteHandler_UnconfirmedStaffSessionWarnsAndClaimsNothing(t *tes
 		t.Fatalf("identity_uid = %q, want empty -- a refused accept may claim nothing", identityUID)
 	}
 
-	retry := postAcceptWithSession(t, srv, inviteToken, staffToken, true)
+	retry := postAcceptWithSession(t, s, inviteToken, staffToken, true)
 	defer retry.Body.Close()
 	if retry.StatusCode != http.StatusOK {
 		t.Fatalf("confirmed retry status = %d, want %d", retry.StatusCode, http.StatusOK)

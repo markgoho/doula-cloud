@@ -26,18 +26,7 @@ func TestPracticeHandler_SpansEverySubjectKindNewestFirst(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(ownerID))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 3 {
 		t.Fatalf("Items = %d, want 3 (one per subject kind written)", len(got.Items))
 	}
@@ -79,15 +68,7 @@ func TestPracticeHandler_ResolvesActorNameForEveryActorKind(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionContractSigned), activity.ClientActor(clientID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionOfferSent), activity.SystemActor())
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 2 {
 		t.Fatalf("Items = %+v, want 2", got.Items)
 	}
@@ -178,15 +159,7 @@ func TestPracticeHandler_EmptyPracticeHasNoActivity(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Feed Empty Practice")
 	testdb.SeedStaffAtPractice(t, db, practiceID, identityUID, []string{ownerRole}, employeeType)
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 0 || got.HasMore || got.NextCursor != nil {
 		t.Fatalf("got %+v, want an empty, terminal page", got)
 	}
@@ -207,15 +180,7 @@ func TestPracticeHandler_UnregisteredSubjectKindNeverAppears(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, "client_field_template", practiceID, "template_saved", activity.StaffActor(ownerID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionEngagementCreated), activity.StaffActor(ownerID))
 
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, identityUID, practiceID)
 	if len(got.Items) != 1 || got.Items[0].SubjectKind != activity.SubjectEngagement {
 		t.Fatalf("Items = %+v, want exactly one engagement row (client_field_template unregistered)", got.Items)
 	}
@@ -298,15 +263,7 @@ func TestPracticeHandler_MoneyTierAppliedPerRow(t *testing.T) {
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionVisitLogged), activity.StaffActor(contractorID))
 	testdb.SeedActivity(t, db, practiceID, activity.SubjectEngagement, engagementID, string(activity.ActionInvoiceRaised), activity.StaffActor(contractorID))
 
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	got := readFeed(t, db, contractorUID, practiceID)
 	if len(got.Items) != 1 || got.Items[0].Action != string(activity.ActionVisitLogged) {
 		t.Fatalf("Items = %+v, want exactly the non-money visit_logged row", got.Items)
 	}

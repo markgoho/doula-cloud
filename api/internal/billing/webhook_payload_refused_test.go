@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
 
@@ -18,28 +17,17 @@ const (
 )
 
 func TestPostPurchaseWebhookHandler_AnOtherwiseFailedLedgerInsertStaysA500(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Ledger Check Failure")
-	srv := newWebhookServer(db)
-	defer srv.Close()
+	e := newWebhookEnv(t)
 
-	resp := postWebhook(t, srv, pricedCheckoutPayload(t, "evt_negative_tax", practiceID, 5, 10000, -1, "pi_negative_tax"), webhookTestSecret)
-	_ = resp.Body.Close()
+	e.deliver(pricedCheckoutPayload(t, "evt_negative_tax", e.Practice, 5, 10000, -1, "pi_negative_tax"), webhookTestSecret, http.StatusInternalServerError)
 
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want 500", resp.StatusCode)
-	}
-	if got := arrivals(t, db); !slices.Equal(got, []arrival{{webhookarrival.Failed, "evt_negative_tax", stripeEventTypeCheckoutCompleted}}) {
+	if got := arrivals(t, e.DB); !slices.Equal(got, []arrival{{webhookarrival.Failed, "evt_negative_tax", stripeEventTypeCheckoutCompleted}}) {
 		t.Fatalf("arrivals = %v, want one failed", got)
 	}
 }
 
 func TestPostPurchaseWebhookHandler_MarksAndLogsEachPayloadItCannotActOn(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Payload Refused")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
+	e := newWebhookEnv(t)
 	var logged bytes.Buffer
 	original := log.Writer()
 	log.SetOutput(&logged)
@@ -49,26 +37,22 @@ func TestPostPurchaseWebhookHandler_MarksAndLogsEachPayloadItCannotActOn(t *test
 		eventID, field string
 		payload        []byte
 	}{
-		{"evt_no_practice", "metadata.practice_id", checkoutCompletedPayload(t, "evt_no_practice", "", 3, "paid")},
-		{"evt_bad_quantity", "metadata.quantity", checkoutCompletedPayload(t, "evt_bad_quantity", practiceID, 0, "paid")},
-		{"evt_uneven", failingSubtotal, pricedCheckoutPayload(t, "evt_uneven", practiceID, 3, 10000, 0, "pi_uneven")},
-		{"evt_ghost", "metadata.practice_id: no such Practice", checkoutCompletedPayload(t, "evt_ghost", "00000000-0000-4000-8000-000000000000", 3, "paid")},
-		{"evt_nopi", failingPaymentIntent, pricedCheckoutPayload(t, "evt_nopi", practiceID, 5, 10000, 0, nil)},
+		{"evt_no_practice", "metadata.practice_id", checkoutCompletedPayload(t, "evt_no_practice", "", 3, paidStatus)},
+		{"evt_bad_quantity", "metadata.quantity", checkoutCompletedPayload(t, "evt_bad_quantity", e.Practice, 0, paidStatus)},
+		{"evt_uneven", failingSubtotal, pricedCheckoutPayload(t, "evt_uneven", e.Practice, 3, 10000, 0, "pi_uneven")},
+		{"evt_ghost", "metadata.practice_id: no such Practice", checkoutCompletedPayload(t, "evt_ghost", "00000000-0000-4000-8000-000000000000", 3, paidStatus)},
+		{"evt_nopi", failingPaymentIntent, pricedCheckoutPayload(t, "evt_nopi", e.Practice, 5, 10000, 0, nil)},
 	}
 	want := []arrival{}
 	for _, c := range cases {
-		resp := postWebhook(t, srv, c.payload, webhookTestSecret)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, want 400", c.eventID, resp.StatusCode)
-		}
+		e.deliver(c.payload, webhookTestSecret, http.StatusBadRequest)
 		line := "refusing event " + c.eventID + " (" + stripeEventTypeCheckoutCompleted + "): " + c.field
 		if !strings.Contains(logged.String(), line) {
 			t.Errorf("log = %q, want it to contain %q", logged.String(), line)
 		}
 		want = append(want, arrival{webhookarrival.PayloadRefused, c.eventID, stripeEventTypeCheckoutCompleted})
 	}
-	if got := arrivals(t, db); !slices.Equal(got, want) {
+	if got := arrivals(t, e.DB); !slices.Equal(got, want) {
 		t.Fatalf("arrivals =\n%v\nwant\n%v", got, want)
 	}
 }

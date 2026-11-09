@@ -2,8 +2,6 @@ package activityfeed_test
 
 import (
 	"encoding/json/jsontext"
-	"encoding/json/v2"
-	"net/http"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -17,15 +15,7 @@ func reassignment(fromID, toID string) jsontext.Value {
 
 func practiceFeed(t *testing.T, db *testdb.DB, uid, practiceID string) []activityfeed.Entry {
 	t.Helper()
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/activity")
-	defer resp.Body.Close()
-	var got activityfeed.ListResponse
-	if err := json.UnmarshalRead(resp.Body, &got); err != nil || resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, err = %v", resp.StatusCode, err)
-	}
-	return got.Items
+	return readFeed(t, db, uid, practiceID).Items
 }
 
 // #2672: a visit_reassigned row names the Doula the Visit left and the

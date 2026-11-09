@@ -31,12 +31,42 @@ const (
 	quantityKey                      = "quantity"
 	metadataKey                      = "metadata"
 	objectKey                        = "object"
+
+	paidStatus = "paid"
 )
 
-func newWebhookServer(db *testdb.DB) *httptest.Server {
+// webhookEnv is what a webhook test starts from: a Practice and a server
+// carrying the Stripe webhook route. Nobody is signed in; the signature
+// is the whole credential.
+type webhookEnv struct {
+	T        *testing.T
+	DB       *testdb.DB
+	Srv      *httptest.Server
+	Practice string
+}
+
+func newWebhookEnv(t *testing.T) *webhookEnv {
+	t.Helper()
+	db := testdb.New(t)
 	mux := http.NewServeMux()
 	mux.Handle("POST /stripe/webhook", webhookarrival.Record(db.App, webhookarrival.StripePlatform, billing.PostPurchaseWebhookHandler(db.App, webhookTestSecret, stripemode.Test)))
-	return httptest.NewServer(mux)
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	return &webhookEnv{T: t, DB: db, Srv: srv, Practice: testdb.SeedPractice(t, db, "Webhook Practice")}
+}
+
+// deliver posts payload signed with signingSecret and requires the status.
+func (e *webhookEnv) deliver(payload []byte, signingSecret string, want int) {
+	e.T.Helper()
+	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
+	reqtest.ExpectStatus(e.T, http.MethodPost, e.Srv.URL+"/stripe/webhook", want,
+		reqtest.Body("", payload), reqtest.Header("Stripe-Signature", signed.Header))
+}
+
+// credited is the Practice's ledger sum, what the webhook has added to it.
+func (e *webhookEnv) credited() int {
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, e.Practice)
 }
 
 // buildEventPayload assembles a raw Stripe event envelope around
@@ -77,290 +107,6 @@ func checkoutCompletedPayload(t *testing.T, eventID, practiceID string, quantity
 	})
 }
 
-func otherEventPayload(t *testing.T, eventID string) []byte {
-	t.Helper()
-	return buildEventPayload(t, eventID, "payment_intent.succeeded", map[string]any{"id": "pi_test", objectKey: "payment_intent"})
-}
-
-func postWebhook(t *testing.T, srv *httptest.Server, payload []byte, signingSecret string) *http.Response {
-	t.Helper()
-	signed := stripe.GenerateTestSignedPayload(&stripe.UnsignedPayload{Payload: payload, Secret: signingSecret})
-
-	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", payload), reqtest.Header("Stripe-Signature", signed.Header))
-	return resp
-}
-
-func sumLedger(t *testing.T, db *testdb.DB, practiceID string) int {
-	t.Helper()
-	sum := testdb.Scalar[int](t, db.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID)
-	return sum
-}
-
-// TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout proves a
-// validly-signed, paid checkout.session.completed event appends a +N
-// purchase row for the Practice named in its metadata.
-func TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Webhook Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := checkoutCompletedPayload(t, "evt_credit_once", practiceID, 7, "paid")
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := sumLedger(t, db, practiceID); got != 7 {
-		t.Fatalf("ledger sum = %d, want 7", got)
-	}
-
-	var origin string
-	var quantity int
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT origin, quantity FROM credit_ledger WHERE practice_id = $1`, practiceID,
-	).Scan(&origin, &quantity); err != nil {
-		t.Fatalf("query ledger row: %v", err)
-	}
-	if origin != originPurchase || quantity != 7 {
-		t.Fatalf("ledger row = (%q, %d), want (\"purchase\", 7)", origin, quantity)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce is the
-// explicit idempotency test AC #3 calls for: replaying the same Stripe
-// event id must not double-credit.
-func TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Replay Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := checkoutCompletedPayload(t, "evt_replayed", practiceID, 4, "paid")
-
-	first := postWebhook(t, srv, payload, webhookTestSecret)
-	_ = first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first delivery status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	second := postWebhook(t, srv, payload, webhookTestSecret)
-	_ = second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("replayed delivery status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
-
-	if got := sumLedger(t, db, practiceID); got != 4 {
-		t.Fatalf("ledger sum after replay = %d, want 4 (credited exactly once)", got)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_InvalidSignatureRejected proves a
-// payload signed with the wrong secret is rejected and never credits.
-func TestPostPurchaseWebhookHandler_InvalidSignatureRejected(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Bad Signature Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := checkoutCompletedPayload(t, "evt_bad_sig", practiceID, 9, "paid")
-	resp := postWebhook(t, srv, payload, "whsec_wrong_secret")
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want 0", got)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_LiveEventRefusedOnTestKeys proves a
-// validly-signed live event is refused when the keys are in test mode.
-func TestPostPurchaseWebhookHandler_LiveEventRefusedOnTestKeys(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Live Event Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	var body map[string]any
-	if err := json.Unmarshal(checkoutCompletedPayload(t, "evt_live", practiceID, 3, "paid"), &body); err != nil {
-		t.Fatalf("unmarshal payload: %v", err)
-	}
-	body["livemode"] = true
-	payload, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("marshal payload: %v", err)
-	}
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want 0", got)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_UnpaidPaymentNeverCredits proves a
-// completed Checkout Session that isn't actually paid (an async payment
-// method still pending) never credits the ledger.
-func TestPostPurchaseWebhookHandler_UnpaidPaymentNeverCredits(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Unpaid Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := checkoutCompletedPayload(t, "evt_unpaid", practiceID, 6, "unpaid")
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want 0", got)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_OtherEventTypesAcknowledgedNotCredited
-// proves an event type other than checkout.session.completed (e.g.
-// payment_intent.succeeded, which fires alongside it for the same
-// Checkout) is acknowledged with 200 but never credits -- avoiding a
-// double-credit off the same purchase under two different event ids.
-func TestPostPurchaseWebhookHandler_OtherEventTypesAcknowledgedNotCredited(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Other Event Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := otherEventPayload(t, "evt_payment_intent")
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want 0", got)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_InvalidPracticeIDMetadataRejected proves
-// a malformed practice_id in metadata is rejected rather than crashing or
-// silently doing nothing.
-func TestPostPurchaseWebhookHandler_InvalidPracticeIDMetadataRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := checkoutCompletedPayload(t, "evt_bad_practice", "not-a-uuid", 3, "paid")
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_OversizedBodyRejected proves a request
-// body over webhookarrival.MaxBodyBytes is rejected rather than read without
-// bound.
-func TestPostPurchaseWebhookHandler_OversizedBodyRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
-	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", oversized), reqtest.Header("Stripe-Signature", "t=1,v1=deadbeef"))
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_MalformedSessionObjectRejected proves a
-// checkout.session.completed event whose data.object can't be unmarshaled
-// into a CheckoutSession is rejected rather than crediting blindly.
-func TestPostPurchaseWebhookHandler_MalformedSessionObjectRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	// metadata as a number (instead of an object of strings) fails to
-	// unmarshal into stripe.CheckoutSession.Metadata.
-	payload := buildEventPayload(t, "evt_malformed_session", stripeEventTypeCheckoutCompleted, map[string]any{
-		"id":        stripeTestSessionID,
-		objectKey:   stripeObjectCheckoutSession,
-		metadataKey: 12345,
-	})
-
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusInternalServerError)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_NonexistentPracticeRejected proves a
-// well-formed but nonexistent practice_id -- which should never happen,
-// since we set that metadata ourselves at Checkout Session creation --
-// is refused with a 400 via credit_ledger's foreign key, and
-// rolls back rather than leaving a stray stripe_webhook_events row with
-// no corresponding credit.
-func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
-	db := testdb.New(t)
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	const nonexistentPracticeID = "00000000-0000-0000-0000-000000000000"
-	payload := checkoutCompletedPayload(t, "evt_nonexistent_practice", nonexistentPracticeID, 3, "paid")
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM stripe_webhook_events WHERE event_id = 'evt_nonexistent_practice'`)
-	if count != 0 {
-		t.Fatalf("stripe_webhook_events row count = %d, want 0 (rolled back)", count)
-	}
-}
-
-// TestPostPurchaseWebhookHandler_InvalidQuantityMetadataRejected proves a
-// non-numeric quantity in metadata is rejected.
-func TestPostPurchaseWebhookHandler_InvalidQuantityMetadataRejected(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Bad Quantity Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
-
-	payload := buildEventPayload(t, "evt_bad_quantity", stripeEventTypeCheckoutCompleted, map[string]any{
-		"id":             stripeTestSessionID,
-		objectKey:        stripeObjectCheckoutSession,
-		"payment_status": "paid",
-		metadataKey: map[string]any{
-			practiceIDKey: practiceID,
-			"quantity":    "not-a-number",
-		},
-	})
-
-	resp := postWebhook(t, srv, payload, webhookTestSecret)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusBadRequest)
-	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want 0", got)
-	}
-}
-
 // pricedCheckoutPayload builds a paid checkout.session.completed event
 // with an explicit subtotal, tax and payment -- the three facts #420's
 // purchase row records, so a refund can be computed from the ledger
@@ -370,7 +116,7 @@ func pricedCheckoutPayload(t *testing.T, eventID, practiceID string, quantity in
 	session := map[string]any{
 		"id":              stripeTestSessionID,
 		objectKey:         stripeObjectCheckoutSession,
-		paymentStatusKey:  "paid",
+		paymentStatusKey:  paidStatus,
 		"amount_subtotal": subtotal,
 		"total_details":   map[string]any{"amount_tax": tax},
 		metadataKey: map[string]any{
@@ -384,54 +130,193 @@ func pricedCheckoutPayload(t *testing.T, eventID, practiceID string, quantity in
 	return buildEventPayload(t, eventID, stripeEventTypeCheckoutCompleted, session)
 }
 
-// TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost proves the purchase
-// row keeps the price paid, the tax charged and the payment it arrived
-// on -- the three things a refund three years later is computed from.
-func TestPostPurchaseWebhookHandler_RecordsWhatTheLotCost(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Priced Webhook")
-	srv := newWebhookServer(db)
+// TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout proves a
+// validly-signed, paid checkout.session.completed event appends a +N
+// purchase row for the Practice named in its metadata, recording the
+// price paid, the tax charged and the payment it arrived on -- the three
+// things a refund three years later is computed from.
+func TestPostPurchaseWebhookHandler_CreditsLedgerOnConfirmedCheckout(t *testing.T) {
+	e := newWebhookEnv(t)
 
-	resp := postWebhook(t, srv, pricedCheckoutPayload(t, "evt_priced", practiceID, 5, 10000, 686, "pi_recorded"), webhookTestSecret)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want 200", resp.StatusCode)
-	}
+	e.deliver(pricedCheckoutPayload(t, "evt_credit_once", e.Practice, 5, 10000, 686, "pi_recorded"), webhookTestSecret, http.StatusOK)
 
-	var unitPrice, tax int
-	var paymentIntent string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT unit_price_cents, tax_cents, stripe_payment_intent_id FROM credit_ledger
-		 WHERE practice_id = $1 AND origin = 'purchase'`, practiceID,
-	).Scan(&unitPrice, &tax, &paymentIntent); err != nil {
-		t.Fatalf("read purchase row: %v", err)
+	var origin, paymentIntent string
+	var quantity, unitPrice, tax int
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT origin, quantity, unit_price_cents, tax_cents, stripe_payment_intent_id FROM credit_ledger
+		 WHERE practice_id = $1`, e.Practice,
+	).Scan(&origin, &quantity, &unitPrice, &tax, &paymentIntent); err != nil {
+		t.Fatalf("query ledger row: %v", err)
 	}
-	if unitPrice != 2000 || tax != 686 || paymentIntent != "pi_recorded" {
-		t.Fatalf("purchase row = (%d, %d, %s), want (2000, 686, pi_recorded)", unitPrice, tax, paymentIntent)
+	if origin != originPurchase || quantity != 5 || unitPrice != 2000 || tax != 686 || paymentIntent != "pi_recorded" {
+		t.Fatalf("ledger row = (%q, %d, %d, %d, %s), want (purchase, 5, 2000, 686, pi_recorded)", origin, quantity, unitPrice, tax, paymentIntent)
 	}
 }
 
-// TestPostPurchaseWebhookHandler_RefusesASessionItCannotPrice proves a
-// Session the handler cannot turn into an exact unit price, or cannot tie
-// to a payment, is refused rather than stored lossily -- Stripe retries,
-// and nothing has been written.
-func TestPostPurchaseWebhookHandler_RefusesASessionItCannotPrice(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Unpriceable Webhook")
-	srv := newWebhookServer(db)
+// TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce is the
+// explicit idempotency test AC #3 calls for: replaying the same Stripe
+// event id must not double-credit.
+func TestPostPurchaseWebhookHandler_ReplayedEventCreditsExactlyOnce(t *testing.T) {
+	e := newWebhookEnv(t)
+	payload := checkoutCompletedPayload(t, "evt_replayed", e.Practice, 4, paidStatus)
 
-	for name, payload := range map[string][]byte{
-		"subtotal does not divide by quantity": pricedCheckoutPayload(t, "evt_uneven", practiceID, 3, 10000, 0, "pi_uneven"),
-		"no subtotal at all":                   pricedCheckoutPayload(t, "evt_free", practiceID, 5, 0, 0, "pi_free"),
-		"no payment to refund against":         pricedCheckoutPayload(t, "evt_nopi", practiceID, 5, 10000, 0, nil),
-	} {
-		resp := postWebhook(t, srv, payload, webhookTestSecret)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("%s: status = %d, want 400", name, resp.StatusCode)
-		}
+	e.deliver(payload, webhookTestSecret, http.StatusOK)
+	e.deliver(payload, webhookTestSecret, http.StatusOK)
+
+	if got := e.credited(); got != 4 {
+		t.Fatalf("ledger sum after replay = %d, want 4 (credited exactly once)", got)
 	}
-	if got := sumLedger(t, db, practiceID); got != 0 {
-		t.Fatalf("ledger sum = %d, want nothing credited", got)
+}
+
+// liveEventPayload is a validly signed checkout that claims to be live.
+func liveEventPayload(t *testing.T, practiceID string) []byte {
+	t.Helper()
+	var body map[string]any
+	if err := json.Unmarshal(checkoutCompletedPayload(t, "evt_live", practiceID, 3, paidStatus), &body); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	body["livemode"] = true
+	payload, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	return payload
+}
+
+// TestPostPurchaseWebhookHandler_NeverCredits covers every delivery that
+// must leave the ledger as it was, with the status Stripe is told.
+func TestPostPurchaseWebhookHandler_NeverCredits(t *testing.T) {
+	cases := []struct {
+		name    string
+		payload func(t *testing.T, practiceID string) []byte
+		// secret signs the payload; empty is webhookTestSecret.
+		secret string
+		want   int
+	}{
+		{
+			name: "a payload signed with the wrong secret",
+			payload: func(t *testing.T, id string) []byte {
+				return checkoutCompletedPayload(t, "evt_bad_sig", id, 9, paidStatus)
+			},
+			secret: "whsec_wrong_secret",
+			want:   http.StatusBadRequest,
+		},
+		{name: "a live event on test keys", payload: liveEventPayload, want: http.StatusBadRequest},
+		{
+			// An async payment method still pending.
+			name: "a completed session that is not paid",
+			payload: func(t *testing.T, id string) []byte {
+				return checkoutCompletedPayload(t, "evt_unpaid", id, 6, "unpaid")
+			},
+			want: http.StatusOK,
+		},
+		{
+			// payment_intent.succeeded fires alongside the checkout for the
+			// same purchase; crediting off it would credit twice under two
+			// event ids.
+			name: "an event type other than checkout.session.completed",
+			payload: func(t *testing.T, _ string) []byte {
+				return buildEventPayload(t, "evt_payment_intent", "payment_intent.succeeded", map[string]any{"id": "pi_test", objectKey: "payment_intent"})
+			},
+			want: http.StatusOK,
+		},
+		{
+			name: "a practice_id that is not a uuid",
+			payload: func(t *testing.T, _ string) []byte {
+				return checkoutCompletedPayload(t, "evt_bad_practice", "not-a-uuid", 3, paidStatus)
+			},
+			want: http.StatusBadRequest,
+		},
+		{
+			// metadata as a number (instead of an object of strings) fails
+			// to unmarshal into stripe.CheckoutSession.Metadata.
+			name: "a session object that cannot be unmarshaled",
+			payload: func(t *testing.T, _ string) []byte {
+				return buildEventPayload(t, "evt_malformed_session", stripeEventTypeCheckoutCompleted, map[string]any{
+					"id": stripeTestSessionID, objectKey: stripeObjectCheckoutSession, metadataKey: 12345,
+				})
+			},
+			want: http.StatusInternalServerError,
+		},
+		{
+			name: "a quantity that is not a number",
+			payload: func(t *testing.T, id string) []byte {
+				return buildEventPayload(t, "evt_bad_quantity", stripeEventTypeCheckoutCompleted, map[string]any{
+					"id":             stripeTestSessionID,
+					objectKey:        stripeObjectCheckoutSession,
+					paymentStatusKey: paidStatus,
+					metadataKey:      map[string]any{practiceIDKey: id, quantityKey: "not-a-number"},
+				})
+			},
+			want: http.StatusBadRequest,
+		},
+		// A Session the handler cannot turn into an exact unit price, or
+		// cannot tie to a payment, is refused rather than stored lossily:
+		// Stripe retries, and nothing has been written.
+		{
+			name: "a subtotal that does not divide by the quantity",
+			payload: func(t *testing.T, id string) []byte {
+				return pricedCheckoutPayload(t, "evt_uneven", id, 3, 10000, 0, "pi_uneven")
+			},
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "no subtotal at all",
+			payload: func(t *testing.T, id string) []byte {
+				return pricedCheckoutPayload(t, "evt_free", id, 5, 0, 0, "pi_free")
+			},
+			want: http.StatusBadRequest,
+		},
+		{
+			name: "no payment to refund against",
+			payload: func(t *testing.T, id string) []byte {
+				return pricedCheckoutPayload(t, "evt_nopi", id, 5, 10000, 0, nil)
+			},
+			want: http.StatusBadRequest,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			e := newWebhookEnv(t)
+			secret := c.secret
+			if secret == "" {
+				secret = webhookTestSecret
+			}
+
+			e.deliver(c.payload(t, e.Practice), secret, c.want)
+
+			if got := e.credited(); got != 0 {
+				t.Fatalf("ledger sum = %d, want 0", got)
+			}
+		})
+	}
+}
+
+// TestPostPurchaseWebhookHandler_OversizedBodyRejected proves a request
+// body over webhookarrival.MaxBodyBytes is rejected rather than read without
+// bound.
+func TestPostPurchaseWebhookHandler_OversizedBodyRejected(t *testing.T) {
+	e := newWebhookEnv(t)
+
+	oversized := bytes.Repeat([]byte("a"), (1<<20)+1)
+	reqtest.ExpectStatus(t, http.MethodPost, e.Srv.URL+"/stripe/webhook", http.StatusBadRequest,
+		reqtest.Body("", oversized), reqtest.Header("Stripe-Signature", "t=1,v1=deadbeef"))
+}
+
+// TestPostPurchaseWebhookHandler_NonexistentPracticeRejected proves a
+// well-formed but nonexistent practice_id -- which should never happen,
+// since we set that metadata ourselves at Checkout Session creation --
+// is refused with a 400 via credit_ledger's foreign key, and
+// rolls back rather than leaving a stray stripe_webhook_events row with
+// no corresponding credit.
+func TestPostPurchaseWebhookHandler_NonexistentPracticeRejected(t *testing.T) {
+	e := newWebhookEnv(t)
+
+	const nonexistentPracticeID = "00000000-0000-0000-0000-000000000000"
+	e.deliver(checkoutCompletedPayload(t, "evt_nonexistent_practice", nonexistentPracticeID, 3, paidStatus), webhookTestSecret, http.StatusBadRequest)
+
+	count := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM stripe_webhook_events WHERE event_id = 'evt_nonexistent_practice'`)
+	if count != 0 {
+		t.Fatalf("stripe_webhook_events row count = %d, want 0 (rolled back)", count)
 	}
 }

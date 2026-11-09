@@ -1,18 +1,12 @@
 package billing_test
 
 import (
-	"encoding/json/v2"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
-	"doula-cloud/api/internal/clock"
-	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/legal"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -61,78 +55,46 @@ const seedUnitPriceCents = 2000
 // seeds treat specially because it is the only one that cost money.
 const originPurchase = "purchase"
 
-// newBillingServer mounts this package's whole surface through
-// billing.Mount, the same call main.go makes on the real GatedRouter and
-// idempotency.Router -- the Owner/Admin-vs-Doula boundary on
-// GetBalanceHandler lives at that mount, not inside the handler (#315).
-func newBillingServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
-	t.Helper()
-	return newBillingServerAt(t, db, uid, billing.NewFakeStripeClient(), legal.Terms, clock.Real)
-}
-
-// newBillingServerAt is newBillingServer with a caller-supplied
-// StripeClient, version history of the Terms and clock, for the tests
-// that move the clock across the date a new price of a Credit starts
-// (#1834).
-func newBillingServerAt(t *testing.T, db *testdb.DB, uid string, client billing.StripeClient, terms legal.Document, now clock.Clock) (srv *httptest.Server, session string) {
-	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	billing.Mount(g, ir, client, terms)
-	return httptest.NewServer(clock.Middleware(now)(mux)), authntest.SeedSessionAt(t, db.App, uid, now())
-}
-
-func getBalance(t *testing.T, srv *httptest.Server, session string, practiceID string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing", reqtest.Session(session))
-	return resp
-}
-
 // TestBalance_SumsLedgerRows exercises the billing package boundary AC
 // #75 calls for: a Practice's derived balance after a sequence of
-// credit_ledger rows of different origins and signs.
+// credit_ledger rows of different origins and signs, and the coalesced
+// zero (not a scan error or an odd value) of a Practice with none.
 func TestBalance_SumsLedgerRows(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
-	lotID := seedLedgerRow(t, db, practiceID, "purchase", 5)
-	seedRefundRow(t, db, practiceID, lotID, 1)
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
+	cases := []struct {
+		name string
+		seed func(t *testing.T, db *testdb.DB, practiceID string)
+		want int
+	}{
+		{
+			name: "rows of different origins and signs",
+			seed: func(t *testing.T, db *testdb.DB, practiceID string) {
+				seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
+				lotID := seedLedgerRow(t, db, practiceID, "purchase", 5)
+				seedRefundRow(t, db, practiceID, lotID, 1)
+			},
+			want: 7,
+		},
+		{name: "no rows at all", seed: func(*testing.T, *testdb.DB, string) {}, want: 0},
 	}
-	defer func() { _ = tx.Rollback() }()
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := testdb.SeedPractice(t, db, "Test Practice")
+			c.seed(t, db, practiceID)
+			tx, err := db.Admin.BeginTx(t.Context(), nil)
+			if err != nil {
+				t.Fatalf("begin: %v", err)
+			}
+			defer func() { _ = tx.Rollback() }()
 
-	got, err := billing.Balance(t.Context(), tx, practiceID)
-	if err != nil {
-		t.Fatalf("Balance: %v", err)
-	}
-	if got != 7 {
-		t.Fatalf("balance = %d, want 7", got)
-	}
-}
-
-// TestBalance_ZeroForPracticeWithNoLedgerRows proves SUM's NULL-on-no-rows
-// case is coalesced to 0, not surfaced as a scan error or a negative/odd
-// value.
-func TestBalance_ZeroForPracticeWithNoLedgerRows(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	got, err := billing.Balance(t.Context(), tx, practiceID)
-	if err != nil {
-		t.Fatalf("Balance: %v", err)
-	}
-	if got != 0 {
-		t.Fatalf("balance = %d, want 0", got)
+			got, err := billing.Balance(t.Context(), tx, practiceID)
+			if err != nil {
+				t.Fatalf("Balance: %v", err)
+			}
+			if got != c.want {
+				t.Fatalf("balance = %d, want %d", got, c.want)
+			}
+		})
 	}
 }
 
@@ -141,26 +103,12 @@ func TestBalance_ZeroForPracticeWithNoLedgerRows(t *testing.T) {
 // "no Owner-only restriction among Owner/Admin", the read table's own
 // widening).
 func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-admin-member"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{"admin"}, "employee")
-	seedLedgerRow(t, db, practiceID, "signup_bonus", 3)
-	seedLedgerRow(t, db, practiceID, "purchase", 5)
+	e := newEnv(t, signedInAs(fixture.Admin()))
+	e.seedLedger("signup_bonus", 3)
+	e.seedLedger("purchase", 5)
 
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
+	out := e.balance()
 
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var out billing.BalanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Balance != 8 {
 		t.Fatalf("balance = %d, want 8", out.Balance)
 	}
@@ -179,51 +127,18 @@ func TestGetBalanceHandler_AdminAllowed(t *testing.T) {
 
 // TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance proves a brand-new
 // Practice with no ledger rows gets a 0 balance and an empty (not null)
-// ledger array.
+// ledger array, and that the read carries the price of a Credit the
+// shipped Terms state today, with no change to come (#285, #1834).
 func TestGetBalanceHandler_EmptyLedgerReturnsZeroBalance(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-empty-ledger"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
+	e := newEnv(t)
 
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
+	out := e.balance()
 
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var out billing.BalanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
 	if out.Balance != 0 {
 		t.Fatalf("balance = %d, want 0", out.Balance)
 	}
 	if out.Ledger.Items == nil || len(out.Ledger.Items) != 0 {
 		t.Fatalf("ledger = %+v, want empty non-nil slice", out.Ledger)
-	}
-}
-
-// TestGetBalanceHandler_IncludesCreditPrice proves the read carries the
-// price of a Credit the shipped Terms state today alongside the balance
-// and ledger (#285, #1834), and no change to come.
-func TestGetBalanceHandler_IncludesCreditPrice(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-owner-price"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	var out billing.BalanceResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode response: %v", err)
 	}
 	if out.Price.UnitAmountCents != seedUnitPriceCents || out.Price.Currency != usd {
 		t.Fatalf("price = %+v, want {%d usd}", out.Price, seedUnitPriceCents)
@@ -239,37 +154,25 @@ func TestGetBalanceHandler_IncludesCreditPrice(t *testing.T) {
 // ambient reach over the Practice nor a contractor's attachment to any
 // Engagement extends to the Practice's own finances.
 func TestGetBalanceHandler_DoulaForbidden(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-doula-member"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{doulaRole}, "employee")
+	for name, staff := range map[string][]fixture.StaffOption{
+		"an employee":  {fixture.Doula()},
+		"a contractor": {fixture.Doula(), fixture.Contractor()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(staff...))
 
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
-
-	resp := getBalance(t, srv, session, practiceID)
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusForbidden)
+			e.balanceAt("", http.StatusForbidden)
+		})
 	}
 }
 
 // TestGetBalanceHandler_InvalidCursorRejected mirrors
 // message.TestListHandler_InvalidCursorRejected.
 func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-owner-bad-cursor"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
+	e := newEnv(t)
 
 	for _, cursor := range []string{"not!valid!base64!", "YmFkdGltZXxzb21lLWlk"} {
-		resp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+cursor, reqtest.Session(session))
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusBadRequest {
-			t.Fatalf("cursor %q: status = %d, want %d", cursor, resp.StatusCode, http.StatusBadRequest)
-		}
+		e.balanceAt("?cursor="+cursor, http.StatusBadRequest)
 	}
 }
 
@@ -277,35 +180,19 @@ func TestGetBalanceHandler_InvalidCursorRejected(t *testing.T) {
 // credit_ledger rows and walks the cursor, mirroring
 // message.TestListHandler_PaginatesNewestFirst.
 func TestGetBalanceHandler_PaginatesNewestFirst(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "get-owner-paging"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
+	e := newEnv(t)
 	const total = 31 // pageSize (30) + 1, to force a second page
 	for range total {
-		seedLedgerRow(t, db, practiceID, "purchase", 1)
+		e.seedLedger("purchase", 1)
 	}
 
-	srv, session := newBillingServer(t, db, uid)
-	defer srv.Close()
-
-	firstResp := getBalance(t, srv, session, practiceID)
-	defer firstResp.Body.Close()
-	var first billing.BalanceResponse
-	if err := json.UnmarshalRead(firstResp.Body, &first); err != nil {
-		t.Fatalf("decode first page: %v", err)
-	}
+	first := e.balance()
 	if len(first.Ledger.Items) != 30 || !first.Ledger.HasMore || first.Ledger.NextCursor == nil {
 		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
 			len(first.Ledger.Items), first.Ledger.HasMore, first.Ledger.NextCursor)
 	}
 
-	secondResp := reqtest.Get(t, srv.URL+"/api/practices/"+practiceID+"/billing?cursor="+*first.Ledger.NextCursor, reqtest.Session(session))
-	defer secondResp.Body.Close()
-	var second billing.BalanceResponse
-	if err := json.UnmarshalRead(secondResp.Body, &second); err != nil {
-		t.Fatalf("decode second page: %v", err)
-	}
+	second := reqtest.Expect[billing.BalanceResponse](t, http.MethodGet, e.PracticeURL("/billing?cursor="+*first.Ledger.NextCursor), http.StatusOK, e.SignedIn)
 	if len(second.Ledger.Items) != 1 || second.Ledger.HasMore || second.Ledger.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(second.Ledger.Items), second.Ledger.HasMore, second.Ledger.NextCursor)

@@ -2,7 +2,7 @@ package billing_test
 
 import (
 	"bytes"
-	"encoding/json/v2"
+	"net/http"
 	"slices"
 	"testing"
 
@@ -29,34 +29,15 @@ func arrivals(t *testing.T, db *testdb.DB) []arrival {
 }
 
 func TestPostPurchaseWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Arrival Practice")
-	srv := newWebhookServer(db)
-	defer srv.Close()
+	e := newWebhookEnv(t)
 
-	post := func(payload []byte, secret string) {
-		resp := postWebhook(t, srv, payload, secret)
-		_ = resp.Body.Close()
-	}
-	post(checkoutCompletedPayload(t, "evt_paid", practiceID, 3, "paid"), webhookTestSecret)
-	post(otherEventPayload(t, "evt_other"), webhookTestSecret)
-	post(checkoutCompletedPayload(t, "evt_forged", practiceID, 3, "paid"), "whsec_wrong")
-
-	var live map[string]any
-	if err := json.Unmarshal(checkoutCompletedPayload(t, "evt_live", practiceID, 3, "paid"), &live); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	live["livemode"] = true
-	livePayload, err := json.Marshal(live)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	post(livePayload, webhookTestSecret)
-	post(checkoutCompletedPayload(t, "evt_bad_quantity", practiceID, 0, "paid"), webhookTestSecret)
-	post(buildEventPayload(t, "evt_malformed", stripeEventTypeCheckoutCompleted, map[string]any{metadataKey: 12345}), webhookTestSecret)
-
-	resp := reqtest.Post(t, srv.URL+"/stripe/webhook", reqtest.Body("", bytes.Repeat([]byte("a"), (1<<20)+1)))
-	_ = resp.Body.Close()
+	e.deliver(checkoutCompletedPayload(t, "evt_paid", e.Practice, 3, paidStatus), webhookTestSecret, http.StatusOK)
+	e.deliver(buildEventPayload(t, "evt_other", "payment_intent.succeeded", map[string]any{"id": "pi_test", objectKey: "payment_intent"}), webhookTestSecret, http.StatusOK)
+	e.deliver(checkoutCompletedPayload(t, "evt_forged", e.Practice, 3, paidStatus), "whsec_wrong", http.StatusBadRequest)
+	e.deliver(liveEventPayload(t, e.Practice), webhookTestSecret, http.StatusBadRequest)
+	e.deliver(checkoutCompletedPayload(t, "evt_bad_quantity", e.Practice, 0, paidStatus), webhookTestSecret, http.StatusBadRequest)
+	e.deliver(buildEventPayload(t, "evt_malformed", stripeEventTypeCheckoutCompleted, map[string]any{metadataKey: 12345}), webhookTestSecret, http.StatusInternalServerError)
+	reqtest.ExpectStatus(t, http.MethodPost, e.Srv.URL+"/stripe/webhook", http.StatusBadRequest, reqtest.Body("", bytes.Repeat([]byte("a"), (1<<20)+1)))
 
 	want := []arrival{
 		{webhookarrival.Accepted, "evt_paid", stripeEventTypeCheckoutCompleted},
@@ -67,7 +48,7 @@ func TestPostPurchaseWebhookHandler_RecordsAnArrivalForEachOutcome(t *testing.T)
 		{webhookarrival.Failed, "evt_malformed", stripeEventTypeCheckoutCompleted},
 		{webhookarrival.BodyRefused, "", ""},
 	}
-	if got := arrivals(t, db); !slices.Equal(got, want) {
+	if got := arrivals(t, e.DB); !slices.Equal(got, want) {
 		t.Fatalf("arrivals =\n%v\nwant\n%v", got, want)
 	}
 }

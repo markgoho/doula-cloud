@@ -15,6 +15,7 @@ import (
 const (
 	testLowCreditStatusPending = "pending"
 	testLowCreditStatusSent    = "sent"
+	testLowCreditStatusDead    = "dead_lettered"
 	testLowCreditAppBaseURL    = "https://app.example.test" //nolint:gosec // test fixture URL, not a credential
 	testLowCreditSenderAddr    = "a@b.test"
 )
@@ -46,7 +47,7 @@ func runLowCreditWorker(t *testing.T, db *testdb.DB, w billing.Worker) {
 	if err != nil {
 		t.Fatalf("begin: %v", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if _, err := tx.ExecContext(t.Context(), `SELECT set_config('app.notification_worker_trusted', 'true', true)`); err != nil {
 		t.Fatalf("set trusted session var: %v", err)
 	}
@@ -68,86 +69,81 @@ func lowCreditOutboxRowState(t *testing.T, db *testdb.DB, id string) (status str
 	return status, attemptCount
 }
 
-func TestShouldQueueOutOfCreditsNotification_TrueWithNoPriorRow(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Dedupe First Episode")
-	tx := beginAsPractice(t, db, practiceID)
-	defer tx.Rollback()
-
-	should, err := billing.ShouldQueueOutOfCreditsNotification(t.Context(), tx, practiceID)
-	if err != nil {
-		t.Fatalf("ShouldQueueOutOfCreditsNotification: %v", err)
+func TestShouldQueueOutOfCreditsNotification(t *testing.T) {
+	cases := []struct {
+		name string
+		seed func(t *testing.T, db *testdb.DB, practiceID string)
+		want bool
+	}{
+		{name: "true with no prior row", seed: func(*testing.T, *testdb.DB, string) {}, want: true},
+		{
+			name: "false with a row from the same episode and no purchase since",
+			seed: func(t *testing.T, db *testdb.DB, practiceID string) {
+				seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
+			},
+		},
+		{
+			name: "true again once a purchase follows the prior row",
+			seed: func(t *testing.T, db *testdb.DB, practiceID string) {
+				seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
+				seedLedgerRow(t, db, practiceID, "purchase", 1)
+			},
+			want: true,
+		},
 	}
-	if !should {
-		t.Fatal("expected true with no prior low_credit_outbox row")
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := testdb.SeedPractice(t, db, "Dedupe")
+			c.seed(t, db, practiceID)
+			tx := beginAsPractice(t, db, practiceID)
+			defer func() { _ = tx.Rollback() }()
 
-func TestShouldQueueOutOfCreditsNotification_FalseWithRowFromSameEpisode(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Dedupe Same Episode")
-	seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
-	tx := beginAsPractice(t, db, practiceID)
-	defer tx.Rollback()
-
-	should, err := billing.ShouldQueueOutOfCreditsNotification(t.Context(), tx, practiceID)
-	if err != nil {
-		t.Fatalf("ShouldQueueOutOfCreditsNotification: %v", err)
-	}
-	if should {
-		t.Fatal("expected false: a row from this episode already exists and no purchase followed it")
-	}
-}
-
-func TestShouldQueueOutOfCreditsNotification_TrueAfterPurchaseFollowsPriorRow(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Dedupe Reset By Purchase")
-	seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
-	seedLedgerRow(t, db, practiceID, "purchase", 1)
-	tx := beginAsPractice(t, db, practiceID)
-	defer tx.Rollback()
-
-	should, err := billing.ShouldQueueOutOfCreditsNotification(t.Context(), tx, practiceID)
-	if err != nil {
-		t.Fatalf("ShouldQueueOutOfCreditsNotification: %v", err)
-	}
-	if !should {
-		t.Fatal("expected true: a purchase after the last row re-arms the notification")
+			should, err := billing.ShouldQueueOutOfCreditsNotification(t.Context(), tx, practiceID)
+			if err != nil {
+				t.Fatalf("ShouldQueueOutOfCreditsNotification: %v", err)
+			}
+			if should != c.want {
+				t.Fatalf("should queue = %v, want %v", should, c.want)
+			}
+		})
 	}
 }
 
-func TestQueueOutOfCreditsNotification_InsertsPendingRow(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Queue Insert")
-
-	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID, &tasknudge.FakeEnqueuer{}); err != nil {
-		t.Fatalf("QueueOutOfCreditsNotification: %v", err)
+func TestQueueOutOfCreditsNotification(t *testing.T) {
+	cases := []struct {
+		name string
+		seed func(t *testing.T, db *testdb.DB, practiceID string)
+	}{
+		{name: "inserts a pending row", seed: func(*testing.T, *testdb.DB, string) {}},
+		{
+			name: "an existing pending row is left alone",
+			seed: func(t *testing.T, db *testdb.DB, practiceID string) {
+				seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
+			},
+		},
 	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := testdb.SeedPractice(t, db, "Queue")
+			c.seed(t, db, practiceID)
 
-	var count int
-	var status string
-	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT count(*), max(status) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
-	).Scan(&count, &status); err != nil {
-		t.Fatalf("query low_credit_outbox: %v", err)
-	}
-	if count != 1 || status != "pending" {
-		t.Fatalf("count/status = %d/%q, want 1/pending", count, status)
-	}
-}
+			if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID, &tasknudge.FakeEnqueuer{}); err != nil {
+				t.Fatalf("QueueOutOfCreditsNotification: %v", err)
+			}
 
-func TestQueueOutOfCreditsNotification_ConflictOnExistingPendingRowIsNoop(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Queue Conflict")
-	seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now())
-
-	if err := billing.QueueOutOfCreditsNotification(t.Context(), db.App, practiceID, &tasknudge.FakeEnqueuer{}); err != nil {
-		t.Fatalf("QueueOutOfCreditsNotification: %v", err)
-	}
-
-	count := testdb.Scalar[int](t, db.Admin, `SELECT count(*) FROM low_credit_outbox WHERE practice_id = $1`, practiceID)
-	if count != 1 {
-		t.Fatalf("count = %d, want 1 (the existing pending row, untouched by DO NOTHING)", count)
+			var count int
+			var status string
+			if err := db.Admin.QueryRowContext(t.Context(),
+				`SELECT count(*), max(status) FROM low_credit_outbox WHERE practice_id = $1`, practiceID,
+			).Scan(&count, &status); err != nil {
+				t.Fatalf("query low_credit_outbox: %v", err)
+			}
+			if count != 1 || status != testLowCreditStatusPending {
+				t.Fatalf("count/status = %d/%q, want 1/%s", count, status, testLowCreditStatusPending)
+			}
+		})
 	}
 }
 
@@ -191,69 +187,58 @@ func TestLowCreditWorker_ProcessPending_MailsEveryOwnerAndMarksSent(t *testing.T
 	}
 }
 
-func TestLowCreditWorker_ProcessPending_SkipsRowNotYetDue(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-not-due", []string{ownerRole}, "employee")
-	outboxID := seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now().Add(time.Hour))
+// TestLowCreditWorker_ProcessPending_Outcomes is what one Scheduler tick
+// leaves on a row, given who the Practice has to mail and how the send
+// goes.
+func TestLowCreditWorker_ProcessPending_Outcomes(t *testing.T) {
+	mailgunDown := errors.New("mailgun unavailable")
+	cases := []struct {
+		name string
+		// owners is how many Owners the Practice has.
+		owners   int
+		attempts int
+		dueIn    time.Duration
+		sendErr  error
 
-	sender := &mail.FakeSender{}
-	runLowCreditWorker(t, db, newTestWorker(sender))
-
-	status, _ := lowCreditOutboxRowState(t, db, outboxID)
-	if status != testLowCreditStatusPending {
-		t.Fatalf("status = %q, want %s (not due yet)", status, testLowCreditStatusPending)
+		wantStatus   string
+		wantAttempts int
+		wantReason   string
+	}{
+		{name: "a row not yet due is skipped", owners: 1, dueIn: time.Hour, wantStatus: testLowCreditStatusPending},
+		{name: "no Owners is marked sent with no mail", dueIn: -time.Minute, wantStatus: testLowCreditStatusSent},
+		{
+			name: "a send failure schedules a retry", owners: 1, dueIn: -time.Minute, sendErr: mailgunDown,
+			wantStatus: testLowCreditStatusPending, wantAttempts: 1,
+		},
+		{
+			// One attempt short of the schedule's length: this failure is
+			// the last one before dead-letter.
+			name: "a failure on the final attempt dead-letters", owners: 1, attempts: 4, dueIn: -time.Minute, sendErr: mailgunDown,
+			wantStatus: testLowCreditStatusDead, wantAttempts: 5, wantReason: "retries_exhausted",
+		},
 	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no send for a not-yet-due row")
-	}
-}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			db := testdb.New(t)
+			practiceID := testdb.SeedPractice(t, db, "Worker Outcomes")
+			for i := range c.owners {
+				testdb.SeedStaffAtPractice(t, db, practiceID, "outcome-owner-"+string(rune('a'+i)), []string{ownerRole}, "employee")
+			}
+			outboxID := seedLowCreditOutboxRow(t, db, practiceID, c.attempts, time.Now().Add(c.dueIn))
+			sender := &mail.FakeSender{Err: c.sendErr}
 
-func TestLowCreditWorker_ProcessPending_ZeroOwnersMarksSentWithNoMail(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Ownerless Practice")
-	outboxID := seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
+			runLowCreditWorker(t, db, newTestWorker(sender))
 
-	sender := &mail.FakeSender{}
-	runLowCreditWorker(t, db, newTestWorker(sender))
-
-	status, _ := lowCreditOutboxRowState(t, db, outboxID)
-	if status != testLowCreditStatusSent {
-		t.Fatalf("status = %q, want %s", status, testLowCreditStatusSent)
-	}
-	if len(sender.Sent()) != 0 {
-		t.Fatalf("expected no mail sent when the Practice has no Owner")
-	}
-}
-
-func TestLowCreditWorker_ProcessPending_RetriesOnSendFailure(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-retry", []string{ownerRole}, "employee")
-	outboxID := seedLowCreditOutboxRow(t, db, practiceID, 0, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runLowCreditWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount := lowCreditOutboxRowState(t, db, outboxID)
-	if status != testLowCreditStatusPending || attemptCount != 1 {
-		t.Fatalf("status/attempt_count = %q/%d, want %s/1", status, attemptCount, testLowCreditStatusPending)
-	}
-}
-
-func TestLowCreditWorker_ProcessPending_DeadLettersAfterFinalAttempt(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "owner-dead-letter", []string{ownerRole}, "employee")
-	// One attempt short of the schedule's length -- this failure is the
-	// last one before dead-letter.
-	outboxID := seedLowCreditOutboxRow(t, db, practiceID, 4, time.Now().Add(-time.Minute))
-
-	sender := &mail.FakeSender{Err: errors.New("mailgun unavailable")}
-	runLowCreditWorker(t, db, newTestWorker(sender))
-
-	status, attemptCount := lowCreditOutboxRowState(t, db, outboxID)
-	if status != "dead_lettered" || attemptCount != 5 {
-		t.Fatalf("status/attempt_count = %q/%d, want dead_lettered/5", status, attemptCount)
-	}
-	if got := testdb.DeadLetterReason(t, db, "low_credit_outbox", outboxID); got != "retries_exhausted" {
-		t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
+			status, attemptCount := lowCreditOutboxRowState(t, db, outboxID)
+			if status != c.wantStatus || attemptCount != c.wantAttempts {
+				t.Errorf("status/attempt_count = %q/%d, want %s/%d", status, attemptCount, c.wantStatus, c.wantAttempts)
+			}
+			if len(sender.Sent()) != 0 {
+				t.Errorf("delivered %d messages, want none", len(sender.Sent()))
+			}
+			if got := testdb.DeadLetterReason(t, db, "low_credit_outbox", outboxID); got != c.wantReason {
+				t.Errorf("dead_letter_reason = %q, want %q", got, c.wantReason)
+			}
+		})
 	}
 }

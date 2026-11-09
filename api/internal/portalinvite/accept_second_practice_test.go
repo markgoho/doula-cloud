@@ -1,44 +1,31 @@
 package portalinvite_test
 
 import (
-	"encoding/json/v2"
+	"database/sql"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
-	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
-// newAcceptThenSessionServer mounts the two surfaces this file's one test
+// acceptThenSessionScene mounts the two surfaces this file's one test
 // walks in order -- portalinvite's accept and clientauth's session read --
-// on a single mux over a single database, the way main.go mounts them.
+// on a single server over a single database, the way main.go mounts them.
 // Both surfaces are covered in their own package's tests already; what
 // only a shared server can show is that the session an accept mints is
 // the same credential the session read then answers.
-func newAcceptThenSessionServer(t *testing.T, db *testdb.DB) *httptest.Server {
+func acceptThenSessionScene(t *testing.T) *fixture.Scene {
 	t.Helper()
-	mux := http.NewServeMux()
-	g := staffauth.NewGatedRouter(mux, db.App)
-	ir := idempotency.NewRouter(g, db.App)
-	portalinvite.Mount(g, ir, db.App, &tasknudge.FakeEnqueuer{})
-	clientauth.Mount(g, ir, db.App, tasknudge.NoOpEnqueuer{})
-	return httptest.NewServer(mux)
-}
-
-// getPortalSession reads GET /api/portal/session carrying session as the
-// __session cookie -- the request AcceptInviteHandler's own doc comment
-// says the frontend makes straight after a successful accept.
-func getPortalSession(t *testing.T, srv *httptest.Server, session string) *http.Response {
-	t.Helper()
-	resp := reqtest.Get(t, srv.URL+"/api/portal/session", reqtest.Session(session))
-	return resp
+	return newInviteScene(t, fixture.NobodySignedIn(), fixture.AlsoMounting(func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
+		clientauth.Mount(g, ir, app, tasknudge.NoOpEnqueuer{})
+	}))
 }
 
 // seedInvitedClientAtNewPractice seeds a Practice of its own, a Client at
@@ -74,27 +61,18 @@ func seedInvitedClientAtNewPractice(t *testing.T, db *testdb.DB, practiceName, c
 // narrows back to one Client, or an accept that mints a second Portal
 // Account instead of reusing hers.
 func TestAcceptSecondPracticeInvite_SessionListsBothPractices(t *testing.T) {
-	db := testdb.New(t)
+	s := acceptThenSessionScene(t)
+	db := s.DB
 
 	// Two unrelated Practices, each with an invitation out to the same
 	// person -- the only thing they have in common is her address.
 	engagementA, tokenA := seedInvitedClientAtNewPractice(t, db, "Practice A", "Camille at A")
 	engagementB, tokenB := seedInvitedClientAtNewPractice(t, db, "Practice B", "Camille at B")
 
-	srv := newAcceptThenSessionServer(t, db)
-	defer srv.Close()
-
-	first := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: tokenA})
-	defer first.Body.Close()
-	if first.StatusCode != http.StatusOK {
-		t.Fatalf("first accept status = %d, want %d", first.StatusCode, http.StatusOK)
-	}
-
-	second := postAccept(t, srv, portalinvite.AcceptInviteRequest{InviteToken: tokenB})
+	acceptInvite(t, s, tokenA, http.StatusOK)
+	second := postAccept(t, s, tokenB)
 	defer second.Body.Close()
-	if second.StatusCode != http.StatusOK {
-		t.Fatalf("second accept status = %d, want %d", second.StatusCode, http.StatusOK)
-	}
+	reqtest.RequireStatus(t, second, http.StatusOK)
 	cookie := sessionCookie(second)
 	if cookie == nil {
 		t.Fatal("no __session cookie set on the second accept")
@@ -110,16 +88,7 @@ func TestAcceptSecondPracticeInvite_SessionListsBothPractices(t *testing.T) {
 		t.Fatalf("portal_accounts rows for her address = %d, want 1 reused across both Practices", accounts)
 	}
 
-	resp := getPortalSession(t, srv, cookie.Value)
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("session status = %d, want %d", resp.StatusCode, http.StatusOK)
-	}
-
-	var out clientauth.SessionResponse
-	if err := json.UnmarshalRead(resp.Body, &out); err != nil {
-		t.Fatalf("decode session response: %v", err)
-	}
+	out := reqtest.Expect[clientauth.SessionResponse](t, http.MethodGet, s.URL("/api/portal/session"), http.StatusOK, reqtest.Session(cookie.Value))
 	if len(out.Engagements) != 2 {
 		t.Fatalf("engagements = %+v, want both Practices' Engagements", out.Engagements)
 	}
