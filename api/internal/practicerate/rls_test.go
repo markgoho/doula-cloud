@@ -18,7 +18,7 @@ import (
 // set.
 func TestRLS_PracticeRatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 	e := newEnv(t)
-	e.seedRate(fixture.KindBirth, 15000)
+	e.seedRate(15000)
 
 	testdb.RequireFailsClosed(t, e.DB, "practice_rates")
 }
@@ -28,7 +28,7 @@ func TestRLS_PracticeRatesFailsClosedWithNoSessionVarSet(t *testing.T) {
 // app.current_practice_id, not every row globally.
 func TestRLS_PracticeRatesVisibilityIsScopedToCurrentPractice(t *testing.T) {
 	e := newEnv(t)
-	e.seedRate(fixture.KindBirth, 15000)
+	e.seedRate(15000)
 	other := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
 	testdb.SeedPracticeRate(t, e.DB, other.ID, fixture.KindBirth, 20000)
 

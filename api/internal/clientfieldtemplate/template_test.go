@@ -25,7 +25,7 @@ func TestGetHandler_EmptyByDefault(t *testing.T) {
 // read the template -- only PUT is Owner/Admin-gated.
 func TestGetHandler_AnyStaffAllowed(t *testing.T) {
 	e := newEnv(t)
-	e.seedTemplate(intakeNoteField)
+	e.seedIntakeNote()
 
 	if out := e.template(); len(out.Fields) != 1 || out.Fields[0].ID != "f1" {
 		t.Fatalf("fields = %+v, want one field with id f1", out.Fields)
@@ -83,7 +83,7 @@ func TestPutHandler_ValidationRejections(t *testing.T) {
 
 	e := newEnv(t, fixture.Owner())
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(*testing.T) {
 			e.putFields(http.StatusBadRequest, tc.fields...)
 		})
 	}
@@ -106,9 +106,9 @@ func TestPutHandler_ExistingFieldsAreLocked(t *testing.T) {
 	}
 
 	e := newEnv(t, fixture.Owner())
-	e.seedTemplate(intakeNoteField)
+	e.seedIntakeNote()
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(*testing.T) {
 			e.putFields(http.StatusBadRequest, tc.fields...)
 		})
 	}

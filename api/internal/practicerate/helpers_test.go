@@ -24,6 +24,17 @@ func newEnv(t *testing.T, opts ...fixture.SceneOption) *env {
 	return &env{fixture.NewScene(t, fixture.Routes(practicerate.Mount), opts...)}
 }
 
+// The two Doulas no rate write is open to.
+const (
+	employeeDoulaName   = "employee doula"
+	contractorDoulaName = "contractor doula"
+)
+
+var (
+	employeeDoula   = []fixture.StaffOption{fixture.Doula()}
+	contractorDoula = []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}
+)
+
 func signedInAs(opts ...fixture.StaffOption) fixture.SceneOption {
 	return fixture.SignedInAs(opts...)
 }
@@ -44,16 +55,16 @@ func (e *env) rates() practicerate.RatesResponse {
 	return reqtest.Expect[practicerate.RatesResponse](e.T, http.MethodGet, e.ratesURL(), http.StatusOK, e.SignedIn)
 }
 
-// seedRate seeds a rate for kind without going through the handlers.
-func (e *env) seedRate(kind string, amountCents int64) {
+// seedRate seeds a birth rate without going through the handlers.
+func (e *env) seedRate(amountCents int64) {
 	e.T.Helper()
-	testdb.SeedPracticeRate(e.T, e.DB, e.Practice.ID, kind, amountCents)
+	testdb.SeedPracticeRate(e.T, e.DB, e.Practice.ID, fixture.KindBirth, amountCents)
 }
 
-// putRate sets kind's rate and requires want.
-func (e *env) putRate(kind string, amountCents int64, want int) {
+// putRate sets kind's rate and requires it to be accepted.
+func (e *env) putRate(kind string, amountCents int64) {
 	e.T.Helper()
-	reqtest.ExpectStatus(e.T, http.MethodPut, e.rateURL(kind), want, e.SignedIn, reqtest.JSON(practicerate.RatePutRequest{AmountCents: amountCents}))
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.rateURL(kind), http.StatusOK, e.SignedIn, reqtest.JSON(practicerate.RatePutRequest{AmountCents: amountCents}))
 }
 
 // deleteRate removes kind's rate and requires want.

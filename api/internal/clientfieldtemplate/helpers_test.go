@@ -36,11 +36,11 @@ func newEnv(t *testing.T, staff ...fixture.StaffOption) *env {
 
 func (e *env) url() string { return e.PracticeURL("/client-field-template") }
 
-// seedTemplate seeds a client_field_templates row directly (bypassing the
-// handlers under test).
-func (e *env) seedTemplate(fieldsJSON string) {
+// seedIntakeNote seeds a client_field_templates row of one field directly
+// (bypassing the handlers under test).
+func (e *env) seedIntakeNote() {
 	e.T.Helper()
-	e.Exec(`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`, e.Practice.ID, fieldsJSON)
+	e.Exec(`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`, e.Practice.ID, intakeNoteField)
 }
 
 // template reads the template as the Staff member at the screen.

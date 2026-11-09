@@ -30,21 +30,16 @@ func TestGetRatesHandler_NoRateSetIsValid(t *testing.T) {
 // Staff member with practice access reads the rate card, contractors
 // included.
 func TestGetRatesHandler_AnyRoleReads(t *testing.T) {
-	cases := []struct {
-		name string
-		opts []fixture.StaffOption
-	}{
-		{"employee doula", []fixture.StaffOption{fixture.Doula()}},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}},
-		{"employee admin", []fixture.StaffOption{fixture.Admin()}},
-		{"contractor admin", []fixture.StaffOption{fixture.Admin(), fixture.Contractor()}},
-		{"employee owner", []fixture.StaffOption{fixture.Owner()}},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.opts...))
-			e.seedRate(fixture.KindBirth, 15000)
+	for name, opts := range map[string][]fixture.StaffOption{
+		employeeDoulaName:   employeeDoula,
+		contractorDoulaName: contractorDoula,
+		"employee admin":    {fixture.Admin()},
+		"contractor admin":  {fixture.Admin(), fixture.Contractor()},
+		"employee owner":    {fixture.Owner()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(opts...))
+			e.seedRate(15000)
 
 			if got := e.amountOf(fixture.KindBirth); got == nil || *got != 15000 {
 				t.Fatalf("birth rate = %v, want 15000", got)
@@ -66,8 +61,8 @@ func TestPutRateHandler_Refusals(t *testing.T) {
 		body reqtest.Option
 		want int
 	}{
-		{"employee doula", []fixture.StaffOption{fixture.Doula()}, fixture.KindBirth, amount(15000), http.StatusForbidden},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, fixture.KindBirth, amount(15000), http.StatusForbidden},
+		{employeeDoulaName, employeeDoula, fixture.KindBirth, amount(15000), http.StatusForbidden},
+		{contractorDoulaName, contractorDoula, fixture.KindBirth, amount(15000), http.StatusForbidden},
 		{"admin", []fixture.StaffOption{fixture.Admin()}, fixture.KindBirth, amount(15000), http.StatusOK},
 		{"invalid kind", []fixture.StaffOption{fixture.Owner()}, "insurance", amount(15000), http.StatusBadRequest},
 		{"invalid body", []fixture.StaffOption{fixture.Owner()}, fixture.KindBirth, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
@@ -90,12 +85,12 @@ func TestPutRateHandler_Refusals(t *testing.T) {
 func TestPutRateHandler_Success(t *testing.T) {
 	e := ownerEnv(t)
 
-	e.putRate(fixture.KindBirth, 15000, http.StatusOK)
+	e.putRate(fixture.KindBirth, 15000)
 	if got := e.amountOf(fixture.KindBirth); got == nil || *got != 15000 {
 		t.Fatalf("birth rate after set = %v, want 15000", got)
 	}
 
-	e.putRate(fixture.KindBirth, 20000, http.StatusOK)
+	e.putRate(fixture.KindBirth, 20000)
 	if got := e.amountOf(fixture.KindBirth); got == nil || *got != 20000 {
 		t.Fatalf("birth rate after replace = %v, want 20000", got)
 	}
@@ -111,8 +106,8 @@ func TestPutRateHandler_Success(t *testing.T) {
 func TestPutRateHandler_RepeatedIdenticalValueRecordsNoNewActivity(t *testing.T) {
 	e := ownerEnv(t)
 
-	e.putRate(fixture.KindBirth, 15000, http.StatusOK)
-	e.putRate(fixture.KindBirth, 15000, http.StatusOK)
+	e.putRate(fixture.KindBirth, 15000)
+	e.putRate(fixture.KindBirth, 15000)
 
 	if count := e.rateChanged(); count != 1 {
 		t.Fatalf("activity rows = %d, want 1 (no duplicate on an unchanged retry)", count)
@@ -124,7 +119,7 @@ func TestPutRateHandler_RepeatedIdenticalValueRecordsNoNewActivity(t *testing.T)
 func TestPutRateHandler_RecordsActivity(t *testing.T) {
 	e := ownerEnv(t)
 
-	e.putRate(fixture.KindPostpartum, 12000, http.StatusOK)
+	e.putRate(fixture.KindPostpartum, 12000)
 
 	if actor := testdb.Scalar[string](t, e.DB.Admin, `SELECT actor_staff_id `+rateChangedRows, e.Practice.ID); actor != e.Staff.ID {
 		t.Fatalf("actor_staff_id = %q, want %q", actor, e.Staff.ID)

@@ -65,9 +65,9 @@ func record(t *testing.T, conn *sql.DB, e activity.Entry, opts ...activity.Recor
 }
 
 // mustRecord is record for a write that has to succeed.
-func mustRecord(t *testing.T, conn *sql.DB, e activity.Entry, opts ...activity.RecordOption) {
+func mustRecord(t *testing.T, conn *sql.DB, e activity.Entry) {
 	t.Helper()
-	if err := record(t, conn, e, opts...); err != nil {
+	if err := record(t, conn, e); err != nil {
 		t.Fatalf("record: %v", err)
 	}
 }

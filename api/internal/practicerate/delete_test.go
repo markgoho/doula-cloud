@@ -21,15 +21,15 @@ func TestDeleteRateHandler_Refusals(t *testing.T) {
 		kind string
 		want int
 	}{
-		{"employee doula", []fixture.StaffOption{fixture.Doula()}, fixture.KindBirth, http.StatusForbidden},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, fixture.KindBirth, http.StatusForbidden},
+		{employeeDoulaName, employeeDoula, fixture.KindBirth, http.StatusForbidden},
+		{contractorDoulaName, contractorDoula, fixture.KindBirth, http.StatusForbidden},
 		{"invalid kind", []fixture.StaffOption{fixture.Owner()}, "insurance", http.StatusBadRequest},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.opts...))
-			e.seedRate(fixture.KindBirth, 240000)
+			e.seedRate(240000)
 
 			e.deleteRate(tc.kind, tc.want)
 		})
@@ -42,7 +42,7 @@ func TestDeleteRateHandler_Refusals(t *testing.T) {
 // the amount before.
 func TestDeleteRateHandler_AdminRemovesRateAndRecordsIt(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Admin()))
-	e.seedRate(fixture.KindBirth, 240000)
+	e.seedRate(240000)
 
 	removed := reqtest.Expect[practicerate.Rate](t, http.MethodDelete, e.rateURL(fixture.KindBirth), http.StatusOK, e.SignedIn)
 	if removed.Kind != fixture.KindBirth || removed.AmountCents != nil {
@@ -75,7 +75,7 @@ func TestDeleteRateHandler_AdminRemovesRateAndRecordsIt(t *testing.T) {
 // of a rate that was never set, write and record nothing new.
 func TestDeleteRateHandler_RepeatRecordsOnce(t *testing.T) {
 	e := ownerEnv(t)
-	e.seedRate(fixture.KindBirth, 240000)
+	e.seedRate(240000)
 
 	for _, kind := range []string{fixture.KindBirth, fixture.KindBirth, fixture.KindPostpartum} {
 		e.deleteRate(kind, http.StatusOK)

@@ -3,7 +3,6 @@ package practicerate_test
 import (
 	"database/sql"
 	"encoding/json/v2"
-	"net/http"
 	"testing"
 	"time"
 
@@ -20,7 +19,7 @@ import (
 func (e *env) seedContract(kind, status string, overridden bool) (engagementID string) {
 	e.T.Helper()
 	engagementID = e.AnotherEngagement(fixture.Kind(kind)).ID
-	e.Scene.Exec(
+	e.Exec(
 		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, amount_overridden)
 		 VALUES ($1, $2::contract_status, 'Agreement.', 15000, $3)`,
 		engagementID, status, overridden)
@@ -82,11 +81,11 @@ func repriceActivityDiff(t *testing.T, db *testdb.DB, engagementID string) (foun
 // (ADR-0022) with the before/after amounts.
 func TestPutRateHandler_RepricesDraftAndSentContracts(t *testing.T) {
 	e := ownerEnv(t)
-	e.seedRate(fixture.KindBirth, 15000)
+	e.seedRate(15000)
 	draftEngagementID := e.seedContract(fixture.KindBirth, "draft", false)
 	sentEngagementID := e.seedContract(fixture.KindBirth, "sent", false)
 
-	e.putRate(fixture.KindBirth, 20000, http.StatusOK)
+	e.putRate(fixture.KindBirth, 20000)
 
 	for _, engagementID := range []string{draftEngagementID, sentEngagementID} {
 		state := readContractState(t, e.DB, engagementID)
@@ -115,7 +114,7 @@ func TestPutRateHandler_RepricesDraftAndSentContracts(t *testing.T) {
 // un-overridden) one -- the AC scopes reprice to "that kind".
 func TestPutRateHandler_LeavesIneligibleContractsAlone(t *testing.T) {
 	e := ownerEnv(t)
-	e.seedRate(fixture.KindBirth, 15000)
+	e.seedRate(15000)
 	untouched := map[string]string{
 		"signed":                 e.seedContract(fixture.KindBirth, "signed", false),
 		"voided":                 e.seedContract(fixture.KindBirth, "voided", false),
@@ -123,7 +122,7 @@ func TestPutRateHandler_LeavesIneligibleContractsAlone(t *testing.T) {
 		"other kind of Contract": e.seedContract(fixture.KindPostpartum, "draft", false),
 	}
 
-	e.putRate(fixture.KindBirth, 20000, http.StatusOK)
+	e.putRate(fixture.KindBirth, 20000)
 
 	for name, engagementID := range untouched {
 		state := readContractState(t, e.DB, engagementID)

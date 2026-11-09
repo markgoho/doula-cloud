@@ -53,6 +53,16 @@ func clientAt(t *testing.T, db *testdb.DB, p fixture.PracticeRecord, address str
 	fixture.Client(t, db, p, fixture.ClientEmail(address))
 }
 
+// minePractice seeds Mine, with a Client at client@example.test, beside
+// Theirs, with a Client at stranger@example.test.
+func minePractice(t *testing.T, db *testdb.DB) fixture.PracticeRecord {
+	t.Helper()
+	mine := fixture.Practice(t, db, fixture.PracticeName("Mine"))
+	clientAt(t, db, mine, "client@example.test")
+	clientAt(t, db, fixture.Practice(t, db, fixture.PracticeName("Theirs")), "stranger@example.test")
+	return mine
+}
+
 // suppress records a suppression of cause for address.
 func suppress(t *testing.T, db *testdb.DB, address, cause string) {
 	t.Helper()

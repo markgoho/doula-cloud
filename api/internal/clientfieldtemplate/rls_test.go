@@ -17,7 +17,7 @@ import (
 // denies all rows when app.current_practice_id is never set.
 func TestRLS_SelectFailsClosedWithNoSessionVarSet(t *testing.T) {
 	e := newEnv(t, fixture.Owner())
-	e.seedTemplate(intakeNoteField)
+	e.seedIntakeNote()
 
 	testdb.RequireFailsClosed(t, e.DB, "client_field_templates")
 }
@@ -27,7 +27,7 @@ func TestRLS_SelectFailsClosedWithNoSessionVarSet(t *testing.T) {
 // Practice's row and not another Practice's.
 func TestRLS_SelectScopedToCurrentPracticeAndAnyRole(t *testing.T) {
 	e := newEnv(t)
-	e.seedTemplate(intakeNoteField)
+	e.seedIntakeNote()
 	other := fixture.Practice(t, e.DB, fixture.PracticeName("Practice B"))
 	e.Exec(`INSERT INTO client_field_templates (practice_id, fields) VALUES ($1, $2)`, other.ID, intakeNoteField)
 
@@ -78,7 +78,7 @@ func TestRLS_InsertIsOwnerOrAdminOnly(t *testing.T) {
 // test pinning the fix.
 func TestRLS_DoulaUpdateAffectsZeroRows(t *testing.T) {
 	e := newEnv(t)
-	e.seedTemplate(intakeNoteField)
+	e.seedIntakeNote()
 	tx := e.DB.BeginAs(t, testdb.Practice(e.Practice.ID), testdb.Staff(e.Staff.ID))
 
 	if rows := testdb.RowsAffected(t, tx, `UPDATE client_field_templates SET fields = '[]'::jsonb WHERE practice_id = $1`, e.Practice.ID); rows != 0 {

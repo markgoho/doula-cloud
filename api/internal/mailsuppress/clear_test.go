@@ -89,10 +89,7 @@ func TestClear_Refusals(t *testing.T) {
 
 func TestList_CarriesOnlyThisPracticesAddresses(t *testing.T) {
 	db := testdb.New(t)
-	mine := fixture.Practice(t, db, fixture.PracticeName("Mine"))
-	theirs := fixture.Practice(t, db, fixture.PracticeName("Theirs"))
-	clientAt(t, db, mine, "client@example.test")
-	clientAt(t, db, theirs, "stranger@example.test")
+	mine := minePractice(t, db)
 	rosterMember := fixture.Staff(t, db, mine, fixture.StaffUID("roster-member"))
 
 	for _, a := range []string{"client@example.test", "stranger@example.test", rosterMember.UID + "@example.com"} {
@@ -145,10 +142,7 @@ func TestList_OmitsAClearedSuppression(t *testing.T) {
 
 func TestAttachedToPractice(t *testing.T) {
 	db := testdb.New(t)
-	mine := fixture.Practice(t, db, fixture.PracticeName("Mine"))
-	theirs := fixture.Practice(t, db, fixture.PracticeName("Theirs"))
-	clientAt(t, db, mine, "client@example.test")
-	clientAt(t, db, theirs, "stranger@example.test")
+	mine := minePractice(t, db)
 	inviter := fixture.Staff(t, db, mine, fixture.Owner())
 	if _, err := db.Admin.ExecContext(t.Context(),
 		`INSERT INTO practice_invitations (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at)

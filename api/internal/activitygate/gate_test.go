@@ -97,26 +97,37 @@ func TestCanSeeAction_UnregisteredKindRefused(t *testing.T) {
 	}
 }
 
+// requireOwnerAndContractorAccess seeds an Engagement and its Client at a
+// new Practice, with an Owner and two contractors, one granted an
+// Attachment to the Engagement, and requires the gate to let the Owner
+// and the attached contractor reach the subject of kind and the
+// unattached contractor not.
+func requireOwnerAndContractorAccess(t *testing.T, practiceName, kind string) {
+	t.Helper()
+	db := testdb.New(t)
+	practiceID := testdb.SeedPractice(t, db, practiceName)
+	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	subjectID := map[string]string{activity.SubjectEngagement: engagementID, activity.SubjectClient: clientID}[kind]
+
+	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-owner", []string{ownerRole}, employeeType)
+	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-contractor-unattached", []string{doulaRole}, contractorType)
+	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, kind+"-gate-contractor-attached", []string{doulaRole}, contractorType)
+	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
+
+	requireAccess(t, db, practiceID, kind, subjectID, []accessCase{
+		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
+		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
+		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
+	})
+}
+
 // TestCanAccessSubject_Engagement proves the shared gate's engagement Rule
 // reproduces the ADR-0008 read table engagement.ListActivityHandler used
 // to check inline: Owner reaches; a contractor with no granted attachment
 // does not; a contractor with one does. Mirrors
 // staffauth_test.TestReader_CanAccessEngagement's own cases, one layer up.
 func TestCanAccessSubject_Engagement(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Gate Engagement Access Practice")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-owner", []string{ownerRole}, employeeType)
-	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-unattached", []string{doulaRole}, contractorType)
-	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-engagement-contractor-attached", []string{doulaRole}, contractorType)
-	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
-
-	requireAccess(t, db, practiceID, activity.SubjectEngagement, engagementID, []accessCase{
-		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
-		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
-	})
+	requireOwnerAndContractorAccess(t, "Gate Engagement Access Practice", activity.SubjectEngagement)
 }
 
 // TestRestrictedActions_Engagement pins the exact literal action strings
@@ -204,20 +215,7 @@ func TestCanSeeAction_Engagement(t *testing.T) {
 // Engagements, per ADR-0017. Mirrors
 // staffauth_test.TestReader_CanAccessClient one layer up.
 func TestCanAccessSubject_Client(t *testing.T) {
-	db := testdb.New(t)
-	practiceID := testdb.SeedPractice(t, db, "Gate Client Access Practice")
-	clientID, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	ownerID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-owner", []string{ownerRole}, employeeType)
-	unattachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-unattached", []string{doulaRole}, contractorType)
-	attachedContractorID := testdb.SeedStaffAtPractice(t, db, practiceID, "gate-client-contractor-attached", []string{doulaRole}, contractorType)
-	testdb.SeedAttachment(t, db, engagementID, attachedContractorID, "granted", false)
-
-	requireAccess(t, db, practiceID, activity.SubjectClient, clientID, []accessCase{
-		{ownerReachesCase, ownerID, []string{ownerRole}, employeeType, true},
-		{"unattached contractor refused", unattachedContractorID, []string{doulaRole}, contractorType, false},
-		{"attached contractor reaches", attachedContractorID, []string{doulaRole}, contractorType, true},
-	})
+	requireOwnerAndContractorAccess(t, "Gate Client Access Practice", activity.SubjectClient)
 }
 
 // TestCanAccessSubject_ClientFieldTemplateUnregistered pins #485's AC5

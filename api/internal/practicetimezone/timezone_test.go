@@ -160,12 +160,7 @@ func TestPutHandler_RefusesABodyItCannotRead(t *testing.T) {
 // its own.
 func loadZone(t *testing.T, db *testdb.DB, practiceID string) (*time.Location, error) {
 	t.Helper()
-	tx, err := db.Admin.BeginTx(t.Context(), nil)
-	if err != nil {
-		t.Fatalf("begin: %v", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-	return practicetimezone.Load(t.Context(), tx, practiceID)
+	return practicetimezone.Load(t.Context(), db.BeginAs(t, testdb.Practice(practiceID)), practiceID) //nolint:wrapcheck // the error under test is Load's own
 }
 
 // TestLoad_IsTheSeamEveryCalendarDayComparisonReads covers the reader
