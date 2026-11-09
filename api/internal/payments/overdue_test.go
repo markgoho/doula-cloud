@@ -21,12 +21,10 @@ import (
 // their own due date and how much money that is, and can be narrowed to
 // exactly those, with the whole-book totals unchanged by the narrowing.
 func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-overdue"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-	_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-	contractID := seedDraftContract(t, db, engagementID)
 	now := overdueInstants[0]
+	e := newEnv(t, atInstant(now))
+	_, contractID := e.contractWithStatus("draft")
+	db, practiceID := e.DB, e.Practice.ID
 	base := now.Add(-time.Hour)
 
 	lateID := seedInvoiceDue(t, db, practiceID, contractID, "in_overdue_late", invoiceStatusOpen, 15000,
@@ -40,10 +38,7 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 	seedInvoiceDue(t, db, practiceID, contractID, "in_overdue_paid", "paid", 30000,
 		base.Add(2*time.Second), dueOnPracticeDay(t, now, -40))
 
-	srv, session := newPracticeInvoiceServerAt(t, db, uid, now)
-	defer srv.Close()
-
-	whole := readPracticeInvoices(t, srv, session, practiceID)
+	whole := e.practiceInvoices()
 	if whole.OverdueCents != 15000 || whole.OverdueCount != 1 {
 		t.Fatalf("overdue totals = (%d, %d), want (15000, 1)", whole.OverdueCents, whole.OverdueCount)
 	}
@@ -56,7 +51,7 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 		t.Fatalf("unnarrowed items = %d, want 3", len(whole.Items))
 	}
 
-	narrowed := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true")
+	narrowed := e.practiceInvoices("overdue=true")
 	if len(narrowed.Items) != 1 || narrowed.Items[0].ID != lateID {
 		t.Fatalf("overdue items = %+v, want only %q", narrowed.Items, lateID)
 	}
@@ -84,11 +79,9 @@ func TestGetPracticeInvoicesHandler_OverdueTotalsAndNarrowing(t *testing.T) {
 func TestGetPracticeInvoicesHandler_OverdueBeatsUnpaid(t *testing.T) {
 	for _, now := range overdueInstants {
 		t.Run(now.Format(time.RFC3339), func(t *testing.T) {
-			db := testdb.New(t)
-			const uid = "practice-invoices-overdue-wins"
-			practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-			_, engagementID := testdb.SeedNamedEngagement(t, db, practiceID, "Ada Client", "ada@example.com")
-			contractID := seedDraftContract(t, db, engagementID)
+			e := newEnv(t, atInstant(now))
+			_, contractID := e.contractWithStatus("draft")
+			db, practiceID := e.DB, e.Practice.ID
 			base := now.Add(-time.Hour)
 
 			// Due on the Practice day before its today: the first day it is late.
@@ -97,10 +90,7 @@ func TestGetPracticeInvoicesHandler_OverdueBeatsUnpaid(t *testing.T) {
 			seedInvoiceDue(t, db, practiceID, contractID, "in_both_current", invoiceStatusOpen, 22000,
 				base.Add(time.Second), dueOnPracticeDay(t, now, 10))
 
-			srv, session := newPracticeInvoiceServerAt(t, db, uid, now)
-			defer srv.Close()
-
-			out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true&unpaid=true")
+			out := e.practiceInvoices("overdue=true&unpaid=true")
 			if len(out.Items) != 1 || out.Items[0].ID != lateID {
 				t.Fatalf("items = %+v, want only the overdue %q", out.Items, lateID)
 			}
@@ -109,7 +99,7 @@ func TestGetPracticeInvoicesHandler_OverdueBeatsUnpaid(t *testing.T) {
 }
 
 // overdueInstants are the request instants the overdue tests run at, read
-// through clock.Now(ctx) (newPracticeInvoiceServerAt), never the host's
+// through clock.Now(ctx) (atInstant), never the host's
 // time.Now(). The first is #2639's failing hour: 04:22 UTC on Nov 2 2026 is
 // 11:22pm on Nov 1 in New York, the 25-hour day the clocks went back, so an
 // instant 24 hours before it is still Nov 1 there and an invoice seeded due
@@ -142,14 +132,7 @@ func dueOnPracticeDay(t *testing.T, now time.Time, days int) time.Time {
 // COALESCE side of the overdue aggregate: a Practice that has billed
 // nothing reports zero, not a null that fails to scan.
 func TestGetPracticeInvoicesHandler_EmptyBookHasNoOverdue(t *testing.T) {
-	db := testdb.New(t)
-	const uid = "practice-invoices-overdue-empty"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, uid, []string{ownerRole}, "employee")
-
-	srv, session := newPracticeInvoiceServer(t, db, uid)
-	defer srv.Close()
-
-	out := readPracticeInvoicesNarrowed(t, srv, session, practiceID, "overdue=true")
+	out := newEnv(t).practiceInvoices("overdue=true")
 	if out.OverdueCents != 0 || out.OverdueCount != 0 || len(out.Items) != 0 {
 		t.Fatalf("empty book = (%d, %d, %d items), want all zero", out.OverdueCents, out.OverdueCount, len(out.Items))
 	}

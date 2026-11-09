@@ -180,12 +180,12 @@ func TestPaymentWorker_ProcessPending_Outcomes(t *testing.T) {
 				staff = fixture.NoRole()
 			}
 			e := newEnv(t, signedInAs(staff))
-			outboxID := seedPaymentOutboxRow(t, e.db, e.Practice.ID, "", tc.attemptCount, time.Now().Add(tc.due))
+			outboxID := seedPaymentOutboxRow(t, e.DB, e.Practice.ID, "", tc.attemptCount, time.Now().Add(tc.due))
 
 			sender := &mail.FakeSender{Err: tc.sendErr}
-			runWorker(t, e.db, newTestPaymentWorker(sender))
+			runWorker(t, e.DB, newTestPaymentWorker(sender))
 
-			status, attemptCount := outboxRowState(t, e.db, paymentOutboxTable, outboxID)
+			status, attemptCount := outboxRowState(t, e.DB, paymentOutboxTable, outboxID)
 			if status != tc.wantStatus || attemptCount != tc.wantAttempts {
 				t.Fatalf("status/attempt_count = %q/%d, want %s/%d", status, attemptCount, tc.wantStatus, tc.wantAttempts)
 			}
@@ -193,7 +193,7 @@ func TestPaymentWorker_ProcessPending_Outcomes(t *testing.T) {
 				t.Fatalf("sent %d messages, want none", len(sender.Sent()))
 			}
 			if tc.wantStatus == statusDeadLettered {
-				if got := testdb.DeadLetterReason(t, e.db, "payment_received_outbox", outboxID); got != "retries_exhausted" {
+				if got := testdb.DeadLetterReason(t, e.DB, "payment_received_outbox", outboxID); got != "retries_exhausted" {
 					t.Fatalf("dead_letter_reason = %q, want retries_exhausted", got)
 				}
 			}

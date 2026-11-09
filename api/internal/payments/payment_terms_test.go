@@ -18,13 +18,13 @@ const paymentTermsPath = "/payments/payment-terms"
 func termsBody(body string) reqtest.Option { return reqtest.RawJSON([]byte(body)) }
 
 func (e *env) readTerms() payments.PaymentTermsResponse {
-	e.t.Helper()
-	return reqtest.Expect[payments.PaymentTermsResponse](e.t, http.MethodGet, e.url(paymentTermsPath), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[payments.PaymentTermsResponse](e.T, http.MethodGet, e.PracticeURL(paymentTermsPath), http.StatusOK, e.SignedIn)
 }
 
 func (e *env) setTerms(body string) payments.PaymentTermsResponse {
-	e.t.Helper()
-	return reqtest.Expect[payments.PaymentTermsResponse](e.t, http.MethodPut, e.url(paymentTermsPath), http.StatusOK, e.signedIn, termsBody(body))
+	e.T.Helper()
+	return reqtest.Expect[payments.PaymentTermsResponse](e.T, http.MethodPut, e.PracticeURL(paymentTermsPath), http.StatusOK, e.SignedIn, termsBody(body))
 }
 
 // TestGetPaymentTermsHandler_DefaultsWithoutARow proves #768's decision
@@ -57,7 +57,7 @@ func TestPutPaymentTermsHandler_SetsAndRecordsWhoChangedIt(t *testing.T) {
 
 	var actor string
 	var diff []byte
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT actor_staff_id, diff FROM activity
 		 WHERE practice_id = $1 AND action = 'payment_terms_changed'`, e.Practice.ID,
 	).Scan(&actor, &diff); err != nil {
@@ -87,7 +87,7 @@ func TestPutPaymentTermsHandler_RepeatRecordsNothingNew(t *testing.T) {
 	e.setTerms(`{"netDays":15}`)
 	e.setTerms(`{"netDays":15}`)
 
-	rows := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, e.Practice.ID)
+	rows := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND action = 'payment_terms_changed'`, e.Practice.ID)
 	if rows != 1 {
 		t.Fatalf("activity rows = %d, want 1", rows)
 	}
@@ -103,7 +103,7 @@ func TestPutPaymentTermsHandler_RefusesAnImpossibleTerm(t *testing.T) {
 		t.Run(body, func(t *testing.T) {
 			out := reqtest.Expect[struct {
 				Details map[string]string `json:"details"`
-			}](t, http.MethodPut, e.url(paymentTermsPath), http.StatusBadRequest, e.signedIn, termsBody(body))
+			}](t, http.MethodPut, e.PracticeURL(paymentTermsPath), http.StatusBadRequest, e.SignedIn, termsBody(body))
 
 			// docs/api-design.md section 7 rule 4: a refusal a person
 			// causes by filling in a form names the field at fault, keyed

@@ -110,18 +110,18 @@ func newReferenceClient(reference string) *referenceClient {
 // connectHook mounts the Connect webhook on a server of its own, answering
 // through client.
 func (e *env) connectHook(client payments.Client) *httptest.Server {
-	e.t.Helper()
-	srv := newConnectWebhookServerWith(e.db, client)
-	e.t.Cleanup(srv.Close)
+	e.T.Helper()
+	srv := newConnectWebhookServerWith(e.DB, client)
+	e.T.Cleanup(srv.Close)
 	return srv
 }
 
 // seedStripeInvoice seeds an Engagement at the Practice with an Invoice
 // Stripe issued as stripeInvoiceID, in status.
 func (e *env) seedStripeInvoice(stripeInvoiceID, status string, amountCents int64) (engagementID, invoiceID string) {
-	e.t.Helper()
+	e.T.Helper()
 	engagementID, contractID := e.contractWithStatus("draft")
-	return engagementID, seedInvoice(e.t, e.db, e.Practice.ID, contractID, stripeInvoiceID, status, amountCents, time.Now())
+	return engagementID, seedInvoice(e.T, e.DB, e.Practice.ID, contractID, stripeInvoiceID, status, amountCents, time.Now())
 }
 
 // buildConnectEventPayload assembles a raw Stripe event envelope around
@@ -381,9 +381,9 @@ func activeAccountClient() *accountFetchClient {
 // accountHook mounts the account webhook on a server of its own, answering
 // through client.
 func (e *env) accountHook(client payments.Client) *httptest.Server {
-	e.t.Helper()
-	srv := newAccountWebhookServer(e.db, client)
-	e.t.Cleanup(srv.Close)
+	e.T.Helper()
+	srv := newAccountWebhookServer(e.DB, client)
+	e.T.Cleanup(srv.Close)
 	return srv
 }
 
@@ -439,7 +439,7 @@ func TestPostAccountWebhookHandler_PersistsFetchedCapabilityStatuses(t *testing.
 	if len(client.fetched) != 1 || client.fetched[0] != e.AccountID {
 		t.Fatalf("fetched = %v, want one retrieve of the account named in related_object", client.fetched)
 	}
-	cardPayments, payouts, requirements, eventID := connectState(t, e.db, e.Practice.ID)
+	cardPayments, payouts, requirements, eventID := connectState(t, e.DB, e.Practice.ID)
 	if cardPayments != string(payments.CapabilityActive) || payouts != string(payments.CapabilityActive) {
 		t.Fatalf("statuses = (%q, %q), want both active", cardPayments, payouts)
 	}
@@ -460,7 +460,7 @@ func TestPostAccountWebhookHandler_PersistsOutstandingRequirements(t *testing.T)
 
 	deliverAccount(t, e.accountHook(client), capabilityStatusPayload(t, "evt_requirements", e.AccountID), http.StatusOK)
 
-	_, _, requirements, _ := connectState(t, e.db, e.Practice.ID)
+	_, _, requirements, _ := connectState(t, e.DB, e.Practice.ID)
 	if len(requirements) != 2 || requirements[0] != requirementMCC {
 		t.Fatalf("requirements = %v, want both outstanding field paths in order", requirements)
 	}
@@ -484,7 +484,7 @@ func TestPostAccountWebhookHandler_QueuesPayoutNotificationOnEmptyToNonEmptyTran
 
 	deliverAccount(t, e.accountHook(restrictedAccountClient(requirementMCC)), capabilityStatusPayload(t, "evt_payout_trigger", e.AccountID), http.StatusOK)
 
-	statuses := payoutOutboxForPractice(t, e.db, e.Practice.ID)
+	statuses := payoutOutboxForPractice(t, e.DB, e.Practice.ID)
 	if len(statuses) != 1 || statuses[0] != testPayoutStatusPending {
 		t.Fatalf("payout_outbox rows = %v, want exactly one pending row", statuses)
 	}
@@ -497,7 +497,7 @@ func TestPostAccountWebhookHandler_NoPayoutNotificationWhenRequirementsStayEmpty
 
 	deliverAccount(t, e.accountHook(activeAccountClient()), capabilityStatusPayload(t, "evt_payout_no_trigger", e.AccountID), http.StatusOK)
 
-	if statuses := payoutOutboxForPractice(t, e.db, e.Practice.ID); len(statuses) != 0 {
+	if statuses := payoutOutboxForPractice(t, e.DB, e.Practice.ID); len(statuses) != 0 {
 		t.Fatalf("payout_outbox rows = %v, want none for an account with nothing outstanding", statuses)
 	}
 }
@@ -515,7 +515,7 @@ func TestPostAccountWebhookHandler_DoesNotRequeuePayoutNotificationWhileRequirem
 	client.status.RequirementsDue = []string{requirementMCC, testRequirementDOB}
 	deliverAccount(t, srv, capabilityStatusPayload(t, "evt_payout_second", e.AccountID), http.StatusOK)
 
-	if statuses := payoutOutboxForPractice(t, e.db, e.Practice.ID); len(statuses) != 1 {
+	if statuses := payoutOutboxForPractice(t, e.DB, e.Practice.ID); len(statuses) != 1 {
 		t.Fatalf("payout_outbox rows = %v, want still exactly one row for the same open episode", statuses)
 	}
 }
@@ -530,7 +530,7 @@ func TestPostAccountWebhookHandler_RequeuesPayoutNotificationAfterEpisodeReopens
 	srv := e.accountHook(client)
 
 	deliverAccount(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_open", e.AccountID), http.StatusOK)
-	if _, err := e.db.Admin.ExecContext(t.Context(),
+	if _, err := e.DB.Admin.ExecContext(t.Context(),
 		`UPDATE payout_outbox SET status = 'sent' WHERE practice_id = $1`, e.Practice.ID,
 	); err != nil {
 		t.Fatalf("simulate worker send: %v", err)
@@ -541,7 +541,7 @@ func TestPostAccountWebhookHandler_RequeuesPayoutNotificationAfterEpisodeReopens
 	client.status.RequirementsDue = []string{requirementMCC}
 	deliverAccount(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_again", e.AccountID), http.StatusOK)
 
-	statuses := payoutOutboxForPractice(t, e.db, e.Practice.ID)
+	statuses := payoutOutboxForPractice(t, e.DB, e.Practice.ID)
 	if len(statuses) != 2 || statuses[0] != testPayoutStatusSent || statuses[1] != testPayoutStatusPending {
 		t.Fatalf("payout_outbox rows = %v, want [sent pending] -- the first episode sent, a second queued after it reopened", statuses)
 	}
@@ -559,7 +559,7 @@ func TestPostAccountWebhookHandler_ReplayDoesNotDoubleQueuePayoutNotification(t 
 	deliverAccount(t, srv, payload, http.StatusOK)
 	deliverAccount(t, srv, payload, http.StatusOK)
 
-	if statuses := payoutOutboxForPractice(t, e.db, e.Practice.ID); len(statuses) != 1 {
+	if statuses := payoutOutboxForPractice(t, e.DB, e.Practice.ID); len(statuses) != 1 {
 		t.Fatalf("payout_outbox rows = %v, want exactly one despite the replay", statuses)
 	}
 }
@@ -574,7 +574,7 @@ func TestPostAccountWebhookHandler_NilRequirementsPersistAsEmptyArray(t *testing
 
 	deliverAccount(t, e.accountHook(client), capabilityStatusPayload(t, "evt_nil_reqs", e.AccountID), http.StatusOK)
 
-	_, _, requirements, _ := connectState(t, e.db, e.Practice.ID)
+	_, _, requirements, _ := connectState(t, e.DB, e.Practice.ID)
 	if requirements == nil || len(requirements) != 0 {
 		t.Fatalf("requirements = %v, want an empty array", requirements)
 	}
@@ -590,14 +590,14 @@ func TestPostAccountWebhookHandler_ReplayedEventIsNoOp(t *testing.T) {
 	deliverAccount(t, srv, payload, http.StatusOK)
 	// Move the row back behind what the event carried. A replay that
 	// re-applied would flip it forward again.
-	if _, err := e.db.Admin.ExecContext(t.Context(),
+	if _, err := e.DB.Admin.ExecContext(t.Context(),
 		`UPDATE practices SET stripe_connect_card_payments_status = 'restricted' WHERE id = $1`, e.Practice.ID,
 	); err != nil {
 		t.Fatalf("reset status: %v", err)
 	}
 	deliverAccount(t, srv, payload, http.StatusOK)
 
-	cardPayments, _, _, _ := connectState(t, e.db, e.Practice.ID)
+	cardPayments, _, _, _ := connectState(t, e.DB, e.Practice.ID)
 	if cardPayments != string(payments.CapabilityRestricted) {
 		t.Fatalf("card_payments = %q after replay, want the reset value to stand", cardPayments)
 	}
@@ -675,7 +675,7 @@ func TestPostAccountWebhookHandler_LeavesTheAccountAloneWhenItShould(t *testing.
 			if len(fetcher.fetched) != 0 && !tc.fetches {
 				t.Fatalf("fetched = %v, want no Stripe call", fetcher.fetched)
 			}
-			cardPayments, _, _, _ := connectState(t, e.db, e.Practice.ID)
+			cardPayments, _, _, _ := connectState(t, e.DB, e.Practice.ID)
 			if cardPayments != string(payments.CapabilityUnsupported) {
 				t.Fatalf("card_payments = %q, want the default to stand", cardPayments)
 			}
@@ -698,7 +698,7 @@ func TestPostAccountWebhookHandler_RetrieveFailureReturns500(t *testing.T) {
 	// The retry succeeds, proving the failed delivery claimed no event id.
 	client.err = nil
 	deliverAccount(t, srv, payload, http.StatusOK)
-	cardPayments, _, _, _ := connectState(t, e.db, e.Practice.ID)
+	cardPayments, _, _, _ := connectState(t, e.DB, e.Practice.ID)
 	if cardPayments != string(payments.CapabilityActive) {
 		t.Fatalf("card_payments = %q after retry, want active", cardPayments)
 	}
@@ -835,7 +835,7 @@ func TestPostConnectWebhookHandler_LiveEventRefusedOnTestKeys(t *testing.T) {
 	payload := asLive(t, invoicePaidPayload(t, "evt_live_invoice", e.AccountID, "in_live_test", time.Now()))
 	deliverConnectSignedWith(t, srv, payload, stripeConnectWebhookSecret, http.StatusBadRequest)
 
-	if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
 }
@@ -853,7 +853,7 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 	paidAt := time.Now().Truncate(time.Second).UTC()
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_invoice_paid", e.AccountID, "in_paid_test", paidAt))
 
-	status, gotPaidAt := invoiceStatusAndPaidAt(t, e.db, invoiceID)
+	status, gotPaidAt := invoiceStatusAndPaidAt(t, e.DB, invoiceID)
 	if status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
@@ -861,7 +861,7 @@ func TestPostConnectWebhookHandler_InvoicePaidCreatesPaymentAndFlipsStatus(t *te
 		t.Fatalf("invoice paid_at = %v, want %v", gotPaidAt, paidAt)
 	}
 
-	rows := paymentsForInvoice(t, e.db, invoiceID)
+	rows := paymentsForInvoice(t, e.DB, invoiceID)
 	if len(rows) != 1 {
 		t.Fatalf("payments for invoice = %d, want exactly 1", len(rows))
 	}
@@ -882,12 +882,12 @@ func TestPostConnectWebhookHandler_InvoicePaidQueuesPaymentReceivedOutboxRow(t *
 
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_invoice_paid_outbox", e.AccountID, "in_paid_outbox_test", time.Now().Truncate(time.Second).UTC()))
 
-	if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 1 {
+	if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 1 {
 		t.Fatalf("payments for invoice = %d, want exactly 1", len(rows))
 	}
 	var count int
 	var gotPracticeID string
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT count(*), max(pro.practice_id::text)
 		 FROM payment_received_outbox pro
 		 JOIN payments p ON p.id = pro.payment_id
@@ -915,14 +915,14 @@ func TestPostConnectWebhookHandler_InvoicePaidReplayIsNoOp(t *testing.T) {
 	deliverConnect(t, srv, payload)
 	deliverConnect(t, srv, payload)
 
-	if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 1 {
+	if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 1 {
 		t.Fatalf("payments for invoice after replay = %d, want exactly 1", len(rows))
 	}
 	// A replayed event must not queue a second payment_received_outbox
 	// row either -- this is the guarantee 00035's migration comment
 	// leans on claimEvent's stripe_webhook_events claim for, since the
 	// table itself carries no dedup index (unlike payout_outbox).
-	outboxCount := testdb.Scalar[int](t, e.db.Admin, `SELECT count(*) FROM payment_received_outbox pro JOIN payments p ON p.id = pro.payment_id WHERE p.invoice_id = $1`, invoiceID)
+	outboxCount := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM payment_received_outbox pro JOIN payments p ON p.id = pro.payment_id WHERE p.invoice_id = $1`, invoiceID)
 	if outboxCount != 1 {
 		t.Fatalf("payment_received_outbox rows after replay = %d, want exactly 1", outboxCount)
 	}
@@ -944,7 +944,7 @@ func TestPostConnectWebhookHandler_InvoicePaidAlreadyPaidGuardSkipsSecondWrite(t
 	// Invoice (PostManualPaymentHandler's own INSERT, done directly here
 	// rather than through the handler since this test's only point is the
 	// webhook-side guard).
-	if _, err := e.db.Admin.ExecContext(t.Context(),
+	if _, err := e.DB.Admin.ExecContext(t.Context(),
 		`INSERT INTO payments (invoice_id, stripe_payment_reference, amount_cents, paid_at, kind, method)
 		 VALUES ($1, '', 5000, now(), 'manual', 'check')`,
 		invoiceID,
@@ -955,7 +955,7 @@ func TestPostConnectWebhookHandler_InvoicePaidAlreadyPaidGuardSkipsSecondWrite(t
 
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_already_paid_guard", e.AccountID, "in_already_paid_guard", time.Now()))
 
-	if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 1 {
+	if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 1 {
 		t.Fatalf("payments for invoice = %d, want exactly 1 (the manual row, untouched)", len(rows))
 	}
 }
@@ -971,12 +971,12 @@ func TestPostConnectWebhookHandler_InvoicePaidSurvivesNudgeEnqueueFailure(t *tes
 	e := newEnv(t, connectAccountOnly())
 	_, invoiceID := e.seedStripeInvoice("in_paid_nudge_fail", invoiceStatusOpen, 5000)
 	failingEnq := &tasknudge.FakeEnqueuer{Err: errors.New("cloud tasks unavailable")}
-	srv := newConnectWebhookServerWithEnqueuer(e.db, payments.NewStripeAPIClient("sk_test_unused", "https://app.test"), failingEnq)
+	srv := newConnectWebhookServerWithEnqueuer(e.DB, payments.NewStripeAPIClient("sk_test_unused", "https://app.test"), failingEnq)
 	t.Cleanup(srv.Close)
 
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_invoice_paid_nudge_fail", e.AccountID, "in_paid_nudge_fail", time.Now()))
 
-	if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 1 {
+	if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 1 {
 		t.Fatalf("payments for invoice = %d, want exactly 1 -- the write must have committed despite the enqueue failure", len(rows))
 	}
 }
@@ -1063,20 +1063,20 @@ func TestPostConnectWebhookHandler_FailedAttemptLeavesInvoicePayable(t *testing.
 
 			deliverConnect(t, srv, invoicePaymentFailedPayload(t, "evt_failed_attempt", e.AccountID, "in_failed_attempt"))
 
-			if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusOpen {
+			if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusOpen {
 				t.Fatalf("invoice status = %q, want %q -- Stripe keeps it open for another try", status, invoiceStatusOpen)
 			}
-			if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 0 {
+			if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 0 {
 				t.Fatalf("payments for invoice = %d, want 0", len(rows))
 			}
-			got := activityRows(t, e.db, "invoice_payment_failed", engagementID)
+			got := activityRows(t, e.DB, "invoice_payment_failed", engagementID)
 			if len(got) != tc.wantRows {
 				t.Fatalf("invoice_payment_failed rows = %d, want %d", len(got), tc.wantRows)
 			}
 			if tc.wantRows == 0 {
 				return
 			}
-			if clientID := clientOfEngagement(t, e.db, engagementID); got[0].actorKind != "client" || got[0].clientID.String != clientID {
+			if clientID := clientOfEngagement(t, e.DB, engagementID); got[0].actorKind != "client" || got[0].clientID.String != clientID {
 				t.Fatalf("actor = %s/%v, want the Client %s -- the attempt was hers", got[0].actorKind, got[0].clientID, clientID)
 			}
 			method, has := got[0].diff["paymentMethodType"]
@@ -1102,10 +1102,10 @@ func TestPostConnectWebhookHandler_InvoicePaymentFailedReplayIsNoOp(t *testing.T
 	deliverConnect(t, srv, payload)
 	deliverConnect(t, srv, payload)
 
-	if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
-	if got := activityRows(t, e.db, "invoice_payment_failed", engagementID); len(got) != 1 {
+	if got := activityRows(t, e.DB, "invoice_payment_failed", engagementID); len(got) != 1 {
 		t.Fatalf("invoice_payment_failed rows = %d, want 1 after a replay", len(got))
 	}
 }
@@ -1124,10 +1124,10 @@ func TestPostConnectWebhookHandler_MarkedUncollectibleWritesOffAnOpenInvoice(t *
 	deliverConnect(t, srv, payload)
 	deliverConnect(t, srv, payload)
 
-	if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusUncollectible {
+	if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusUncollectible {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusUncollectible)
 	}
-	got := activityRows(t, e.db, "invoice_written_off", engagementID)
+	got := activityRows(t, e.DB, "invoice_written_off", engagementID)
 	if len(got) != 1 {
 		t.Fatalf("invoice_written_off rows = %d, want 1 after a replay", len(got))
 	}
@@ -1150,10 +1150,10 @@ func TestPostConnectWebhookHandler_MarkedUncollectibleLeavesASettledInvoiceAlone
 
 	deliverConnect(t, srv, invoiceMarkedUncollectiblePayload(t, "evt_marked_uncollectible_paid", e.AccountID, "in_marked_uncollectible_paid"))
 
-	if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
-	if got := activityRows(t, e.db, "invoice_written_off", engagementID); len(got) != 0 {
+	if got := activityRows(t, e.DB, "invoice_written_off", engagementID); len(got) != 0 {
 		t.Fatalf("invoice_written_off rows = %d, want 0", len(got))
 	}
 }
@@ -1169,10 +1169,10 @@ func TestPostConnectWebhookHandler_InvoicePaidUnrecognizedAccountDroppedButAckno
 
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_wrong_account", "acct_unrecognized_for_invoice", "in_wrong_account", time.Now()))
 
-	if status, _ := invoiceStatusAndPaidAt(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status, _ := invoiceStatusAndPaidAt(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want %q (untouched)", status, invoiceStatusOpen)
 	}
-	if rows := paymentsForInvoice(t, e.db, invoiceID); len(rows) != 0 {
+	if rows := paymentsForInvoice(t, e.DB, invoiceID); len(rows) != 0 {
 		t.Fatalf("payments for invoice = %d, want 0", len(rows))
 	}
 }
@@ -1191,7 +1191,7 @@ func TestPostConnectWebhookHandler_InvoicePaidRecordsFetchedPaymentReference(t *
 
 	deliverConnect(t, srv, invoicePaidPayload(t, "evt_reference", e.AccountID, "in_reference", time.Unix(1_700_000_000, 0)))
 
-	reference := testdb.Scalar[string](t, e.db.Admin, `SELECT stripe_payment_reference FROM payments WHERE invoice_id = $1`, invoiceID)
+	reference := testdb.Scalar[string](t, e.DB.Admin, `SELECT stripe_payment_reference FROM payments WHERE invoice_id = $1`, invoiceID)
 	if reference != "pi_from_stripe" {
 		t.Fatalf("stripe_payment_reference = %q, want the fetched PaymentIntent id", reference)
 	}
@@ -1213,7 +1213,7 @@ func TestPostConnectWebhookHandler_InvoicePaidSurvivesReferenceLookupFailure(t *
 
 	var reference string
 	var amount int64
-	if err := e.db.Admin.QueryRowContext(t.Context(),
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT stripe_payment_reference, amount_cents FROM payments WHERE invoice_id = $1`, invoiceID,
 	).Scan(&reference, &amount); err != nil {
 		t.Fatalf("read payment: %v", err)

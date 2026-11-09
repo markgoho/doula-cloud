@@ -14,12 +14,12 @@ const recordedNote = "Bank transfer from Imani Brooks, reference IB-0950"
 // paidByHandEngagement is one by-hand Invoice paid by a bank transfer with
 // a note, as Record payment leaves it (#271), on a new Engagement.
 func (e *env) paidByHandEngagement(opts ...fixture.EngagementOption) (engagementID string) {
-	e.t.Helper()
+	e.T.Helper()
 	engagementID, invoiceID := e.byHandInvoiceFor(opts...)
-	seedManualPayment(e.t, e.db, invoiceID, "bank_transfer", recordedNote)
-	if _, err := e.db.Admin.ExecContext(e.t.Context(),
+	seedManualPayment(e.T, e.DB, invoiceID, "bank_transfer", recordedNote)
+	if _, err := e.DB.Admin.ExecContext(e.T.Context(),
 		`UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1`, invoiceID); err != nil {
-		e.t.Fatalf("mark invoice paid: %v", err)
+		e.T.Fatalf("mark invoice paid: %v", err)
 	}
 	return engagementID
 }
@@ -66,9 +66,9 @@ func TestGetInvoicesHandler_StaffWhoReadMoneyReadHowItWasPaid(t *testing.T) {
 func TestGetInvoicesHandler_ACardPaymentCarriesNoMethod(t *testing.T) {
 	e := newEnv(t)
 	engagementID, invoiceID := e.byHandInvoice()
-	seedStripePayment(t, e.db, invoiceID, seedByHandInvoiceAmountCents, "pi_method_card")
+	seedStripePayment(t, e.DB, invoiceID, seedByHandInvoiceAmountCents, "pi_method_card")
 
-	raw := string(reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn))
+	raw := string(reqtest.ExpectBody(t, http.MethodGet, e.PracticeURL(invoicesPath(engagementID)), http.StatusOK, e.SignedIn))
 
 	if strings.Contains(raw, "activePaymentMethod") || strings.Contains(raw, "activePaymentNote") {
 		t.Fatalf("a card Payment carries a method or note: %s", raw)
@@ -82,7 +82,7 @@ func TestGetInvoicesHandler_AContractorNeverReadsHowItWasPaid(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Contractor()))
 	engagementID := e.paidByHandEngagement(fixture.WithDoula(e.Staff))
 
-	body := string(reqtest.ExpectBody(t, http.MethodGet, e.url(invoicesPath(engagementID)), http.StatusOK, e.signedIn))
+	body := string(reqtest.ExpectBody(t, http.MethodGet, e.PracticeURL(invoicesPath(engagementID)), http.StatusOK, e.SignedIn))
 
 	for _, leak := range []string{"bank_transfer", "IB-0950", "activePaymentMethod", "activePaymentNote"} {
 		if strings.Contains(body, leak) {

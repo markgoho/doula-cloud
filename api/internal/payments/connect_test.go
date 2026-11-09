@@ -83,19 +83,19 @@ func stripeConnectAccountID(t *testing.T, db *testdb.DB, practiceID string) *str
 // RetrieveAccount tests can control what FakeClient.Statuses reports for
 // it.
 func (e *env) connectAccount() string {
-	e.t.Helper()
-	accountID, err := e.Stripe.CreateAccount(e.t.Context(), payments.AccountProfile{
+	e.T.Helper()
+	accountID, err := e.Stripe.CreateAccount(e.T.Context(), payments.AccountProfile{
 		PracticeID:   e.Practice.ID,
 		PracticeName: fixturePracticeName,
 		BusinessURL:  fixtureOwnSiteURL,
 	})
 	if err != nil {
-		e.t.Fatalf("CreateAccount fixture: %v", err)
+		e.T.Fatalf("CreateAccount fixture: %v", err)
 	}
-	if _, err := e.db.Admin.ExecContext(e.t.Context(),
+	if _, err := e.DB.Admin.ExecContext(e.T.Context(),
 		`UPDATE practices SET stripe_connect_account_id = $1 WHERE id = $2`, accountID, e.Practice.ID,
 	); err != nil {
-		e.t.Fatalf("seed stripe_connect_account_id: %v", err)
+		e.T.Fatalf("seed stripe_connect_account_id: %v", err)
 	}
 	return accountID
 }
@@ -103,8 +103,8 @@ func (e *env) connectAccount() string {
 // connectStatus reads the Practice's Connect status as the Staff member
 // at the screen.
 func (e *env) connectStatus() payments.ConnectStatusResponse {
-	e.t.Helper()
-	return reqtest.Expect[payments.ConnectStatusResponse](e.t, http.MethodGet, e.url(connectPath), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[payments.ConnectStatusResponse](e.T, http.MethodGet, e.PracticeURL(connectPath), http.StatusOK, e.SignedIn)
 }
 
 // TestPostConnectHandler_OwnerCreatesAccountAndAccountLink proves an
@@ -113,7 +113,7 @@ func (e *env) connectStatus() payments.ConnectStatusResponse {
 func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 	e := newEnv(t, withDeclaredWebsite(fixtureOwnSiteURL))
 
-	out := reqtest.Expect[payments.ConnectResponse](t, http.MethodPost, e.url(connectPath), http.StatusOK, e.signedIn)
+	out := reqtest.Expect[payments.ConnectResponse](t, http.MethodPost, e.PracticeURL(connectPath), http.StatusOK, e.SignedIn)
 	if out.OnboardingURL == "" {
 		t.Fatal("onboardingUrl is empty")
 	}
@@ -126,7 +126,7 @@ func TestPostConnectHandler_OwnerCreatesAccountAndAccountLink(t *testing.T) {
 		t.Fatalf("account link call practiceID = %q, want %q", link.PracticeID, e.Practice.ID)
 	}
 
-	id := stripeConnectAccountID(t, e.db, e.Practice.ID)
+	id := stripeConnectAccountID(t, e.DB, e.Practice.ID)
 	if id == nil || *id == "" {
 		t.Fatal("stripe_connect_account_id was not persisted")
 	}
@@ -142,13 +142,13 @@ func TestPostConnectHandler_SecondAttemptReusesExistingAccount(t *testing.T) {
 	e := newEnv(t, withDeclaredWebsite(fixtureOwnSiteURL))
 
 	e.expect(http.MethodPost, connectPath, http.StatusOK)
-	firstAccountID := stripeConnectAccountID(t, e.db, e.Practice.ID)
+	firstAccountID := stripeConnectAccountID(t, e.DB, e.Practice.ID)
 	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
 	if got := e.Stripe.AccountCallCount(); got != 1 {
 		t.Fatalf("CreateAccount call count = %d, want 1", got)
 	}
-	if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got == nil || *got != *firstAccountID {
+	if got := stripeConnectAccountID(t, e.DB, e.Practice.ID); got == nil || *got != *firstAccountID {
 		t.Fatalf("stripe_connect_account_id changed across attempts: first %v, second %v", firstAccountID, got)
 	}
 	if got := e.Stripe.AccountLinkCallCount(); got != 2 {
@@ -199,7 +199,7 @@ func TestPostConnectHandler_StripeFailureReturns500(t *testing.T) {
 			e.expect(http.MethodPost, connectPath, http.StatusInternalServerError)
 
 			if tc.name == "CreateAccount" {
-				if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got != nil {
+				if got := stripeConnectAccountID(t, e.DB, e.Practice.ID); got != nil {
 					t.Fatalf("stripe_connect_account_id = %v, want nil (never persisted)", got)
 				}
 			}
@@ -388,7 +388,7 @@ func TestPostConnectHandler_PassesPracticeNameToStripe(t *testing.T) {
 	if len(e.Stripe.AccountProfiles) != 1 {
 		t.Fatalf("AccountProfiles = %v, want exactly one CreateAccount call", e.Stripe.AccountProfiles)
 	}
-	want := testdb.Scalar[string](t, e.db.Admin, `SELECT name FROM practices WHERE id = $1`, e.Practice.ID)
+	want := testdb.Scalar[string](t, e.DB.Admin, `SELECT name FROM practices WHERE id = $1`, e.Practice.ID)
 	if e.Stripe.AccountProfiles[0].PracticeName != want {
 		t.Fatalf("display name sent to Stripe = %q, want the Practice's own name %q", e.Stripe.AccountProfiles[0].PracticeName, want)
 	}
@@ -422,7 +422,7 @@ func TestPostConnectHandler_RefusesWithoutDeclaredWebsite(t *testing.T) {
 	if got := e.Stripe.AccountLinkCallCount(); got != 0 {
 		t.Fatalf("CreateAccountLink calls = %d, want 0", got)
 	}
-	if got := stripeConnectAccountID(t, e.db, e.Practice.ID); got != nil {
+	if got := stripeConnectAccountID(t, e.DB, e.Practice.ID); got != nil {
 		t.Fatalf("stripe_connect_account_id = %v, want nil", got)
 	}
 }
@@ -480,7 +480,7 @@ func TestPostConnectHandler_SendsHerOwnWebsiteToStripe(t *testing.T) {
 // carries the words she wrote as Stripe's product description.
 func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 	e := newEnv(t)
-	seedPaymentsHostedPage(t, e.db, e.Practice.ID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
+	seedPaymentsHostedPage(t, e.DB, e.Practice.ID, "rochester-doulas", "Birth and postpartum doula support across Monroe County.")
 
 	e.expect(http.MethodPost, connectPath, http.StatusOK)
 
@@ -501,7 +501,7 @@ func TestPostConnectHandler_SendsHerHostedPageToStripe(t *testing.T) {
 // with no visible cause.
 func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T) {
 	e := newEnv(t)
-	seedHostedPageInState(t, e.db, e.Practice.ID, "test-practice", "Birth support.", "failed")
+	seedHostedPageInState(t, e.DB, e.Practice.ID, "test-practice", "Birth support.", "failed")
 
 	out := e.postRefused(connectPath, http.StatusConflict)
 
@@ -518,7 +518,7 @@ func TestPostConnectHandler_RefusesWhenHerPublishedPageDoesNotLoad(t *testing.T)
 // there would block the happy path.
 func TestPostConnectHandler_AllowsAPageStillWaitingForItsDeploy(t *testing.T) {
 	e := newEnv(t)
-	seedHostedPageInState(t, e.db, e.Practice.ID, "test-practice", "Birth support.", "pending")
+	seedHostedPageInState(t, e.DB, e.Practice.ID, "test-practice", "Birth support.", "pending")
 
 	e.expect(http.MethodPost, connectPath, http.StatusOK)
 }

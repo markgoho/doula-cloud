@@ -33,9 +33,9 @@ func paymentRowByID(t *testing.T, db *testdb.DB, paymentID string) reversalRow {
 // record records a manual check Payment for the whole amount against
 // invoiceID as the Staff member at the screen and returns its id.
 func (e *env) record(invoiceID string) (paymentID string) {
-	e.t.Helper()
-	return reqtest.Expect[payments.PaymentView](e.t, http.MethodPost, e.url(paymentsPath(invoiceID)), http.StatusCreated,
-		e.signedIn, paymentRequest(payments.PaymentMethodCheck, "check #1", todayInSeededZone(e.t))).ID
+	e.T.Helper()
+	return reqtest.Expect[payments.PaymentView](e.T, http.MethodPost, e.PracticeURL(paymentsPath(invoiceID)), http.StatusCreated,
+		e.SignedIn, paymentRequest(payments.PaymentMethodCheck, "check #1", todayInSeededZone(e.T))).ID
 }
 
 func reversalPath(invoiceID, paymentID string) string {
@@ -44,9 +44,9 @@ func reversalPath(invoiceID, paymentID string) string {
 
 // reverse reverses paymentID as the Staff member at the screen.
 func (e *env) reverse(invoiceID, paymentID, reason string) payments.PaymentView {
-	e.t.Helper()
-	return reqtest.Expect[payments.PaymentView](e.t, http.MethodPost, e.url(reversalPath(invoiceID, paymentID)), http.StatusCreated,
-		e.signedIn, reqtest.JSON(payments.ReversePaymentRequest{Reason: reason}))
+	e.T.Helper()
+	return reqtest.Expect[payments.PaymentView](e.T, http.MethodPost, e.PracticeURL(reversalPath(invoiceID, paymentID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.ReversePaymentRequest{Reason: reason}))
 }
 
 // TestPostReversePaymentHandler_ByHandHappyPath proves the core path: an
@@ -69,10 +69,10 @@ func TestPostReversePaymentHandler_ByHandHappyPath(t *testing.T) {
 	if out.Reason == nil || *out.Reason != "logged against the wrong invoice" {
 		t.Fatalf("reversal.reason = %v, want the given reason", out.Reason)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusOpen {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusOpen {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusOpen)
 	}
-	row := paymentRowByID(t, e.db, out.ID)
+	row := paymentRowByID(t, e.DB, out.ID)
 	if row.kind != "reversal" || row.amountCents != -seedByHandInvoiceAmountCents {
 		t.Fatalf("reversal row = %+v, want kind reversal amount %d", row, -seedByHandInvoiceAmountCents)
 	}
@@ -119,16 +119,16 @@ func TestPostReversePaymentHandler_Refusals(t *testing.T) {
 			name: "a Payment against a Stripe-backed Invoice",
 			setup: func(e *env) (string, string) {
 				invoiceID := e.stripeInvoice("in_reverse_stripe", "")
-				if _, err := e.db.Admin.ExecContext(e.t.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, invoiceID); err != nil {
-					e.t.Fatalf("seed paid status: %v", err)
+				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, invoiceID); err != nil {
+					e.T.Fatalf("seed paid status: %v", err)
 				}
-				if _, err := e.db.Admin.ExecContext(e.t.Context(),
+				if _, err := e.DB.Admin.ExecContext(e.T.Context(),
 					`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, method) VALUES ($1, 15000, now(), 'manual', 'check')`,
 					invoiceID,
 				); err != nil {
-					e.t.Fatalf("seed manual payment on stripe-backed invoice: %v", err)
+					e.T.Fatalf("seed manual payment on stripe-backed invoice: %v", err)
 				}
-				return invoiceID, testdb.Scalar[string](e.t, e.db.Admin, `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID)
+				return invoiceID, testdb.Scalar[string](e.T, e.DB.Admin, `SELECT id FROM payments WHERE invoice_id = $1`, invoiceID)
 			},
 			reason: "wrong invoice", want: http.StatusConflict, invoiceStays: invoiceStatusPaid,
 		},
@@ -191,19 +191,19 @@ func TestPostReversePaymentHandler_Refusals(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t)
 			invoiceID, paymentID := tc.setup(e)
-			who := e.signedIn
+			who := e.SignedIn
 			if len(tc.as) > 0 {
-				who = e.as(e.staff(tc.as...))
+				who = e.As(e.Colleague(tc.as...))
 			}
 			body := tc.body
 			if body == nil {
 				body = reqtest.JSON(payments.ReversePaymentRequest{Reason: tc.reason})
 			}
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.url(reversalPath(invoiceID, paymentID)), tc.want, who, body)
+			reqtest.ExpectStatus(t, http.MethodPost, e.PracticeURL(reversalPath(invoiceID, paymentID)), tc.want, who, body)
 
 			if tc.invoiceStays != "" {
-				if status := invoiceStatusFor(t, e.db, invoiceID); status != tc.invoiceStays {
+				if status := invoiceStatusFor(t, e.DB, invoiceID); status != tc.invoiceStays {
 					t.Fatalf("invoice status = %q, want unchanged %q", status, tc.invoiceStays)
 				}
 			}
@@ -220,7 +220,7 @@ func TestGetInvoicesHandler_ActivePaymentIDTracksReversal(t *testing.T) {
 	engagementID, invoiceID := e.byHandInvoice()
 	items := func() []payments.InvoiceView {
 		return reqtest.Expect[payments.ListInvoicesResponse](t, http.MethodGet,
-			e.url("/engagements/"+engagementID+"/contract/invoices"), http.StatusOK, e.signedIn).Items
+			e.PracticeURL("/engagements/"+engagementID+"/contract/invoices"), http.StatusOK, e.SignedIn).Items
 	}
 
 	// Before any Payment: no active one.

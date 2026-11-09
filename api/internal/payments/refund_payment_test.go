@@ -106,26 +106,26 @@ func refundPath(invoiceID, paymentID string) string {
 // Invoice for seedByHandInvoiceAmountCents with a check recorded against
 // it in full.
 func (e *env) paidByHandInvoice() (engagementID, invoiceID, paymentID string) {
-	e.t.Helper()
+	e.T.Helper()
 	engagementID, invoiceID = e.byHandInvoice()
 	return engagementID, invoiceID, e.record(invoiceID)
 }
 
 // refund returns amount of paymentID as the Staff member at the screen.
 func (e *env) refund(invoiceID, paymentID string, req payments.RefundPaymentRequest) payments.PaymentView {
-	e.t.Helper()
-	return reqtest.Expect[payments.PaymentView](e.t, http.MethodPost, e.url(refundPath(invoiceID, paymentID)), http.StatusCreated,
-		e.signedIn, reqtest.JSON(req))
+	e.T.Helper()
+	return reqtest.Expect[payments.PaymentView](e.T, http.MethodPost, e.PracticeURL(refundPath(invoiceID, paymentID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(req))
 }
 
 // refuseRefund checks both halves of a refusal: the status, and the exact
 // message a caller reads -- two refusals that share a status must not be
 // able to swap messages unnoticed.
 func (e *env) refuseRefund(invoiceID, paymentID string, req payments.RefundPaymentRequest, wantStatus int, wantMessage string) {
-	e.t.Helper()
+	e.T.Helper()
 	got := e.postRefused(refundPath(invoiceID, paymentID), wantStatus, reqtest.JSON(req))
 	if got.Message != wantMessage {
-		e.t.Fatalf("message = %q, want %q", got.Message, wantMessage)
+		e.T.Fatalf("message = %q, want %q", got.Message, wantMessage)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestPostRefundPaymentHandler_ByHandFullRefundLeavesInvoicePaid(t *testing.T
 		t.Fatalf("refund.kind = %q, want refund", out.Kind)
 	}
 
-	row := refundRowByID(t, e.db, out.ID)
+	row := refundRowByID(t, e.DB, out.ID)
 	if row.kind != kindRefund || row.amountCents != -seedByHandInvoiceAmountCents {
 		t.Fatalf("refund row = %+v, want kind refund amount %d", row, -seedByHandInvoiceAmountCents)
 	}
@@ -172,18 +172,18 @@ func TestPostRefundPaymentHandler_ByHandFullRefundLeavesInvoicePaid(t *testing.T
 		t.Fatalf("refund row stripe reference = %q, want none on the by-hand rail", *row.stripeReference)
 	}
 
-	original := refundRowByID(t, e.db, paymentID)
+	original := refundRowByID(t, e.DB, paymentID)
 	if original.kind != "manual" || original.amountCents != seedByHandInvoiceAmountCents {
 		t.Fatalf("original payment = %+v, want it untouched", original)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want it to stay %q", status, invoiceStatusPaid)
 	}
 	if len(e.Stripe.RefundCreditNoteCalls) != 0 {
 		t.Fatalf("credit note calls = %d, want 0 on the by-hand rail", len(e.Stripe.RefundCreditNoteCalls))
 	}
 
-	diffs := refundActivityDiffs(t, e.db, engagementID)
+	diffs := refundActivityDiffs(t, e.DB, engagementID)
 	if len(diffs) != 1 {
 		t.Fatalf("payment_refunded activity rows = %d, want 1", len(diffs))
 	}
@@ -212,10 +212,10 @@ func TestPostRefundPaymentHandler_PartialRefundsAreBoundedTogether(t *testing.T)
 	e.refund(invoiceID, paymentID, transfer(5000))
 	e.refuseRefund(invoiceID, paymentID, transfer(1), http.StatusConflict, payments.MsgRefundExceedsPayment)
 
-	if got := len(refundActivityDiffs(t, e.db, engagementID)); got != 2 {
+	if got := len(refundActivityDiffs(t, e.DB, engagementID)); got != 2 {
 		t.Fatalf("payment_refunded activity rows = %d, want 2", got)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 }
@@ -228,7 +228,7 @@ func TestPostRefundPaymentHandler_SingleRefundOverPaymentRefused(t *testing.T) {
 
 	e.refuseRefund(invoiceID, paymentID, checkRefund(seedByHandInvoiceAmountCents+1), http.StatusConflict, payments.MsgRefundExceedsPayment)
 
-	if got := paymentRowCount(t, e.db, invoiceID); got != 1 {
+	if got := paymentRowCount(t, e.DB, invoiceID); got != 1 {
 		t.Fatalf("payments for invoice = %d, want only the original", got)
 	}
 }
@@ -254,7 +254,7 @@ func TestPostRefundPaymentHandler_RequestShapeRefusals(t *testing.T) {
 			e.expect(http.MethodPost, refundPath(invoiceID, paymentID), http.StatusBadRequest, reqtest.JSON(tc.req))
 		})
 	}
-	if got := paymentRowCount(t, e.db, invoiceID); got != 1 {
+	if got := paymentRowCount(t, e.DB, invoiceID); got != 1 {
 		t.Fatalf("payments for invoice = %d, want only the original", got)
 	}
 }
@@ -343,7 +343,7 @@ func TestPostReversePaymentHandler_RefundedPaymentCannotBeReversed(t *testing.T)
 	if got.Message != payments.MsgRefundedPaymentCannotBeReversed {
 		t.Fatalf("message = %q, want %q", got.Message, payments.MsgRefundedPaymentCannotBeReversed)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want it to stay %q", status, invoiceStatusPaid)
 	}
 }
@@ -366,7 +366,7 @@ func TestPostRefundPaymentHandler_RefundRowIsNotATarget(t *testing.T) {
 func TestPostRefundPaymentHandler_StripeCardPaymentIssuesRefundCreditNote(t *testing.T) {
 	e := newEnv(t, connected())
 	_, invoiceID := e.seedStripeInvoice("in_refund_card", invoiceStatusOpen, 15000)
-	paymentID := seedStripePayment(t, e.db, invoiceID, 15000, "pi_refund_card")
+	paymentID := seedStripePayment(t, e.DB, invoiceID, 15000, "pi_refund_card")
 
 	e.expect(http.MethodPost, refundPath(invoiceID, paymentID), http.StatusBadRequest, reqtest.JSON(checkRefund(5000)))
 
@@ -379,14 +379,14 @@ func TestPostRefundPaymentHandler_StripeCardPaymentIssuesRefundCreditNote(t *tes
 	if got := e.Stripe.RefundCreditNoteCalls[0]; got != want {
 		t.Fatalf("credit note call = %+v, want %+v", got, want)
 	}
-	row := refundRowByID(t, e.db, out.ID)
+	row := refundRowByID(t, e.DB, out.ID)
 	if row.method != nil {
 		t.Fatalf("card refund method = %q, want none", *row.method)
 	}
 	if row.stripeReference == nil || len(*row.stripeReference) < 3 || (*row.stripeReference)[:3] != "re_" {
 		t.Fatalf("card refund reference = %v, want the Refund object's re_ id", row.stripeReference)
 	}
-	if status := invoiceStatusFor(t, e.db, invoiceID); status != invoiceStatusPaid {
+	if status := invoiceStatusFor(t, e.DB, invoiceID); status != invoiceStatusPaid {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 }
@@ -407,7 +407,7 @@ func TestPostRefundPaymentHandler_StripeOutOfBandPaymentRecordsCreditNote(t *tes
 	if len(e.Stripe.RefundCreditNoteCalls) != 1 || e.Stripe.RefundCreditNoteCalls[0] != want {
 		t.Fatalf("credit note calls = %+v, want exactly %+v", e.Stripe.RefundCreditNoteCalls, want)
 	}
-	row := refundRowByID(t, e.db, out.ID)
+	row := refundRowByID(t, e.DB, out.ID)
 	if row.method == nil || *row.method != "check" {
 		t.Fatalf("out-of-band refund method = %v, want check", row.method)
 	}
@@ -424,14 +424,14 @@ func TestPostRefundPaymentHandler_StripeFailureRecordsNothing(t *testing.T) {
 	stripe.RefundCreditNoteErr = errStripeFake
 	e := newEnv(t, withStripe(stripe), connected())
 	engagementID, invoiceID := e.seedStripeInvoice("in_refund_fail", invoiceStatusOpen, 15000)
-	paymentID := seedStripePayment(t, e.db, invoiceID, 15000, "pi_refund_fail")
+	paymentID := seedStripePayment(t, e.DB, invoiceID, 15000, "pi_refund_fail")
 
 	e.refuseRefund(invoiceID, paymentID, payments.RefundPaymentRequest{AmountCents: 5000}, http.StatusBadGateway, payments.MsgStripeRefundFailed)
 
-	if got := paymentRowCount(t, e.db, invoiceID); got != 1 {
+	if got := paymentRowCount(t, e.DB, invoiceID); got != 1 {
 		t.Fatalf("payments for invoice = %d, want only the original", got)
 	}
-	if got := len(refundActivityDiffs(t, e.db, engagementID)); got != 0 {
+	if got := len(refundActivityDiffs(t, e.DB, engagementID)); got != 0 {
 		t.Fatalf("payment_refunded activity rows = %d, want 0", got)
 	}
 }
@@ -481,7 +481,7 @@ func TestRefundedInvoice_BookFiguresTellTheTruth(t *testing.T) {
 func TestStripeCardPayment_IsOfferedAsActive(t *testing.T) {
 	e := newEnv(t, connected())
 	engagementID, invoiceID := e.seedStripeInvoice("in_active_card", invoiceStatusOpen, 15000)
-	paymentID := seedStripePayment(t, e.db, invoiceID, 15000, "pi_active_card")
+	paymentID := seedStripePayment(t, e.DB, invoiceID, 15000, "pi_active_card")
 
 	page := e.listInvoices(engagementID)
 

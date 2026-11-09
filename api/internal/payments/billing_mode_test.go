@@ -13,18 +13,18 @@ import (
 const billingModePath = "/payments/billing-mode"
 
 func (e *env) billingMode() payments.BillingModeView {
-	e.t.Helper()
-	return reqtest.Expect[payments.BillingModeView](e.t, http.MethodGet, e.url(billingModePath), http.StatusOK, e.signedIn)
+	e.T.Helper()
+	return reqtest.Expect[payments.BillingModeView](e.T, http.MethodGet, e.PracticeURL(billingModePath), http.StatusOK, e.SignedIn)
 }
 
 func (e *env) putBillingMode(mode string, want int) {
-	e.t.Helper()
+	e.T.Helper()
 	e.expect(http.MethodPut, billingModePath, want, reqtest.JSON(payments.PutBillingModeRequest{BillingMode: mode}))
 }
 
 func (e *env) billingModeChangedRows() int {
-	e.t.Helper()
-	return testdb.Scalar[int](e.t, e.db.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`, e.Practice.ID)
+	e.T.Helper()
+	return testdb.Scalar[int](e.T, e.DB.Admin, `SELECT count(*) FROM activity WHERE practice_id = $1 AND subject_kind = 'practice' AND action = 'billing_mode_changed'`, e.Practice.ID)
 }
 
 // TestGetBillingModeHandler_UnsetReturnsNoValue proves a Practice that
@@ -57,7 +57,7 @@ func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
 
 	e.putBillingMode(string(payments.BillingModeByHand), http.StatusOK)
 
-	mode, ok := billingModeOfPractice(t, e.db, e.Practice.ID)
+	mode, ok := billingModeOfPractice(t, e.DB, e.Practice.ID)
 	if !ok || mode != string(payments.BillingModeByHand) {
 		t.Fatalf("billing_mode = (%q, ok=%v), want (%q, true)", mode, ok, payments.BillingModeByHand)
 	}
@@ -74,8 +74,8 @@ func TestPutBillingModeHandler_OwnerCanChangeEstablishedMode(t *testing.T) {
 func TestPutBillingModeHandler_SameModeRecordsNothing(t *testing.T) {
 	e := newEnv(t, withBillingMode(payments.BillingModeStripe))
 
-	out := reqtest.Expect[payments.BillingModeView](t, http.MethodPut, e.url(billingModePath), http.StatusOK,
-		e.signedIn, reqtest.JSON(payments.PutBillingModeRequest{BillingMode: string(payments.BillingModeStripe)}))
+	out := reqtest.Expect[payments.BillingModeView](t, http.MethodPut, e.PracticeURL(billingModePath), http.StatusOK,
+		e.SignedIn, reqtest.JSON(payments.PutBillingModeRequest{BillingMode: string(payments.BillingModeStripe)}))
 
 	if out.BillingMode == nil || *out.BillingMode != string(payments.BillingModeStripe) {
 		t.Fatalf("billingMode = %v, want %q", out.BillingMode, payments.BillingModeStripe)
@@ -105,7 +105,7 @@ func TestPutBillingModeHandler_Refusals(t *testing.T) {
 
 			e.expect(http.MethodPut, billingModePath, tc.want, tc.body)
 
-			if mode, _ := billingModeOfPractice(t, e.db, e.Practice.ID); mode != string(payments.BillingModeStripe) {
+			if mode, _ := billingModeOfPractice(t, e.DB, e.Practice.ID); mode != string(payments.BillingModeStripe) {
 				t.Fatalf("billing_mode = %q, want unchanged %q", mode, payments.BillingModeStripe)
 			}
 		})
