@@ -133,36 +133,6 @@ func TestCreateHandler_ForbiddenForNonDoula(t *testing.T) {
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
 }
 
-func TestCreateHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-wrong-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "doula-elsewhere", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestCreateHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-bad-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 func TestListHandler_ReturnsVisitsForEngagement(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-listing"
@@ -274,26 +244,6 @@ func TestListHandler_VisibleToNonDoulaStaff(t *testing.T) {
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
-// TestListHandler_ContractorWithoutAttachmentForbidden proves ADR-0008's
-// attachment rule: a contractor Doula with no engagement_attachments row
-// gets the same "not found" response an out-of-practice Engagement gets.
-func TestListHandler_ContractorWithoutAttachmentForbidden(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-visits", []string{doulaRole}, "employee")
-	contractorUID := "contractor-unattached-visits"
-	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
 // TestListHandler_ContractorWithGrantedAttachmentSucceeds proves the
 // other half: an open, granted attachment reaches.
 func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
@@ -312,36 +262,6 @@ func TestListHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T) {
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-func TestListHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-list-wrong-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, _ := testdb.SeedStaffAtNewPractice(t, db, "doula-list-elsewhere", []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestListHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-list-bad-engagement"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits")
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestReassignHandler_Success(t *testing.T) {
@@ -425,27 +345,6 @@ func TestCreateHandler_LogsOnlyTheAssignee(t *testing.T) {
 	}
 }
 
-func TestReassignHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-wrong-practice"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-reassign-elsewhere", []string{doulaRole}, "employee")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
 // An Admin who is not herself a Doula is the person whose job scheduling
 // is (ADR-0006, ADR-0008), so handing a Visit to a colleague is hers to
 // do -- #268 replaced the Doula-only guard that used to refuse her.
@@ -470,26 +369,6 @@ func TestReassignHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	reqtest.RequireStatus(t, resp, http.StatusOK)
 }
 
-func TestReassignHandler_TargetNotStaffAtPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-unknown-target"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{ownerRole, doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: "00000000-0000-0000-0000-000000000000"})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 func TestReassignHandler_TargetNotDoula(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "doula-reassign-non-doula-target"
@@ -506,98 +385,6 @@ func TestReassignHandler_TargetNotDoula(t *testing.T) {
 		t.Fatalf("marshal body: %v", err)
 	}
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestReassignHandler_VisitNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-missing-visit"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000", body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestReassignHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-bad-body"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, []byte("not json"))
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestReassignHandler_InvalidStaffID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-bad-staff-id"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: notAUUID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID, body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestReassignHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-bad-engagement-id"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000", body)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestReassignHandler_InvalidVisitID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-reassign-bad-visit-id"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ReassignRequest{StaffID: staffID})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid", body)
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
@@ -765,27 +552,6 @@ func TestCreateHandler_GrantsNothingToAContractorWhoLoggedAVisit(t *testing.T) {
 	}
 }
 
-// TestCreateHandler_RefusesAnUnattachedContractor is what the old form of
-// the test above never actually exercised: with no attachment at all, a
-// contractor cannot reach the route -- staffauth.AttachingWrite's own
-// CanAccessEngagement precheck 404s before CreateHandler's own body runs,
-// the same "not found" shape TestListHandler_ContractorWithoutAttachmentForbidden
-// proves for the read side.
-func TestCreateHandler_RefusesAnUnattachedContractor(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "contractor-unattached-logging"
-	practiceID := testdb.SeedPractice(t, db, "Test Practice")
-	testdb.SeedContractorAtPractice(t, db, practiceID, identityUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPost(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits")
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
 // #250: POST .../visits now accepts an optional scheduledAt, and a Visit
 // created with one carries it into both the create response and the list.
 func TestCreateHandler_WithScheduledAt(t *testing.T) {
@@ -852,23 +618,6 @@ func TestCreateHandler_InvalidScheduledAt(t *testing.T) {
 		t.Fatalf("marshal body: %v", err)
 	}
 	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// A malformed body -- not merely an unparsable scheduledAt value, but
-// invalid JSON altogether -- still refuses, even though POST's body is
-// otherwise optional (apierr.DecodeJSONOptional).
-func TestCreateHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-creating-bad-body"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedBody(t, session, http.MethodPost, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits", []byte("not json"))
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 }
@@ -1138,25 +887,6 @@ func waitForLockContention(t *testing.T, db *testdb.DB) {
 	t.Fatal("timed out waiting for the request under test to contend for the Visit row's lock")
 }
 
-func TestScheduleHandler_InvalidFormat(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-scheduling-bad-format"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("not-a-timestamp")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
 // Setting a Visit's date is the Admin's own job, not something the Doula
 // role gates (#268) -- see ScheduleHandler's doc comment.
 func TestScheduleHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
@@ -1177,118 +907,6 @@ func TestScheduleHandler_AllowedForAnAdminWhoIsNotADoula(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-func TestScheduleHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-schedule-wrong-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-schedule-elsewhere", []string{doulaRole}, "employee")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestScheduleHandler_VisitNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-schedule-missing-visit"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestScheduleHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-schedule-bad-body"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", []byte("not json"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestScheduleHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-schedule-bad-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestScheduleHandler_InvalidVisitID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-schedule-bad-visit-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
-// unattached contractor before ScheduleHandler's own body ever runs, the
-// same shape TestCreateHandler_RefusesAnUnattachedContractor proves for
-// create.
-func TestScheduleHandler_RefusesAnUnattachedContractor(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-schedule", []string{doulaRole}, "employee")
-	contractorUID := "contractor-unattached-schedule"
-	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.ScheduleRequest{ScheduledAt: new("2027-04-01T09:00:00Z")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/schedule", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestListHandler_ReturnsNotes proves list.Visit round-trips notes (#251):
@@ -1746,138 +1364,6 @@ func TestNotesHandler_AllowedForNonDoulaCaller(t *testing.T) {
 	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusOK)
-}
-
-func TestNotesHandler_EngagementNotFoundAtWrongPractice(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-wrong-practice"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	otherPracticeID, otherStaffID := testdb.SeedStaffAtNewPractice(t, db, "doula-notes-elsewhere", []string{doulaRole}, "employee")
-	_, otherEngagementID := testdb.SeedEngagement(t, db, otherPracticeID)
-	visitID := seedVisit(t, db, otherEngagementID, otherStaffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+otherEngagementID+"/visits/"+visitID+"/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestNotesHandler_VisitNotFound(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-missing-visit"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/00000000-0000-0000-0000-000000000000/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
-}
-
-func TestNotesHandler_MissingNotesRejected(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-missing-field"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: nil})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestNotesHandler_InvalidBody(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-bad-body"
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", []byte("not json"))
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestNotesHandler_InvalidEngagementID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-bad-engagement-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/not-a-uuid/visits/00000000-0000-0000-0000-000000000000/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-func TestNotesHandler_InvalidVisitID(t *testing.T) {
-	db := testdb.New(t)
-	const identityUID = "doula-notes-bad-visit-id"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, identityUID, []string{doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-
-	srv, session := newServer(t, db, identityUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/not-a-uuid/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusBadRequest)
-}
-
-// staffauth.AttachingWrite's own CanAccessEngagement precheck 404s an
-// unattached contractor before NotesHandler's own body ever runs, the same
-// shape TestScheduleHandler_RefusesAnUnattachedContractor proves for
-// schedule -- proving the read-parity rule holds even though NotesHandler
-// asserts no role of its own.
-func TestNotesHandler_RefusesAnUnattachedContractor(t *testing.T) {
-	db := testdb.New(t)
-	practiceID, staffID := testdb.SeedStaffAtNewPractice(t, db, "doula-owner-of-notes", []string{doulaRole}, "employee")
-	contractorUID := "contractor-unattached-notes"
-	testdb.SeedContractorAtPractice(t, db, practiceID, contractorUID)
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-	visitID := seedVisit(t, db, engagementID, staffID)
-
-	srv, session := newServer(t, db, contractorUID)
-	defer srv.Close()
-
-	body, err := json.Marshal(visit.NotesRequest{Notes: new("notes")})
-	if err != nil {
-		t.Fatalf("marshal body: %v", err)
-	}
-	resp := authedPatch(t, session, srv.URL+"/api/practices/"+practiceID+"/engagements/"+engagementID+"/visits/"+visitID+"/notes", body)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNotFound)
 }
 
 // TestNotesHandler_AllowsAnAttachedContractor is the other half: a

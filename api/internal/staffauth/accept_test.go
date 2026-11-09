@@ -13,7 +13,6 @@ import (
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -53,7 +52,7 @@ func newAcceptServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.S
 
 func newAcceptServerWithAccounts(t *testing.T, db *testdb.DB, uid, email string, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
-	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, accounts, tasknudge.NoOpEnqueuer{})
+	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, accounts)
 }
 
 // newInviteeEnv is a Practice whose Owner is at the screen as the inviter,
@@ -301,14 +300,14 @@ func TestAcceptInviteHandler_BadRequests(t *testing.T) {
 		name string
 		body any
 	}{
-		{"invalid body", "not json"},
+		{"invalid body", notJSON},
 		{"missing token", staffauth.AcceptInviteRequest{WorkState: "NY", FirstName: "Nameless", LastName: placeholderLastName}},
 		// A new person must name herself: practice_invitations carries no
 		// name column, so there is nothing to fall back to.
 		{"missing name for a new person", staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token}},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(*testing.T) {
 			e.refuseAccept(tc.body, http.StatusBadRequest)
 		})
 	}

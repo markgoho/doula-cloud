@@ -89,7 +89,7 @@ func TestHistory_Refuses(t *testing.T) {
 	}{
 		{"a Doula", false, func(e *env) (string, string) { return e.Staff.ID, "" }, http.StatusForbidden},
 		{"a cursor that is not one", true, func(e *env) (string, string) { return e.Staff.ID, "?cursor=not-a-cursor" }, http.StatusBadRequest},
-		{"a staff id that is not a uuid", true, func(*env) (string, string) { return "not-a-uuid", "" }, http.StatusBadRequest},
+		{"a staff id that is not a uuid", true, func(*env) (string, string) { return notAUUID, "" }, http.StatusBadRequest},
 		{"a stranger at another Practice", true, func(e *env) (string, string) {
 			return fixture.Staff(e.T, e.DB, fixture.Practice(e.T, e.DB)).ID, ""
 		}, http.StatusNotFound},

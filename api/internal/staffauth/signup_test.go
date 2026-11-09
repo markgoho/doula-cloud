@@ -217,13 +217,13 @@ func TestSignupHandler_RefusesAnIncompleteForm(t *testing.T) {
 	}{
 		{"no first name",
 			staffauth.SignupRequest{WorkState: "NY", PracticeName: "P", FirstName: "", LastName: placeholderLastName},
-			map[string]string{"firstName": staffauth.MsgFirstNameNeeded}, []string{"lastName"}},
+			map[string]string{firstNameKey: staffauth.MsgFirstNameNeeded}, []string{lastNameKey}},
 		{"neither name",
 			staffauth.SignupRequest{WorkState: "NY"},
-			map[string]string{"firstName": staffauth.MsgFirstNameNeeded, "lastName": staffauth.MsgLastNameNeeded}, []string{"practiceName"}},
+			map[string]string{firstNameKey: staffauth.MsgFirstNameNeeded, lastNameKey: staffauth.MsgLastNameNeeded}, []string{"practiceName"}},
 		{"a work state that is not one",
 			staffauth.SignupRequest{PracticeName: "P", FirstName: "S", LastName: placeholderLastName, WorkState: "ZZ"},
-			map[string]string{"workState": staffauth.MsgWorkStateNeeded}, nil},
+			map[string]string{workStateKey: staffauth.MsgWorkStateNeeded}, nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -256,7 +256,7 @@ func TestSignupHandler_EmptyPracticeNameTakesHerName(t *testing.T) {
 		"empty":       staffauth.SignupRequest{WorkState: "NY", PracticeName: "", FirstName: " " + maryAnne + " ", LastName: smith},
 		"white space": staffauth.SignupRequest{WorkState: "NY", PracticeName: "   ", FirstName: maryAnne, LastName: smith},
 		"no key": map[string]string{
-			"firstName": maryAnne, "lastName": smith, "workState": "NY", "timezone": signupZone,
+			firstNameKey: maryAnne, lastNameKey: smith, workStateKey: "NY", "timezone": signupZone,
 		},
 	}
 	for label, body := range bodies {
@@ -312,7 +312,7 @@ func TestSignupHandler_RefusesAZoneTheDatabaseDoesNotName(t *testing.T) {
 			e := newSignupEnv(t, authntest.Verifier{UID: newOwnerUID, Email: jamieEmail})
 
 			details := e.refused(map[string]string{
-				"practiceName": "P", "firstName": "S", "lastName": "Last", "workState": "NY", "timezone": zone,
+				"practiceName": "P", firstNameKey: "S", lastNameKey: "Last", workStateKey: "NY", "timezone": zone,
 			}, http.StatusBadRequest).Details
 
 			// Two sentences for two different mistakes: nothing chosen

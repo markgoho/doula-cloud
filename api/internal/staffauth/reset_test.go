@@ -15,12 +15,11 @@ import (
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newResetRequestServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
-	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
+	return serveStaffauth(db, authntest.Verifier{}, accounts)
 }
 
 func newResetSpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {

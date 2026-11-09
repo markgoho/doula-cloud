@@ -5,17 +5,17 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
 
-func createFor(t *testing.T, db *testdb.DB, uid, practiceID, engagementID string, body visit.CreateRequest) visit.CreateResponse {
-	t.Helper()
-	srv, session := newServer(t, db, uid)
-	defer srv.Close()
-	resp := createVisit(t, session, visitsURL(srv.URL, practiceID, engagementID), "", body)
-	defer resp.Body.Close()
-	return decodeCreate(t, resp)
+// attachedDoula is a Doula already on the Engagement.
+func (e *env) attachedDoula() fixture.StaffRecord {
+	e.T.Helper()
+	doula := e.Colleague()
+	testdb.SeedGrantedAttachment(e.T, e.DB, e.Engagement.ID, doula.ID)
+	return doula
 }
 
 // #2540: an Admin creating a Visit that names a Doula already on the
@@ -27,19 +27,15 @@ func TestCreateHandler_EmailsTheDoulaItNames(t *testing.T) {
 	scheduled := time.Date(2027, 3, 4, 15, 0, 0, 0, time.UTC).Format(time.RFC3339)
 	for name, scheduledAt := range map[string]*string{"scheduled": &scheduled, "no date": nil} {
 		t.Run(name, func(t *testing.T) {
-			db := testdb.New(t)
-			const adminUID = "admin-creating"
-			practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-			doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-named", []string{doulaRole}, "employee")
-			_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-			testdb.SeedGrantedAttachment(t, db, engagementID, doulaID)
+			e := newEnv(t, signedInAs(fixture.Admin()))
+			doula := e.attachedDoula()
 
-			out := createFor(t, db, adminUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID, ScheduledAt: scheduledAt})
+			out := e.create(visit.CreateRequest{StaffID: &doula.ID, ScheduledAt: scheduledAt})
 
-			if want := []string{doulaID}; !slices.Equal(out.NotifiedStaffIDs, want) {
+			if want := []string{doula.ID}; !slices.Equal(out.NotifiedStaffIDs, want) {
 				t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 			}
-			if got, want := queuedNotices(t, db), []queuedNotice{{doulaID, kindVisitTo, adminID}}; !slices.Equal(got, want) {
+			if got, want := queuedNotices(t, e.DB), []queuedNotice{{doula.ID, kindVisitTo, e.Staff.ID}}; !slices.Equal(got, want) {
 				t.Fatalf("queued = %+v, want %+v", got, want)
 			}
 		})
@@ -51,40 +47,33 @@ func TestCreateHandler_EmailsTheDoulaItNames(t *testing.T) {
 // on a visit" as well. Create and reassign decide it the same way.
 func TestVisitWrites_ADoulaPutOnTheClientGetsOneEmail(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
-		db := testdb.New(t)
-		const ownerUID = "owner-creating"
-		practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{ownerRole}, "employee")
-		doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-new", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		e := newEnv(t, signedInAs(fixture.Owner()))
+		doula := e.Colleague()
 
-		out := createFor(t, db, ownerUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
+		out := e.create(visit.CreateRequest{StaffID: &doula.ID})
 
-		if want := []string{doulaID}; !slices.Equal(out.NotifiedStaffIDs, want) {
+		if want := []string{doula.ID}; !slices.Equal(out.NotifiedStaffIDs, want) {
 			t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 		}
-		if got, want := queuedNotices(t, db), []queuedNotice{{doulaID, kindPutOn, ownerID}}; !slices.Equal(got, want) {
+		if got, want := queuedNotices(t, e.DB), []queuedNotice{{doula.ID, kindPutOn, e.Staff.ID}}; !slices.Equal(got, want) {
 			t.Fatalf("queued = %+v, want %+v", got, want)
 		}
 	})
 	t.Run("reassign", func(t *testing.T) {
-		db := testdb.New(t)
-		const adminUID = "admin-moving"
-		practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-		fromID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-from", []string{doulaRole}, "employee")
-		toID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-new", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-		visitID := seedVisit(t, db, engagementID, fromID)
+		e := newEnv(t, signedInAs(fixture.Admin()))
+		from, to := e.Colleague(), e.Colleague()
+		visitID := seedVisit(t, e.DB, e.Engagement.ID, from.ID)
 
-		out := reassign(t, db, adminUID, practiceID, engagementID, visitID, toID)
+		out := e.reassignOK(visitID, to.ID)
 
-		if want := []string{toID, fromID}; !slices.Equal(out.NotifiedStaffIDs, want) {
+		if want := []string{to.ID, from.ID}; !slices.Equal(out.NotifiedStaffIDs, want) {
 			t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 		}
 		want := []queuedNotice{
-			{toID, kindPutOn, adminID},
-			{fromID, "visit_reassigned_from", adminID},
+			{to.ID, kindPutOn, e.Staff.ID},
+			{from.ID, "visit_reassigned_from", e.Staff.ID},
 		}
-		if got := queuedNotices(t, db); !slices.Equal(got, want) {
+		if got := queuedNotices(t, e.DB); !slices.Equal(got, want) {
 			t.Fatalf("queued = %+v, want %+v", got, want)
 		}
 	})
@@ -92,17 +81,14 @@ func TestVisitWrites_ADoulaPutOnTheClientGetsOneEmail(t *testing.T) {
 
 // #2540: a Doula who creates her own Visit is never mailed about it.
 func TestCreateHandler_EmailsNobodyAboutTheirOwnVisit(t *testing.T) {
-	db := testdb.New(t)
-	const doulaUID = "doula-own"
-	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{ownerRole, doulaRole}, "employee")
-	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
 
-	out := createFor(t, db, doulaUID, practiceID, engagementID, visit.CreateRequest{})
+	out := e.create(visit.CreateRequest{})
 
 	if len(out.NotifiedStaffIDs) != 0 {
 		t.Fatalf("notifiedStaffIds = %v, want none", out.NotifiedStaffIDs)
 	}
-	if got := queuedNotices(t, db); len(got) != 0 {
+	if got := queuedNotices(t, e.DB); len(got) != 0 {
 		t.Fatalf("queued = %+v, want none", got)
 	}
 }

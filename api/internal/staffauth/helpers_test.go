@@ -16,6 +16,18 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
+// Named once so goconst does not see independent literals across this
+// package's tests.
+const (
+	notJSON      = "not json"
+	notAUUID     = "not-a-uuid"
+	noStaffRow   = "a session with no staff row"
+	freshToken   = "fresh-id-token"
+	firstNameKey = "firstName"
+	lastNameKey  = "lastName"
+	workStateKey = "workState"
+)
+
 // env is what a handler test in this package starts from once a Staff
 // member is signed in: a Practice with this package's whole surface
 // mounted through staffauth.Mount, the same call main.go makes on the real
@@ -32,7 +44,6 @@ type envSpec struct {
 	scene    []fixture.SceneOption
 	verifier authn.Verifier
 	accounts *authntest.FakeAccountManager
-	enq      tasknudge.Enqueuer
 }
 
 type envOption func(*envSpec)
@@ -57,19 +68,14 @@ func withAccounts(accounts *authntest.FakeAccountManager) envOption {
 	return func(s *envSpec) { s.accounts = accounts }
 }
 
-// withEnqueuer swaps the worker nudge.
-func withEnqueuer(enq tasknudge.Enqueuer) envOption {
-	return func(s *envSpec) { s.enq = enq }
-}
-
 func newEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
-	spec := envSpec{verifier: authntest.Verifier{}, accounts: authntest.NewFakeAccountManager(), enq: tasknudge.NoOpEnqueuer{}}
+	spec := envSpec{verifier: authntest.Verifier{}, accounts: authntest.NewFakeAccountManager()}
 	for _, opt := range opts {
 		opt(&spec)
 	}
 	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, app *sql.DB) {
-		staffauth.Mount(g, ir, app, spec.verifier, spec.accounts, spec.enq, neverSuppressed)
+		staffauth.Mount(g, ir, app, spec.verifier, spec.accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	}
 	return &env{Scene: fixture.NewScene(t, mount, spec.scene...), accounts: spec.accounts}
 }
@@ -77,16 +83,16 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 // serveStaffauth mounts this package's whole surface through
 // staffauth.Mount on a server of its own, for a test that seeds by hand
 // and signs in with a session it mints itself.
-func serveStaffauth(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) *httptest.Server {
-	return httptest.NewServer(staffauthMux(db, verifier, accounts, enq))
+func serveStaffauth(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager) *httptest.Server {
+	return httptest.NewServer(staffauthMux(db, verifier, accounts))
 }
 
 // staffauthMux is serveStaffauth's handler, for a test that wraps it.
-func staffauthMux(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager, enq tasknudge.Enqueuer) *http.ServeMux {
+func staffauthMux(db *testdb.DB, verifier authn.Verifier, accounts authn.AccountManager) *http.ServeMux {
 	mux := http.NewServeMux()
 	g := staffauth.NewGatedRouter(mux, db.App)
 	ir := idempotency.NewRouter(g, db.App)
-	staffauth.Mount(g, ir, db.App, verifier, accounts, enq, neverSuppressed)
+	staffauth.Mount(g, ir, db.App, verifier, accounts, tasknudge.NoOpEnqueuer{}, neverSuppressed)
 	return mux
 }
 

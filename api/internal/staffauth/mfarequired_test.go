@@ -8,13 +8,12 @@ import (
 
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newMFARequiredServer(t *testing.T, db *testdb.DB, accounts *authntest.FakeAccountManager) (srv *httptest.Server, seedSession func(uid string) string) {
 	t.Helper()
-	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{}), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
+	return serveStaffauth(db, authntest.Verifier{}, accounts), func(uid string) string { return authntest.SeedSession(t, db.App, uid) }
 }
 
 func putMFARequired(t *testing.T, srv *httptest.Server, session, practiceID string, required bool, confirmed bool) *http.Response {

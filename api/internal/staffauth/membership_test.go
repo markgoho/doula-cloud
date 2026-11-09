@@ -145,10 +145,10 @@ func TestUpdateMembershipHandler_Rejects(t *testing.T) {
 		{"no roles", e.Staff.ID, staffauth.UpdateMembershipRequest{EmploymentType: employeeType}},
 		{"unknown role", e.Staff.ID, staffauth.UpdateMembershipRequest{Roles: []string{"superuser"}, EmploymentType: employeeType}},
 		{"unknown employment type", e.Staff.ID, staffauth.UpdateMembershipRequest{Roles: []string{doulaRole}, EmploymentType: "volunteer"}},
-		{"malformed staff id", "not-a-uuid", asDoula()},
+		{"malformed staff id", notAUUID, asDoula()},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
+		t.Run(tc.name, func(*testing.T) {
 			e.patch(tc.staffID, tc.body, http.StatusBadRequest)
 		})
 	}
@@ -203,12 +203,12 @@ func TestRemoveMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 func TestRemoveMembershipHandler_Refuses(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 
-	t.Run("no such membership", func(t *testing.T) {
+	t.Run("no such membership", func(*testing.T) {
 		e.remove(emptyUUID, http.StatusNotFound)
 	})
 
-	t.Run("malformed staff id", func(t *testing.T) {
-		e.remove("not-a-uuid", http.StatusBadRequest)
+	t.Run("malformed staff id", func(*testing.T) {
+		e.remove(notAUUID, http.StatusBadRequest)
 	})
 }
 

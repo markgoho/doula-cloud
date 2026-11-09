@@ -123,12 +123,6 @@ func (e *pingEnv) at(practiceID, path string) string {
 // pingURL is the ping route of the Practice the Staff member works at.
 func (e *pingEnv) pingURL() string { return e.at(e.Practice.ID, "/ping") }
 
-// withoutSecondFactor signs the Staff member in on a session that shows no
-// second factor.
-func (e *pingEnv) withoutSecondFactor() reqtest.Option {
-	return reqtest.Session(authntest.SeedSessionWithSecondFactor(e.T, e.DB.App, e.Staff.UID, false))
-}
-
 // refusalCode requires a 403 and returns the code of its error envelope.
 func refusalCode(t *testing.T, method, url string, opts ...reqtest.Option) apierr.Code {
 	t.Helper()

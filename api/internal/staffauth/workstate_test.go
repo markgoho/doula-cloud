@@ -180,9 +180,9 @@ func TestRoster_CarriesWorkStateAndItsDate(t *testing.T) {
 // putWorkState corrects the work state of the Staff member at the screen.
 // The route carries no {practiceId} and no {staffId}: that absence is the
 // whole authorization story.
-func (e *env) putWorkState(body string, want int, opts ...reqtest.Option) []byte {
+func (e *env) putWorkState(body string, want int, opts ...reqtest.Option) {
 	e.T.Helper()
-	return reqtest.ExpectBody(e.T, http.MethodPut, e.URL("/api/staff/work-state"), want, append([]reqtest.Option{reqtest.RawJSON([]byte(body))}, opts...)...)
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.URL("/api/staff/work-state"), want, append([]reqtest.Option{reqtest.RawJSON([]byte(body))}, opts...)...)
 }
 
 // latestWorkStateEvent returns both sides of the newest audit row for a

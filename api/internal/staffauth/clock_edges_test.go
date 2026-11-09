@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -25,7 +24,7 @@ const clockEdge = time.Microsecond
 func newClockedStaffServer(t *testing.T, db *testdb.DB, uid string, now time.Time) (srv *httptest.Server, session string) {
 	t.Helper()
 	fixed := clock.Middleware(func() time.Time { return now })
-	srv = httptest.NewServer(fixed(staffauthMux(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})))
+	srv = httptest.NewServer(fixed(staffauthMux(db, authntest.Verifier{}, authntest.NewFakeAccountManager())))
 	t.Cleanup(srv.Close)
 	return srv, authntest.SeedSessionAt(t, db.App, uid, now)
 }

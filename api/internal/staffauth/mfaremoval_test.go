@@ -9,13 +9,12 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRemoveSecondFactorServer(t *testing.T, db *testdb.DB, verifier authn.Verifier, accounts *authntest.FakeAccountManager) *httptest.Server {
 	t.Helper()
-	return serveStaffauth(db, verifier, accounts, tasknudge.NoOpEnqueuer{})
+	return serveStaffauth(db, verifier, accounts)
 }
 
 func deleteSecondFactor(t *testing.T, srv *httptest.Server, session, bearer string) *http.Response {

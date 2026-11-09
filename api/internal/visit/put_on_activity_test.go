@@ -4,6 +4,7 @@ import (
 	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/visit"
 )
@@ -33,102 +34,79 @@ func doulaAttachedEntries(t *testing.T, db *testdb.DB, engagementID string) []at
 	return out
 }
 
+// requireAttachedEntries fails unless the Engagement's doula_attached
+// trail is exactly want.
+func (e *env) requireAttachedEntries(want ...attachedEntry) {
+	e.T.Helper()
+	if got := doulaAttachedEntries(e.T, e.DB, e.Engagement.ID); !slices.Equal(got, want) {
+		e.T.Fatalf("doula_attached = %+v, want %+v", got, want)
+	}
+}
+
 // #2567: a Visit that puts a Doula on the Engagement records "Put on this
 // Engagement as the Doula" by the person who saved it, the same entry the
 // Doula row's Save records, and a Visit for a Doula already on it records
 // none.
 func TestVisitWrites_RecordThatADoulaWasPutOnTheEngagement(t *testing.T) {
 	t.Run("create", func(t *testing.T) {
-		db := testdb.New(t)
-		const ownerUID = "owner-creating"
-		practiceID, ownerID := testdb.SeedStaffAtNewPractice(t, db, ownerUID, []string{ownerRole}, "employee")
-		doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-new", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		e := newEnv(t, signedInAs(fixture.Owner()))
+		doula := e.Colleague()
 
-		createFor(t, db, ownerUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
+		e.create(visit.CreateRequest{StaffID: &doula.ID})
 
-		if got, want := doulaAttachedEntries(t, db, engagementID), []attachedEntry{{ownerID, doulaID}}; !slices.Equal(got, want) {
-			t.Fatalf("doula_attached = %+v, want %+v", got, want)
-		}
+		e.requireAttachedEntries(attachedEntry{e.Staff.ID, doula.ID})
 	})
 	t.Run("reassign", func(t *testing.T) {
-		db := testdb.New(t)
-		const adminUID = "admin-moving"
-		practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-		fromID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-from", []string{doulaRole}, "employee")
-		toID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-new", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-		visitID := seedVisit(t, db, engagementID, fromID)
+		e := newEnv(t, signedInAs(fixture.Admin()))
+		from, to := e.Colleague(), e.Colleague()
+		visitID := seedVisit(t, e.DB, e.Engagement.ID, from.ID)
 
-		reassign(t, db, adminUID, practiceID, engagementID, visitID, toID)
+		e.reassignOK(visitID, to.ID)
 
-		if got, want := doulaAttachedEntries(t, db, engagementID), []attachedEntry{{adminID, toID}}; !slices.Equal(got, want) {
-			t.Fatalf("doula_attached = %+v, want %+v", got, want)
-		}
+		e.requireAttachedEntries(attachedEntry{e.Staff.ID, to.ID})
 	})
 	t.Run("already on the Engagement", func(t *testing.T) {
-		db := testdb.New(t)
-		const adminUID = "admin-creating"
-		practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-		doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-on", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-		testdb.SeedGrantedAttachment(t, db, engagementID, doulaID)
+		e := newEnv(t, signedInAs(fixture.Admin()))
+		doula := e.attachedDoula()
 
-		createFor(t, db, adminUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
-		createFor(t, db, adminUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
+		e.create(visit.CreateRequest{StaffID: &doula.ID})
+		e.create(visit.CreateRequest{StaffID: &doula.ID})
 
-		if got := doulaAttachedEntries(t, db, engagementID); len(got) != 0 {
-			t.Fatalf("doula_attached = %+v, want none", got)
-		}
+		e.requireAttachedEntries()
 	})
 	t.Run("a second Visit for the same new Doula", func(t *testing.T) {
-		db := testdb.New(t)
-		const adminUID = "admin-twice"
-		practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-		doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-new", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		e := newEnv(t, signedInAs(fixture.Admin()))
+		doula := e.Colleague()
 
-		createFor(t, db, adminUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
-		createFor(t, db, adminUID, practiceID, engagementID, visit.CreateRequest{StaffID: &doulaID})
+		e.create(visit.CreateRequest{StaffID: &doula.ID})
+		e.create(visit.CreateRequest{StaffID: &doula.ID})
 
-		if got, want := doulaAttachedEntries(t, db, engagementID), []attachedEntry{{adminID, doulaID}}; !slices.Equal(got, want) {
-			t.Fatalf("doula_attached = %+v, want %+v", got, want)
-		}
-		want := []queuedNotice{{doulaID, kindPutOn, adminID}, {doulaID, kindVisitTo, adminID}}
-		if got := queuedNotices(t, db); !slices.Equal(got, want) {
+		e.requireAttachedEntries(attachedEntry{e.Staff.ID, doula.ID})
+		want := []queuedNotice{{doula.ID, kindPutOn, e.Staff.ID}, {doula.ID, kindVisitTo, e.Staff.ID}}
+		if got := queuedNotices(t, e.DB); !slices.Equal(got, want) {
 			t.Fatalf("queued = %+v, want %+v", got, want)
 		}
 	})
 	t.Run("a Visit handed to the Doula who holds it, with only accrued work on the Engagement", func(t *testing.T) {
-		db := testdb.New(t)
-		const adminUID = "admin-confirming"
-		practiceID, adminID := testdb.SeedStaffAtNewPractice(t, db, adminUID, []string{adminRole}, "employee")
-		doulaID := testdb.SeedStaffAtPractice(t, db, practiceID, "doula-accrued", []string{doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
-		testdb.SeedAttachment(t, db, engagementID, doulaID, "accrued", false)
-		visitID := seedVisit(t, db, engagementID, doulaID)
+		e := newEnv(t, signedInAs(fixture.Admin()))
+		doula := e.Colleague()
+		testdb.SeedAttachment(t, e.DB, e.Engagement.ID, doula.ID, "accrued", false)
+		visitID := seedVisit(t, e.DB, e.Engagement.ID, doula.ID)
 
-		out := reassign(t, db, adminUID, practiceID, engagementID, visitID, doulaID)
+		out := e.reassignOK(visitID, doula.ID)
 
-		if want := []string{doulaID}; !slices.Equal(out.NotifiedStaffIDs, want) {
+		if want := []string{doula.ID}; !slices.Equal(out.NotifiedStaffIDs, want) {
 			t.Fatalf("notifiedStaffIds = %v, want %v", out.NotifiedStaffIDs, want)
 		}
-		if got, want := doulaAttachedEntries(t, db, engagementID), []attachedEntry{{adminID, doulaID}}; !slices.Equal(got, want) {
-			t.Fatalf("doula_attached = %+v, want %+v", got, want)
-		}
+		e.requireAttachedEntries(attachedEntry{e.Staff.ID, doula.ID})
 	})
 	t.Run("self", func(t *testing.T) {
-		db := testdb.New(t)
-		const doulaUID = "doula-own"
-		practiceID, doulaID := testdb.SeedStaffAtNewPractice(t, db, doulaUID, []string{ownerRole, doulaRole}, "employee")
-		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
+		e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
 
-		createFor(t, db, doulaUID, practiceID, engagementID, visit.CreateRequest{})
+		e.create(visit.CreateRequest{})
 
-		if got, want := doulaAttachedEntries(t, db, engagementID), []attachedEntry{{doulaID, doulaID}}; !slices.Equal(got, want) {
-			t.Fatalf("doula_attached = %+v, want %+v", got, want)
-		}
-		if got := queuedNotices(t, db); len(got) != 0 {
+		e.requireAttachedEntries(attachedEntry{e.Staff.ID, e.Staff.ID})
+		if got := queuedNotices(t, e.DB); len(got) != 0 {
 			t.Fatalf("queued = %+v, want none", got)
 		}
 	})

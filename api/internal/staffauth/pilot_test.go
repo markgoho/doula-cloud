@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -26,7 +25,7 @@ const (
 // against one database.
 func newPilotServer(t *testing.T, db *testdb.DB, uid, email string) *httptest.Server {
 	t.Helper()
-	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{})
+	return serveStaffauth(db, authntest.Verifier{UID: uid, Email: email}, authntest.NewFakeAccountManager())
 }
 
 func pilotSignup(t *testing.T, srv *httptest.Server) *http.Response {

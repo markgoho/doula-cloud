@@ -42,7 +42,7 @@ func TestChangeEmailHandler_RefusesAnUnreadableRequest(t *testing.T) {
 		body string
 	}{
 		{"a missing new address", `{"newEmail":""}`},
-		{"a body that is not JSON", `not json`},
+		{"a body that is not JSON", notJSON},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

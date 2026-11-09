@@ -24,15 +24,6 @@ func createVisit(t *testing.T, session, url, key string, body visit.CreateReques
 	return resp
 }
 
-// decodeCreate reads a CreateResponse off a 201, failing the test on any
-// other status -- the shape most of the success cases below want.
-func decodeCreate(t *testing.T, resp *http.Response) visit.CreateResponse {
-	t.Helper()
-	reqtest.RequireStatus(t, resp, http.StatusCreated)
-	out := reqtest.Decode[visit.CreateResponse](t, resp)
-	return out
-}
-
 // countVisits is how the refusal cases prove no row was written.
 func countVisits(t *testing.T, db *testdb.DB, engagementID string) int {
 	t.Helper()

@@ -259,7 +259,7 @@ func TestDeleteLoginHandler_RefusesWithoutAStaffMember(t *testing.T) {
 		session func(e *env) reqtest.Option
 	}{
 		{"no session", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("") }},
-		{"a session with no staff row", http.StatusNotFound, func(e *env) reqtest.Option {
+		{noStaffRow, http.StatusNotFound, func(e *env) reqtest.Option {
 			return reqtest.Session(authntest.SeedSession(e.T, e.DB.App, "a-uid-with-no-staff-row"))
 		}},
 	}

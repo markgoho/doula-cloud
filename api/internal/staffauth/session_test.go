@@ -27,7 +27,7 @@ func TestSessionHandler_Refuses(t *testing.T) {
 		// A cookie that names no live session -- the shape a stale or
 		// forged cookie arrives in.
 		{"a session that was never issued", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("never-issued") }},
-		{"a session with no staff row", http.StatusNotFound, func(e *env) reqtest.Option {
+		{noStaffRow, http.StatusNotFound, func(e *env) reqtest.Option {
 			return reqtest.Session(authntest.SeedSession(e.T, e.DB.App, "no-such-staff"))
 		}},
 	}

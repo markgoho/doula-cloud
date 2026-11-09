@@ -18,7 +18,7 @@ var selfRoutes = []struct {
 	valid  string
 }{
 	{"work state", http.MethodPut, "/api/staff/work-state", `{"workState":"NJ"}`},
-	{"name", http.MethodPut, "/api/staff/name", `{"firstName":"A","lastName":"B"}`},
+	{"person name", http.MethodPut, "/api/staff/name", `{"firstName":"A","lastName":"B"}`},
 	{"feedback", http.MethodPost, "/api/staff/feedback", `{"kind":"idea_or_request"}`},
 }
 
@@ -61,10 +61,10 @@ func TestSelfRoutes_RefuseTheUnreadableRequest(t *testing.T) {
 		session func(e *env) reqtest.Option
 	}{
 		{"no cookie", "", http.StatusUnauthorized, func(*env) reqtest.Option { return reqtest.Session("") }},
-		{"a session with no staff row", "", http.StatusNotFound, func(e *env) reqtest.Option {
+		{noStaffRow, "", http.StatusNotFound, func(e *env) reqtest.Option {
 			return reqtest.Session(authntest.SeedSession(e.T, e.DB.App, "session-without-a-staff-row"))
 		}},
-		{"a body that is not JSON", "not json", http.StatusBadRequest, func(e *env) reqtest.Option { return e.SignedIn }},
+		{"a body that is not JSON", notJSON, http.StatusBadRequest, func(e *env) reqtest.Option { return e.SignedIn }},
 	}
 	for _, route := range selfRoutes {
 		for _, tc := range cases {

@@ -14,13 +14,12 @@ import (
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/staffauth"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
 func newRotateSavedCodesServer(t *testing.T, db *testdb.DB, uid string) (srv *httptest.Server, session string) {
 	t.Helper()
-	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}), authntest.SeedSession(t, db.App, uid)
+	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager()), authntest.SeedSession(t, db.App, uid)
 }
 
 func postRotate(t *testing.T, srv *httptest.Server, session string) *http.Response {

@@ -53,14 +53,14 @@ func TestVouchHandler_Refuses(t *testing.T) {
 	}{
 		{name: "no Bearer token", verifier: freshOwner(), confirm: true, want: http.StatusUnauthorized},
 		{name: "a Bearer token that does not verify", verifier: authntest.Verifier{Err: errBadToken}, bearer: "rejected-token", confirm: true, want: http.StatusUnauthorized},
-		{name: "a stale sign-in", verifier: authntest.Verifier{UID: vouchOwnerUID, AuthTime: time.Now().Add(-time.Hour)}, bearer: "fresh-id-token", confirm: true, want: http.StatusUnauthorized},
+		{name: "a stale sign-in", verifier: authntest.Verifier{UID: vouchOwnerUID, AuthTime: time.Now().Add(-time.Hour)}, bearer: freshToken, confirm: true, want: http.StatusUnauthorized},
 		{name: "a token for someone else", verifier: authntest.Verifier{UID: "someone-else", AuthTime: time.Now()}, bearer: "someone-elses-token", confirm: true, want: http.StatusUnauthorized},
-		{name: "no confirmation", verifier: freshOwner(), bearer: "fresh-id-token", want: http.StatusBadRequest},
-		{name: "a non-Owner", verifier: freshOwner(), doula: true, bearer: "fresh-id-token", confirm: true, want: http.StatusForbidden,
+		{name: "no confirmation", verifier: freshOwner(), bearer: freshToken, want: http.StatusBadRequest},
+		{name: "a non-Owner", verifier: freshOwner(), doula: true, bearer: freshToken, confirm: true, want: http.StatusForbidden,
 			target: func(e *env, _ fixture.StaffRecord) string { return e.Staff.ID }},
-		{name: "a staff id that is not a uuid", verifier: freshOwner(), bearer: "fresh-id-token", confirm: true, want: http.StatusBadRequest,
-			target: func(*env, fixture.StaffRecord) string { return "not-a-uuid" }},
-		{name: "a Membership nobody holds", verifier: freshOwner(), bearer: "fresh-id-token", confirm: true, want: http.StatusNotFound,
+		{name: "a staff id that is not a uuid", verifier: freshOwner(), bearer: freshToken, confirm: true, want: http.StatusBadRequest,
+			target: func(*env, fixture.StaffRecord) string { return notAUUID }},
+		{name: "a Membership nobody holds", verifier: freshOwner(), bearer: freshToken, confirm: true, want: http.StatusNotFound,
 			target: func(*env, fixture.StaffRecord) string { return emptyUUID }},
 	}
 	for _, tc := range cases {
@@ -89,7 +89,7 @@ func TestVouchHandler_Success(t *testing.T) {
 	e := newVouchEnv(t, []fixture.StaffOption{fixture.Owner()}, freshOwner())
 	target := e.Colleague()
 
-	e.vouch(target.ID, "fresh-id-token", true, http.StatusNoContent)
+	e.vouch(target.ID, freshToken, true, http.StatusNoContent)
 
 	var tokenHash, purpose string
 	if err := e.DB.Admin.QueryRowContext(t.Context(),

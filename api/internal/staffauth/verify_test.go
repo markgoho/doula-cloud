@@ -12,7 +12,6 @@ import (
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/authtoken"
 	"doula-cloud/api/internal/reqtest"
-	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -35,7 +34,7 @@ func newVerifyRequestServer(t *testing.T, db *testdb.DB, uid string) (*httptest.
 // row, for the tests whose whole subject is a caller who has none.
 func newVerifyRequestServerWithoutStaff(t *testing.T, db *testdb.DB, uid string) (*httptest.Server, string) {
 	t.Helper()
-	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager(), tasknudge.NoOpEnqueuer{}), authntest.SeedSession(t, db.App, uid)
+	return serveStaffauth(db, authntest.Verifier{}, authntest.NewFakeAccountManager()), authntest.SeedSession(t, db.App, uid)
 }
 
 func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http.Response {
@@ -44,7 +43,7 @@ func postVerifyRequest(t *testing.T, srv *httptest.Server, session string) *http
 }
 
 func newVerifySpendServer(accounts *authntest.FakeAccountManager, db *testdb.DB) *httptest.Server {
-	return serveStaffauth(db, authntest.Verifier{}, accounts, tasknudge.NoOpEnqueuer{})
+	return serveStaffauth(db, authntest.Verifier{}, accounts)
 }
 
 func postVerifySpend(t *testing.T, srv *httptest.Server, body string) *http.Response {
