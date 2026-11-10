@@ -1,4 +1,4 @@
-import { postAct, refusal, type Outcome } from './act.ts';
+import { postAct, refusal, stepUpRefusal, type Outcome, type StepUpOutcome } from './act.ts';
 
 export type PilotGate = { openedAt: string | null };
 
@@ -10,8 +10,8 @@ export async function readPilotGate(fetcher: Fetch = fetch): Promise<Outcome<Pil
 	return refusal(response);
 }
 
-export async function sendPilotGateOpening(key: string, fetcher: Fetch = fetch): Promise<Outcome<PilotGate>> {
+export async function sendPilotGateOpening(key: string, fetcher: Fetch = fetch): Promise<StepUpOutcome<PilotGate>> {
 	const response = await postAct('/api/pilot-gate/openings', key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
-	return refusal(response);
+	return stepUpRefusal(response);
 }

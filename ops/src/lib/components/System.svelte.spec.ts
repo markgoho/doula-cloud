@@ -176,4 +176,12 @@ describe('System', () => {
 		await expect.element(page.getByRole('alert')).toBeVisible();
 		await expect.element(page.getByRole('table')).not.toBeInTheDocument();
 	});
+
+	it('shows a read that cannot reach doula-ops in words', async () => {
+		const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+		await render(SystemSection, { fetcher, onsignedout: vi.fn() });
+
+		await expect.element(page.getByRole('alert')).toBeVisible();
+	});
 });

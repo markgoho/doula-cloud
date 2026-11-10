@@ -2,7 +2,7 @@
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import type { FormError } from '../authRefusal.ts';
+	import { CheckRead } from '../checkRead.svelte.ts';
 	import { monthName, readMonthlyCredits, type MonthlyCredits } from '../monthlyCredits.ts';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
@@ -12,24 +12,15 @@
 		fetcher = fetch
 	}: { month: string | undefined; onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
-	let read = $state<MonthlyCredits | undefined>();
-	let errors = $state<FormError[]>([]);
+	const check = new CheckRead<MonthlyCredits>(() => onsignedout());
+	const read = $derived(check.value);
 
-	onMount(async () => {
-		const outcome = await readMonthlyCredits(month, fetcher);
-		if (outcome.kind === 'signed-out') return onsignedout();
-		if (outcome.kind === 'refused') {
-			errors = outcome.errors;
-			return;
-		}
-		/* v8 ignore next -- a read asks no fresh code, so 'step-up' never arrives */
-		if (outcome.kind === 'ok') read = outcome.value;
-	});
+	onMount(() => check.load(() => readMonthlyCredits(month, fetcher)));
 </script>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={check.errors} />
 
-{#if errors.length > 0}
+{#if check.state.status === 'failed'}
 	<p><a href={resolve('/credits')}>Show the last month that has ended</a></p>
 {/if}
 

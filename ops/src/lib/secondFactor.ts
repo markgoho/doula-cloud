@@ -1,4 +1,4 @@
-import { postAct, refusal, type Outcome } from './act.ts';
+import { postAct, refusal, stepUpRefusal, type Outcome, type StepUpOutcome } from './act.ts';
 
 export type SecondFactorStaff = { staffName: string; practiceNames: string[] };
 
@@ -10,10 +10,10 @@ export async function readSecondFactorCheck(staffId: string, fetcher: Fetch = fe
 	return refusal(response);
 }
 
-export async function sendSecondFactorClear(staffId: string, key: string, fetcher: Fetch = fetch): Promise<Outcome<SecondFactorStaff>> {
+export async function sendSecondFactorClear(staffId: string, key: string, fetcher: Fetch = fetch): Promise<StepUpOutcome<SecondFactorStaff>> {
 	const response = await postAct(`/api/staff/${staffId}/second-factor-clears`, key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
-	return refusal(response);
+	return stepUpRefusal(response);
 }
 
 export function practiceList(names: string[]): string {

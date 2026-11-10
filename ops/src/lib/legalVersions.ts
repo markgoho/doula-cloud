@@ -1,4 +1,4 @@
-import { postAct, refusal, type Outcome } from './act.ts';
+import { postAct, refusal, stepUpRefusal, type Outcome, type StepUpOutcome } from './act.ts';
 
 export type LegalVersion = {
 	document: string;
@@ -55,8 +55,8 @@ export async function sendLegalPublication(
 	version: string,
 	key: string,
 	fetcher: Fetch = fetch
-): Promise<Outcome<LegalPublication>> {
+): Promise<StepUpOutcome<LegalPublication>> {
 	const response = await postAct(`${versionPath(document, version)}/publications`, key, {}, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
-	return refusal(response);
+	return stepUpRefusal(response);
 }

@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import { page } from 'vitest/browser';
 import OperatorLog from './OperatorLog.svelte';
 import type { LogRow } from '../operatorLog.ts';
+import { SERVICE_PROBLEM } from '../session.ts';
 
 function row(id: string, overrides: Partial<LogRow> = {}): LogRow {
 	return { id, at: '2026-11-02T14:05:00Z', operator: 'Mark Goho', action: 'sign_in', subject: null, details: {}, ...overrides };
@@ -105,6 +106,26 @@ describe('OperatorLog', () => {
 		await render(OperatorLog, { fetcher, onsignedout: vi.fn() });
 
 		await expect.element(page.getByText('This page of the list cannot be found. Start from the first page.')).toBeVisible();
+	});
+
+	it('says the service has a problem when the log cannot be reached', async () => {
+		const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+		await render(OperatorLog, { fetcher, onsignedout: vi.fn() });
+
+		await expect.element(page.getByText(SERVICE_PROBLEM)).toBeVisible();
+	});
+
+	it('keeps the rows it has when a later page cannot be reached', async () => {
+		const fetcher = answering({ status: 200, body: { items: [row('a-1')], hasMore: true, nextCursor: 'c-2' } });
+		fetcher.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+		await render(OperatorLog, { fetcher, onsignedout: vi.fn() });
+
+		await page.getByRole('button', { name: 'Show more' }).click();
+
+		await expect.element(page.getByText(SERVICE_PROBLEM)).toBeVisible();
+		await expect.element(page.getByRole('heading', { name: 'Signed in' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Show more' })).toBeVisible();
 	});
 
 	it('hands back once the session has ended', async () => {

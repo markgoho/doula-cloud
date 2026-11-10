@@ -1,12 +1,12 @@
 <script lang="ts">
-	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { FormError } from '#lib/authRefusal.js';
-		import {
+	import { CheckAct } from '#lib/checkAct.svelte.js';
+	import { CheckRead } from '#lib/checkRead.svelte.js';
+	import {
 		credits,
 		readFoundingGrantCheck,
 		sendFoundingGrant,
@@ -18,42 +18,21 @@
 
 	const practiceId = $derived(page.params.practiceId ?? '');
 
-	let check = $state<FoundingGrantCheck | undefined>();
-	let result = $state<FoundingGrantResult | undefined>();
-	let errors = $state<FormError[]>([]);
-	let isSending = $state(false);
-	const requestKey = actKey();
-
 	async function signedOut() {
 		await goto(resolve('/sign-in'));
 	}
 
-	onMount(async () => {
-		const outcome = await readFoundingGrantCheck(practiceId);
-		if (outcome.kind === 'signed-out') return signedOut();
-		if (outcome.kind === 'ok') check = outcome.value;
-		else if (outcome.kind === 'refused') errors = outcome.errors;
-	});
+	const read = new CheckRead<FoundingGrantCheck>(signedOut);
+	const act = new CheckAct<FoundingGrantResult>({ onsignedout: signedOut });
+	const errors = $derived(read.state.status === 'failed' ? read.errors : act.errors);
+
+	onMount(() => read.load(() => readFoundingGrantCheck(practiceId)));
 
 	async function give(event: SubmitEvent) {
 		event.preventDefault();
-		isSending = true;
-		try {
-			const outcome = await sendFoundingGrant(practiceId, requestKey);
-			if (outcome.kind === 'signed-out') return signedOut();
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			if (outcome.kind === 'ok') {
-				errors = [];
-				result = outcome.value;
-				await tick();
-				document.querySelector('h1')?.focus();
-			}
-		} finally {
-			isSending = false;
-		}
+		if (!(await act.run((key) => sendFoundingGrant(practiceId, key)))) return;
+		await tick();
+		document.querySelector('h1')?.focus();
 	}
 </script>
 
@@ -61,7 +40,8 @@
 
 <ErrorSummary {errors} />
 
-{#if result}
+{#if act.state.status === 'done'}
+	{@const result = act.state.value}
 	<stack-l role="status">
 		<h1 tabindex="-1">Founding grant given</h1>
 		<p>
@@ -70,7 +50,11 @@
 		</p>
 	</stack-l>
 	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
-{:else if check}
+{:else if read.state.status === 'failed'}
+	<h1 tabindex="-1">Founding grant</h1>
+	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
+{:else if read.state.status === 'loaded'}
+	{@const check = read.state.value}
 	<p class="caption">{check.practiceName}</p>
 	{#if check.grantedCredits !== null}
 		<h1 tabindex="-1">Founding grant</h1>
@@ -95,7 +79,7 @@
 					The Credits go on the Practice's ledger at once, and are spent before any it buys. A founding grant is given
 					once and cannot be undone.
 				</p>
-				<Button label="Give {credits(check.credits)}" type="submit" loading={isSending} />
+				<Button label="Give {credits(check.credits)}" type="submit" loading={act.isSending} />
 			</stack-l>
 		</form>
 	{/if}

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { FormError } from '../authRefusal.ts';
+	import { CheckRead } from '../checkRead.svelte.ts';
 	import {
 		arrivalLabel,
 		modeLabel,
@@ -19,24 +19,15 @@
 
 	let { onsignedout, fetcher = fetch }: { onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
-	let read = $state<System | undefined>();
-	let errors = $state<FormError[]>([]);
+	const check = new CheckRead<System>(() => onsignedout());
+	const read = $derived(check.value);
 
 	const NOT_READ = 'Stripe did not answer';
 
-	onMount(async () => {
-		const outcome = await readSystem(fetcher);
-		if (outcome.kind === 'signed-out') return onsignedout();
-		if (outcome.kind === 'refused') {
-			errors = outcome.errors;
-			return;
-		}
-		/* v8 ignore next -- a read asks no fresh code, so 'step-up' never arrives */
-		if (outcome.kind === 'ok') read = outcome.value;
-	});
+	onMount(() => check.load(() => readSystem(fetcher)));
 </script>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={check.errors} />
 
 {#if read}
 	<!-- v8 ignore start: Svelte's compiled update branches for each value; a read is set once and never changes in place -->
