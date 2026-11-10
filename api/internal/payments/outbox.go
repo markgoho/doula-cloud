@@ -84,7 +84,7 @@ type payoutPendingRow struct {
 
 const payoutClaimQuery = `SELECT id, practice_id, attempt_count
 	 FROM payout_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -113,8 +113,8 @@ func wrapOutboxErr(err error) error {
 // grace window (00034's 48-hour next_attempt_at default) may have
 // already resolved itself by the time it comes due, so this rechecks the
 // Practice's live stripe_connect_requirements_due before mailing anyone:
-// a Practice with nothing outstanding any more is marked sent with
-// nothing to mail, same as a Practice with zero Owners. Owners are
+// a Practice with nothing outstanding any more is marked skipped with
+// nothing to mail, as a Practice with zero Owners is. Owners are
 // resolved at send time too (not stored on the row) and mailed
 // separately; a row is marked sent once every resolved Owner has been
 // mailed without error.
@@ -129,7 +129,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pay
 		return err
 	}
 	if !stillOutstanding {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
+		return wrapOutboxErr(inner.MarkSkipped(ctx, tx, r.id, outbox.SkipAlreadyResolved, now))
 	}
 
 	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)

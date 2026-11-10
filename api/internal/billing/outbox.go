@@ -107,7 +107,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, practice_id, attempt_count
 	 FROM low_credit_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -133,8 +133,8 @@ func wrapOutboxErr(err error) error {
 // resolving the Practice's current Owners at send time (not stored on
 // the row) and mailing each of them separately. A row is marked sent
 // once every resolved Owner has been mailed without error; a Practice
-// with zero Owners at send time is marked sent with nothing to mail --
-// there is no one left to notify.
+// with zero Owners at send time is marked skipped with nothing to mail
+// (outbox.SkipNoRecipients) -- there is no one left to notify.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 	return wrapOutboxErr(w.inner().HandlePending(ctx, tx, claimQuery, scanRow, w.send))
 }

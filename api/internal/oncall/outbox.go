@@ -45,7 +45,7 @@ type gapNoticeRow struct {
 
 const gapNoticeClaimQuery = `SELECT id, practice_id, gap_id, attempt_count
 	 FROM coverage_gap_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -70,7 +70,7 @@ func (w GapNoticeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 
 // send mails one claimed row, rechecking the gap first. A gap that has
 // since been covered, cleared, or has ended -- a retry after a Mailgun
-// failure can be most of a day later -- is marked sent with nothing
+// failure can be most of a day later -- is marked skipped with nothing
 // mailed, rather than asking every Owner to cover a hole that is gone.
 //
 // The recheck reads engagement_coverage_gaps with no Practice set, which
@@ -90,7 +90,7 @@ func (w GapNoticeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Work
 		return fmt.Errorf("oncall: recheck coverage gap: %w", err)
 	}
 	if !stillOpen {
-		return wrap(inner.MarkSent(ctx, tx, r.id, now))
+		return wrap(inner.MarkSkipped(ctx, tx, r.id, outbox.SkipAlreadyResolved, now))
 	}
 
 	staffIDs, emails, err := outbox.OwnerAndAdminRecipients(ctx, tx, r.practiceID)

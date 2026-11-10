@@ -67,11 +67,16 @@ type eventTypeView struct {
 	LastArrivalAt *time.Time `json:"lastArrivalAt"`
 }
 
+// One count per state of outbox.Status, so a send and a skip read apart; Bounced and Complained are only ever nonzero for portal_invite_outbox.
 // OldestDueAt is when the oldest pending row that is due now came due, null when none is.
 type outboxView struct {
 	Name         string     `json:"name"`
 	Pending      int        `json:"pending"`
+	Sent         int        `json:"sent"`
+	Skipped      int        `json:"skipped"`
 	DeadLettered int        `json:"deadLettered"`
+	Bounced      int        `json:"bounced"`
+	Complained   int        `json:"complained"`
 	OldestDueAt  *time.Time `json:"oldestDueAt"`
 }
 
@@ -186,7 +191,9 @@ func readSystemDatabase(ctx context.Context, tx *sql.Tx, now, since time.Time, v
 	}
 	view.EventTypes = handledEventTypes(seen)
 
-	view.Outboxes, err = queryAll(ctx, tx, func(o *outboxView) []any { return []any{&o.Name, &o.Pending, &o.DeadLettered, &o.OldestDueAt} }, `SELECT outbox, pending, dead_lettered, oldest_due_at FROM ops_outbox_status($1)`, now)
+	view.Outboxes, err = queryAll(ctx, tx, func(o *outboxView) []any {
+		return []any{&o.Name, &o.Pending, &o.Sent, &o.Skipped, &o.DeadLettered, &o.Bounced, &o.Complained, &o.OldestDueAt}
+	}, `SELECT outbox, pending, sent, skipped, dead_lettered, bounced, complained, oldest_due_at FROM ops_outbox_status($1)`, now)
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return err

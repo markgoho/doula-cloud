@@ -98,7 +98,7 @@ const claimQuery = `SELECT o.id, o.attempt_count, r.practice_id, r.state::text, 
 	   FROM engagement_request_outbox o
 	   JOIN engagement_requests r ON r.id = o.request_id
 	   JOIN staff s ON s.id = o.staff_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  WHERE ` + outbox.ClaimDueAliasO + `
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
 	  FOR UPDATE OF o SKIP LOCKED`

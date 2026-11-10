@@ -50,17 +50,40 @@ func QueueVouchedCodeMail(ctx context.Context, tx *sql.Tx, recipientIdentityUID,
 // holds).
 type Worker = outbox.MailWorker[pendingRow]
 
+// recoveryOutbox is staff_mfa_recovery_outbox and the exit duty its rows
+// carry: the plaintext recovery code -- another person's way back into
+// her account -- is cleared whichever way a row leaves pending. Named
+// once so the worker and SkipPendingTo cannot disagree about it.
+var recoveryOutbox = outbox.Worker{Table: "staff_mfa_recovery_outbox", ClearOnTerminal: []string{"token"}}
+
 // NewWorker builds the recovery-code outbox worker around mailer and
 // accounts.
 func NewWorker(mailer outbox.Mailer, accounts authn.AccountManager) Worker {
 	return Worker{
 		Mailer:          mailer,
-		Table:           "staff_mfa_recovery_outbox",
-		ClearOnTerminal: []string{"token"},
+		Table:           recoveryOutbox.Table,
+		ClearOnTerminal: recoveryOutbox.ClearOnTerminal,
 		ClaimQuery:      claimQuery,
 		Scan:            scanRow,
 		Compose:         compose(accounts),
 	}
+}
+
+// SkipPendingTo marks every pending row whose code is addressed to
+// recipientIdentityUID skipped, for reason, through the same transition
+// a worker's skip takes -- so the code is cleared exactly as a send
+// would clear it. It is for an act that makes the mail moot before it
+// goes out: the recipient deleting her own login (staffauth's
+// resolveQueuedMail).
+func SkipPendingTo(ctx context.Context, tx *sql.Tx, recipientIdentityUID string, reason outbox.SkipReason, now time.Time) error {
+	if err := recoveryOutbox.SkipPending(ctx, tx,
+		`SELECT id FROM staff_mfa_recovery_outbox WHERE recipient_identity_uid = $1 AND status = 'pending' FOR UPDATE`,
+		reason, now, recipientIdentityUID,
+	); err != nil {
+		// coverage:ignore reason: DB failure inside the outbox package, not exercised by unit tests
+		return fmt.Errorf("mfarecoverymail: skip pending recovery mail: %w", err)
+	}
+	return nil
 }
 
 type pendingRow struct {
@@ -71,7 +94,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, attempt_count, recipient_identity_uid, subject_staff_id, token
 	 FROM staff_mfa_recovery_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -93,7 +116,7 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 //
 // Both of those people are rechecked against `staff` before either
 // resolution runs, and either one having deleted her login since the
-// vouch resolves the row to ErrAlreadyDone -- marked sent, nothing
+// vouch resolves the row to ErrAlreadyDone -- marked skipped, nothing
 // mailed. The recheck comes first rather than after GetAccount because
 // a deleted login has no Identity Platform account left: reaching the
 // Admin SDK for it would answer ErrAccountNotFound and dead-letter a

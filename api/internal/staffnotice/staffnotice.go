@@ -102,7 +102,7 @@ const claimQuery = `SELECT o.id, o.attempt_count, o.id, o.practice_id, o.recipie
 	   FROM staff_notice_outbox o
 	   JOIN staff s ON s.id = o.recipient_staff_id
 	   JOIN practices p ON p.id = o.practice_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  WHERE ` + outbox.ClaimDueAliasO + `
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
 	  FOR UPDATE OF o SKIP LOCKED`
@@ -121,8 +121,8 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 }
 
 // compose rechecks the row at send time: a person who has left the
-// Practice, or a record already resolved, is marked sent with nothing
-// mailed. The address it goes to is written on the row before the send,
+// Practice, or a record already resolved, is marked skipped with
+// nothing mailed. The address it goes to is written on the row before the send,
 // so the row says whom it reached; a retry overwrites it.
 func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
 	return func(ctx context.Context, tx *sql.Tx, p pendingRow, now time.Time) (string, string, string, error) {

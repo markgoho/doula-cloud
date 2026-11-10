@@ -387,14 +387,38 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 	e.erase()
 
 	for _, table := range []string{
-		"staff_token_mail_outbox",
+		tokenMailOutbox,
 		"session_notice_outbox",
-		"staff_mfa_recovery_outbox",
+		recoveryOutbox,
 	} {
 		//nolint:gosec // the table name is this test's own literal, from the slice above
 		if n := countRows(t, e.DB,
 			`SELECT count(*) FROM `+table+` WHERE status = 'pending'`); n != 0 {
 			t.Fatalf("%s: pending rows = %d, want every one addressed to her resolved", table, n)
+		}
+	}
+
+	// Each is resolved as skipped for her deletion, not marked sent, and
+	// the two that carried a plaintext secret -- her own reset or
+	// verification token, and a recovery code, which is a way back into
+	// another person's account -- no longer hold it. 00061 promises the
+	// token is gone the moment a row leaves pending; the deletion once
+	// marked these rows sent by hand and left both behind.
+	for _, table := range []string{
+		tokenMailOutbox,
+		"session_notice_outbox",
+		recoveryOutbox,
+	} {
+		//nolint:gosec // the table name is this test's own literal, from the slice above
+		if n := countRows(t, e.DB,
+			`SELECT count(*) FROM `+table+` WHERE status = 'skipped' AND skip_reason = 'login_deleted' AND skipped_at IS NOT NULL`); n != 1 {
+			t.Fatalf("%s: rows skipped for login_deleted = %d, want 1", table, n)
+		}
+	}
+	for _, table := range []string{tokenMailOutbox, recoveryOutbox} {
+		//nolint:gosec // the table name is this test's own literal, from the slice above
+		if n := countRows(t, e.DB, `SELECT count(*) FROM `+table+` WHERE token IS NOT NULL`); n != 0 {
+			t.Fatalf("%s: rows still holding a token = %d, want 0", table, n)
 		}
 	}
 
@@ -411,6 +435,12 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 
 // seedPendingMail queues one pending row addressed to her in each of the
 // four outbox tables the deletion has to resolve.
+// The two outboxes addressed to her whose rows hold a plaintext secret.
+const (
+	tokenMailOutbox = "staff_token_mail_outbox"
+	recoveryOutbox  = "staff_mfa_recovery_outbox"
+)
+
 func seedPendingMail(e *env) {
 	e.Exec(`INSERT INTO staff_token_mail_outbox (identity_uid, kind, token) VALUES ($1, 'email_verification', 'a-token')`, e.Staff.UID)
 	e.Exec(`INSERT INTO staff_email_change_outbox (identity_uid, old_email) VALUES ($1, 'old@example.com')`, e.Staff.UID)

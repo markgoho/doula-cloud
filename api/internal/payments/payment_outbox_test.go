@@ -164,7 +164,7 @@ func TestPaymentWorker_ProcessPending_Outcomes(t *testing.T) {
 		wantAttempts int
 	}{
 		{name: "a row not yet due is skipped", due: time.Hour, wantStatus: testPaymentOutboxStatusPending},
-		{name: "a Practice with no Owner or Admin is marked sent with no mail", noOwner: true, due: -time.Minute, wantStatus: testPaymentOutboxStatusSent},
+		{name: "a Practice with no Owner or Admin is marked skipped with no mail", noOwner: true, due: -time.Minute, wantStatus: testOutboxStatusSkipped},
 		{name: "a send failure retries", due: -time.Minute, sendErr: errMailgun, wantStatus: testPaymentOutboxStatusPending, wantAttempts: 1},
 		// One attempt short of the schedule's length -- this failure is the
 		// last one before dead-letter.

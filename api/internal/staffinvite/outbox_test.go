@@ -112,7 +112,7 @@ func TestRefresh_ReplacesAPendingRowsTokenOnly(t *testing.T) {
 		}
 	}
 	if _, err := tx.ExecContext(t.Context(),
-		`UPDATE staff_invite_outbox SET status = 'sent', invite_token = NULL WHERE invitation_id = $1`, sentInvitation,
+		`UPDATE staff_invite_outbox SET status = 'sent', sent_at = now(), invite_token = NULL WHERE invitation_id = $1`, sentInvitation,
 	); err != nil {
 		t.Fatalf("mark row sent: %v", err)
 	}

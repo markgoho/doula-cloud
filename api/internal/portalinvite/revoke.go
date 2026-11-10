@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-
-	"doula-cloud/api/internal/outbox"
 )
 
 // RevokeReason names why a pending invitation was stopped, written onto
@@ -35,14 +33,12 @@ const (
 // there is no pending row (no portal invite was ever sent, or the last
 // one already sent/dead-lettered).
 func RevokePending(ctx context.Context, tx *sql.Tx, clientID string, reason RevokeReason) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE portal_invite_outbox o
-		 SET status = 'dead_lettered', dead_letter_reason = $3, last_error = $2
-		 FROM client_portal_users pu
-		 WHERE o.client_portal_user_id = pu.id
-		   AND pu.client_id = $1
-		   AND o.status = 'pending'`,
-		clientID, string(reason), outbox.OwnData,
+	if err := inviteOutbox.DeadLetterPending(ctx, tx,
+		`SELECT o.id FROM portal_invite_outbox o
+		 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
+		 WHERE pu.client_id = $1 AND o.status = 'pending'
+		 FOR UPDATE OF o`,
+		string(reason), clientID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("portalinvite: revoke pending invite: %w", err)

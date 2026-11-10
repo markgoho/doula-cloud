@@ -199,6 +199,33 @@ func TestSystem_CountsPendingAndDeadLetteredRowsAndDatesTheOldestOneDue(t *testi
 	}
 }
 
+// A row resolved with nothing sent is counted apart from one that was
+// sent, and a portal invite Mailgun reported back is counted in its own
+// state, not lost from every count.
+func TestSystem_CountsEveryStateOfAnOutboxApart(t *testing.T) {
+	s := newSystemStack(t)
+	sent := testdb.SeedPractice(t, s.db, "Sent")
+	skipped := testdb.SeedPractice(t, s.db, "Skipped")
+	for _, p := range []string{sent, skipped} {
+		s.exec(`INSERT INTO welcome_credits_outbox (practice_id, next_attempt_at, created_at) VALUES ($1, $2, $2)`, p, opsStart)
+	}
+	s.exec(`UPDATE welcome_credits_outbox SET status = 'sent', sent_at = $2 WHERE practice_id = $1`, sent, opsStart)
+	s.exec(`UPDATE welcome_credits_outbox SET status = 'skipped', skip_reason = 'engagement_started', skipped_at = $2 WHERE practice_id = $1`, skipped, opsStart)
+
+	practice := testdb.SeedPractice(t, s.db, "Invites")
+	for _, status := range []string{"bounced", "complained", "complained"} {
+		portalUser := testdb.SeedPendingPortalInvite(t, s.db, testdb.SeedNamedClient(t, s.db, practice, "Client", ""))
+		s.exec(`UPDATE portal_invite_outbox SET status = $2, sent_at = $3 WHERE client_portal_user_id = $1`, portalUser, status, opsStart)
+	}
+
+	if o := outboxOf(t, s.view(), "welcome_credits_outbox"); o.Sent != 1 || o.Skipped != 1 || o.Pending != 0 {
+		t.Errorf("welcome_credits_outbox = %+v, want 1 sent and 1 skipped", o)
+	}
+	if o := outboxOf(t, s.view(), "portal_invite_outbox"); o.Bounced != 1 || o.Complained != 2 || o.Sent != 0 {
+		t.Errorf("portal_invite_outbox = %+v, want 1 bounced and 2 complained", o)
+	}
+}
+
 func TestSystem_AnOutboxWithNothingDueHasNoOldestDue(t *testing.T) {
 	s := newSystemStack(t)
 	if o := outboxOf(t, s.view(), "low_credit_outbox"); o.Pending != 0 || o.DeadLettered != 0 || o.OldestDueAt != nil {

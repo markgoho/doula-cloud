@@ -124,8 +124,8 @@ func TestWorker_SkipsAnOfferThatIsNoLongerOpen(t *testing.T) {
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("sent %d messages for a withdrawn offer", len(sender.Sent()))
 	}
-	if row := readOutbox(t, f.db, offerID); row.status != "sent" {
-		t.Fatalf("row status = %q, want sent (resolved without mailing)", row.status)
+	if row := readOutbox(t, f.db, offerID); row.status != "skipped" {
+		t.Fatalf("row status = %q, want skipped (resolved without mailing)", row.status)
 	}
 }
 

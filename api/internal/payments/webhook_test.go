@@ -531,7 +531,7 @@ func TestPostAccountWebhookHandler_RequeuesPayoutNotificationAfterEpisodeReopens
 
 	deliverAccount(t, srv, capabilityStatusPayload(t, "evt_payout_reopen_open", e.AccountID), http.StatusOK)
 	if _, err := e.DB.Admin.ExecContext(t.Context(),
-		`UPDATE payout_outbox SET status = 'sent' WHERE practice_id = $1`, e.Practice.ID,
+		`UPDATE payout_outbox SET status = 'sent', sent_at = now() WHERE practice_id = $1`, e.Practice.ID,
 	); err != nil {
 		t.Fatalf("simulate worker send: %v", err)
 	}

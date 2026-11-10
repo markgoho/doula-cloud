@@ -124,23 +124,41 @@ func TestWorker_ProcessPending_SendsToRecipientAndMarksSent(t *testing.T) {
 	}
 }
 
-// TestWorker_ProcessPending_DeletedRecipientMarksSentWithNoMail is
+// TestWorker_ProcessPending_DeletedRecipientMarksSkippedWithNoMail is
 // #892's skip-at-send recheck seen from the worker rather than from
 // Compose: the vouching Owner deleted her own login between approving
 // the request and this row being claimed. Her Identity Platform account
 // went with it, so the row would otherwise dead-letter on
-// ErrAccountNotFound; instead it is marked sent, with nothing mailed.
-func TestWorker_ProcessPending_DeletedRecipientMarksSentWithNoMail(t *testing.T) {
+// ErrAccountNotFound; instead it is marked skipped, with nothing mailed,
+// and the recovery code it held is gone.
+func TestWorker_ProcessPending_DeletedRecipientMarksSkippedWithNoMail(t *testing.T) {
 	r := seedRecovery(t, "24682468")
 	testdb.RedactDeletedLogin(t, r.db, r.ownerID)
 
 	r.process(t)
 
-	status, _ := r.state(t)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
+	status, token := r.state(t)
+	if status != "skipped" || token.Valid {
+		t.Fatalf("status = %q, token = %+v, want skipped with the code cleared", status, token)
 	}
 	if len(r.sender.Sent()) != 0 {
 		t.Fatalf("expected no mail for an Owner who deleted her login, got %d", len(r.sender.Sent()))
+	}
+}
+
+// TestSkipPendingTo_SkipsTheRecipientsPendingCodeAndClearsIt is the skip a
+// login deletion makes at source for a recovery code addressed to her.
+func TestSkipPendingTo_SkipsTheRecipientsPendingCodeAndClearsIt(t *testing.T) {
+	r := seedRecovery(t, "13571357")
+
+	r.db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		return mfarecoverymail.SkipPendingTo(ctx, tx, "owner-uid", outbox.SkipLoginDeleted, time.Now())
+	})
+
+	if status, token := r.state(t); status != string(outbox.StatusSkipped) || token.Valid {
+		t.Fatalf("row = (%s, %+v), want skipped with the code cleared", status, token)
+	}
+	if len(r.sender.Sent()) != 0 {
+		t.Fatalf("sent %d messages, want none", len(r.sender.Sent()))
 	}
 }

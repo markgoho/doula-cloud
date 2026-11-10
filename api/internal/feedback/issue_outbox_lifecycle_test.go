@@ -80,13 +80,13 @@ func TestIssueWorker_CloseAsErasedGitHubErrorLeavesTheJobPending(t *testing.T) {
 
 // TestIssueWorker_OpenJobWhosePieceIsGoneOpensNoIssue is #1525's third
 // AC: a piece erased before its issue was opened opens no issue, and the
-// pending open job is marked done.
+// pending open job is marked skipped, not sent: nothing was opened.
 func TestIssueWorker_OpenJobWhosePieceIsGoneOpensNoIssue(t *testing.T) {
 	e := newStaffIssueEnv(t, "feedback-worker-gone", feedback.KindNotWorking, testAccountPage)
 	deleteFeedbackRow(t, e.DB, e.FeedbackID)
 	e.run()
 
-	e.requireStatus(statusSent)
+	e.requireStatus("skipped")
 	if len(e.Creator.Issues) != 0 {
 		t.Fatalf("issues = %d, want 0 -- an erased piece opens no issue", len(e.Creator.Issues))
 	}

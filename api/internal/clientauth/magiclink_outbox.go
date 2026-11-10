@@ -45,7 +45,7 @@ type magicLinkRow struct {
 const magicLinkClaimQuery = `SELECT o.id, o.attempt_count, o.token, pa.sign_in_address
 	 FROM portal_magic_link_outbox o
 	 JOIN portal_accounts pa ON pa.identifier = o.identity_uid
-	 WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDueAliasO + `
 	 ORDER BY o.next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE OF o SKIP LOCKED`

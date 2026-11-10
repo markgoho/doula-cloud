@@ -15,8 +15,9 @@ import (
 )
 
 const (
-	testStatusSent = "sent"
-	kindNewSignIn  = "new_signin"
+	testStatusSent    = "sent"
+	testStatusSkipped = "skipped"
+	kindNewSignIn     = "new_signin"
 
 	kindSessionRevoked = "session_revoked"
 )
@@ -208,14 +209,14 @@ func TestWorker_ProcessPending_MailsEachNoticeAndMarksItSent(t *testing.T) {
 	}
 }
 
-// TestWorker_ProcessPending_MarksSentWithNoMailWhenThereIsNobodyToNotify
+// TestWorker_ProcessPending_MarksSkippedWithNoMailWhenThereIsNobodyToNotify
 // covers both skips: an identity that queued a notice and was then
 // removed from staff before send, and #892's skip-at-send recheck -- a
 // notice queued while she still had a login, claimed after she deleted
 // it. Her Identity Platform account is gone and her staff row names
 // nobody, so the row is marked sent with no mail, never retried and
 // never dead-lettered.
-func TestWorker_ProcessPending_MarksSentWithNoMailWhenThereIsNobodyToNotify(t *testing.T) {
+func TestWorker_ProcessPending_MarksSkippedWithNoMailWhenThereIsNobodyToNotify(t *testing.T) {
 	cases := []struct {
 		name, kind string
 		seed       func(*testing.T, *testdb.DB, string)
@@ -233,12 +234,28 @@ func TestWorker_ProcessPending_MarksSentWithNoMailWhenThereIsNobodyToNotify(t *t
 
 			status, sent := runPending(t, db, uid, tc.kind)
 
-			if status != testStatusSent {
-				t.Fatalf("status = %q, want %s", status, testStatusSent)
+			if status != testStatusSkipped {
+				t.Fatalf("status = %q, want %s", status, testStatusSkipped)
 			}
 			if len(sent) != 0 {
 				t.Fatalf("sent %d messages, want none", len(sent))
 			}
 		})
+	}
+}
+
+// TestSkipPendingTo_SkipsHerPendingNotices is the skip a login deletion
+// makes at source for a notice addressed to her.
+func TestSkipPendingTo_SkipsHerPendingNotices(t *testing.T) {
+	db := testdb.New(t)
+	id := seedSessionNoticeOutboxRow(t, db, "uid-leaving", kindNewSignIn, time.Now(), time.Now())
+
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		return sessionnotice.SkipPendingTo(ctx, tx, "uid-leaving", outbox.SkipLoginDeleted, time.Now())
+	})
+
+	if got := testdb.Scalar[string](t, db.Admin,
+		`SELECT status::text || ':' || skip_reason::text FROM session_notice_outbox WHERE id = $1`, id); got != "skipped:login_deleted" {
+		t.Fatalf("row = %s, want skipped:login_deleted", got)
 	}
 }

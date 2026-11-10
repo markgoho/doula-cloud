@@ -220,8 +220,8 @@ func TestGapNoticeWorker_NoOwnerOrAdminLeftMailsNobody(t *testing.T) {
 
 	e.runWorker(&mail.FakeSender{})
 
-	if got := e.noticeStatus(); got != statusSent {
-		t.Fatalf("status = %q, want sent", got)
+	if got := e.noticeStatus(); got != statusSkipped {
+		t.Fatalf("status = %q, want skipped", got)
 	}
 	if n := e.count(`SELECT count(*) FROM coverage_gap_outbox WHERE gap_id = $1 AND notified_staff_ids = '{}'`, e.GapID); n != 1 {
 		t.Fatal("the row does not record that it addressed nobody")

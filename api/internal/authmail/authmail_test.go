@@ -94,13 +94,13 @@ func TestTokenMailWorker_ProcessPending_SendsVerificationAndMarksSent(t *testing
 	testdb.RequireSentAndTokenCleared(t, status, token, sender, "person@example.com")
 }
 
-// TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail is
+// TestTokenMailWorker_ProcessPending_DeletedLoginMarksSkippedWithNoMail is
 // #892's skip-at-send recheck seen from the worker rather than from
 // Compose: a verification link queued while she still had a login,
-// claimed after she deleted it. The row is marked sent with nothing
+// claimed after she deleted it. The row is marked skipped with nothing
 // mailed, rather than dead-lettered on an Identity Platform account that
-// no longer exists.
-func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testing.T) {
+// no longer exists, and its token is gone with it.
+func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSkippedWithNoMail(t *testing.T) {
 	db := testdb.New(t)
 	staffID := testdb.SeedStaff(t, db, "uid-deleted")
 	accounts := authntest.NewFakeAccountManager()
@@ -111,9 +111,9 @@ func TestTokenMailWorker_ProcessPending_DeletedLoginMarksSentWithNoMail(t *testi
 	sender := &mail.FakeSender{}
 	db.RunAsWorker(t, newTokenMailWorker(sender, accounts).ProcessPending)
 
-	status, _ := tokenMailRowState(t, db, rowID)
-	if status != statusSent {
-		t.Fatalf("status = %q, want sent", status)
+	status, token := tokenMailRowState(t, db, rowID)
+	if status != string(outbox.StatusSkipped) || token.Valid {
+		t.Fatalf("status = %q, token = %+v, want skipped with the token cleared", status, token)
 	}
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("expected no mail for a Staff person who deleted her login, got %d", len(sender.Sent()))
@@ -189,5 +189,26 @@ func TestQueueEmailChangeNotice_InsertsRow(t *testing.T) {
 	}
 	if oldEmail != "old@example.com" || status != "pending" {
 		t.Fatalf("old_email/status = %q/%q, want old@example.com/pending", oldEmail, status)
+	}
+}
+
+// TestSkipPendingTokenMail_SkipsHerPendingRowsAndClearsTheirTokens is the
+// skip a login deletion makes at source: every pending row addressed to
+// her is skipped, its token cleared as a send would clear it, and a row
+// addressed to anybody else is left to send.
+func TestSkipPendingTokenMail_SkipsHerPendingRowsAndClearsTheirTokens(t *testing.T) {
+	db := testdb.New(t)
+	hers := seedTokenMailRow(t, db, "uid-leaving", authmail.KindPasswordReset, "her-token", 0, time.Now())
+	theirs := seedTokenMailRow(t, db, "uid-staying", authmail.KindPasswordReset, "their-token", 2, time.Now())
+
+	db.RunAsWorker(t, func(ctx context.Context, tx *sql.Tx) error {
+		return authmail.SkipPendingTokenMail(ctx, tx, "uid-leaving", outbox.SkipLoginDeleted, time.Now())
+	})
+
+	if status, token := tokenMailRowState(t, db, hers); status != string(outbox.StatusSkipped) || token.Valid {
+		t.Fatalf("her row = (%s, %+v), want skipped with the token cleared", status, token)
+	}
+	if status, token := tokenMailRowState(t, db, theirs); status != string(outbox.StatusPending) || !token.Valid {
+		t.Fatalf("another person's row = (%s, %+v), want still pending with its token", status, token)
 	}
 }

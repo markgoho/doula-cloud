@@ -209,7 +209,7 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 		},
 		{
 			name:   "no Owner is left",
-			reason: "no_owners",
+			reason: "no_recipients",
 			arrange: func(t *testing.T, db *testdb.DB, practiceID string) {
 				t.Helper()
 				exec(t, db, `UPDATE practice_memberships SET roles = '{doula}' WHERE practice_id = $1`, practiceID)
@@ -230,8 +230,8 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 				t.Errorf("mails sent = %d, want 0", len(sender.Sent()))
 			}
 			row := readRow(t, db, id)
-			if row.status != statusSent || !row.sentAt.Valid || row.skip.String != tc.reason {
-				t.Errorf("row = %+v, want sent with skip_reason %q", row, tc.reason)
+			if row.status != "skipped" || row.sentAt.Valid || row.skip.String != tc.reason {
+				t.Errorf("row = %+v, want skipped, never sent, with skip_reason %q", row, tc.reason)
 			}
 			if row.notified.Valid {
 				t.Errorf("notified_owner_staff_ids = %q, want NULL on a skip", row.notified.String)

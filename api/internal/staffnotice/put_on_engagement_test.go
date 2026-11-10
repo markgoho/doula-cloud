@@ -16,8 +16,9 @@ type putOnFixture struct {
 }
 
 const (
-	employeeUID = "uid-employee"
-	statusSent  = "sent"
+	employeeUID   = "uid-employee"
+	statusSent    = "sent"
+	statusSkipped = "skipped"
 )
 
 func newPutOnFixture(t *testing.T) putOnFixture {
@@ -111,8 +112,8 @@ func TestWorker_MailsNothingOnceSheIsNoLongerOnIt(t *testing.T) {
 			tc.change(f, t)
 
 			requireMails(t, f.run(t, putOnNow), 0)
-			if status, address := f.readPutOn(t); status != statusSent || address != nil {
-				t.Fatalf("row = (%s, %v), want sent with no address", status, address)
+			if status, address := f.readPutOn(t); status != statusSkipped || address != nil {
+				t.Fatalf("row = (%s, %v), want skipped with no address", status, address)
 			}
 		})
 	}

@@ -92,7 +92,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, practice_id, act::text, attempt_count
 	 FROM practice_deletion_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -132,17 +132,16 @@ func (w Worker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r 
 // performReminder mails every current Owner, unless the Practice's
 // standing is no longer pending deletion (restored, or already
 // finalized) by the time this row was claimed --
-// the skip-at-send recheck the package doc describes. A skip marks sent
-// with nothing mailed, the same "nothing left to do" shape SendAll
-// already gives a Practice with zero current Owners.
+// the skip-at-send recheck the package doc describes. A skip marks the
+// row skipped with nothing mailed, and says which of the two it was.
 func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
 	state, err := readDeletionState(ctx, tx, r.practiceID, false)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if state.standing != StandingPendingDeletion {
-		return markErr(inner.MarkSent(ctx, tx, r.id, now))
+	if reason, moot := state.skip(); moot {
+		return markErr(inner.MarkSkipped(ctx, tx, r.id, reason, now))
 	}
 
 	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
@@ -152,6 +151,20 @@ func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/delete"
 	return markErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, reminderSubject, reminderText(link, state.finalizeAt.Time)))
+}
+
+// skip is the recheck both acts make: a Practice restored since the row
+// was queued, or one already finalized, leaves nothing to do. It asks
+// TransitionFinalize, the one declaration of "still pending deletion",
+// and names the reason from the standing the Practice is actually in.
+func (s deletionState) skip() (outbox.SkipReason, bool) {
+	if ok, _ := TransitionFinalize.Check(s.standing); ok {
+		return "", false
+	}
+	if s.standing == StandingDeleted {
+		return outbox.SkipAlreadyResolved, true
+	}
+	return outbox.SkipPracticeRestored, true
 }
 
 // performFinalize runs the act itself, unless the same recheck finds the
@@ -165,8 +178,8 @@ func (w Worker) performFinalize(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if ok, _ := TransitionFinalize.Check(state.standing); !ok {
-		return markErr(inner.MarkSent(ctx, tx, r.id, now))
+	if reason, moot := state.skip(); moot {
+		return markErr(inner.MarkSkipped(ctx, tx, r.id, reason, now))
 	}
 
 	if err := finalize(ctx, tx, r.practiceID, now); err != nil {

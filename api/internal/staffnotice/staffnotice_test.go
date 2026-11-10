@@ -199,8 +199,8 @@ func TestWorker_MailsNothingOnceTheOfferIsNoLongerOpen(t *testing.T) {
 			now := prepare(t, f)
 
 			requireMails(t, f.run(t, now), 0)
-			if r := f.read(t); r.status != statusSent || r.address != nil {
-				t.Fatalf("row = (%s, %v), want sent with no address", r.status, r.address)
+			if r := f.read(t); r.status != statusSkipped || r.address != nil {
+				t.Fatalf("row = (%s, %v), want skipped with no address", r.status, r.address)
 			}
 		})
 	}

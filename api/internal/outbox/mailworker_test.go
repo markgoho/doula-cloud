@@ -85,10 +85,10 @@ func TestMailWorker_Outcomes(t *testing.T) {
 			want:          rowWant{status: testStatusSent},
 		},
 		{
-			name:    "already done marks sent without sending",
+			name:    "already done marks skipped without sending",
 			compose: composeAlready,
 			sender:  &scriptSender{},
-			want:    rowWant{status: testStatusSent},
+			want:    rowWant{status: testStatusSkipped, skip: outbox.SkipAlreadyResolved},
 		},
 		{
 			name:    "a DeadLetterError dead-letters on the spot",

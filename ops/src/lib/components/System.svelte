@@ -121,12 +121,16 @@
 				<h2>Outboxes</h2>
 				<div class="scroll">
 					<table>
-						<caption>Rows waiting to be sent, and rows that failed for good</caption>
+						<caption>Rows waiting, sent, skipped with nothing to send, and failed for good</caption>
 						<thead>
 							<tr>
 								<th scope="col">Outbox</th>
 								<th scope="col" class="number">Pending</th>
+								<th scope="col" class="number">Sent</th>
+								<th scope="col" class="number">Skipped</th>
 								<th scope="col" class="number">Dead-lettered</th>
+								<th scope="col" class="number">Bounced</th>
+								<th scope="col" class="number">Marked as spam</th>
 								<th scope="col">Oldest due</th>
 							</tr>
 						</thead>
@@ -135,7 +139,11 @@
 								<tr>
 									<th scope="row">{outboxLabel(outbox.name)}</th>
 									<td class="number">{outbox.pending}</td>
+									<td class="number">{outbox.sent}</td>
+									<td class="number">{outbox.skipped}</td>
 									<td class="number">{outbox.deadLettered}</td>
+									<td class="number">{outbox.bounced}</td>
+									<td class="number">{outbox.complained}</td>
 									<td>{outbox.oldestDueAt ? sentAt(outbox.oldestDueAt) : 'None due'}</td>
 								</tr>
 							{/each}

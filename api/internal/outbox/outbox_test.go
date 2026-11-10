@@ -39,6 +39,17 @@ func TestWorker_MarkingARow(t *testing.T) {
 			want: rowWant{status: testStatusSent, cleared: []string{secretA, secretB}},
 		},
 		{
+			// A skip is a way out of pending like any other, so the
+			// plaintext the row held goes with it -- the duty the login
+			// deletion's own hand-written UPDATE once skipped.
+			name:  "skipped records why and clears the configured columns",
+			clear: []string{secretA},
+			mark: func(w outbox.Worker, tx *sql.Tx) error {
+				return w.MarkSkipped(context.Background(), tx, rowID, outbox.SkipLoginDeleted, time.Now())
+			},
+			want: rowWant{status: testStatusSkipped, skip: outbox.SkipLoginDeleted, cleared: []string{secretA}},
+		},
+		{
 			name: "a failure before the schedule is spent schedules a retry",
 			mark: func(w outbox.Worker, tx *sql.Tx) error {
 				return w.MarkFailed(context.Background(), tx, rowID, 0, errors.New(mailgunErr), time.Now())
@@ -96,9 +107,9 @@ func TestWorker_SendAll(t *testing.T) {
 		want          rowWant
 	}{
 		{
-			name:   "no addresses is sent with nothing to mail",
+			name:   "no addresses is skipped with nothing to mail, and says so",
 			sender: &scriptSender{},
-			want:   rowWant{status: testStatusSent},
+			want:   rowWant{status: testStatusSkipped, skip: outbox.SkipNoRecipients},
 		},
 		{
 			name:          "every address is mailed and the row is sent",
@@ -164,7 +175,7 @@ type testRow struct {
 }
 
 const testClaimQuery = `SELECT id, attempt_count FROM outbox_test_rows
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`

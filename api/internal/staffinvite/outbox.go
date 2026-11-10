@@ -104,7 +104,7 @@ type pendingRow struct {
 const claimQuery = `SELECT o.id, o.attempt_count, o.invite_token, pi.address, pi.status, pi.expires_at
 	 FROM staff_invite_outbox o
 	 JOIN practice_invitations pi ON pi.id = o.invitation_id
-	 WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDueAliasO + `
 	 ORDER BY o.next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE OF o SKIP LOCKED`
