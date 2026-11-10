@@ -26,21 +26,20 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
 	import {
-		loadConnectStatus,
 		connect,
-		canConnectStatusStillMove,
-		pollConnectStatus,
 		nudgeOwnersToConnect,
 		recordConnectReturn,
 		CONNECT_STATUS_BADGES,
-		CONNECT_STATUS_CHECK_FAILED_MESSAGE,
 		CONNECT_NUDGE_OFFER_MESSAGE,
 		CONNECT_NUDGE_SENT_MESSAGE,
 		CONNECT_OWNERS_ALREADY_EMAILED_MESSAGE,
-		type ConnectStatus,
-		type ConnectStatusResult,
-		type ConnectStatusPollHandle
+		type ConnectStatus
 	} from '#lib/payments.js';
+	import {
+		ConnectStatusCheck,
+		connectArrival,
+		CONNECT_STATUS_LOAD_FAILED_MESSAGE
+	} from '#lib/connectStatusCheck.svelte.js';
 	import { loadWebsite, type PracticeWebsite } from '#lib/website.js';
 	import {
 		loadBillingMode,
@@ -67,11 +66,13 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
-	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
+	import { LOADED_PAGE, PageRead, type PageReadState } from '#lib/pageRead.svelte.js';
 
-	let status = $state<ConnectStatusResult | undefined>();
-	let website = $state<PracticeWebsite | undefined>();
-	let error = $state('');
+	/* The website read is here only to decide whether the Connect button
+	   may be offered, so it is asked for with the Connect status and a
+	   failure of either is the page's. */
+	const websiteRead = new PageRead<PracticeWebsite>();
+	const website = $derived(websiteRead.value);
 	// The connect button's enabled state mirrors the "owner"-role gating
 	// the billing page already uses -- server-side enforcement
 	// (RequireOwner) is what actually matters, this is UX only. Resolved
@@ -84,8 +85,6 @@
 	// `staffauth.OwnerAndAdmin` on the route exactly -- the BFF is what
 	// refuses, this only decides what to ask for and what to show.
 	let isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(session));
-	let connectParameter = $derived(page.url.searchParams.get('connect'));
-
 	let connectError = $state('');
 	let isConnecting = $state(false);
 
@@ -96,27 +95,20 @@
 	// to hook a re-read to once she is already sitting on this page (an
 	// external redirect, not a client-side one), so the fix is a short
 	// poll rather than an invalidate -- reasoning captured in #259's own
-	// re-verified triage comment. `refreshError` never clears `status`: a
-	// failed re-read keeps the last good answer on screen rather than
-	// blanking it or routing through FormPage's `loadError`, which would
-	// replace the whole page over a check that merely didn't go through.
-	let refreshError = $state('');
-	let isCheckingStatus = $state(false);
-	let isPolling = $state(false);
-	let pollHandle: ConnectStatusPollHandle | undefined;
-	// Plain, not $state: only onMount's own async chain reads it, to
-	// decide whether it is still allowed to start a poll after leaving
-	// the two awaits below. A visit that leaves fast enough to destroy
-	// this screen before either fetch resolves must not start a poll
-	// that nothing will ever be left to stop.
-	let isDestroyed = false;
+	// re-verified triage comment. A failed re-read keeps the last good
+	// answer on screen rather than blanking it or routing through
+	// FormPage's failed read, which would replace the whole page over a
+	// check that merely didn't go through. The first read, the poll and
+	// the on-demand check are one value, `ConnectStatusCheck`, so the
+	// banner and the badge are drawn from one status.
+	const connectCheck = new ConnectStatusCheck(apiFetchWithSession, page.params.practiceId!);
+	const status = $derived(connectCheck.status);
 
 	// #271: read by any Staff member (#270's own reasoning for the
 	// sibling "can this Practice raise an Invoice at all" fact), so this
 	// runs unconditionally rather than behind the Owner/Admin guard the
-	// Connect status fetch below uses. billingMode undefined is
-	// ambiguous on its own -- still loading, or loaded and never
-	// chosen -- so isBillingModeLoaded tells the two apart.
+	// Connect status fetch below uses. Loaded with no mode is a mode never
+	// chosen, which the read's own state tells apart from still loading.
 	/*
 	 * What a save said (#2046, #1710): the payment terms question hands its
 	 * message here across the navigation, and the billing mode's in-place
@@ -125,9 +117,8 @@
 	 */
 	let outcome = $state(takeOutcome(page.url));
 
-	let billingMode = $state<BillingMode | undefined>();
-	let isBillingModeLoaded = $state(false);
-	let billingModeLoadError = $state('');
+	const billingModeRead = new PageRead<BillingMode | undefined>();
+	const billingMode = $derived(billingModeRead.value);
 	// No fallback (#1922): with no mode stored nothing is chosen, and the
 	// row has no Change at all -- #271 asks it on the first Invoice.
 	let chosenBillingMode = $state<BillingMode | undefined>();
@@ -135,14 +126,9 @@
 	let isSavingBillingMode = $state(false);
 	let billingModeSaveError = $state('');
 
-	onMount(async () => {
-		try {
-			billingMode = await loadBillingMode(apiFetchWithSession, page.params.practiceId!);
-			isBillingModeLoaded = true;
-		} catch (error_) {
-			billingModeLoadError = error_ instanceof Error ? error_.message : 'Failed to load billing mode';
-		}
-	});
+	onMount(() =>
+		billingModeRead.load(() => loadBillingMode(apiFetchWithSession, page.params.practiceId!), 'Failed to load billing mode')
+	);
 
 	/*
 	 * #768: how many days after an Invoice is raised it falls due, and so
@@ -151,16 +137,14 @@
 	 * (#2046). A Practice that has never set one runs on 30 days, and the
 	 * row says so.
 	 */
-	let paymentTerms = $state<PaymentTerms | undefined>();
-	let paymentTermsLoadError = $state('');
+	const paymentTermsRead = new PageRead<PaymentTerms>();
 
-	onMount(async () => {
-		try {
-			paymentTerms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			paymentTermsLoadError = error_ instanceof Error ? error_.message : 'Failed to load payment terms';
-		}
-	});
+	onMount(() =>
+		paymentTermsRead.load(
+			() => loadPaymentTerms(apiFetchWithSession, page.params.practiceId!),
+			'Failed to load payment terms'
+		)
+	);
 
 	// The billing mode's Change opens the question in place, from what is
 	// saved, so a choice abandoned earlier is not carried in.
@@ -185,13 +169,14 @@
 			// A non-null assertion, not a guard: the Change is drawn only
 			// once a mode is stored, and opening it sets `chosenBillingMode`
 			// to that mode, so a guard would be a branch that never runs.
-			billingMode = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode!);
+			const saved = await setBillingMode(apiFetchWithSession, page.params.practiceId!, chosenBillingMode!);
+			billingModeRead.set(saved);
 			isBillingModeOpen = false;
 			// Cleared first, so a message already showing (the payment terms') is
 			// drawn again and takes focus, rather than changing its words in place.
 			outcome = undefined;
 			await tick();
-			outcome = billingModeSavedMessage(billingMode);
+			outcome = billingModeSavedMessage(saved);
 		} catch (error_) {
 			billingModeSaveError = error_ instanceof Error ? error_.message : 'Failed to change billing mode';
 		} finally {
@@ -208,68 +193,45 @@
 		// only to decide whether the Connect button may be offered, and on
 		// this branch there is no button.
 		if (!isPracticeOwnerOrAdmin) return;
+		const arrival = connectArrival(page.url);
 		// #1812: only this screen sees her come back from Stripe's form,
 		// so it tells the server, once per landing. Not awaited, and it
 		// never fails for her: the record is ours, not her task.
-		if (connectParameter === 'return' && isPracticeOwner) {
+		if (arrival === 'return' && isPracticeOwner) {
 			void recordConnectReturn(apiFetchWithSession, page.params.practiceId!);
 		}
-		try {
-			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
-			// Set with the status, before the website read, so the screen
-			// never draws a first read as settled while Stripe catches up.
-			isPolling = connectParameter === 'return' && canConnectStatusStillMove(status);
-			website = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			isPolling = false;
-			error = error_ instanceof Error ? error_.message : 'Failed to load Stripe Connect status';
+		if (!(await connectCheck.first(arrival))) return;
+		const hasWebsite = await websiteRead.load(
+			() => loadWebsite(apiFetchWithSession, page.params.practiceId!),
+			CONNECT_STATUS_LOAD_FAILED_MESSAGE
+		);
+		if (!hasWebsite) {
+			connectCheck.stop();
 			return;
 		}
-		if (isDestroyed) return;
 		// Only the return trip starts the poll, and only until the status
 		// is `active` -- arriving without `connect=return` at all must
 		// never trigger an extra read (verified by the "no extra read"
-		// spec below).
-		if (isPolling) {
-			pollHandle = pollConnectStatus(apiFetchWithSession, page.params.practiceId!, status, {
-				onResult: (result) => {
-					status = result;
-					refreshError = '';
-				},
-				onError: () => {
-					refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
-				},
-				onStopped: () => {
-					isPolling = false;
-				}
-			});
-		}
+		// spec below). A screen already left starts nothing.
+		connectCheck.startPolling();
 	});
 
 	// Stops a running poll the moment this screen is left, so nothing
-	// keeps reading Connect status for a page nobody is looking at --
-	// and marks `isDestroyed` for onMount's own chain above, in case this
-	// runs before that chain has even started its poll.
+	// keeps reading Connect status for a page nobody is looking at, and
+	// drops any read still in flight so onMount's chain above starts no
+	// poll that nothing would be left to stop.
 	onDestroy(() => {
-		isDestroyed = true;
-		pollHandle?.stop();
+		connectCheck.stop();
 	});
 
 	/* The on-demand half of #259: a visible, focusable control that reads
 	   status again right now, independent of whatever the poll above is
 	   doing. It exists so nothing depends on a timer she cannot see --
 	   the poll is a small, bounded convenience, this is the fallback that
-	   always works, including after the poll's ceiling is reached. */
-	async function handleCheckStatus() {
-		refreshError = '';
-		isCheckingStatus = true;
-		try {
-			status = await loadConnectStatus(apiFetchWithSession, page.params.practiceId!);
-		} catch {
-			refreshError = CONNECT_STATUS_CHECK_FAILED_MESSAGE;
-		} finally {
-			isCheckingStatus = false;
-		}
+	   always works, including after the poll's ceiling is reached. An
+	   answer of `active` ends the poll there and then. */
+	function handleCheckStatus() {
+		return connectCheck.recheck();
 	}
 
 	/*
@@ -433,14 +395,12 @@
 	   "done" and restricted; the account is also restricted while Stripe
 	   is still reviewing. So the return notice reads the status rather
 	   than assuming the trip worked. */
-	let isBackFromStripeRestricted = $derived(
-		connectParameter === 'return' && !isPolling && status !== undefined && status.status === 'onboarding_incomplete'
-	);
+	const banner = $derived(connectCheck.banner);
 
 	/* #2565. For the first minutes after the return, a read that still
 	   lists requirements is Stripe catching up on the form just
 	   submitted. Nothing is shown as outstanding until the poll ends. */
-	let isStripeCatchingUp = $derived(isPolling && status?.status === 'onboarding_incomplete');
+	const isStripeCatchingUp = $derived(connectCheck.isStripeCatchingUp);
 
 	/*
 	 * #2046: the page is its facts, one summary row each, with a Change on
@@ -468,14 +428,20 @@
 			{
 				fact: 'billingMode',
 				label: 'Billing mode',
-				value: billingModeLoadError ? readFailed(billingModeLoadError) : billingModeValue(billingMode),
+				value:
+					billingModeRead.state.status === 'failed'
+						? readFailed(billingModeRead.state.message)
+						: billingModeValue(billingMode),
 				...(isPracticeOwner && billingMode !== undefined && { changes: 'the billing mode', isDetailShown: isBillingModeOpen })
 			},
 			{
 				fact: 'paymentTerms',
 				label: 'Payment terms',
-				value: paymentTermsLoadError ? readFailed(paymentTermsLoadError) : paymentTermsValue(paymentTerms!),
-				...(isPracticeOwnerOrAdmin && !paymentTermsLoadError && { changes: 'the payment terms' })
+				value:
+					paymentTermsRead.state.status === 'failed'
+						? readFailed(paymentTermsRead.state.message)
+						: paymentTermsValue(paymentTermsRead.value!),
+				...(isPracticeOwnerOrAdmin && paymentTermsRead.isLoaded && { changes: 'the payment terms' })
 			}
 		];
 		if (status !== undefined) {
@@ -495,22 +461,20 @@
 		return rows;
 	});
 
-	// Every read this page shows before it draws: the two any Staff member
-	// reads, and the Connect status for those who may read it.
-	const isLoading = $derived(
-		(!isBillingModeLoaded && !billingModeLoadError) ||
-			(paymentTerms === undefined && !paymentTermsLoadError) ||
-			(isPracticeOwnerOrAdmin && !error && status === undefined)
-	);
-	// The Template's one read value, from the flags above. These flags stay
-	// as they are: the Connect status shares them with its poll.
-	const read = $derived<PageReadState>(
-		error
-			? { status: 'failed', message: error }
-			: (isLoading
-				? { status: 'loading', label: 'Loading how this Practice gets paid' }
-				: LOADED_PAGE)
-	);
+	// The Template's one read value. The page fails on the Connect status
+	// or the website read; a billing mode or payment terms read that fails
+	// says so on its own row instead. It draws once the two any Staff
+	// member reads have settled, and the Connect status for those who may
+	// read it.
+	const read = $derived.by((): PageReadState => {
+		if (connectCheck.phase.phase === 'failed') return { status: 'failed', message: connectCheck.phase.message };
+		if (websiteRead.state.status === 'failed') return websiteRead.state;
+		const isLoading =
+			billingModeRead.state.status === 'loading' ||
+			paymentTermsRead.state.status === 'loading' ||
+			(isPracticeOwnerOrAdmin && connectCheck.phase.phase === 'reading');
+		return isLoading ? { status: 'loading', label: 'Loading how this Practice gets paid' } : LOADED_PAGE;
+	});
 </script>
 
 {#snippet intro()}
@@ -531,14 +495,14 @@
 
 {#snippet facts()}
 	{#if isPracticeOwnerOrAdmin}
-		{#if isBackFromStripeRestricted}
+		{#if banner === 'still-restricted'}
 			<Notice
 				variant="info"
 				message={isPracticeOwner
 					? 'Stripe still needs something from you before Clients can pay this Practice. Continue under Connect Stripe, below.'
 					: 'Stripe still needs something before Clients can pay this Practice. A Practice Owner has to finish it under Connect Stripe, below.'}
 			/>
-		{:else if connectParameter === 'return' && isPolling}
+		{:else if banner === 'checking'}
 			<!-- The banner's wording matches what the screen actually does
 			     (#259): it only promises to keep checking while a poll is
 			     actually running. -->
@@ -546,12 +510,12 @@
 				variant="status"
 				message="Stripe is checking your details. This can take a minute or two."
 			/>
-		{:else if connectParameter === 'return'}
+		{:else if banner === 'finished'}
 			<!-- No poll is running -- the status already settled on the
 			     first read, or the poll already reached its ceiling -- so
 			     this stops short of promising an update that is not coming. -->
 			<Notice variant="status" message="Stripe onboarding finished." />
-		{:else if connectParameter === 'refresh'}
+		{:else if banner === 'link-expired'}
 			<Notice variant="status" message="The Stripe onboarding link expired. Start again below." />
 		{/if}
 	{/if}
@@ -644,10 +608,10 @@
 			just come back from Stripe at all.
 		-->
 		<cluster-l space="var(--space-3)">
-			<Button label="Check status again" variant="secondary" size="sm" onClick={handleCheckStatus} loading={isCheckingStatus} />
+			<Button label="Check status again" variant="secondary" size="sm" onClick={handleCheckStatus} loading={connectCheck.isRechecking} />
 		</cluster-l>
-		{#if refreshError}
-			<Notice variant="error" message={refreshError} />
+		{#if connectCheck.refreshError}
+			<Notice variant="error" message={connectCheck.refreshError} />
 		{/if}
 	{:else}
 		<!--
