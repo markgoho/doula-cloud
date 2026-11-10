@@ -196,7 +196,7 @@ func MergeHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		moved, err := moveAttachments(r.Context(), c.Tx, absorbedID, survivorID)
+		moved, err := moveAttachments(r.Context(), c.Tx, absorbedID, survivorID, c.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -219,7 +219,7 @@ func MergeHandler() http.Handler {
 			return
 		}
 		if strings.TrimSpace(survivorOnFile.Email) != strings.TrimSpace(merged.Email) {
-			if err := portalinvite.RevokePending(r.Context(), c.Tx, survivorID, portalinvite.RevokedEmailChanged); err != nil {
+			if _, err := portalinvite.Revoke(r.Context(), c.Tx, survivorID, c.StaffID, portalinvite.RevokedEmailChanged, clock.Now(r.Context()).UTC()); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -433,7 +433,7 @@ type movedCounts struct {
 // are plain practice_id comparisons that this transaction already
 // satisfies. What could refuse them is the narrowed trigger, and that
 // raises rather than matching zero rows.
-func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID string) (movedCounts, error) {
+func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID, staffID string) (movedCounts, error) {
 	var moved movedCounts
 
 	engagements, err := moveRows(ctx, tx,
@@ -454,25 +454,16 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 
 	// A pending invitation is revoked rather than moved. It is
 	// re-sendable, moving one would collide with
-	// client_portal_users_one_pending_per_client (00026) whenever the
+	// client_portal_users_one_open_invite_per_client (00168) whenever the
 	// survivor holds her own, and the address it was sent to may not even
-	// be the address the fold kept.
-	revoked, err := moveRows(ctx, tx,
-		`UPDATE client_portal_users
-		    SET invite_token = NULL, invite_token_expires_at = NULL
-		  WHERE client_id = $1 AND identity_uid IS NULL AND invite_token IS NOT NULL`,
-		absorbedID)
+	// be the address the fold kept. portalinvite.Revoke records who and
+	// when on the row, and stops any send still queued for it.
+	revoked, err := portalinvite.Revoke(ctx, tx, absorbedID, staffID, portalinvite.RevokedRecordMerged, clock.Now(ctx).UTC())
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return movedCounts{}, err
+		return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
 	}
 	moved.RevokedInvitations = revoked
-	if revoked > 0 {
-		if err := portalinvite.RevokePending(ctx, tx, absorbedID, portalinvite.RevokedRecordMerged); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
-		}
-	}
 
 	// Counted before the move, so the move has something to be wrong
 	// about. Read through the caller's own RLS, which admits the absorbed

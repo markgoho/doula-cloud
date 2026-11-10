@@ -21,7 +21,7 @@ func TestRLS_ClientPortalUsersInviteInsertFailsClosedWithNoPracticeSet(t *testin
 	tx := db.BeginAs(t)
 
 	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`,
 		clientID,
 	)
 	if err == nil {
@@ -40,7 +40,7 @@ func TestRLS_ClientPortalUsersInviteInsertFailsForClientAtOtherPractice(t *testi
 
 	tx := db.BeginAs(t, testdb.Practice(practiceA))
 	_, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`,
 		clientB,
 	)
 	if err == nil {
@@ -58,7 +58,7 @@ func TestRLS_ClientPortalUsersInviteInsertSucceedsForClientAtOwnPractice(t *test
 
 	tx := db.BeginAs(t, testdb.Practice(practiceID))
 	if _, err := tx.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`,
 		clientID,
 	); err != nil {
 		t.Fatalf("expected insert to succeed for a Client with an Engagement at the current Practice: %v", err)
@@ -76,7 +76,7 @@ func TestRLS_ClientPortalUsersPracticeVisibilityScopedToOwnPractice(t *testing.T
 	clientA, _ := testdb.SeedNamedEngagement(t, db, practiceA, "Client A", "cliana@example.com")
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clianb@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()), ($2, gen_random_uuid())`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days'), ($2, 'invited', gen_random_uuid(), now() + interval '7 days')`,
 		clientA, clientB,
 	); err != nil {
 		t.Fatalf("seed portal rows: %v", err)
@@ -103,7 +103,7 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchAcceptedRow(t *testing.T) {
 	practiceID := testdb.SeedPractice(t, db, "Accepted Row Practice")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Accepted Row Client", "acceptedrow@example.com")
 	testdb.SeedPortalAccount(t, db, "already-accepted", "already-accepted@example.com")
-	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted', $1) RETURNING id`,
+	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES ('already-accepted', $1, 'accepted') RETURNING id`,
 		clientID)
 
 	tx := db.BeginAs(t, testdb.Practice(practiceID))
@@ -132,7 +132,7 @@ func TestRLS_ClientPortalUsersInviteUpdateCannotTouchCrossPracticeRow(t *testing
 	practiceA := testdb.SeedPractice(t, db, "Update Cross Practice A")
 	practiceB := testdb.SeedPractice(t, db, "Update Cross Practice B")
 	clientB, _ := testdb.SeedNamedEngagement(t, db, practiceB, "Client B", "clientb-update@example.com")
-	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+	rowID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days') RETURNING id`,
 		clientB)
 
 	tx := db.BeginAs(t, testdb.Practice(practiceA))
@@ -209,7 +209,7 @@ func TestRLS_ClientPortalUsersAcceptUpdateRejectsMismatchedIdentity(t *testing.T
 	tx := db.BeginAs(t, testdb.Identity("the-real-caller"), testdb.InviteToken(inviteToken))
 
 	_, err := tx.ExecContext(t.Context(),
-		`UPDATE client_portal_users SET identity_uid = 'someone-else', invite_token = NULL WHERE invite_token = $1`,
+		`UPDATE client_portal_users SET state = 'accepted', identity_uid = 'someone-else', invite_token = NULL, invite_token_expires_at = NULL WHERE invite_token = $1`,
 		inviteToken,
 	)
 	if err == nil {

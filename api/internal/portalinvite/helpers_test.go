@@ -105,7 +105,7 @@ func seedPendingPortalInviteExpiringAt(t *testing.T, db *testdb.DB, expiresAt ti
 func insertPendingPortalInvite(t *testing.T, db *testdb.DB, clientID string, expiresAt time.Time) (inviteToken string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token, invite_token_expires_at) VALUES ($1, gen_random_uuid(), $2) RETURNING invite_token::text`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), $2) RETURNING invite_token::text`,
 		clientID, expiresAt,
 	).Scan(&inviteToken); err != nil {
 		t.Fatalf("seed pending portal invite: %v", err)

@@ -25,6 +25,7 @@ import { DOULA_RADIOS_MAX } from '#lib/engagementRequest.js';
 import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
 import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staff.js';
+import type { PortalAccessState, PortalInviteDelivery } from '#lib/portalInvite.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 import { pageState } from '#testing/routePage.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -65,7 +66,8 @@ interface Detail {
 	pregnancyEndedOn?: string;
 	offersBirthPlanToStart: boolean;
 	offersBirthPlan: boolean;
-	clientPortalInviteStatus?: string;
+	clientPortalInviteStatus?: PortalAccessState;
+	clientPortalInviteDelivery?: PortalInviteDelivery;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
 	doulas: { staffId: string; name: string; openVisits: number }[];
@@ -1338,7 +1340,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	});
 
 	it('reads the pending word once the fixture reports a pending invite', async () => {
-		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'pending' });
+		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'invited', clientPortalInviteDelivery: 'pending' });
 
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
 	});
@@ -1369,6 +1371,20 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
 	});
 
+	// An invite that expired, was withdrawn or never arrived cannot bring
+	// her to a Contract, so Send waits for a new one, as the server does.
+	it('withholds Send Contract while the invite has expired, and asks for a new one', async () => {
+		await setupWithContract(
+			() => mockContract(draftContract),
+			{ ...fixtureDetail, clientPortalInviteStatus: 'expired' }
+		);
+
+		await expect.element(testPage.getByText('Invite expired — needs re-invite')).toBeVisible();
+		await expect.element(testPage.getByText(/Send this Client a new portal invite before sending the Contract/)).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' }).first()).toBeVisible();
+	});
+
 	it('offers "Send portal invite" while never invited', async () => {
 		await setup(fixtureDetail);
 
@@ -1395,7 +1411,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	it('enables Send Contract once the Client has a pending or accepted invite', async () => {
 		await setupWithContract(
 			() => mockContract(draftContract),
-			{ ...fixtureDetail, clientPortalInviteStatus: 'pending' }
+			{ ...fixtureDetail, clientPortalInviteStatus: 'invited', clientPortalInviteDelivery: 'pending' }
 		);
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
@@ -1600,7 +1616,7 @@ describe('the Contract read first, and its change only when asked (#2004)', () =
 		apiFetchWithSession.mockReset();
 	});
 
-	const accepted = { ...fixtureDetail, clientPortalInviteStatus: 'accepted' };
+	const accepted = { ...fixtureDetail, clientPortalInviteStatus: 'accepted' as const };
 
 	it('shows the status and fee as rows and no field, with the text behind a closed disclosure', async () => {
 		await setupWithContract(() => mockContract(draftOf()), accepted);
@@ -1856,7 +1872,7 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 	it('names the acceptance signing waits on once an invite is out', async () => {
 		await setupWithContract(
 			() => mockNoContract(birthRateOnly),
-			{ ...fixtureDetail, clientPortalInviteStatus: 'sent' },
+			{ ...fixtureDetail, clientPortalInviteStatus: 'invited', clientPortalInviteDelivery: 'sent' },
 			ownerSession
 		);
 
@@ -3905,7 +3921,7 @@ describe('the Messages section (#2004)', () => {
 	});
 
 	it('says the thread opens once a pending invite is accepted', async () => {
-		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientPortalInviteStatus: 'pending' });
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientPortalInviteStatus: 'invited', clientPortalInviteDelivery: 'pending' });
 
 		await expect
 			.element(

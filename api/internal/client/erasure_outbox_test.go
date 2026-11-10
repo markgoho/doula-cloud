@@ -319,7 +319,7 @@ func TestEraseHandler_DeletesHerPortalLoginAndEndsHerSessions(t *testing.T) {
 func TestEraseHandler_RevokesAnUnacceptedPortalInvite(t *testing.T) {
 	e := newEraseEnv(t)
 	if _, err := e.DB.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, e.ClientID,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`, e.ClientID,
 	); err != nil {
 		t.Fatalf("seed portal invite: %v", err)
 	}
@@ -655,7 +655,7 @@ func TestEraseHandler_LeavesTheLoginAnotherPracticeStillReaches(t *testing.T) {
 func (e *eraseEnv) seedPortalLogin(portalUID string) {
 	e.T.Helper()
 	testdb.SeedPortalAccount(e.T, e.DB, portalUID, portalUID+"@example.com")
-	e.Exec(`INSERT INTO client_portal_users (client_id, identity_uid) VALUES ($1, $2)`, e.ClientID, portalUID)
+	e.Exec(`INSERT INTO client_portal_users (client_id, identity_uid, state) VALUES ($1, $2, 'accepted')`, e.ClientID, portalUID)
 }
 
 // eraseAndRunWorker erases the Client, brings every queued act due, and

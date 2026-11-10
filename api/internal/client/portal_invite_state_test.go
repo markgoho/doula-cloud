@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -22,7 +23,7 @@ func fetchPortalInviteState(t *testing.T, db *testdb.DB, clientID string) client
 }
 
 // TestFetchPortalInviteState_NeverInvited proves the "no client_portal_users
-// row" case reads Status nil, mirroring ListItem.PortalInviteStatus's own
+// row" case reads Access nil, mirroring ListItem.PortalInviteStatus's own
 // "Never invited" absence (#255) -- and that a Client with an email on
 // file reports HasEmail true.
 func TestFetchPortalInviteState_NeverInvited(t *testing.T) {
@@ -32,8 +33,8 @@ func TestFetchPortalInviteState_NeverInvited(t *testing.T) {
 
 	state := fetchPortalInviteState(t, db, clientID)
 
-	if state.Status != nil {
-		t.Fatalf("status = %v, want nil", state.Status)
+	if state.Access != nil {
+		t.Fatalf("access = %+v, want nil", state.Access)
 	}
 	if state.EmailSuppressed {
 		t.Fatal("emailSuppressed = true, want false")
@@ -53,8 +54,8 @@ func TestFetchPortalInviteState_NoEmail(t *testing.T) {
 
 	state := fetchPortalInviteState(t, db, clientID)
 
-	if state.Status != nil {
-		t.Fatalf("status = %v, want nil", state.Status)
+	if state.Access != nil {
+		t.Fatalf("access = %+v, want nil", state.Access)
 	}
 	if state.HasEmail {
 		t.Fatal("hasEmail = true, want false")
@@ -62,7 +63,7 @@ func TestFetchPortalInviteState_NoEmail(t *testing.T) {
 }
 
 // TestFetchPortalInviteState_Pending proves a pending (outbox row, no
-// identity_uid) client_portal_users row reads Status "pending" -- exactly
+// identity_uid) client_portal_users row reads "invited", delivery "pending" -- exactly
 // the word ListItem.PortalInviteStatus reports for the same row shape.
 func TestFetchPortalInviteState_Pending(t *testing.T) {
 	db := testdb.New(t)
@@ -72,8 +73,8 @@ func TestFetchPortalInviteState_Pending(t *testing.T) {
 
 	state := fetchPortalInviteState(t, db, clientID)
 
-	if state.Status == nil || *state.Status != pendingStatus {
-		t.Fatalf("status = %v, want %q", state.Status, pendingStatus)
+	if state.Access == nil || state.Access.State != portalinvite.StateInvited || state.Access.Delivery != pendingStatus {
+		t.Fatalf("access = %+v, want invited, delivery %q", state.Access, pendingStatus)
 	}
 	if !state.HasEmail {
 		t.Fatal("hasEmail = false, want true")
@@ -81,7 +82,7 @@ func TestFetchPortalInviteState_Pending(t *testing.T) {
 }
 
 // TestFetchPortalInviteState_Accepted proves an accepted (identity_uid
-// set) client_portal_users row reads Status "accepted" regardless of
+// set) client_portal_users row reads "accepted" regardless of
 // outbox state, the same precedence ListItem.PortalInviteStatus applies.
 func TestFetchPortalInviteState_Accepted(t *testing.T) {
 	db := testdb.New(t)
@@ -91,8 +92,8 @@ func TestFetchPortalInviteState_Accepted(t *testing.T) {
 
 	state := fetchPortalInviteState(t, db, clientID)
 
-	if state.Status == nil || *state.Status != "accepted" {
-		t.Fatalf("status = %v, want \"accepted\"", state.Status)
+	if state.Access == nil || state.Access.State != portalinvite.StateAccepted || state.Access.Delivery != "" {
+		t.Fatalf("access = %+v, want accepted with no delivery", state.Access)
 	}
 }
 
@@ -105,15 +106,15 @@ func TestFetchPortalInviteState_Refused(t *testing.T) {
 	clientID := testdb.SeedNamedClient(t, db, practiceID, "Refused Client", "refused-fetch@example.com")
 	seedPendingOutboxRow(t, db, clientID)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, clientID,
+		`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE client_id = $1`, clientID,
 	); err != nil {
 		t.Fatalf("mark refused: %v", err)
 	}
 
 	state := fetchPortalInviteState(t, db, clientID)
 
-	if state.Status == nil || *state.Status != client.PortalInviteRefused {
-		t.Fatalf("status = %v, want %q", state.Status, client.PortalInviteRefused)
+	if state.Access == nil || state.Access.State != portalinvite.StateRefused {
+		t.Fatalf("access = %+v, want refused", state.Access)
 	}
 }
 

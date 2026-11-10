@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -37,12 +38,14 @@ type ListItem struct {
 	Email   string `json:"email"`
 	HasWork bool   `json:"hasWork"`
 
-	// PortalInviteStatus mirrors the pre-#397 engagement.ClientEngagement
-	// field of the same name: nil when the Client was never invited,
-	// "accepted" once identity_uid is set (taking precedence over
-	// portal_invite_outbox, since accept.go never touches that row),
-	// otherwise the most recent outbox row's status.
-	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
+	// PortalInviteStatus is her portal access (portalinvite.State, from
+	// portalinvite.Derive): nil when the Client was never invited.
+	// PortalInviteDelivery is what the latest send of a live invitation
+	// did (portal_invite_outbox.status), present only while
+	// PortalInviteStatus is "invited" -- the two are separate fields
+	// because they are two tables' vocabularies.
+	PortalInviteStatus   *portalinvite.State `json:"portalInviteStatus,omitempty"`
+	PortalInviteDelivery *string             `json:"portalInviteDelivery,omitempty"`
 
 	// EmailSuppressed is whether this Client's address currently sits on
 	// email_suppressions with no cleared_at (#785, ADR-0029). It is what
@@ -470,7 +473,7 @@ func listClients(ctx context.Context, tx *sql.Tx, practiceID string, filters lis
 		return nil, fmt.Errorf("client: list clients: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanListItems(rows)
+	return scanListItems(ctx, rows)
 }
 
 // disableJIT turns JIT compilation off for the rest of tx. The list sorts every
@@ -514,13 +517,8 @@ func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.
 	narrow, narrowArgs := filters.narrowing(5)
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        pu.id IS NOT NULL, pu.identity_uid IS NOT NULL, pu.access_refused_at IS NOT NULL, latest.status, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
-		 FROM clients c` + portalUserForClient + dueSortJoin + `
-		 LEFT JOIN LATERAL (
-		     SELECT o.status FROM portal_invite_outbox o
-		     WHERE o.client_portal_user_id = pu.id
-		     ORDER BY o.created_at DESC LIMIT 1
-		 ) latest ON true
+		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
+		 FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + `
 		 WHERE c.practice_id = $1 AND c.merged_into IS NULL AND (NOT $2 OR ` + hasWorkExpr + `)
 		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
 		   AND ` + narrow
@@ -554,18 +552,13 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
-		            pu.id IS NOT NULL AS has_portal_user, pu.identity_uid IS NOT NULL AS accepted, pu.access_refused_at IS NOT NULL AS refused, latest.status,
+		            ` + portalinvite.HerAccessColumns + `,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at
 		     FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     ` + portalUserForClient + dueSortJoin + `
-		     LEFT JOIN LATERAL (
-		         SELECT o.status FROM portal_invite_outbox o
-		         WHERE o.client_portal_user_id = pu.id
-		         ORDER BY o.created_at DESC LIMIT 1
-		     ) latest ON true
+		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
 		     WHERE c.practice_id = $1 AND c.merged_into IS NULL AND ea.staff_id = $2
 		       AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
@@ -587,7 +580,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		return nil, fmt.Errorf("client: list attached clients: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
-	return scanListItems(rows)
+	return scanListItems(ctx, rows)
 }
 
 // rawOpenEngagement is one row of fetchOpenEngagements' unshaped read --
@@ -877,25 +870,30 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 	return oe
 }
 
-func scanListItems(rows *sql.Rows) ([]ListItem, error) {
+// scanListItems reads a page's rows, deriving each Client's portal
+// access through portalinvite.Derive -- the same derivation
+// FetchPortalInviteState gives a single read -- at one instant for the
+// whole page.
+func scanListItems(ctx context.Context, rows *sql.Rows) ([]ListItem, error) {
+	now := clock.Now(ctx)
 	list := []ListItem{}
 	for rows.Next() {
 		var item ListItem
 		var givenName string
 		var preferredName, familyName sql.NullString
-		var hasPortalUser, accepted, refused bool
-		var outboxStatus sql.NullString
+		var accessState, delivery sql.NullString
+		var expiresAt sql.NullTime
 		var pendingKinds sql.NullString
 		var sortAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
-			&hasPortalUser, &accepted, &refused, &outboxStatus, &item.EmailSuppressed, &pendingKinds, &sortAt,
+			&accessState, &expiresAt, &delivery, &item.EmailSuppressed, &pendingKinds, &sortAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
 		}
 		item.Name = personname.Full(givenName, preferredName.String, familyName.String)
-		item.PortalInviteStatus = PortalInviteStatus(hasPortalUser, accepted, refused, outboxStatus)
+		item.PortalInviteStatus, item.PortalInviteDelivery = portalinvite.Derive(accessState, expiresAt, delivery, now).Fields()
 		if pendingKinds.Valid {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
 		}
@@ -907,33 +905,4 @@ func scanListItems(rows *sql.Rows) ([]ListItem, error) {
 		return nil, fmt.Errorf("client: iterate list items: %w", err)
 	}
 	return list, nil
-}
-
-// PortalInviteStatus derives ListItem.PortalInviteStatus, mirroring the
-// pre-#397 engagement.portalInviteStatus logic exactly. Exported (#255)
-// so FetchPortalInviteState below -- the single-Client read
-// engagement.DetailHandler and any other caller needing one Client's
-// state use -- computes the same word this list does, rather than
-// forking the derivation a second time.
-//
-// refused (#2522) is an accept ADR-0015 refused because her login already
-// reaches another Client here: PortalInviteRefused, ahead of the outbox's
-// word, because that invite can never be accepted.
-func PortalInviteStatus(hasPortalUser, accepted, refused bool, outboxStatus sql.NullString) *string {
-	if !hasPortalUser {
-		return nil
-	}
-	if accepted {
-		status := "accepted"
-		return &status
-	}
-	if refused {
-		status := PortalInviteRefused
-		return &status
-	}
-	if outboxStatus.Valid {
-		status := outboxStatus.String
-		return &status
-	}
-	return nil
 }

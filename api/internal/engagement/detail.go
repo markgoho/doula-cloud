@@ -20,6 +20,7 @@ import (
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -72,11 +73,14 @@ type Detail struct {
 	// client.FetchPortalInviteState -- the same derivation the Clients
 	// list's own PortalInviteStatus/EmailSuppressed carry, reinstated
 	// here so the Engagement hub can state it as standing information
-	// (never invited / pending / accepted, and whether the address can
+	// (never invited / invited / accepted, and whether the address can
 	// even be invited) rather than only as feedback after a Send.
-	ClientPortalInviteStatus *string `json:"clientPortalInviteStatus,omitempty"`
-	ClientEmailSuppressed    bool    `json:"clientEmailSuppressed"`
-	ClientHasEmail           bool    `json:"clientHasEmail"`
+	// ClientPortalInviteDelivery is the latest send of a live invitation,
+	// present only while ClientPortalInviteStatus is "invited".
+	ClientPortalInviteStatus   *portalinvite.State `json:"clientPortalInviteStatus,omitempty"`
+	ClientPortalInviteDelivery *string             `json:"clientPortalInviteDelivery,omitempty"`
+	ClientEmailSuppressed      bool                `json:"clientEmailSuppressed"`
+	ClientHasEmail             bool                `json:"clientHasEmail"`
 
 	// ClientsCanPay (#270) is cardpayments.ClientsCanPay -- one column, no
 	// Stripe round-trip. A standing fact about the Practice's own billing
@@ -329,7 +333,7 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		d.ClientPortalInviteStatus = portalState.Status
+		d.ClientPortalInviteStatus, d.ClientPortalInviteDelivery = portalState.Access.Fields()
 		d.ClientEmailSuppressed = portalState.EmailSuppressed
 		d.ClientHasEmail = portalState.HasEmail
 

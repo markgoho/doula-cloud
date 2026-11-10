@@ -171,8 +171,9 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 	if d := detailOf(neverInvited); d.ClientPortalInviteStatus != nil || !d.ClientHasEmail {
 		t.Fatalf("never-invited detail = %+v, want nil status and hasEmail true", d)
 	}
-	if d := detailOf(engagementFor(pending)); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "pending" {
-		t.Fatalf("pending detail status = %v, want \"pending\"", d.ClientPortalInviteStatus)
+	if d := detailOf(engagementFor(pending)); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "invited" ||
+		d.ClientPortalInviteDelivery == nil || *d.ClientPortalInviteDelivery != "pending" {
+		t.Fatalf("pending detail = %v / %v, want invited / pending", d.ClientPortalInviteStatus, d.ClientPortalInviteDelivery)
 	}
 	if d := detailOf(engagementFor(accepted)); d.ClientPortalInviteStatus == nil || *d.ClientPortalInviteStatus != "accepted" {
 		t.Fatalf("accepted detail status = %v, want \"accepted\"", d.ClientPortalInviteStatus)

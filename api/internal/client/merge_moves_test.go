@@ -244,7 +244,7 @@ func TestEraseHandler_ReachesTheAbsorbedRecord(t *testing.T) {
 
 // TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation proves the
 // one attachment the merge does not move. An invitation is re-sendable,
-// moving it would collide with client_portal_users_one_pending_per_client
+// moving it would collide with client_portal_users_one_open_invite_per_client
 // (00026) whenever the survivor holds her own, and the address it was
 // sent to may not even be the address the fold kept.
 func TestMergeHandler_RevokesTheAbsorbedRecordsPendingInvitation(t *testing.T) {

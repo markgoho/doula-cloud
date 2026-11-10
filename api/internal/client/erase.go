@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -324,7 +325,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
-	portalQueued, err := enqueuePortalErasure(ctx, tx, clientID)
+	portalQueued, err := enqueuePortalErasure(ctx, tx, clientID, actor.StaffID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
@@ -880,26 +881,23 @@ func enqueueStripeErasure(ctx context.Context, tx *sql.Tx, practiceID, clientID 
 // so the "last Practice out takes the login" rule below is asked of each
 // login separately rather than of whichever row a single read happened
 // to return.
-func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (queued bool, err error) {
-	identityUIDs, hasPending, err := portalIdentityUIDs(ctx, tx, clientID)
+//
+// A live invitation she holds -- beside a login or instead of one, since
+// a merge can leave both on one Client -- is revoked first
+// (portalinvite.TransitionRevoke, recording staffID and now); there is
+// no account behind it to delete.
+func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID, staffID string, now time.Time) (queued bool, err error) {
+	if _, err := portalinvite.Revoke(ctx, tx, clientID, staffID, portalinvite.RevokedClientErased, now); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return false, fmt.Errorf("client: revoke pending portal invite: %w", err)
+	}
+
+	identityUIDs, err := portalIdentityUIDs(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, err
 	}
-
 	if len(identityUIDs) == 0 {
-		if !hasPending {
-			return false, nil
-		}
-		// An invitation that was never accepted: there is no Identity
-		// Platform account behind it, and revoking the pending invite is
-		// enough.
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE client_portal_users SET invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return false, fmt.Errorf("client: revoke pending portal invite: %w", err)
-		}
 		return false, nil
 	}
 
@@ -911,12 +909,14 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 	}
 
 	// Runs whatever the loop above did. Where a DELETE ran, the FK
-	// cascade has already nulled that row's identity_uid and this clears
-	// the invite columns alongside it; where none did, this is the whole
-	// act -- every row that named a surviving login from this Practice
-	// stops naming it.
+	// cascade has already nulled that row's identity_uid; where none did,
+	// this is the whole act -- every row that named a surviving login from
+	// this Practice stops naming it. Either way the row moves to unlinked
+	// through portalinvite.TransitionUnlink, which the database writes
+	// (00168's trigger) because the cascade has no other writer.
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE client_portal_users SET identity_uid = NULL, invite_token = NULL, invite_token_expires_at = NULL WHERE client_id = $1`, clientID,
+		`UPDATE client_portal_users SET identity_uid = NULL WHERE client_id = $1 AND state = ANY($2::portal_access_state[])`,
+		clientID, portalinvite.TransitionUnlink.FromStates(),
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("client: clear portal identity: %w", err)
@@ -924,38 +924,35 @@ func enqueuePortalErasure(ctx context.Context, tx *sql.Tx, clientID string) (que
 	return true, nil
 }
 
-// portalIdentityUIDs reads every login clientID's portal rows name, and
-// whether any of those rows is a pending invitation instead. Its own
-// function so the result set is closed before erasePortalAccount runs a
-// second query on the same transaction -- opening one while a result set
-// is still streaming deadlocks on the connection.
-func portalIdentityUIDs(ctx context.Context, tx *sql.Tx, clientID string) (identityUIDs []string, hasPending bool, err error) {
+// portalIdentityUIDs reads every login clientID's accepted portal rows
+// name. Its own function so the result set is closed before
+// erasePortalAccount runs a second query on the same transaction --
+// opening one while a result set is still streaming deadlocks on the
+// connection.
+func portalIdentityUIDs(ctx context.Context, tx *sql.Tx, clientID string) (identityUIDs []string, err error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1 ORDER BY id`, clientID,
+		`SELECT identity_uid FROM client_portal_users WHERE client_id = $1 AND state = ANY($2::portal_access_state[]) ORDER BY id`,
+		clientID, portalinvite.TransitionUnlink.FromStates(),
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("client: read portal accounts: %w", err)
+		return nil, fmt.Errorf("client: read portal accounts: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
 	for rows.Next() {
-		var identityUID sql.NullString
+		var identityUID string
 		if err := rows.Scan(&identityUID); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, false, fmt.Errorf("client: scan portal account: %w", err)
+			return nil, fmt.Errorf("client: scan portal account: %w", err)
 		}
-		if identityUID.Valid {
-			identityUIDs = append(identityUIDs, identityUID.String)
-		} else {
-			hasPending = true
-		}
+		identityUIDs = append(identityUIDs, identityUID)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, false, fmt.Errorf("client: iterate portal accounts: %w", err)
+		return nil, fmt.Errorf("client: iterate portal accounts: %w", err)
 	}
-	return identityUIDs, hasPending, nil
+	return identityUIDs, nil
 }
 
 // erasePortalAccount takes one of her logins: it deletes the Portal

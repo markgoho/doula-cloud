@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -135,13 +136,14 @@ type DetailResponse struct {
 	// where the date may already be in the past. Absent means done: it
 	// ran, or she had no Stripe presence to redact.
 	StripeRedactionEligibleAt *time.Time `json:"stripeRedactionEligibleAt,omitempty"`
-	// PortalInviteStatus and EmailSuppressed are her portal-invite state,
-	// the same two facts ListItem carries and through the same
-	// FetchPortalInviteState (#255). The Clients list stopped showing them
-	// on #2022, so her hub is where a Practice reads whether she was
+	// PortalInviteStatus, PortalInviteDelivery and EmailSuppressed are her
+	// portal-invite state, the same facts ListItem carries and through the
+	// same FetchPortalInviteState (#255). The Clients list stopped showing
+	// them on #2022, so her hub is where a Practice reads whether she was
 	// invited and whether her address is blocked (#785).
-	PortalInviteStatus *string `json:"portalInviteStatus,omitempty"`
-	EmailSuppressed    bool    `json:"emailSuppressed,omitzero"`
+	PortalInviteStatus   *portalinvite.State `json:"portalInviteStatus,omitempty"`
+	PortalInviteDelivery *string             `json:"portalInviteDelivery,omitempty"`
+	EmailSuppressed      bool                `json:"emailSuppressed,omitzero"`
 }
 
 // DetailHandler views one Client's full record. Access follows
@@ -216,6 +218,7 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		portalStatus, portalDelivery := portalState.Access.Fields()
 		out := DetailResponse{
 			Record:                    rec,
 			ResolvedFields:            resolvedFields,
@@ -224,7 +227,8 @@ func DetailHandler() http.Handler {
 			MergedFrom:                mergedFrom,
 			ErasedAt:                  erasedAt,
 			StripeRedactionEligibleAt: redactionEligibleAt,
-			PortalInviteStatus:        portalState.Status,
+			PortalInviteStatus:        portalStatus,
+			PortalInviteDelivery:      portalDelivery,
 			EmailSuppressed:           portalState.EmailSuppressed,
 		}
 		apierr.WriteJSON(w, http.StatusOK, out)

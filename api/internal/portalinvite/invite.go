@@ -142,36 +142,47 @@ func resolveEngagementClient(ctx context.Context, tx *sql.Tx, engagementID, prac
 	return clientID, email, nil
 }
 
-// invite creates a pending client_portal_users row for clientID, or
-// rotates the existing pending row's invite_token if one already exists.
-// An already-accepted row (identity_uid set) is a 409 Conflict.
+// invite makes TransitionInvite (a new row) for clientID, or
+// TransitionReinvite on her live invitation if she holds one. A Client
+// whose access is accepted is a 409 Conflict.
 //
 // Since #813 a Client merged from two records can be reached by more
 // than one Portal Account, so this reads one row deliberately rather
-// than assuming there is only one. The ORDER BY prefers an accepted row:
-// a woman who can already sign in is refused a second invitation
+// than assuming there is only one, through herRowOrder -- the same row
+// every Staff-facing read calls hers. It prefers an accepted row: a
+// woman who can already sign in is refused a second invitation
 // whichever of her logins the query happened to see first, which is the
-// answer that cannot be wrong. Without it the same request would 409 or
-// send an invite depending on physical row order.
+// answer that cannot be wrong. A revoked or unlinked row is history, so
+// a new invitation is a new row and that one keeps its record.
 func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteResponse, status int, code apierr.Code, msg string) {
 	var existingID string
-	var identityUID sql.NullString
+	var state State
 	err := tx.QueryRowContext(ctx,
-		`SELECT id, identity_uid FROM client_portal_users
+		`SELECT id, state FROM client_portal_users
 		  WHERE client_id = $1
-		  ORDER BY (identity_uid IS NOT NULL) DESC, id
+		  `+herRowOrder+`
 		  LIMIT 1`,
 		clientID,
-	).Scan(&existingID, &identityUID)
+	).Scan(&existingID, &state)
+	if errors.Is(err, sql.ErrNoRows) {
+		err, state = nil, ""
+	}
 	expiresAt := clock.Now(ctx).Add(inviteTokenLifetime)
 
 	switch {
-	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+
+	case state == StateAccepted:
+		return InviteResponse{}, http.StatusConflict, apierr.CodeConflict, "this client already has portal access"
+
+	case !TransitionReinvite.Allows(state):
 		newID := uuid.NewString()
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO client_portal_users (id, client_id, invite_token, invite_token_expires_at) VALUES ($1, $2, $3, $4)`,
-			newID, clientID, inviteToken, expiresAt,
+			`INSERT INTO client_portal_users (id, client_id, state, invite_token, invite_token_expires_at) VALUES ($1, $2, $3, $4, $5)`,
+			newID, clientID, string(TransitionInvite.To), inviteToken, expiresAt,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
@@ -182,18 +193,13 @@ func invite(ctx context.Context, tx *sql.Tx, clientID string) (resp InviteRespon
 		}
 		return InviteResponse{ClientPortalUserID: newID, InviteToken: inviteToken}, http.StatusCreated, "", ""
 
-	case err != nil:
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
-
-	case identityUID.Valid:
-		return InviteResponse{}, http.StatusConflict, apierr.CodeConflict, "this client already has portal access"
-
 	default:
 		inviteToken := uuid.NewString()
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE client_portal_users SET invite_token = $1, invite_token_expires_at = $2, access_refused_at = NULL WHERE id = $3`,
-			inviteToken, expiresAt, existingID,
+			`UPDATE client_portal_users
+			    SET state = $1, invite_token = $2, invite_token_expires_at = $3, access_refused_at = NULL
+			  WHERE id = $4 AND state = ANY($5::portal_access_state[])`,
+			string(TransitionReinvite.To), inviteToken, expiresAt, existingID, TransitionReinvite.FromStates(),
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return InviteResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError

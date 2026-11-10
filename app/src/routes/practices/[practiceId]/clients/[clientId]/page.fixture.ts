@@ -45,7 +45,8 @@ export const detail: ClientDetail = {
 	dateOfBirth: '1994-03-01',
 	// #2022: the longest invite words there are, and the one branch that
 	// draws a link beside them (#785).
-	portalInviteStatus: 'bounced',
+	portalInviteStatus: 'invited',
+	portalInviteDelivery: 'bounced',
 	emailSuppressed: true,
 	// #2051: a field before any header (a list with no heading) and a
 	// section of two (one list under its heading), so both groupings are

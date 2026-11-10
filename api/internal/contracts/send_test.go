@@ -94,7 +94,7 @@ func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 	e := newEnv(t)
 	e.seedDraft()
 	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
-	e.Exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
+	e.Exec(`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
 
 	out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
 
@@ -102,6 +102,36 @@ func TestPostSendContractHandler_RefusedInviteHoldsTheSendBack(t *testing.T) {
 		t.Fatalf("refusal = %+v, want FAILED_PRECONDITION naming the other record's sign-in", out)
 	}
 	e.requireNothingSent()
+}
+
+// TestPostSendContractHandler_AnInviteThatCannotBringHerHoldsTheSendBack
+// proves the send asks portalinvite's CanReachPortal rather than "was a
+// row ever written": before 00168 an expired, withdrawn or undelivered
+// invite all let a Contract go to 'sent' with no way for her to reach
+// it. Each is refused in words that say what happened and what to do.
+func TestPostSendContractHandler_AnInviteThatCannotBringHerHoldsTheSendBack(t *testing.T) {
+	for _, tc := range []struct {
+		name, change, want string
+	}{
+		{"expired", `UPDATE client_portal_users SET invite_token_expires_at = now() - interval '1 day' WHERE client_id = $1`, "This Client's portal invite has expired, so you cannot send this Contract yet. Send a new portal invite first."},
+		{"withdrawn", `UPDATE client_portal_users SET state = 'revoked', invite_token = NULL, invite_token_expires_at = NULL, revoked_at = now(), revoke_reason = 'email_changed' WHERE client_id = $1`, "This Client's portal invite was withdrawn, so you cannot send this Contract yet. Send a new portal invite first."},
+		{"bounced", `UPDATE portal_invite_outbox SET status = 'bounced' WHERE client_portal_user_id IN (SELECT id FROM client_portal_users WHERE client_id = $1)`, "This Client's portal invite did not arrive, so you cannot send this Contract yet. Send a new portal invite first."},
+		{"unlinked", `UPDATE client_portal_users SET state = 'unlinked', invite_token = NULL, invite_token_expires_at = NULL, unlinked_at = now() WHERE client_id = $1`, "This Client no longer has portal access, so you cannot send this Contract."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := newEnv(t)
+			e.seedDraft()
+			testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
+			e.Exec(tc.change, e.Engagement.Client.ID)
+
+			out := apierrtest.Expect(t, http.MethodPost, e.send(), http.StatusConflict, e.SignedIn)
+
+			if out.Code != apierr.CodeFailedPrecondition || out.Message != tc.want {
+				t.Fatalf("refusal = %+v, want FAILED_PRECONDITION %q", out, tc.want)
+			}
+			e.requireNothingSent()
+		})
+	}
 }
 
 // TestPostSendContractHandler_NoPortalInvite proves the #255 precondition:

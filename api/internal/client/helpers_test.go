@@ -231,7 +231,7 @@ func seedPendingOutboxRow(t *testing.T, db *testdb.DB, clientID string) (outboxI
 
 	var portalUserID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days') RETURNING id`,
 		clientID,
 	).Scan(&portalUserID); err != nil {
 		t.Fatalf("seed portal user: %v", err)
@@ -254,7 +254,7 @@ func seedAcceptedPortalUser(t *testing.T, db *testdb.DB, clientID string) {
 	identityUID := "identity-" + clientID
 	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token, identity_uid) VALUES ($1, gen_random_uuid(), $2)`,
+		`INSERT INTO client_portal_users (client_id, state, identity_uid) VALUES ($1, 'accepted', $2)`,
 		clientID, identityUID,
 	); err != nil {
 		t.Fatalf("seed accepted portal user: %v", err)

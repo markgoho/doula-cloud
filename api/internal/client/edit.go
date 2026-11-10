@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -182,7 +183,7 @@ func EditHandler() http.Handler {
 			return
 		}
 		if old.Email != req.Email {
-			if err := portalinvite.RevokePending(r.Context(), c.Tx, c.ClientID, portalinvite.RevokedEmailChanged); err != nil {
+			if _, err := portalinvite.Revoke(r.Context(), c.Tx, c.ClientID, c.StaffID, portalinvite.RevokedEmailChanged, clock.Now(r.Context()).UTC()); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return

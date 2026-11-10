@@ -222,12 +222,13 @@ describe('client detail hub', () => {
 	});
 
 	it.each([
-		[undefined, false, 'Never invited'],
-		['sent', false, 'Invite sent'],
-		['bounced', false, 'Bounced — needs re-invite'],
-		['complained', true, 'Marked as spam (no action needed)']
-	])('reads %s (blocked: %s) as %s, with no link to unblock', async (portalInviteStatus, emailSuppressed, label) => {
-		await setup({ overrides: { portalInviteStatus, emailSuppressed } });
+		[undefined, undefined, false, 'Never invited'],
+		['invited', 'sent', false, 'Invite sent'],
+		['invited', 'bounced', false, 'Bounced — needs re-invite'],
+		['invited', 'complained', true, 'Marked as spam (no action needed)'],
+		['expired', undefined, false, 'Invite expired — needs re-invite']
+	] as const)('reads %s, %s (blocked: %s) as %s, with no link to unblock', async (portalInviteStatus, portalInviteDelivery, emailSuppressed, label) => {
+		await setup({ overrides: { portalInviteStatus, portalInviteDelivery, emailSuppressed } });
 
 		await expect.element(testPage.getByText(label)).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Blocked email addresses' })).not.toBeInTheDocument();

@@ -34,7 +34,7 @@ func TestSchema_OnePortalAccountLinkPerClient(t *testing.T) {
 
 	// The same Client twice is the pair the constraint exists to refuse.
 	_, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
+		`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES ($1, $2, 'accepted')`,
 		identifier, clientB,
 	)
 	if err == nil {
@@ -70,7 +70,7 @@ func TestSchema_PendingInviteRowsAreNotPairConstrained(t *testing.T) {
 	// constraint has nothing to say about the second, because its
 	// identity_uid is NULL.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`,
 		clientID,
 	); err != nil {
 		t.Fatalf("a pending row alongside an accepted one was refused: %v", err)
