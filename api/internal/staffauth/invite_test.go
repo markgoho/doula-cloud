@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
@@ -162,6 +163,54 @@ func TestInviteHandler_ReInviteRotatesTheSameInvitation(t *testing.T) {
 	}
 	if roles != adminRole || employmentType != contractorType {
 		t.Fatalf("rotated membership = %q/%q, want the second invite's", roles, employmentType)
+	}
+
+	// Each send is its own row on the Practice's feed: the invite, then
+	// the re-invite, both naming this one Invitation.
+	got := readInvitationActivity(t, db, practiceID)
+	if len(got) != 2 || got[0].action != string(activity.ActionStaffInvited) || got[1].action != string(activity.ActionStaffInvitationResent) ||
+		got[0].invitationID != created.InvitationID || got[1].invitationID != created.InvitationID {
+		t.Fatalf("invitation activity = %+v, want staff_invited then staff_invitation_resent on %s", got, created.InvitationID)
+	}
+}
+
+// TestInviteHandler_ReInviteKeepsWhoFirstInvited proves a re-invite
+// rotates the token and expiry without rewriting who first invited this
+// address and when: those stay on the row, and the re-sender and her
+// moment are the re-invite's own activity row.
+func TestInviteHandler_ReInviteKeepsWhoFirstInvited(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-resends"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	firstInviter := testdb.SeedStaffAtPractice(t, db, practiceID, "first-inviter", []string{"owner"}, employeeType)
+	invitationID := seedInvitation(t, db, practiceID, firstInviter, "resend@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
+	createdAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT created_at FROM practice_invitations WHERE id = $1`, invitationID)
+
+	srv, session, _ := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := postInvite(t, srv, session, practiceID, staffauth.InviteRequest{
+		Email: "resend@example.com", Roles: []string{doulaRole}, EmploymentType: employeeType,
+	})
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusOK)
+
+	var invitedBy string
+	var stillCreatedAt, expiresAt time.Time
+	if err := db.Admin.QueryRowContext(t.Context(),
+		`SELECT invited_by, created_at, expires_at FROM practice_invitations WHERE id = $1`, invitationID,
+	).Scan(&invitedBy, &stillCreatedAt, &expiresAt); err != nil {
+		t.Fatalf("read invitation: %v", err)
+	}
+	if invitedBy != firstInviter || !stillCreatedAt.Equal(createdAt) {
+		t.Fatalf("invited_by/created_at = %s/%v, want the first invite's %s/%v", invitedBy, stillCreatedAt, firstInviter, createdAt)
+	}
+	if !expiresAt.After(time.Now().Add(6 * 24 * time.Hour)) {
+		t.Fatalf("expires_at = %v, want a fresh lifetime", expiresAt)
+	}
+	got := readInvitationActivity(t, db, practiceID)
+	if len(got) != 1 || got[0].action != string(activity.ActionStaffInvitationResent) || got[0].actor != ownerID {
+		t.Fatalf("invitation activity = %+v, want one resend by %s", got, ownerID)
 	}
 }
 
@@ -352,6 +401,14 @@ func TestRevokeInvitationHandler_Success(t *testing.T) {
 	if status != "revoked" || revokedBy != ownerID || revokedAt.IsZero() {
 		t.Fatalf("revoked row = %q/%q/%v, want the actor and moment recorded", status, revokedBy, revokedAt)
 	}
+
+	// "Who withdrew it, and when" is on the Practice's feed too, at the
+	// instant the row records.
+	got := readInvitationActivity(t, db, practiceID)
+	if len(got) != 1 || got[0].action != string(activity.ActionStaffInvitationRevoked) || got[0].actor != ownerID ||
+		got[0].invitationID != invitationID || !got[0].at.Equal(revokedAt) {
+		t.Fatalf("invitation activity = %+v, want one revoke by %s at %v", got, ownerID, revokedAt)
+	}
 }
 
 func TestRevokeInvitationHandler_NotFound(t *testing.T) {
@@ -376,18 +433,93 @@ func TestRevokeInvitationHandler_NotFound(t *testing.T) {
 		reqtest.RequireStatus(t, resp, http.StatusBadRequest)
 	})
 
-	t.Run("already revoked", func(t *testing.T) {
-		invitationID := seedInvitation(t, db, practiceID, ownerID, "twice@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-		if _, err := db.Admin.ExecContext(t.Context(),
-			`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, invitationID,
-		); err != nil {
-			t.Fatalf("pre-revoke: %v", err)
+	// An Invitation that has already left pending is a 409 naming the
+	// state it is in (staffinvitation.TransitionRevoke's refusal), and is
+	// left exactly as it was.
+	conflicts := []struct {
+		name    string
+		address string
+		settle  string
+		want    string
+	}{
+		{"already revoked", "twice@example.com",
+			`UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`,
+			"This invitation has been revoked, so you cannot revoke it."},
+		{"already accepted", "joined@example.com",
+			`UPDATE practice_invitations SET status = 'accepted', accepted_staff_id = $2, accepted_at = now() WHERE id = $1`,
+			"This invitation has been accepted, so you cannot revoke it."},
+	}
+	for _, c := range conflicts {
+		t.Run(c.name, func(t *testing.T) {
+			invitationID := seedInvitation(t, db, practiceID, ownerID, c.address, "{doula}", employeeType, time.Now().Add(time.Hour))
+			if _, err := db.Admin.ExecContext(t.Context(), c.settle, invitationID, ownerID); err != nil {
+				t.Fatalf("settle invitation: %v", err)
+			}
+			resp := doInviteRequest(t, srv, session,
+				"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+			defer resp.Body.Close()
+			reqtest.RequireStatus(t, resp, http.StatusConflict)
+			if got := apierrtest.Decode(t, resp).Message; got != c.want {
+				t.Fatalf("message = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// TestRevokeInvitationHandler_WithdrawsALapsedInvitation proves an
+// Invitation past its expiry can still be withdrawn: it is still pending
+// in the column, still holds its address's slot, and withdrawing it is
+// one of the two things the Staff screen offers for it.
+func TestRevokeInvitationHandler_WithdrawsALapsedInvitation(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-revokes-lapsed"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	invitationID := seedInvitation(t, db, practiceID, ownerID, "lapsed@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
+
+	srv, session, _ := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+
+	resp := doInviteRequest(t, srv, session,
+		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+
+	if status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID); status != "revoked" {
+		t.Fatalf("status = %q, want revoked", status)
+	}
+}
+
+// invitationActivity is one Staff Invitation activity row, as a test
+// reads it back around RLS.
+type invitationActivity struct {
+	action, actor, invitationID string
+	at                          time.Time
+}
+
+// readInvitationActivity returns practiceID's Staff Invitation activity
+// rows, oldest first.
+func readInvitationActivity(t *testing.T, db *testdb.DB, practiceID string) []invitationActivity {
+	t.Helper()
+	rows, err := db.Admin.QueryContext(t.Context(),
+		`SELECT action, actor_staff_id, diff->>'invitationId', created_at FROM activity
+		  WHERE practice_id = $1 AND subject_kind = 'practice' AND action LIKE 'staff_invit%'
+		  ORDER BY created_at, id`, practiceID)
+	if err != nil {
+		t.Fatalf("read invitation activity: %v", err)
+	}
+	defer rows.Close()
+	var out []invitationActivity
+	for rows.Next() {
+		var a invitationActivity
+		if err := rows.Scan(&a.action, &a.actor, &a.invitationID, &a.at); err != nil {
+			t.Fatalf("scan invitation activity: %v", err)
 		}
-		resp := doInviteRequest(t, srv, session,
-			"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
-		defer resp.Body.Close()
-		reqtest.RequireStatus(t, resp, http.StatusNotFound)
-	})
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate invitation activity: %v", err)
+	}
+	return out
 }
 
 func TestRevokeInvitationHandler_RequiresConfirmation(t *testing.T) {

@@ -93,7 +93,7 @@ func TestListStaffHandler_PendingInvitationsAreTheirOwnGroup(t *testing.T) {
 	// A revoked Invitation is history, not a pending ask -- it must not
 	// appear in either group.
 	revokedID := seedInvitation(t, e.DB, e.Practice.ID, e.Staff.ID, "revoked@example.com", "{doula}", employeeType, inOneHour)
-	e.Exec(`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, revokedID)
+	e.Exec(`UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`, revokedID, e.Staff.ID)
 
 	roster := e.roster("")
 

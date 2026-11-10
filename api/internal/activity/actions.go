@@ -61,7 +61,8 @@ const SubjectClient = "client"
 // on-call settings), and staffauth's second-factor act seam (#1532's
 // refusal of one of the five acts) and its signup (#1547's terms_accepted,
 // the Practice's agreement to the Terms of Service and the Privacy
-// Policy) all write against it. Exported for the same reason
+// Policy) and staffinvitation.Record (a Staff Invitation sent, sent
+// again or withdrawn) all write against it. Exported for the same reason
 // SubjectClient is -- a second write site is exactly the drift this
 // prevents.
 const SubjectPractice = "practice"
@@ -101,6 +102,14 @@ const (
 	// ActionFoundingGrantIssued is a Platform operator's founding grant,
 	// from ops (#2482) -- diff staffCount, credits.
 	ActionFoundingGrantIssued PracticeAction = "founding_grant_issued"
+	// ActionStaffInvited, ActionStaffInvitationResent and
+	// ActionStaffInvitationRevoked are a Staff Invitation's own moves
+	// (staffinvitation.Transitions): sent, sent again, withdrawn -- diff
+	// invitationId, plus roles, employmentType and expiresAt on a send.
+	// Accepting one writes the Membership's 'joined' row instead.
+	ActionStaffInvited           PracticeAction = "staff_invited"
+	ActionStaffInvitationResent  PracticeAction = "staff_invitation_resent"
+	ActionStaffInvitationRevoked PracticeAction = "staff_invitation_revoked"
 )
 
 // SubjectMembership is the subject_kind every write site that touches

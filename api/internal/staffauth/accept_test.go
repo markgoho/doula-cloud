@@ -1,6 +1,9 @@
 package staffauth_test
 
 import (
+	"bytes"
+	"context"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -243,17 +246,17 @@ func TestAcceptInviteHandler_RefusesAMemberTwice(t *testing.T) {
 
 // TestAcceptInviteHandler_Refuses covers each way an acceptance is turned
 // away: an address that is not the invited one, a token with no verified
-// address behind it, an Invitation that lapsed (marked expired on the way
-// past, so the Owner's Staff screen stops offering it as pending -- it
-// survives the rolled-back request because nothing else in it succeeded),
-// a token nobody holds, and one that was revoked.
+// address behind it, an Invitation that lapsed (left pending in the
+// column: expiry is derived, so the Owner's Staff screen goes on showing
+// it as expired, the same answer this link got), a token nobody holds,
+// one that was revoked, and one already accepted.
 func TestAcceptInviteHandler_Refuses(t *testing.T) {
 	const invited = "invited@example.com"
 	cases := []struct {
 		name       string
 		email      string
 		expiresIn  time.Duration
-		revoke     bool
+		settle     string
 		unknown    bool
 		want       int
 		code       apierr.Code
@@ -262,10 +265,14 @@ func TestAcceptInviteHandler_Refuses(t *testing.T) {
 		{name: "the wrong address", email: "someone.else@example.com", expiresIn: time.Hour, want: http.StatusForbidden},
 		{name: "no verified address", expiresIn: time.Hour, want: http.StatusForbidden},
 		{name: "an Invitation that lapsed", email: invited, expiresIn: -time.Hour,
-			want: http.StatusGone, code: apierr.CodeLinkUnusable, wantStatus: "expired"},
+			want: http.StatusGone, code: apierr.CodeLinkUnusable, wantStatus: "pending"},
 		{name: "a token nobody holds", email: invited, unknown: true, want: http.StatusNotFound, code: apierr.CodeLinkUnusable},
-		{name: "a revoked Invitation", email: invited, expiresIn: time.Hour, revoke: true,
-			want: http.StatusNotFound, code: apierr.CodeLinkUnusable},
+		{name: "a revoked Invitation", email: invited, expiresIn: time.Hour,
+			settle: `UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`,
+			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: "revoked"},
+		{name: "an accepted Invitation", email: invited, expiresIn: time.Hour,
+			settle: `UPDATE practice_invitations SET status = 'accepted', accepted_staff_id = $2, accepted_at = now() WHERE id = $1`,
+			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: "accepted"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -274,8 +281,8 @@ func TestAcceptInviteHandler_Refuses(t *testing.T) {
 			if tc.unknown {
 				token = "not-a-real-token"
 			}
-			if tc.revoke {
-				e.Exec(`UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, invitationID)
+			if tc.settle != "" {
+				e.Exec(tc.settle, invitationID, e.Staff.ID)
 			}
 
 			out := e.refuseAccept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Too", LastName: "Late"}, tc.want)
@@ -290,6 +297,123 @@ func TestAcceptInviteHandler_Refuses(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestAcceptInviteHandler_LosesToAWithdrawalThatCommitsFirst is the race
+// the unguarded write lost: accept reads the Invitation as pending, an
+// Owner's withdrawal commits before accept writes, and accept then wrote
+// 'accepted' over the revoked row by id alone -- an accepted Invitation
+// still carrying revoked_by and revoked_at, and a Membership the Owner had
+// just refused. The test holds the row's lock itself so the withdrawal
+// lands in exactly that gap: the request reads, reaches its write and
+// waits on the lock, then the withdrawal commits under it.
+func TestAcceptInviteHandler_LosesToAWithdrawalThatCommitsFirst(t *testing.T) {
+	e, _ := newInviteeEnv(t, "racer-uid", "racer@example.com")
+	invitationID, token := e.inviteLive("racer@example.com", employeeType)
+
+	withdrawal, err := e.DB.Admin.BeginTx(t.Context(), nil)
+	if err != nil {
+		t.Fatalf("begin withdrawal: %v", err)
+	}
+	defer func() { _ = withdrawal.Rollback() }()
+	if _, err := withdrawal.ExecContext(t.Context(), `SELECT 1 FROM practice_invitations WHERE id = $1 FOR UPDATE`, invitationID); err != nil {
+		t.Fatalf("lock invitation: %v", err)
+	}
+
+	status := make(chan int, 1)
+	go func() {
+		status <- postWithoutT(e.URL("/api/staff/accept-invite"), staffauth.AcceptInviteRequest{
+			InviteToken: token, FirstName: "Rae", LastName: "Cer", WorkState: "NY",
+		})
+	}()
+	awaitAWaitingLock(t, e.DB)
+
+	if _, err := withdrawal.ExecContext(t.Context(),
+		`UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`,
+		invitationID, e.Staff.ID,
+	); err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+	if err := withdrawal.Commit(); err != nil {
+		t.Fatalf("commit withdrawal: %v", err)
+	}
+
+	if got := <-status; got != http.StatusNotFound {
+		t.Fatalf("accept status = %d, want %d -- the withdrawal committed first", got, http.StatusNotFound)
+	}
+	var rowStatus string
+	var acceptedStaffID *string
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT status::text, accepted_staff_id FROM practice_invitations WHERE id = $1`, invitationID,
+	).Scan(&rowStatus, &acceptedStaffID); err != nil {
+		t.Fatalf("read invitation: %v", err)
+	}
+	if rowStatus != "revoked" || acceptedStaffID != nil {
+		t.Fatalf("invitation = %q accepted by %v, want it left revoked", rowStatus, acceptedStaffID)
+	}
+	members := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'racer@example.com'`)
+	if members != 0 {
+		t.Fatalf("staff rows for the racer = %d, want 0 -- the refused acceptance rolls back whole", members)
+	}
+}
+
+// TestAcceptInviteHandler_ALapsedLinkLeavesTheStaffScreenAsItWas is the
+// disagreement the stored 'expired' made: opening a lapsed link used to
+// flip the row, which took it off the Owner's Staff screen, while a lapsed
+// Invitation nobody had opened stayed on it marked expired. The same
+// Invitation now reads the same on the Staff screen whether or not the
+// link was opened.
+func TestAcceptInviteHandler_ALapsedLinkLeavesTheStaffScreenAsItWas(t *testing.T) {
+	e, _ := newInviteeEnv(t, "opener-uid", "opener@example.com")
+	openedID, token := e.invite("opener@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
+	unopenedID, _ := e.invite("unopened@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
+
+	e.refuseAccept(staffauth.AcceptInviteRequest{WorkState: "NY", InviteToken: token, FirstName: "Open", LastName: "Er"}, http.StatusGone)
+
+	listed := map[string]bool{}
+	for _, inv := range e.roster("").Invitations.Items {
+		listed[inv.InvitationID] = inv.Expired
+	}
+	for name, id := range map[string]string{"opened": openedID, "unopened": unopenedID} {
+		if expired, ok := listed[id]; !ok || !expired {
+			t.Errorf("%s lapsed Invitation listed=%v expired=%v, want listed and expired", name, ok, expired)
+		}
+	}
+}
+
+// postWithoutT posts body as an accept-invite request and returns the
+// status, or 0 if the request could not be made -- for a goroutine, where
+// t.Fatalf is not safe.
+func postWithoutT(url string, body staffauth.AcceptInviteRequest) int {
+	payload, err := json.Marshal(body)
+	if err != nil {
+		return 0
+	}
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return 0
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer any-token")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode
+}
+
+// awaitAWaitingLock returns once some backend is blocked on a lock: the
+// request under test has reached its write and is waiting for the row.
+func awaitAWaitingLock(t *testing.T, db *testdb.DB) {
+	t.Helper()
+	for range 500 {
+		if testdb.Scalar[bool](t, db.Admin, `SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted)`) {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the accept request never reached the locked Invitation row")
 }
 
 func TestAcceptInviteHandler_BadRequests(t *testing.T) {

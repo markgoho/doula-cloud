@@ -175,7 +175,13 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff'),
 	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits'),
 	credits_refunded: fixed('Purchased Credits refunded'),
-	founding_grant_issued: fixed('Founding member credits given')
+	founding_grant_issued: fixed('Founding member credits given'),
+	// A Staff Invitation, recorded against the Practice: the row names
+	// no address, so neither does the phrase. Accepting one is the
+	// Membership's own `joined` row above.
+	staff_invited: fixed('Invitation to join the Practice sent'),
+	staff_invitation_resent: fixed('Invitation to join the Practice sent again'),
+	staff_invitation_revoked: fixed('Invitation to join the Practice revoked')
 };
 
 /**

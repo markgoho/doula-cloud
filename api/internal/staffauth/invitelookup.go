@@ -6,10 +6,12 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/staffinvitation"
 )
 
 // LookupInvitationRequest carries the token from the emailed link, in the
@@ -34,9 +36,8 @@ type LookupInvitationResponse struct {
 // LookupInvitationHandler reads a pending Invitation by its token. The
 // token is the whole credential, as it is for accepting: whoever holds it
 // was mailed it, so the address and whether it has an account are hers to
-// read. It writes nothing -- an expired Invitation answers 410 here and is
-// marked expired only by the accept path, which runs in a Practice
-// context this read never sets.
+// read. It writes nothing: an expired Invitation answers 410 here, as it
+// does at accept, and neither writes its expiry down.
 func LookupInvitationHandler(accounts authn.AccountManager, db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req LookupInvitationRequest
@@ -70,6 +71,10 @@ func LookupInvitationHandler(accounts authn.AccountManager, db *sql.DB) http.Han
 	})
 }
 
+// msgLookupUnusable answers a token that opens no Invitation, an accepted
+// one, or a withdrawn one, alike.
+const msgLookupUnusable = "This invitation was not found, was already accepted, or was revoked"
+
 func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvitationResponse, int, apierr.Code, string) {
 	tx, err := db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 	if err != nil {
@@ -85,23 +90,30 @@ func lookupInvitation(ctx context.Context, db *sql.DB, token string) (LookupInvi
 
 	var resp LookupInvitationResponse
 	var roles string
-	var expired bool
+	var status staffinvitation.Status
+	var expiresAt time.Time
 	err = tx.QueryRowContext(ctx,
-		`SELECT p.name, i.address, array_to_string(i.roles, ','), i.employment_type::text, i.expires_at <= $2
+		`SELECT p.name, i.address, array_to_string(i.roles, ','), i.employment_type::text, i.status::text, i.expires_at
 		 FROM practice_invitations i
 		 JOIN practices p ON p.id = i.practice_id
-		 WHERE i.token_digest = $1 AND i.status = 'pending'`,
-		TokenDigest(token), clock.Now(ctx),
-	).Scan(&resp.PracticeName, &resp.Address, &roles, &resp.EmploymentType, &expired)
+		 WHERE i.token_digest = $1`,
+		TokenDigest(token),
+	).Scan(&resp.PracticeName, &resp.Address, &roles, &resp.EmploymentType, &status, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return LookupInvitationResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, "This invitation was not found, was already accepted, or was revoked"
+		return LookupInvitationResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, msgLookupUnusable
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return LookupInvitationResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
-	if expired {
-		return LookupInvitationResponse{}, http.StatusGone, apierr.CodeLinkUnusable, "This invitation has expired. Ask for a new one"
+	// The screen is asking whether she can accept, so it asks the
+	// question accept asks, on the one derivation of expiry.
+	state := staffinvitation.StateOf(status, expiresAt, clock.Now(ctx))
+	if ok, _ := staffinvitation.TransitionAccept.Check(state); !ok {
+		if state == staffinvitation.StateExpired {
+			return LookupInvitationResponse{}, http.StatusGone, apierr.CodeLinkUnusable, "This invitation has expired. Ask for a new one"
+		}
+		return LookupInvitationResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, msgLookupUnusable
 	}
 	resp.Address = NormalizeAddress(resp.Address)
 	resp.Roles = splitRoles(roles)

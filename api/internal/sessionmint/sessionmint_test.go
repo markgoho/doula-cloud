@@ -289,8 +289,8 @@ func TestIssue_RefusalRollsBackWhatStepWrote(t *testing.T) {
 	}
 }
 
-// TestIssue_KeptRefusalCommitsWhatStepWrote covers staffauth's own
-// expired-invitation branch: the refusal itself is worth keeping despite
+// TestIssue_KeptRefusalCommitsWhatStepWrote covers a Keep refusal
+// (portalinvite's accept): what the step wrote is worth keeping despite
 // minting nothing.
 func TestIssue_KeptRefusalCommitsWhatStepWrote(t *testing.T) {
 	db := testdb.New(t)
