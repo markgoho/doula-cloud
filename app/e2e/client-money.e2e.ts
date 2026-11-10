@@ -14,7 +14,7 @@ test('a Client walks from the hub to an Invoice and back', async ({ page, reques
 	seedInvoice(practiceId, engagementId, { reference: 'A4B2-0011', stripeInvoiceId: 'in_e2e_open' });
 	seedInvoice(practiceId, engagementId, { status: 'paid', amountCents: 90_000, reference: 'INV-0002' });
 	// A draft never reaches her, whatever the Practice has raised.
-	seedInvoice(practiceId, engagementId, { status: 'draft', amountCents: 1, reference: 'DRAFT-0001' });
+	seedInvoice(practiceId, engagementId, { status: 'draft', amountCents: 1, reference: 'DRAFT-0001', stripeInvoiceId: 'in_e2e_draft' });
 
 	await signInPortalClient(page, request, clientEmail);
 	await expect(page).toHaveURL(new RegExp(`/portal/engagements/${engagementId}$`));

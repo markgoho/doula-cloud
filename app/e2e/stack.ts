@@ -511,7 +511,7 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 	execSQL(
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(signInAddress)})`
 	);
-	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
+	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)}, 'accepted')`);
 }
 
 /**
