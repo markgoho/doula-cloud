@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
@@ -203,7 +204,8 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
 // so being its Owner no longer means anything and must not trap her.
 func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 	e := newSoleStaffEnv(t, fixture.Owner())
-	e.Exec(`UPDATE practices SET deleted_at = now() WHERE id = $1`, e.Practice.ID)
+	now := time.Now()
+	testdb.SeedPracticeDeletion(t, e.DB, e.Practice.ID, now.AddDate(0, 0, -30), now, &now)
 
 	e.erase()
 

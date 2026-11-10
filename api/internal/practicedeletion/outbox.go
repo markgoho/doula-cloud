@@ -129,9 +129,9 @@ func (w Worker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r 
 	return markErr(fmt.Errorf("practicedeletion: unknown act %q", r.act))
 }
 
-// performReminder mails every current Owner, unless the Practice's own
-// deletion_requested_at has gone null (restored) or deleted_at is
-// already set (already finalized) by the time this row was claimed --
+// performReminder mails every current Owner, unless the Practice's
+// standing is no longer pending deletion (restored, or already
+// finalized) by the time this row was claimed --
 // the skip-at-send recheck the package doc describes. A skip marks sent
 // with nothing mailed, the same "nothing left to do" shape SendAll
 // already gives a Practice with zero current Owners.
@@ -141,7 +141,7 @@ func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if !state.requestedAt.Valid || state.deletedAt.Valid {
+	if state.standing != StandingPendingDeletion {
 		return markErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
@@ -165,7 +165,7 @@ func (w Worker) performFinalize(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if !state.requestedAt.Valid || state.deletedAt.Valid {
+	if ok, _ := TransitionFinalize.Check(state.standing); !ok {
 		return markErr(inner.MarkSent(ctx, tx, r.id, now))
 	}
 
@@ -210,9 +210,17 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 		return err
 	}
 
-	if _, err := tx.ExecContext(ctx, `UPDATE practices SET deleted_at = $1 WHERE id = $2`, now, practiceID); err != nil {
+	ok, err := moved(tx.ExecContext(ctx,
+		`UPDATE practices SET deleted_at = $1 WHERE id = $2 AND standing = $3`,
+		now, practiceID, TransitionFinalize.Requires,
+	))
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("practicedeletion: stamp deleted_at: %w", err)
+		return err
+	}
+	if !ok {
+		// coverage:ignore reason: the row cannot leave TransitionFinalize.Requires under performFinalize's own FOR UPDATE lock, which nothing else can write through
+		return fmt.Errorf("practicedeletion: practice %s is no longer %s", practiceID, TransitionFinalize.Requires)
 	}
 
 	diff, err := json.Marshal(finalizedScope{ClientsErased: len(clientIDs), CreditsForfeited: forfeited})

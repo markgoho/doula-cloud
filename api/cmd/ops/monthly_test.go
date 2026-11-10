@@ -177,7 +177,8 @@ func TestMonthlyCredits_ListsAPracticeOnlyForTheMonthsItExisted(t *testing.T) {
 	s := newMonthlyStack(t)
 	gone := testdb.SeedPractice(t, s.db, "Gone")
 	s.signedUp(gone, nyTime(time.July, 1))
-	s.exec(`UPDATE practices SET deleted_at = $2 WHERE id = $1`, gone, nyTime(time.August, 15))
+	deletedAt := nyTime(time.August, 15)
+	testdb.SeedPracticeDeletion(t, s.db, gone, deletedAt.AddDate(0, 0, -30), deletedAt, &deletedAt)
 	cookie := s.signedInCookie()
 
 	names := func(month string) []string {

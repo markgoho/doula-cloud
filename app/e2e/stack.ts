@@ -559,11 +559,14 @@ export function seedPracticeWithStaff(name: string, staffCount: number): string 
 
 /**
  * Marks a seeded Practice's Deletion finalized, so ops lists it on the
- * Deleted list (#2475).
+ * Deleted list (#2475). The request names the Practice's Owner as who
+ * asked, since a request carries all three of its facts (00172).
  */
 export function finalizePracticeDeletion(practiceId: string): void {
 	execSQL(
-		`UPDATE practices SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now() WHERE id = ${sqlLiteral(practiceId)};`
+		`UPDATE practices p SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now(),
+		        deletion_requested_by = (SELECT pm.staff_id FROM practice_memberships pm WHERE pm.practice_id = p.id AND 'owner' = ANY (pm.roles) ORDER BY pm.staff_id LIMIT 1)
+		  WHERE p.id = ${sqlLiteral(practiceId)};`
 	);
 }
 

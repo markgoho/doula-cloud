@@ -10,11 +10,16 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/pagecursor"
 )
 
 const practicePageSize = 50
+
+// standingActive is practice_standing's 'active': a Practice nobody has
+// asked to delete.
+const standingActive = "active"
 
 const msgBadCursor = "This page of the list cannot be found. Start from the first page."
 
@@ -38,7 +43,11 @@ type practiceGrant struct {
 	GivenAt *time.Time `json:"givenAt"`
 }
 
+// Standing is the Practice's deletion standing as ops_practice_list reads
+// it at the request's instant (00172's practice_standing_at): pending_deletion,
+// finalize_overdue or deleted. An active Practice has no deletion at all.
 type practiceDeletion struct {
+	Standing    string     `json:"standing"`
 	RequestedAt *time.Time `json:"requestedAt"`
 	FinalizesAt *time.Time `json:"finalizesAt"`
 	DeletedAt   *time.Time `json:"deletedAt"`
@@ -99,7 +108,7 @@ func scanPractice(rows *sql.Rows) (practiceRow, error) {
 		&p.StripeConnect.Connected, &p.StripeConnect.CardPayments, &p.StripeConnect.Payouts,
 		&requirements, &p.StripeConnect.UpdatedAt,
 		&p.CreditsHeld, &p.EngagementsStarted, &grantCredits, &grantBy, &grantAt,
-		&d.RequestedAt, &d.FinalizesAt, &d.DeletedAt, &p.OpenFeedback)
+		&d.Standing, &d.RequestedAt, &d.FinalizesAt, &d.DeletedAt, &p.OpenFeedback)
 	if err != nil {
 		// coverage:ignore reason: scan failure on a well-typed query, not exercised by unit tests
 		return p, fmt.Errorf("scan practice: %w", err)
@@ -112,7 +121,7 @@ func scanPractice(rows *sql.Rows) (practiceRow, error) {
 			p.FoundingGrant.GivenBy = &grantBy.String
 		}
 	}
-	if d.RequestedAt != nil || d.DeletedAt != nil {
+	if d.Standing != standingActive {
 		p.Deletion = &d
 	}
 	return p, nil
@@ -164,8 +173,8 @@ func readPracticePage(r *http.Request, tx *sql.Tx, deleted bool, afterAt, afterI
 	rows, err := tx.QueryContext(r.Context(),
 		`SELECT id, name, signed_up_at, owners, staff_count, connected, card_payments_status, payouts_status,
 		        requirements_due, connect_updated_at, credits_held, engagements_started, grant_credits, grant_given_by,
-		        grant_given_at, deletion_requested_at, deletion_finalize_at, deleted_at, open_feedback
-		   FROM ops_practice_list($1, $2, $3, $4)`, deleted, afterAt, afterID, practicePageSize+1)
+		        grant_given_at, standing, deletion_requested_at, deletion_finalize_at, deleted_at, open_feedback
+		   FROM ops_practice_list($1, $2, $3, $4, $5)`, deleted, clock.Now(r.Context()), afterAt, afterID, practicePageSize+1)
 	if err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return practicePage{}, fmt.Errorf("read practice list: %w", err)

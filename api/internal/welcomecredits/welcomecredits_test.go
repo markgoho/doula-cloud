@@ -187,7 +187,7 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 			reason: "practice_deleting",
 			arrange: func(t *testing.T, db *testdb.DB, practiceID string) {
 				t.Helper()
-				exec(t, db, `UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = $1`, practiceID)
+				testdb.SeedPracticeDeletion(t, db, practiceID, time.Now(), time.Now().AddDate(0, 0, 30), nil)
 			},
 		},
 		{
@@ -195,7 +195,8 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 			reason: "practice_deleting",
 			arrange: func(t *testing.T, db *testdb.DB, practiceID string) {
 				t.Helper()
-				exec(t, db, `UPDATE practices SET deleted_at = now() WHERE id = $1`, practiceID)
+				now := time.Now()
+				testdb.SeedPracticeDeletion(t, db, practiceID, now.AddDate(0, 0, -30), now, &now)
 			},
 		},
 		{

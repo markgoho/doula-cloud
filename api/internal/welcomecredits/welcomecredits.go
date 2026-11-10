@@ -196,7 +196,7 @@ func practiceSkip(ctx context.Context, tx *sql.Tx, practiceID string) (skipReaso
 	var deleting, engaged, founding bool
 	if err := tx.QueryRowContext(ctx,
 		`SELECT
-			p.deletion_requested_at IS NOT NULL OR p.deleted_at IS NOT NULL,
+			p.standing <> 'active',
 			EXISTS (SELECT 1 FROM engagements e WHERE e.practice_id = p.id),
 			EXISTS (SELECT 1 FROM credit_ledger c WHERE c.practice_id = p.id AND c.origin = 'founding_grant')
 		 FROM practices p WHERE p.id = $1`,

@@ -67,13 +67,13 @@ func (s *legalStack) seedOwners() {
 	testdb.SeedStaffAtPractice(s.t, s.db, gone, "fay", owner, "employee")
 	for _, statement := range []string{
 		`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type) VALUES ('` + willow + `', '` + ana + `', '{owner}', 'employee')`,
-		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = '` + leaving + `'`,
-		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now(), deleted_at = now() WHERE id = '` + gone + `'`,
 	} {
 		if _, err := s.db.Admin.ExecContext(s.t.Context(), statement); err != nil {
 			s.t.Fatalf("seed owners: %v", err)
 		}
 	}
+	testdb.SeedPracticeDeletion(s.t, s.db, leaving, s.now, s.now.AddDate(0, 0, 30), nil)
+	testdb.SeedPracticeDeletion(s.t, s.db, gone, s.now, s.now, &s.now)
 }
 
 func legalVersionPath(document, version string) string {

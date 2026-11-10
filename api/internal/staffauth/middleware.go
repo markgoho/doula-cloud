@@ -419,15 +419,17 @@ func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, pra
 	}
 
 	var rolesText, employmentTypeText sql.NullString
-	var deletedAt sql.NullTime
+	var deleted bool
+	// practices.standing (00172) is the one derivation of the Practice's
+	// deletion standing; practicedeletion.Standing names its values.
 	scanErr := tx.QueryRowContext(ctx,
 		`SELECT array_to_string(pm.roles, ','), pm.employment_type::text, p.require_mfa_for_all_staff,
-		        p.deletion_requested_at IS NOT NULL, p.deleted_at
+		        p.standing = 'pending_deletion', p.standing = 'deleted'
 		 FROM practices p
 		 LEFT JOIN practice_memberships pm ON pm.practice_id = p.id AND pm.staff_id = $2
 		 WHERE p.id = $1`,
 		practiceID, staffID,
-	).Scan(&rolesText, &employmentTypeText, &requireMFA, &pendingDeletion, &deletedAt)
+	).Scan(&rolesText, &employmentTypeText, &requireMFA, &pendingDeletion, &deleted)
 	if errors.Is(scanErr, sql.ErrNoRows) {
 		// No such Practice at all -- same outward result as no membership.
 		return false, nil, "", false, false, nil
@@ -436,7 +438,7 @@ func setPracticeAndCheckMembership(ctx context.Context, tx *sql.Tx, staffID, pra
 	if scanErr != nil {
 		return false, nil, "", false, false, fmt.Errorf("staffauth: check practice membership: %w", scanErr)
 	}
-	if deletedAt.Valid {
+	if deleted {
 		// #871: a finalized Practice reads as though it never existed --
 		// ADR-0027's own "locks and hides the row" applied to the one
 		// gate every Staff-scoped request runs through. Its Activity and

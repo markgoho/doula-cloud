@@ -45,12 +45,7 @@ func seedOutboxRow(t *testing.T, db *testdb.DB, practiceID, act string, nextAtte
 // the worker in isolation from the request that enqueues its rows.
 func markPendingDeletion(t *testing.T, db *testdb.DB, practiceID string, finalizeAt time.Time) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = $2 WHERE id = $1`,
-		practiceID, finalizeAt,
-	); err != nil {
-		t.Fatalf("mark pending deletion: %v", err)
-	}
+	testdb.SeedPracticeDeletion(t, db, practiceID, finalizeAt.Add(-practicedeletion.RestoreWindow), finalizeAt, nil)
 }
 
 func runWorker(t *testing.T, db *testdb.DB, w practicedeletion.Worker) {

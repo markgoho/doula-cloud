@@ -64,7 +64,7 @@ var wantDefinerFunctions = map[string][]string{
 		"ops_refund_by_request_key(uuid,text)",
 		"ops_refund_lots(uuid)",
 		"ops_record_second_factor_cleared(uuid,uuid,timestamp with time zone)",
-		"ops_practice_list(boolean,timestamp with time zone,uuid,integer)",
+		"ops_practice_list(boolean,timestamp with time zone,timestamp with time zone,uuid,integer)",
 		"ops_refund_practice(uuid)",
 		"ops_second_factor_staff(uuid)",
 		"ops_webhook_event_types()",

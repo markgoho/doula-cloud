@@ -4,6 +4,23 @@ import { newYorkDay } from './dates.ts';
 
 type Instant = string;
 
+/**
+ * A Practice's deletion standing as the server reads it at the request's
+ * instant (00172's practice_standing_at). An active Practice carries no
+ * deletion at all, so it is not one of these. finalize_overdue is a
+ * deletion still pending after its finalize date: nothing retries it on
+ * its own, so this list is where it shows.
+ */
+export type DeletionStanding = 'pending_deletion' | 'finalize_overdue' | 'deleted';
+
+/**
+ * A request always carries both its dates, and only a deleted one a
+ * deletion date.
+ */
+export type Deletion =
+	| { standing: 'pending_deletion' | 'finalize_overdue'; requestedAt: Instant; finalizesAt: Instant; deletedAt: null }
+	| { standing: 'deleted'; requestedAt: Instant; finalizesAt: Instant; deletedAt: Instant };
+
 export type PracticeRow = {
 	id: string;
 	name: string;
@@ -20,7 +37,7 @@ export type PracticeRow = {
 	creditsHeld: number;
 	engagementsStarted: number;
 	foundingGrant: { credits: number; givenBy: string | null; givenAt: Instant } | null;
-	deletion: { requestedAt: Instant | null; finalizesAt: Instant | null; deletedAt: Instant | null } | null;
+	deletion: Deletion | null;
 	source: string | null;
 	openFeedback: number;
 };
@@ -52,9 +69,18 @@ function foundingGrant({ foundingGrant: grant }: PracticeRow): string {
 }
 
 function deletion({ deletion: d }: PracticeRow): string {
-	if (d?.deletedAt) return `Deleted ${newYorkDay(d.deletedAt)}`;
-	if (d?.requestedAt && d.finalizesAt) return `Asked for ${newYorkDay(d.requestedAt)}. Finalizes ${newYorkDay(d.finalizesAt)}`;
-	return 'Not asked for';
+	if (!d) return 'Not asked for';
+	switch (d.standing) {
+		case 'deleted': {
+			return `Deleted ${newYorkDay(d.deletedAt)}`;
+		}
+		case 'finalize_overdue': {
+			return `Asked for ${newYorkDay(d.requestedAt)}. Overdue: was due to finalize ${newYorkDay(d.finalizesAt)}`;
+		}
+		case 'pending_deletion': {
+			return `Asked for ${newYorkDay(d.requestedAt)}. Finalizes ${newYorkDay(d.finalizesAt)}`;
+		}
+	}
 }
 
 export function practiceFacts(row: PracticeRow): { label: string; value: string }[] {

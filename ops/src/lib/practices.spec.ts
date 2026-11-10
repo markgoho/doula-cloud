@@ -93,17 +93,17 @@ describe('practiceFacts', () => {
 		expect(facts['Founding grant']).toBe('6 Credits, given on September 15, 2026, before ops recorded who gave it');
 	});
 
-	it('states a Deletion in its window and a finalized one', () => {
-		const pending = practiceFacts({
-			...rooted,
-			deletion: { requestedAt: '2026-09-15T10:00:00Z', finalizesAt: '2026-10-15T10:00:00Z', deletedAt: null }
-		});
-		const deleted = practiceFacts({
-			...rooted,
-			deletion: { requestedAt: '2026-09-15T10:00:00Z', finalizesAt: '2026-10-15T10:00:00Z', deletedAt: '2026-10-15T10:05:00Z' }
-		});
+	it('states a Deletion in its window, one past its date, and a finalized one', () => {
+		const asked = { requestedAt: '2026-09-15T10:00:00Z', finalizesAt: '2026-10-15T10:00:00Z' };
+		const pending = practiceFacts({ ...rooted, deletion: { ...asked, standing: 'pending_deletion', deletedAt: null } });
+		const overdue = practiceFacts({ ...rooted, deletion: { ...asked, standing: 'finalize_overdue', deletedAt: null } });
+		const deleted = practiceFacts({ ...rooted, deletion: { ...asked, standing: 'deleted', deletedAt: '2026-10-15T10:05:00Z' } });
 
 		expect(pending).toContainEqual({ label: 'Deletion', value: 'Asked for September 15, 2026. Finalizes October 15, 2026' });
+		expect(overdue).toContainEqual({
+			label: 'Deletion',
+			value: 'Asked for September 15, 2026. Overdue: was due to finalize October 15, 2026'
+		});
 		expect(deleted).toContainEqual({ label: 'Deletion', value: 'Deleted October 15, 2026' });
 	});
 });

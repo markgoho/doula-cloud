@@ -57,7 +57,7 @@ func TestOperatorLog_NamesEachSubjectAndTheOwnerWhoAskedForARefund(t *testing.T)
 	practiceID := testdb.SeedPractice(t, s.db, "Rooted Birth Collective")
 	ownerID := testdb.SeedNamedStaffAtPractice(t, s.db, practiceID, "log-owner", "Renata Alvarez", []string{ownerRole}, "employee")
 	gone := testdb.SeedPractice(t, s.db, "Gone Births")
-	s.exec(`UPDATE practices SET deleted_at = $2 WHERE id = $1`, gone, opsStart)
+	testdb.SeedPracticeDeletion(t, s.db, gone, opsStart.AddDate(0, 0, -30), opsStart, &opsStart)
 	const feedbackID = "6f1c2c1e-9a52-4b0e-8a3c-2f9d3c1d6a11"
 	const missingStaff = "0b7c1f2a-3d4e-4f50-8a6b-7c8d9e0f1a2b"
 	s.act("refund", "practice", practiceID, `{"requestedByStaffId":"`+ownerID+`","requestedOn":"2026-10-30","credits":2,"amountCents":5000,"taxCents":400}`, opsStart.Add(4*time.Minute))

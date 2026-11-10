@@ -98,20 +98,21 @@ type InitiateResponse struct {
 	FinalizeAt          time.Time `json:"finalizeAt"`
 }
 
-// deletionState is the one row lookup every handler here starts from.
+// deletionState is the one row lookup every handler here starts from:
+// the Practice's standing, and the two dates its window carries.
 type deletionState struct {
+	standing    Standing
 	requestedAt sql.NullTime
 	finalizeAt  sql.NullTime
-	deletedAt   sql.NullTime
 }
 
 func readDeletionState(ctx context.Context, tx *sql.Tx, practiceID string, forUpdate bool) (deletionState, error) {
-	query := `SELECT deletion_requested_at, deletion_finalize_at, deleted_at FROM practices WHERE id = $1`
+	query := `SELECT standing::text, deletion_requested_at, deletion_finalize_at FROM practices WHERE id = $1`
 	if forUpdate {
 		query += ` FOR UPDATE`
 	}
 	var s deletionState
-	if err := tx.QueryRowContext(ctx, query, practiceID).Scan(&s.requestedAt, &s.finalizeAt, &s.deletedAt); err != nil {
+	if err := tx.QueryRowContext(ctx, query, practiceID).Scan(&s.standing, &s.requestedAt, &s.finalizeAt); err != nil {
 		// coverage:ignore reason: the practices row is guaranteed by staffauth.Middleware's own membership query, not exercised by unit tests
 		return deletionState{}, fmt.Errorf("practicedeletion: read deletion state: %w", err)
 	}
@@ -166,9 +167,8 @@ func StatusHandler() http.Handler {
 			return
 		}
 
-		out := StatusResponse{HasUnsettledInvoices: blocked}
+		out := StatusResponse{HasUnsettledInvoices: blocked, Pending: state.standing == StandingPendingDeletion}
 		if state.requestedAt.Valid {
-			out.Pending = true
 			t := state.requestedAt.Time
 			out.DeletionRequestedAt = &t
 		}
@@ -210,16 +210,9 @@ func InitiateHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		// coverage:ignore reason: unreachable through the real mount -- deleted_at is set only by finalize, which requires deletion_requested_at already set, and staffauth.Middleware's own isMember=false branch for a deleted Practice (deletedAt.Valid) refuses every request before RequireOwner resolves one, forever, so this branch never runs behind a live HTTP request
-		if state.deletedAt.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				"this practice has already been deleted", nil)
-			return
-		}
-		// coverage:ignore reason: reachable only by two genuinely concurrent initiate requests racing this row's FOR UPDATE lock -- a single sequential caller is already refused earlier, by staffauth.Middleware's own pending-deletion lockout, before InitiateHandler ever runs a second time
-		if state.requestedAt.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				"this practice's deletion is already pending", nil)
+		// coverage:ignore reason: unreachable through the real mount -- staffauth.Middleware refuses a deleted Practice to everyone and a pending one to every route but GET/DELETE, so a second initiate reaches here only by racing a first one onto this row's FOR UPDATE lock; TestTransition_CheckSpeaksToThePerson proves the refusal it writes
+		if ok, refusal := TransitionRequest.Check(state.standing); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeConflict, refusal, nil)
 			return
 		}
 
@@ -239,11 +232,13 @@ func InitiateHandler() http.Handler {
 		finalizeAt := now.Add(RestoreWindow)
 		reminderAt := now.Add(ReminderLeadTime)
 
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE practices SET deletion_requested_at = $1, deletion_requested_by = $2, deletion_finalize_at = $3 WHERE id = $4`,
-			now, staffID, finalizeAt, practiceID,
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
+		ok, err := moved(tx.ExecContext(r.Context(),
+			`UPDATE practices SET deletion_requested_at = $1, deletion_requested_by = $2, deletion_finalize_at = $3
+			 WHERE id = $4 AND standing = $5`,
+			now, staffID, finalizeAt, practiceID, TransitionRequest.Requires,
+		))
+		// coverage:ignore reason: a DB failure, or a row that left TransitionRequest.Requires under this transaction's own FOR UPDATE lock, which nothing else can write through
+		if err != nil || !ok {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
@@ -301,25 +296,25 @@ func RestoreHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
-		res, err := tx.ExecContext(r.Context(),
-			`UPDATE practices SET deletion_requested_at = NULL, deletion_requested_by = NULL, deletion_finalize_at = NULL
-			 WHERE id = $1 AND deletion_requested_at IS NOT NULL AND deleted_at IS NULL`,
-			practiceID,
-		)
+		state, err := readDeletionState(r.Context(), tx, practiceID, true)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		if ok, refusal := TransitionRestore.Check(state.standing); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
-		if affected == 0 {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition,
-				"this practice has no pending deletion to restore", nil)
+
+		ok, err := moved(tx.ExecContext(r.Context(),
+			`UPDATE practices SET deletion_requested_at = NULL, deletion_requested_by = NULL, deletion_finalize_at = NULL
+			 WHERE id = $1 AND standing = $2`,
+			practiceID, TransitionRestore.Requires,
+		))
+		// coverage:ignore reason: a DB failure, or a row that left TransitionRestore.Requires under this transaction's own FOR UPDATE lock, which nothing else can write through
+		if err != nil || !ok {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

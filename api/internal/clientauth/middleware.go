@@ -192,7 +192,7 @@ func setClientAndCheckEngagement(ctx context.Context, tx *sql.Tx, clientID, enga
 			SELECT 1 FROM engagements e
 			JOIN practices p ON p.id = e.practice_id
 			WHERE e.id = $1 AND e.client_id = $2
-			  AND p.deletion_requested_at IS NULL AND p.deleted_at IS NULL
+			  AND p.standing = 'active'
 		 )`,
 		engagementID, clientID,
 	).Scan(&exists)

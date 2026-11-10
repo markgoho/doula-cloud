@@ -475,12 +475,7 @@ func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
 
 func markPracticePendingDeletion(t *testing.T, db *testdb.DB, practiceID string) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() + interval '30 days' WHERE id = $1`,
-		practiceID,
-	); err != nil {
-		t.Fatalf("mark pending deletion: %v", err)
-	}
+	testdb.SeedPracticeDeletion(t, db, practiceID, time.Now(), time.Now().AddDate(0, 0, 30), nil)
 }
 
 // TestMiddleware_PendingDeletionLockout_Refuses covers what a Practice
@@ -540,7 +535,8 @@ func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing
 
 func TestMiddleware_DeletedPracticeReadsAsNoMembership(t *testing.T) {
 	e := newPingEnv(t, fixture.SignedInAs(fixture.Owner()))
-	e.Exec(`UPDATE practices SET deletion_requested_at = now(), deleted_at = now() WHERE id = $1`, e.Practice.ID)
+	now := time.Now()
+	testdb.SeedPracticeDeletion(t, e.DB, e.Practice.ID, now, now, &now)
 
 	if got := refusalCode(t, http.MethodGet, e.at(e.Practice.ID, "/deletion"), e.SignedIn); got == apierr.CodePracticePendingDeletion {
 		t.Fatal("a finalized Practice must read as no membership, not as pending-deletion")

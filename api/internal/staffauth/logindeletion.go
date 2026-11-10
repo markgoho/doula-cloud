@@ -271,7 +271,7 @@ func listOwnMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]ownM
 // does not (nobody can reach it). Spelled out because it is the kind of
 // divergence that reads as a copy someone forgot to keep in step --
 // a person refused this act deserves to be told which Practices are in
-// the way, not merely that some are. The deleted_at filter is what makes
+// the way, not merely that some are. The standing filter is what makes
 // a finalized Practice stop blocking: nobody can reach it any more, so an
 // Owner it has no longer means anything. A Practice merely *pending*
 // deletion still blocks, deliberately: ADR-0031 promises a restore during
@@ -284,7 +284,7 @@ func soleOwnerPractices(ctx context.Context, tx *sql.Tx, staffID string) ([]sole
 		   JOIN practices p ON p.id = pm.practice_id
 		  WHERE pm.staff_id = $1
 		    AND 'owner' = ANY(pm.roles)
-		    AND p.deleted_at IS NULL
+		    AND p.standing <> 'deleted'
 		    AND NOT EXISTS (
 		        SELECT 1 FROM practice_memberships other
 		         WHERE other.practice_id = pm.practice_id
