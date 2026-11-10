@@ -38,7 +38,7 @@ const countAttachedClientsQuery = `SELECT count(*)
 	   AND c.id IN (
 	       SELECT e.client_id FROM engagements e
 	         JOIN engagement_attachments ea ON ea.engagement_id = e.id
-	        WHERE ea.staff_id = $2 AND ea.origin = 'granted' AND ea.ended_at IS NULL)`
+	        WHERE ea.staff_id = $2 AND ea.state = 'granted')`
 
 // CountHandler serves CountResponse. Any Staff member, as the list is:
 // the contractor narrowing happens inside, through staffauth.Reader, the

@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
 	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
@@ -348,6 +349,12 @@ func endEveryMembership(ctx context.Context, tx *sql.Tx, staffID string, members
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return err
+		}
+		// ADR-0008's Membership-ends trigger, as RemoveMembershipHandler
+		// makes it, with her as the one who ended them.
+		if err := attachmentstate.EndForMembership(ctx, tx, m.practiceID, staffID, staffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("staffauth: end own attachments: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,

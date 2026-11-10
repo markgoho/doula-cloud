@@ -230,7 +230,7 @@ func stillOn(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (boo
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM engagement_attachments
 		                 WHERE engagement_id = $1 AND staff_id = $2
-		                   AND origin = 'granted' AND ended_at IS NULL)`,
+		                   AND state = 'granted')`,
 		engagementID, staffID,
 	).Scan(&on); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

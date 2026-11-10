@@ -10,6 +10,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/personname"
@@ -139,7 +140,7 @@ func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, 
 
 	// attached_by is the accepter herself: an Offer's attachment is
 	// opened by her agreement, not by the Practice reaching in.
-	if err := staffauth.Grant(ctx, tx, engagementID, staffID, staffID, nullableInt64(amountCents), nullableString(terms)); err != nil {
+	if err := attachmentstate.Grant(ctx, tx, engagementID, staffID, staffID, nullableInt64(amountCents), nullableString(terms), now); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}

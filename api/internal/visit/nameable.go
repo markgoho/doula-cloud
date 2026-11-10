@@ -37,7 +37,7 @@ const (
 // concatenate this const, so the two cannot drift apart. A const, not a
 // fmt.Sprintf, so every query built from it stays a constant expression
 // and gosec's G201/G202 have nothing to object to.
-const grantedAttachmentPredicate = `origin = 'granted' AND ended_at IS NULL`
+const grantedAttachmentPredicate = `state = 'granted'`
 
 // decideNameable is the whole rule for whether a *named* Staff member may
 // be put on a Visit at one Engagement, in one place: she is a person the

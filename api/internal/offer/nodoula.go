@@ -89,7 +89,7 @@ const noDoulaSelect = `SELECT id, engagement_id, kind, given_name, preferred_nam
 	  LEFT JOIN practice_invitations pi ON pi.id = o.invitation_id
 	 WHERE e.practice_id = $1 AND o.state = 'declined' AND e.status <> 'completed'
 	   AND NOT EXISTS (SELECT 1 FROM engagement_attachments ea
-	                    WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
+	                    WHERE ea.engagement_id = e.id AND ea.state = 'granted')
 	   AND NOT EXISTS (SELECT 1 FROM engagement_offers open
 	                    WHERE open.engagement_id = e.id AND offer_open_at(open.state, open.expires_at, $2))
 	UNION ALL
@@ -105,7 +105,7 @@ const noDoulaSelect = `SELECT id, engagement_id, kind, given_name, preferred_nam
 	                    WHERE later.subject_kind = 'engagement' AND later.subject_id = a.subject_id
 	                      AND later.action = 'doula_taken_off' AND (later.created_at, later.id) > (a.created_at, a.id))
 	   AND NOT EXISTS (SELECT 1 FROM engagement_attachments ea
-	                    WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
+	                    WHERE ea.engagement_id = e.id AND ea.state = 'granted')
 	   AND NOT EXISTS (SELECT 1 FROM engagement_offers open
 	                    WHERE open.engagement_id = e.id AND offer_open_at(open.state, open.expires_at, $2))
 ) x

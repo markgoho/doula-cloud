@@ -118,7 +118,7 @@ func listAwaitingReply(ctx context.Context, tx *sql.Tx, practiceID string, after
 }
 
 // listAttachedAwaitingReply is listAwaitingReply narrowed to Engagements
-// staffID holds an open (ended_at IS NULL), granted-origin
+// staffID holds an open, granted (state = 'granted')
 // engagement_attachments row on -- the literal predicate
 // staffauth.Reader.CanAccessEngagement runs, applied here as a SQL filter
 // rather than a per-row round trip since this list is already homogeneous
@@ -132,7 +132,7 @@ func listAttachedAwaitingReply(ctx context.Context, tx *sql.Tx, practiceID, staf
 		  AND EXISTS (
 		      SELECT 1 FROM engagement_attachments ea
 		      WHERE ea.engagement_id = e.id AND ea.staff_id = $3
-		        AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		        AND ea.state = 'granted'
 		  )`
 	args := []any{practiceID, senderTypeClient, staffID}
 	if after != nil {

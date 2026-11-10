@@ -10,8 +10,8 @@ import (
 // of the person who worked it.
 func TestVisitsHandler_LeavesTheNameOffABookedVisitWhoseDoulaWasTakenOff(t *testing.T) {
 	e := newEnv(t)
-	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by)
-		 VALUES ($1, $2, 'granted', $2, now(), $2)`, e.Engagement.ID, e.Staff.ID)
+	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason)
+		 VALUES ($1, $2, 'granted', $2, now(), $2, 'taken_off')`, e.Engagement.ID, e.Staff.ID)
 	past := e.visit(time.Now().Add(-30 * 24 * time.Hour))
 	upcoming := e.visit(time.Now().Add(7 * 24 * time.Hour))
 

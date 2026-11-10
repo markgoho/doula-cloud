@@ -22,7 +22,7 @@ func (e *env) detailRefusal(want int) apierr.APIError {
 
 func (e *env) endAttachments(endedAt string) {
 	e.T.Helper()
-	e.Exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
+	e.Exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
 }
 
 func (e *env) seedAcceptedOffer(dueDate string) {

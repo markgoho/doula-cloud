@@ -115,8 +115,8 @@ func TestNoDoulaHandler_PagesByCursor(t *testing.T) {
 func TestNoDoulaHandler_ListsTheLastDoulaTakenOff(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by)
-		 VALUES ($1, $2, 'granted', $3, now(), $3)`, f.engagementID, f.doulaID, f.ownerID); err != nil {
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason)
+		 VALUES ($1, $2, 'granted', $3, now(), $3, 'taken_off')`, f.engagementID, f.doulaID, f.ownerID); err != nil {
 		t.Fatalf("seed ended attachment: %v", err)
 	}
 	for range 2 {

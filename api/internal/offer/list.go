@@ -106,7 +106,7 @@ func InboxHandler() http.Handler {
 			        -- only through the open Attachment; anyone else reaches
 			        -- every Engagement at the Practice (ADR-0008).
 			        CASE WHEN o.state = 'accepted'
-			              AND (NOT $5::boolean OR (att.id IS NOT NULL AND att.ended_at IS NULL))
+			              AND (NOT $5::boolean OR att.state = 'granted')
 			             THEN o.engagement_id::text END,
 			        to_char((att.ended_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD'),
 			        CASE WHEN o.state = 'accepted'
@@ -116,10 +116,10 @@ func InboxHandler() http.Handler {
 			   JOIN practices p ON p.id = e.practice_id
 			   -- The Attachment in force when this Offer was accepted: the
 			   -- latest granted one on the pair, opened no later than the
-			   -- acceptance (staffauth.Grant writes both in one transaction).
+			   -- acceptance (attachmentstate.Grant writes both in one transaction).
 			   -- An employee's carries no fee, and so no Fee Payment.
 			   LEFT JOIN LATERAL (
-			        SELECT ea.id, ea.ended_at FROM engagement_attachments ea
+			        SELECT ea.id, ea.ended_at, ea.state FROM engagement_attachments ea
 			         WHERE o.state = 'accepted'
 			           AND ea.engagement_id = o.engagement_id AND ea.staff_id = o.staff_id
 			           AND ea.origin = 'granted'

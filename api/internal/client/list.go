@@ -437,7 +437,7 @@ const doulaExpr = `($%[1]d::uuid IS NULL OR EXISTS (
 	SELECT 1 FROM engagements de
 	JOIN engagement_attachments da ON da.engagement_id = de.id
 	WHERE de.client_id = c.id AND de.status <> 'completed'
-	  AND da.staff_id = $%[1]d::uuid AND da.origin = 'granted' AND da.ended_at IS NULL
+	  AND da.staff_id = $%[1]d::uuid AND da.state = 'granted'
 ))`
 
 // narrowing is the ?doula and ?q conditions as SQL, with their two bind
@@ -535,7 +535,7 @@ func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.
 }
 
 // listAttachedClients is listClients narrowed to Clients staffID holds an
-// open (ended_at IS NULL), granted-origin engagement_attachments row on,
+// open, granted (state = 'granted') engagement_attachments row on,
 // via any of their Engagements -- ADR-0008's contractor column. DISTINCT
 // because a contractor may be attached to more than one Engagement for
 // the same Client.
@@ -561,7 +561,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
 		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
 		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
-		       AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		       AND ea.state = 'granted'
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
 		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)
 		       AND ` + narrow + `
@@ -694,7 +694,7 @@ const openEngagementRollupQueryTemplate = `
 	       (SELECT string_agg(s.name, E'\x1f' ORDER BY s.last_name, s.first_name)
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
-	        WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL),
+	        WHERE ea.engagement_id = e.id AND ea.state = 'granted'),
 	       inv.status, inv.amount_cents, inv.due_at, inv.payment_processing, att.fee_amount_cents
 	FROM engagements e
 	LEFT JOIN LATERAL (
@@ -738,7 +738,7 @@ const openEngagementRollupQueryTemplate = `
 	) inv ON true
 	LEFT JOIN engagement_attachments att
 	    ON att.engagement_id = e.id AND att.staff_id = $%d
-	   AND att.origin = 'granted' AND att.ended_at IS NULL
+	   AND att.state = 'granted'
 	WHERE e.client_id IN (%s) AND e.status <> 'completed'
 	  AND (NOT $%d OR att.id IS NOT NULL)
 	ORDER BY e.client_id, e.created_at`

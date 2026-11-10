@@ -76,7 +76,7 @@ func TestDetailHandler_NoFeeWithoutAnAcceptedOffer(t *testing.T) {
 func TestDetailHandler_AnEndedAttachmentCarriesNoFee(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula(), fixture.Contractor()), withEngagement(fixture.Status(fixture.StatusActive)))
 	seedFeeAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID, e.Staff.ID, 50000, "2026-07-01T12:00:00Z")
-	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, e.Engagement.ID)
 
 	if d := e.detail(); d.YourFee != nil {
 		t.Fatalf("yourFee = %+v, want absent once the Attachment ended", d.YourFee)

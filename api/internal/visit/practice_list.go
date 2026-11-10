@@ -219,7 +219,7 @@ const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.
 	   AND ($5::uuid IS NULL OR EXISTS (
 	         SELECT 1 FROM engagement_attachments ea
 	          WHERE ea.engagement_id = v.engagement_id AND ea.staff_id = $5::uuid
-	            AND ea.origin = 'granted' AND ea.ended_at IS NULL))`
+	            AND ea.state = 'granted'))`
 
 // nullableID turns "the caller named none" into a real SQL NULL, which is
 // what the `$n::uuid IS NULL` halves above test. An empty string would be

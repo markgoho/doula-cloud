@@ -355,20 +355,21 @@ func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, statu
 
 // SeedAttachment inserts an engagement_attachments row directly, using the
 // superuser Admin connection -- origin is "accrued" or "granted"
-// (ADR-0008), and ended sets ended_at to now() rather than leaving the
+// (ADR-0008), and ended ends it at now(), by staffID herself, taken off
+// (00173 requires an ending to say who and why) rather than leaving the
 // attachment open. attached_by is always staffID: no caller here needs to
 // distinguish an accrual from a grant by a different actor. Collapses the
 // identical seedAttachment copies #706 found duplicated in staffauth_test
 // and activitygate_test.
 func SeedAttachment(t *testing.T, db *DB, engagementID, staffID, origin string, ended bool) {
 	t.Helper()
-	endedAt := "NULL"
+	ending := "NULL, NULL, NULL"
 	if ended {
-		endedAt = "now()"
+		ending = "now(), $2, 'taken_off'"
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at)
-		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`)`,
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason)
+		 VALUES ($1, $2, $3::attachment_origin, $2, `+ending+`)`,
 		engagementID, staffID, origin,
 	); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test

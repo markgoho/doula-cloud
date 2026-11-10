@@ -248,7 +248,7 @@ func TestRecord_RefusesASecondRecord(t *testing.T) {
 func TestRecord_AnEndedAttachmentCanStillBePaid(t *testing.T) {
 	f := newFixture(t)
 	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE id = $1`, f.attachmentID,
+		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE id = $1`, f.attachmentID,
 	); err != nil {
 		t.Fatalf("end attachment: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestInbox_SheReadsHerOwnFeePaidAndNoOneElseDoes(t *testing.T) {
 
 	view := f.recordPaid(t)
 	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE id = $1`, f.attachmentID,
+		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE id = $1`, f.attachmentID,
 	); err != nil {
 		t.Fatalf("end attachment: %v", err)
 	}
@@ -469,7 +469,7 @@ func TestInbox_EachAcceptedOfferReadsItsOwnAttachment(t *testing.T) {
 	f := newFixture(t)
 	f.recordPaid(t)
 	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE id = $1`, f.attachmentID,
+		`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE id = $1`, f.attachmentID,
 	); err != nil {
 		t.Fatalf("end attachment: %v", err)
 	}

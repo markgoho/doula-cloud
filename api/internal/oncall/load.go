@@ -94,7 +94,7 @@ const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.prefer
 	  FROM engagements e
 	  JOIN clients cl ON cl.id = e.client_id
 	  JOIN engagement_attachments ea
-	    ON ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL
+	    ON ea.engagement_id = e.id AND ea.state = 'granted'
 	  LEFT JOIN staff s ON s.id = ea.staff_id
 	 WHERE e.practice_id = $1
 	   AND e.status <> 'completed'
@@ -102,7 +102,7 @@ const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.prefer
 	   AND ($2::uuid IS NULL OR EXISTS (
 	         SELECT 1 FROM engagement_attachments mine
 	          WHERE mine.engagement_id = e.id AND mine.staff_id = $2::uuid
-	            AND mine.origin = 'granted' AND mine.ended_at IS NULL))
+	            AND mine.state = 'granted'))
 	   AND ($3::uuid IS NULL OR e.id = $3::uuid)
 	 ORDER BY e.id, ea.attached_at, ea.staff_id`
 

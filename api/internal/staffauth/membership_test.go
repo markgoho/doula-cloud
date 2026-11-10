@@ -194,6 +194,28 @@ func TestRemoveMembershipHandler_Success(t *testing.T) {
 	}
 }
 
+// TestRemoveMembershipHandler_EndsHerAttachments is ADR-0008's fourth
+// trigger: her Membership ending ends every Attachment she holds open at
+// the Practice, granted or accrued, and the rows say the Owner who removed
+// her ended them and why.
+func TestRemoveMembershipHandler_EndsHerAttachments(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	target := e.Colleague()
+	granted, accrued := fixture.Engagement(t, e.DB, e.Practice).ID, fixture.Engagement(t, e.DB, e.Practice).ID
+	testdb.SeedGrantedAttachment(t, e.DB, granted, target.ID)
+	testdb.SeedAttachment(t, e.DB, accrued, target.ID, "accrued", false)
+
+	e.remove(target.ID, http.StatusNoContent)
+
+	ended := testdb.Scalar[int](t, e.DB.Admin,
+		`SELECT count(*) FROM engagement_attachments
+		  WHERE staff_id = $1 AND state = 'ended' AND ended_by = $2 AND ended_reason = 'membership_ended'`,
+		target.ID, e.Staff.ID)
+	if ended != 2 {
+		t.Fatalf("attachments ended by her removal = %d, want both", ended)
+	}
+}
+
 func TestRemoveMembershipHandler_KeepsTheLastOwner(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 

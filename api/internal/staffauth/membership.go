@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
 )
 
 // MembershipEvent is one recorded change to a Membership, subject_kind
@@ -368,6 +369,15 @@ func RemoveMembershipHandler() http.Handler {
 			PreviousRoles: "{" + roles + "}", PreviousEmploymentType: employmentType,
 			ActorStaffID: c.StaffID,
 		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		// Her Membership ending is one of ADR-0008's four triggers for
+		// ending an Attachment: she is no longer on any of this Practice's
+		// Engagements, and the rows say the Owner who removed her ended them.
+		if err := attachmentstate.EndForMembership(r.Context(), c.Tx, c.PracticeID, targetStaffID, c.StaffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

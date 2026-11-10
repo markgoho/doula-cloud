@@ -221,7 +221,7 @@ func readOwnFee(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (
 		   JOIN engagements e ON e.id = ea.engagement_id
 		   JOIN practices p ON p.id = e.practice_id
 		  WHERE ea.engagement_id = $1 AND ea.staff_id = $2
-		    AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		    AND ea.state = 'granted'
 		    AND ea.fee_amount_cents IS NOT NULL`,
 		engagementID, staffID,
 	).Scan(&fee.AmountCents, &fee.Terms, &fee.AcceptedOn)
@@ -264,7 +264,7 @@ func refuseUnreachable(w http.ResponseWriter, r *http.Request, tx *sql.Tx, pract
 		   JOIN engagements e ON e.id = ea.engagement_id
 		   JOIN practices p ON p.id = e.practice_id
 		  WHERE ea.engagement_id = $1 AND ea.staff_id = $2 AND e.practice_id = $3
-		    AND ea.origin = 'granted' AND ea.ended_at IS NOT NULL
+		    AND ea.origin = 'granted' AND ea.state = 'ended'
 		  ORDER BY ea.ended_at DESC
 		  LIMIT 1`,
 		engagementID, staffID, practiceID,

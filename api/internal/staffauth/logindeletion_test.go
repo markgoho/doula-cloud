@@ -147,6 +147,28 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 	}
 }
 
+// TestDeleteLoginHandler_EndsHerAttachmentsAtEveryPractice: deleting her
+// login ends each Membership, so it ends every Attachment she holds open
+// at each Practice, with her as the one who ended them.
+func TestDeleteLoginHandler_EndsHerAttachmentsAtEveryPractice(t *testing.T) {
+	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
+	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
+	fixture.Staff(t, e.DB, second, fixture.Owner())
+	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES ($1, $2, '{doula}', 'contractor')`, second.ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, e.Practice).ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, second).ID, e.Staff.ID)
+
+	e.erase()
+
+	if n := countRows(t, e.DB,
+		`SELECT count(*) FROM engagement_attachments
+		  WHERE staff_id = $1 AND state = 'ended' AND ended_by = $1 AND ended_reason = 'membership_ended'`,
+		e.Staff.ID); n != 2 {
+		t.Fatalf("attachments ended by her own deletion = %d, want one at each Practice", n)
+	}
+}
+
 // TestDeleteLoginHandler_EndsEverySession is the ordering the handler's
 // own comment calls load-bearing: sessions is keyed on identity_uid, so a
 // redaction that overwrote it first would leave her signed in forever on

@@ -26,7 +26,7 @@ func (r Reader) CanAccessEngagement(ctx context.Context, tx *sql.Tx, engagementI
 		`SELECT EXISTS(
 			SELECT 1 FROM engagement_attachments
 			WHERE engagement_id = $1 AND staff_id = $2
-			  AND origin = 'granted' AND ended_at IS NULL
+			  AND state = 'granted'
 		)`,
 		engagementID, r.staffID,
 	).Scan(&attached)
@@ -55,7 +55,7 @@ func (r Reader) CanAccessClient(ctx context.Context, tx *sql.Tx, clientID string
 			SELECT 1 FROM engagement_attachments ea
 			JOIN engagements e ON e.id = ea.engagement_id
 			WHERE e.client_id = $1 AND ea.staff_id = $2
-			  AND ea.origin = 'granted' AND ea.ended_at IS NULL
+			  AND ea.state = 'granted'
 		)`,
 		clientID, r.staffID,
 	).Scan(&attached)

@@ -157,9 +157,9 @@ func entities() []entity {
 		{
 			file:        "engagement_attachment.csv",
 			description: "Which Staff member is or was attached to which piece of work, and on what fee terms.",
-			header:      []string{"id", colEngagementID, colStaffID, "origin", "attached_by_staff_id", "attached_at", "ended_at", "ended_by_staff_id", "fee_amount_cents", "fee_terms"},
+			header:      []string{"id", colEngagementID, colStaffID, "origin", "attached_by_staff_id", "attached_at", "ended_at", "ended_by_staff_id", "ended_reason", "fee_amount_cents", "fee_terms"},
 			query: `SELECT a.id::text, a.engagement_id::text, a.staff_id::text, a.origin::text,
-			               a.attached_by::text, a.attached_at::text, a.ended_at::text, a.ended_by::text,
+			               a.attached_by::text, a.attached_at::text, a.ended_at::text, a.ended_by::text, a.ended_reason::text,
 			               a.fee_amount_cents::text, a.fee_terms
 			          FROM engagement_attachments a
 			          JOIN engagements e ON e.id = a.engagement_id

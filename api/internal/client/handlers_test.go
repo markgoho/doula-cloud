@@ -1610,7 +1610,7 @@ func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.
 	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 90000)
 
 	endedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
-	seedAttachmentWithFee(t, db, endedEngagement, contractorID, "granted", true, 40000)
+	seedAttachmentWithFee(t, db, endedEngagement, contractorID, true, 40000)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -1634,7 +1634,8 @@ func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.
 // TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee
 // proves fetchOpenEngagements' own "att.origin = 'granted'" condition
 // (#742): an accrued-only attachment (#228 -- a record of work, never a
-// key) must not surface a fee or its Engagement line either, even though
+// key, and one the schema refuses a fee on since 00173) must not surface
+// its Engagement line either, even though
 // the same contractor holds a separate open, granted attachment
 // elsewhere on the same Client.
 func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testing.T) {
@@ -1647,7 +1648,7 @@ func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testin
 	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 85000)
 
 	accruedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
-	seedAttachmentWithFee(t, db, accruedEngagement, contractorID, "accrued", false, 5000)
+	testdb.SeedAttachment(t, db, accruedEngagement, contractorID, "accrued", false)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()

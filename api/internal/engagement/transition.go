@@ -5,6 +5,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -254,7 +255,7 @@ func TransitionHandler() http.Handler {
 
 		// Before the write, so a refused completion runs neither the
 		// UPDATE nor the cascade below it (offer.CloseOnCompletion,
-		// staffauth.EndAttachments): nothing is written on this refusal.
+		// attachmentstate.EndForCompletion): nothing is written on this refusal.
 		// A same-status re-request of 'completed' is never refused here
 		// and needs no exception -- the row is already 'completed', so
 		// 00094's own CHECK is what guarantees it carries an outcome.
@@ -289,6 +290,10 @@ func TransitionHandler() http.Handler {
 			case req.Status == StatusCompleted:
 				newEndingReason, newEndingNote = req.EndingReason, req.EndingNote
 			case isReopen:
+				// A reopen puts back no Attachment the completion
+				// ended: the Engagement comes back with no Doula on it
+				// until someone is put on it again (attachmentstate's
+				// declaration says why that is not decided here).
 				newEndingReason, newEndingNote = nil, nil
 			}
 
@@ -337,7 +342,7 @@ func TransitionHandler() http.Handler {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
 			}
-			if err := staffauth.EndAttachments(r.Context(), c.Tx, c.EngagementID, c.StaffID); err != nil {
+			if err := attachmentstate.EndForCompletion(r.Context(), c.Tx, c.EngagementID, c.StaffID); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
