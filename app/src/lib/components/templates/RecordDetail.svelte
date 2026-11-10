@@ -14,6 +14,7 @@
 	 * names it and the reader learns it is empty rather than missing.
 	 */
 	import { tick, type Snippet } from 'svelte';
+	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -59,8 +60,8 @@
 		onBack?: (event: MouseEvent) => void;
 		/**
 		 * The record will have a Back link whose target is its own data,
-		 * such as the Practice Your account came from (#2251). While
-		 * `loading`, its line is held so the title does not move when it
+		 * such as the Practice Your account came from (#2251). While `read` is
+		 * loading, its line is held so the title does not move when it
 		 * lands.
 		 */
 		isBackPending?: boolean;
@@ -71,7 +72,7 @@
 		 * label, a value as long as a usual one (with a note under it as
 		 * a second line, such as "Last confirmed"), and the words of its
 		 * row action if it has one.
-		 * While `loading`, a bordered card of these rows holds the
+		 * While `read` is loading, a bordered card of these rows holds the
 		 * summary's space, each value drawn as bars that wrap where its
 		 * words would. A summary of another shape, or none, passes nothing
 		 * and gets no placeholder.
@@ -84,7 +85,7 @@
 		summaryLinks?: readonly string[];
 		actions?: Snippet;
 		/**
-		 * The actions to draw beside the title while `loading`, for a
+		 * The actions to draw beside the title while `read` is loading, for a
 		 * route whose actions do not wait on its record (#2251), so the
 		 * title row does not grow when they land. Usually `actions` itself.
 		 */
@@ -98,20 +99,18 @@
 		 *
 		 * Optional because archetype D covers short records too, and a
 		 * contents list above three sections is furniture. It is also
-		 * consulted while `loading` -- a route knows whether its record has
+		 * consulted while `read` is loading -- a route knows whether its record has
 		 * contents before the record has loaded, since it never varied by
 		 * data (#480) -- so the list is drawn from the named sections at
 		 * once and the page does not move when the record lands.
 		 */
 		isContentsShown?: boolean;
 		/**
-		Presence is the state, value is the Skeleton's accessible label (#480).
-		*/
-		loading?: string;
-		/**
-		Presence is the state, value is the Notice's message (#480).
-		*/
-		loadError?: string;
+		 * The record's own read (#480, `pageRead.svelte.ts`): loading, with
+		 * the Skeleton's accessible label; failed, with the Notice's
+		 * message; or loaded, which is also what leaving it out means.
+		 */
+		read?: PageReadState;
 	}
 
 	let {
@@ -129,9 +128,12 @@
 		loadingActions,
 		sections,
 		isContentsShown = false,
-		loading,
-		loadError
+		read = LOADED_PAGE
 	}: Properties = $props();
+
+	// The snippets below draw only while loading, but a snippet does not
+	// carry the `{#if}` that renders it, so the label is read out here.
+	const loadingLabel = $derived(read.status === 'loading' ? read.label : undefined);
 
 	// The `#each` below is already keyed on the heading, so two sections
 	// sharing one is a pre-existing error rather than a new one this
@@ -150,7 +152,7 @@
 	// to again, once.
 	let hasLanded = false;
 	$effect(() => {
-		if (loading || hasLanded) return;
+		if (hasLanded || read.status === 'loading') return;
 		hasLanded = true;
 		const id = location.hash.slice(1);
 		if (!id) return;
@@ -158,7 +160,7 @@
 	});
 </script>
 
-<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
+<PageTitle page={title} {serviceName} isPending={read.status === 'loading'} />
 
 <container-l>
 	<!-- No cap: a record is a contents rail beside description lists and
@@ -277,12 +279,12 @@
 							<stack-l space="var(--space-4)">
 								<Heading level={2} variant="section" text={section.heading} />
 								<div class="loading-bars">
-									<Skeleton variant="text" lines={3} label={index === 0 ? loading : undefined} />
+									<Skeleton variant="text" lines={3} label={index === 0 ? loadingLabel : undefined} />
 								</div>
 							</stack-l>
 						</section>
 					{:else}
-						<div class="loading-bars"><Skeleton variant="text" lines={6} label={loading} /></div>
+						<div class="loading-bars"><Skeleton variant="text" lines={6} label={loadingLabel} /></div>
 					{/each}
 				</stack-l>
 			</div>
@@ -323,9 +325,9 @@
 			</stack-l>
 		{/snippet}
 
-		{#if loadError}
-			<Notice variant="error" message={loadError} />
-		{:else if loading}
+		{#if read.status === 'failed'}
+			<Notice variant="error" message={read.message} />
+		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-section)">
 				{@render loadingHeader()}
 				{@render loadingSections()}

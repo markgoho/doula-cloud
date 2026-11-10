@@ -75,7 +75,7 @@ export const detailsQuestions: QuestionJourney = {
 		return intakeFlow.sections;
 	},
 	get isReady() {
-		return intakeFlow.status === 'ready' && clientDetails.status === 'ready';
+		return intakeFlow.read.isLoaded && clientDetails.read.isLoaded;
 	},
 	get basePath() {
 		const { practiceId, clientId } = currentIds();

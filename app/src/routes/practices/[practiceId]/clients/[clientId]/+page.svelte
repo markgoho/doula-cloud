@@ -30,6 +30,7 @@
 	import { formatAddress, formatPhoneNumber } from '#lib/contactDetails.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -109,8 +110,8 @@
 	// nothing.
 	const outcome = takeOutcome(page.url);
 
-	let detail = $state<ClientDetail | undefined>();
-	let error = $state('');
+	const detailRead = new PageRead<ClientDetail>();
+	const detail = $derived(detailRead.value);
 	// The signed-in Staff member's own id, read once alongside the Client
 	// (#504): "Withdraw, available to the requester alone" is a fact about
 	// who is looking, not about the Client record itself. Left blank on a
@@ -340,7 +341,7 @@
 			// #2280: read back rather than flipped in place, so the History's
 			// withdrawal row carries the time the BFF recorded it, as
 			// handleErase does for the same reason.
-			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+			detailRead.set(await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!));
 		} catch (error_) {
 			withdrawError = error_ instanceof Error ? error_.message : 'Failed to withdraw request';
 		} finally {
@@ -400,7 +401,7 @@
 		eraseError = '';
 		try {
 			await eraseClient(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
-			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
+			detailRead.set(await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!));
 		} catch (error_) {
 			eraseError = error_ instanceof Error ? error_.message : 'Failed to erase this Client';
 			throw error_;
@@ -409,18 +410,18 @@
 
 	onMount(async () => {
 		void loadStaffId();
-		try {
-			detail = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!);
-			// A tombstoned row is redirected, never rendered (ADR-0017's
-			// amendment): every other field on this response is meaningless
-			// placeholder data once mergedInto is set (detail.go), so this
-			// hub must not draw from it at all.
-			if (detail.mergedInto) {
-				await goto(`/practices/${page.params.practiceId}/clients/${detail.mergedInto}`);
-				return;
-			}
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Client';
+		await detailRead.load(
+			() => loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!),
+			'Failed to load Client'
+		);
+		// A tombstoned row is redirected, never rendered (ADR-0017's
+		// amendment): every other field on this response is meaningless
+		// placeholder data once mergedInto is set (detail.go), so this
+		// hub must not draw from it at all.
+		const survivor = detailRead.value?.mergedInto;
+		if (survivor) {
+			await goto(`/practices/${page.params.practiceId}/clients/${survivor}`);
+			return;
 		}
 		// Already-erased is unconditional and needs no precheck of its own
 		// -- there is nothing left to settle, and the control never renders
@@ -759,6 +760,5 @@
 				...eraseSections
 			]
 		: []}
-	loading={detail || error ? undefined : 'Loading the Client'}
-	loadError={error || undefined}
+	read={detailRead.frame('Loading the Client')}
 />

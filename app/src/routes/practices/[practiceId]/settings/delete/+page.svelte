@@ -33,6 +33,7 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { LOADED_PAGE, PageRead } from '#lib/pageRead.svelte.js';
 	import type { PracticeSession } from '../../+layout.js';
 
 	const session = $derived((page.data as { session: PracticeSession }).session);
@@ -43,8 +44,9 @@
 	// says nothing.
 	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
-	let status = $state<DeletionStatus | undefined>();
-	let loadError = $state('');
+	const statusRead = new PageRead<DeletionStatus>();
+	const status = $derived(statusRead.value);
+	const LOAD_FAILURE = 'Failed to load this setting';
 	let actionError = $state('');
 	let successNotice = $state('');
 	let isConfirmOpen = $state(false);
@@ -52,17 +54,18 @@
 
 	onMount(async () => {
 		if (isOwner) {
-			await loadStatus();
+			await statusRead.load(readStatus, LOAD_FAILURE);
 		}
 	});
 
-	async function loadStatus() {
-		loadError = '';
-		try {
-			status = await loadDeletionStatus(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this setting';
-		}
+	function readStatus(): Promise<DeletionStatus> {
+		return loadDeletionStatus(apiFetchWithSession, page.params.practiceId!);
+	}
+
+	// A re-read in place after an act that went through: if it fails, the
+	// page and its notice stay, and the failure is said beside them.
+	function reloadStatus(): Promise<boolean> {
+		return statusRead.refresh(readStatus, LOAD_FAILURE);
 	}
 
 	async function handleConfirmDelete() {
@@ -70,7 +73,7 @@
 		try {
 			await initiateDeletion(apiFetchWithSession, page.params.practiceId!);
 			successNotice = '';
-			await loadStatus();
+			await reloadStatus();
 		} catch (error_) {
 			actionError = error_ instanceof Error ? error_.message : 'Failed to start deletion';
 			throw error_;
@@ -83,7 +86,7 @@
 		try {
 			await restorePractice(apiFetchWithSession, page.params.practiceId!);
 			successNotice = 'This Practice has been restored.';
-			await loadStatus();
+			await reloadStatus();
 		} catch (error_) {
 			actionError = error_ instanceof Error ? error_.message : 'Failed to restore this Practice';
 		} finally {
@@ -107,7 +110,8 @@
 	// address, as the Settings index draws it.
 	const exportHref = $derived(`${apiBaseURL()}/api/practices/${page.params.practiceId}/export`);
 
-	let loading = $derived(isOwner && status === undefined ? 'Loading this setting' : undefined);
+	// A non-Owner has nothing further to read: her page is loaded as it is.
+	const read = $derived(isOwner ? statusRead.frame('Loading this setting') : LOADED_PAGE);
 </script>
 
 {#snippet intro()}
@@ -165,6 +169,9 @@
 	{#if successNotice}
 		<Notice variant="status" message={successNotice} />
 	{/if}
+	{#if statusRead.refreshError}
+		<Notice variant="error" message={statusRead.refreshError} />
+	{/if}
 	{#if actionError && !isConfirmOpen}
 		<!-- Delete's own failure renders inside ConfirmDialog while it is
 		     open (#804); this is Restore's, which has no dialog to gate it. -->
@@ -186,7 +193,7 @@
 	{/if}
 {/snippet}
 
-<FormPage title="Delete this Practice" {intro} fieldsets={[{ content: body }]} {actions} {loading} {loadError} />
+<FormPage title="Delete this Practice" {intro} fieldsets={[{ content: body }]} {actions} {read} />
 
 <ConfirmDialog
 	bind:open={isConfirmOpen}

@@ -16,5 +16,5 @@
 {:else if balance.value}
 	<CreditsScreen data={{ ...data, ...balance.value }} />
 {:else}
-	<ListPage title="Credits" loading="Loading your Credits" content={nothing} />
+	<ListPage title="Credits" read={{ status: 'loading', label: 'Loading your Credits' }} content={nothing} />
 {/if}

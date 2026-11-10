@@ -30,8 +30,11 @@ beforeEach(() => {
 });
 
 describe('ClientDetailsFlow', () => {
-	it('is idle until it is asked to load', () => {
-		expect(new ClientDetailsFlow().status).toBe('idle');
+	it('has no record until it is asked to load', () => {
+		const flow = new ClientDetailsFlow();
+
+		expect(flow.read.state).toEqual({ status: 'loading' });
+		expect(flow.record).toBeUndefined();
 	});
 
 	it('starts each question from the record on file', async () => {
@@ -39,7 +42,7 @@ describe('ClientDetailsFlow', () => {
 
 		await flow.load(fetcherFor(), 'p1', 'client-1');
 
-		expect(flow.status).toBe('ready');
+		expect(flow.read.isLoaded).toBe(true);
 		expect(flow.draft.answers.email).toBe('anne@example.com');
 		expect(flow.draft.answers.fieldValues).toEqual({ referral: 'A sister' });
 	});
@@ -87,7 +90,7 @@ describe('ClientDetailsFlow', () => {
 
 		await flow.load(fetcherFor({ id: 'client-1', mergedInto: 'client-2' }), 'p1', 'client-1');
 
-		expect(flow.status).toBe('ready');
+		expect(flow.read.isLoaded).toBe(true);
 		expect(flow.record?.mergedInto).toBe('client-2');
 		expect(flow.draft.answers.givenName).toBe('');
 	});
@@ -97,8 +100,8 @@ describe('ClientDetailsFlow', () => {
 
 		await flow.load(fetcherFor({ error: 'client not found' }, 404), 'p1', 'client-1');
 
-		expect(flow.status).toBe('error');
-		expect(flow.loadError).not.toBe('');
+		expect(flow.read.state.status).toBe('failed');
+		expect(flow.record).toBeUndefined();
 	});
 
 	it('reports a failure that is not an error object in words', async () => {
@@ -106,7 +109,34 @@ describe('ClientDetailsFlow', () => {
 
 		await flow.load(vi.fn(() => Promise.reject('offline')), 'p1', 'client-1');
 
-		expect(flow.loadError).toBe('Failed to load Client');
+		expect(flow.read.state).toEqual({ status: 'failed', message: 'Failed to load Client' });
+	});
+
+	it('asks again for a Client whose read failed', async () => {
+		const flow = new ClientDetailsFlow();
+		await flow.load(fetcherFor({ error: 'down' }, 503), 'p1', 'client-1');
+
+		await flow.load(fetcherFor(), 'p1', 'client-1');
+
+		expect(flow.record?.email).toBe('anne@example.com');
+	});
+
+	// A slow read for the Client open before must not land as the record,
+	// or the draft, of the Client open now.
+	it("drops a read for one Client that answers after another's was asked for", async () => {
+		const flow = new ClientDetailsFlow();
+		let answerA!: (response: Response) => void;
+		const slowA = vi.fn(() => new Promise<Response>((resolve) => (answerA = resolve)));
+		const pendingA = flow.load(slowA, 'p1', 'client-a');
+
+		flow.open('client-b', undefined);
+		await flow.load(fetcherFor({ ...onFile, id: 'client-b', email: 'bea@example.com' }), 'p1', 'client-b');
+		answerA(jsonResponse({ ...onFile, id: 'client-a', email: 'anne@example.com' }));
+		await pendingA;
+
+		expect(flow.clientId).toBe('client-b');
+		expect(flow.record?.email).toBe('bea@example.com');
+		expect(flow.draft.answers.email).toBe('bea@example.com');
 	});
 
 	it('is one shared instance', () => {

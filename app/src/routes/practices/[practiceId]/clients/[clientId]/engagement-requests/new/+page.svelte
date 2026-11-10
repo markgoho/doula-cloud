@@ -68,6 +68,7 @@
 		type RequestDoulas
 	} from '#lib/engagementRequest.js';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead, readFailure } from '#lib/pageRead.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -90,7 +91,10 @@
 	// Read once, while the page renders, so a reload says nothing.
 	const outcome = takeOutcome(page.url);
 
-	let detail = $state<ClientDetail | undefined>();
+	// Her record and the Doula roster, read as one.
+	const detailRead = new PageRead<ClientDetail>();
+	const detail = $derived(detailRead.value);
+	const LOAD_FAILURE = 'Failed to load Client';
 	let doulas = $state<RequestDoulas | undefined>();
 	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
 	// fetch of this page's own.
@@ -98,7 +102,6 @@
 	let balance = $state<number | undefined>();
 	// The balance in words, "3 Welcome credits" or "N Credits" (#1612).
 	let balanceCount = $state('');
-	let loadError = $state('');
 
 	let kind = $state<'' | 'birth' | 'postpartum'>('');
 	let dueDate = $state('');
@@ -269,7 +272,7 @@
 
 	onMount(async () => {
 		restoreDraft();
-		try {
+		const isLoaded = await detailRead.load(async () => {
 			const [client, roster] = await Promise.all([
 				loadClientDetail(apiFetchWithSession, page.params.practiceId!, page.params.clientId!),
 				loadRequestDoulas(apiFetchWithSession, page.params.practiceId!)
@@ -282,14 +285,18 @@
 			const isOffered = doulaOptions(roster.items, session.staffId).some((option) => option.value === doula);
 			if (!isOffered) doula = initialDoulaAnswer(roster, session.staffId);
 			doulas = roster;
-			detail = client;
-			if (isApprover) {
-				const balancePage = await loadBalance(apiFetchWithSession, page.params.practiceId!);
-				balance = balancePage.balance;
-				balanceCount = creditCount(balancePage);
-			}
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load Client';
+			return client;
+		}, LOAD_FAILURE);
+		// Her record is drawn while an approver's balance is still on its
+		// way; a balance that cannot be read fails the page, as her record
+		// would have.
+		if (!isLoaded || !isApprover) return;
+		try {
+			const balancePage = await loadBalance(apiFetchWithSession, page.params.practiceId!);
+			balance = balancePage.balance;
+			balanceCount = creditCount(balancePage);
+		} catch (error) {
+			detailRead.fail(readFailure(error, LOAD_FAILURE));
 		}
 	});
 
@@ -476,7 +483,6 @@
 		fieldsets={detail ? [{ content: requestFields }] : []}
 		errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 		actions={formActions}
-		loading={detail || loadError ? undefined : 'Loading the Client'}
-		loadError={loadError || undefined}
+		read={detailRead.frame('Loading the Client')}
 	/>
 </form>

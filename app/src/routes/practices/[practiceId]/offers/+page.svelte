@@ -10,20 +10,15 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
-	let offers = $state<Offer[]>([]);
-	let error = $state('');
-	let isLoaded = $state(false);
+	// The inbox's read. A failed first read is said on its own, never over
+	// an empty inbox that would read as "nothing offered".
+	const inbox = new PageRead<Offer[]>();
+	const LOAD_FAILURE = 'Failed to load your offers';
 
-	async function refresh() {
-		error = '';
-		try {
-			offers = await loadInbox(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load your offers';
-		} finally {
-			isLoaded = true;
-		}
+	function readInbox(): Promise<Offer[]> {
+		return loadInbox(apiFetchWithSession, page.params.practiceId!);
 	}
 
 	// The list is reloaded rather than patched in place: accepting one
@@ -31,7 +26,9 @@
 	// those are rows this list may well be showing.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		const decision = await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
-		await refresh();
+		// In place: the decision went through, so the inbox stays drawn and
+		// a failed re-read is said above it.
+		await inbox.refresh(readInbox, LOAD_FAILURE);
 		return decision;
 	}
 
@@ -43,7 +40,7 @@
 			engagementId
 		});
 
-	onMount(refresh);
+	onMount(() => inbox.load(readInbox, LOAD_FAILURE));
 </script>
 
 {#snippet intro()}
@@ -54,13 +51,14 @@
 {/snippet}
 
 {#snippet content()}
-	{#if error}
-		<Notice message={error} variant="error" />
-	{/if}
-
-	{#if isLoaded}
+	{#if inbox.state.status === 'failed'}
+		<Notice message={inbox.state.message} variant="error" />
+	{:else if inbox.state.status === 'loaded'}
+		{#if inbox.refreshError}
+			<Notice message={inbox.refreshError} variant="error" />
+		{/if}
 		<OfferInbox
-			{offers}
+			offers={inbox.state.value}
 			onDecide={handleDecide}
 			practiceName={(page.data as { session: PracticeSession }).session.practiceName}
 			{engagementHref}

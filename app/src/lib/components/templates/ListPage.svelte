@@ -35,6 +35,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
 
 	interface Properties {
 		title: string;
@@ -60,33 +61,31 @@
 		 */
 		outcome?: string;
 		/**
-		Presence is the state, value is the Skeleton's accessible label (#480).
-		*/
-		loading?: string;
-		/**
-		Presence is the state, value is the Notice's message (#480).
-		*/
-		loadError?: string;
+		 * The list's own read (#480, `pageRead.svelte.ts`): loading, with
+		 * the Skeleton's accessible label; failed, with the Notice's
+		 * message; or loaded, which is also what leaving it out means.
+		 */
+		read?: PageReadState;
 	}
 
-	let { title, serviceName, intro, actions, content, outcome, loading, loadError }: Properties = $props();
+	let { title, serviceName, intro, actions, content, outcome, read = LOADED_PAGE }: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
+<PageTitle page={title} {serviceName} isPending={read.status === 'loading'} />
 
 <container-l>
 	<center-l max="none" gutters="var(--page-gutter)">
-		{#if loadError}
+		{#if read.status === 'failed'}
 			<!-- data-load-error: see FormPage.svelte's own comment on this
 			     attribute (#1258) -- the same fact, the same reason. -->
 			<stack-l space="var(--space-section)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
-				<Notice variant="error" message={loadError} />
+				<Notice variant="error" message={read.message} />
 			</stack-l>
-		{:else if loading}
+		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-section)">
 				<Heading level={1} variant="page" text={title} />
-				<Skeleton variant="row" lines={6} label={loading} />
+				<Skeleton variant="row" lines={6} label={read.label} />
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-group)">

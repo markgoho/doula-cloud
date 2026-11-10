@@ -39,6 +39,7 @@
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { LOADED_PAGE, PageRead } from '#lib/pageRead.svelte.js';
 	import type { PracticeSession } from '../../+layout.js';
 
 	// The Membership comes off practices/[practiceId]/+layout.ts's
@@ -50,8 +51,9 @@
 	// holds the rule for a session that says nothing.
 	const hasSecondFactor = $derived(checkHasSecondFactor(session));
 
-	let impact = $state<MfaRequirementImpact | undefined>();
-	let loadError = $state('');
+	const impactRead = new PageRead<MfaRequirementImpact>();
+	const impact = $derived(impactRead.value);
+	const LOAD_FAILURE = 'Failed to load this setting';
 	let toggleError = $state('');
 	let successNotice = $state('');
 	let isConfirmOpen = $state(false);
@@ -63,17 +65,12 @@
 		// a non-Owner for it would only earn a 403 she has no use for, so
 		// this never asks.
 		if (isOwner) {
-			await loadImpact();
+			await impactRead.load(readImpact, LOAD_FAILURE);
 		}
 	});
 
-	async function loadImpact() {
-		loadError = '';
-		try {
-			impact = await loadMfaRequirementImpact(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this setting';
-		}
+	function readImpact(): Promise<MfaRequirementImpact> {
+		return loadMfaRequirementImpact(apiFetchWithSession, page.params.practiceId!);
 	}
 
 	// Common to both directions: the confirmation step before this runs is
@@ -85,7 +82,10 @@
 		try {
 			await setMfaRequired(apiFetchWithSession, page.params.practiceId!, isRequired);
 			successNotice = confirmedMessage;
-			await loadImpact();
+			// A re-read in place: if it fails, the save still happened, so
+			// the page and its success notice stay, and the failure is said
+			// beside them rather than in place of them.
+			await impactRead.refresh(readImpact, LOAD_FAILURE);
 		} catch (error_) {
 			toggleError = error_ instanceof Error ? error_.message : 'Failed to save this setting';
 			throw error_;
@@ -131,10 +131,9 @@
 		impact === undefined ? '' : requireConsequence(impact.withoutSecondFactor)
 	);
 
-	// Truthy until an Owner's impact has loaded -- a non-Owner's roles are
-	// already known from page.data.session, so there is nothing further to
-	// load for her.
-	let loading = $derived(isOwner && impact === undefined ? 'Loading this setting' : undefined);
+	// A non-Owner's roles are already known from page.data.session, so
+	// there is nothing further to load for her: her page is loaded as it is.
+	const read = $derived(isOwner ? impactRead.frame('Loading this setting') : LOADED_PAGE);
 </script>
 
 {#snippet intro()}
@@ -149,10 +148,10 @@
 	{:else}
 		<!--
 			A non-null assertion, not another `{#if impact}`: `body` only
-			renders once `loading` is falsy, and `loading` stays truthy for
-			an Owner until `impact` is set -- so `impact` is always defined
-			by the time this runs, the same reasoning payments/+page.svelte's
-			own `status!` uses.
+			renders once `read` is loaded, which for an Owner is once
+			`impact` is -- so `impact` is always defined by the time this
+			runs, the same reasoning payments/+page.svelte's own `status!`
+			uses.
 		-->
 		<!--
 			"Mandatory", not "Required": formErrors.usage.spec.ts (#467)
@@ -190,6 +189,9 @@
 		{#if successNotice}
 			<Notice variant="status" message={successNotice} />
 		{/if}
+		{#if impactRead.refreshError}
+			<Notice variant="error" message={impactRead.refreshError} />
+		{/if}
 		{#if toggleError && !isConfirmOpen}
 			<!-- Require-all's own failure renders inside ConfirmDialog while
 			     it is open (#804); this is Stop-requiring's, which has no
@@ -214,7 +216,7 @@
 	{/if}
 {/snippet}
 
-<FormPage title="Multi-factor authentication" {intro} fieldsets={[{ content: body }]} {actions} {loading} {loadError} />
+<FormPage title="Multi-factor authentication" {intro} fieldsets={[{ content: body }]} {actions} {read} />
 
 <ConfirmDialog
 	bind:open={isConfirmOpen}

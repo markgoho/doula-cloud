@@ -119,7 +119,7 @@
 -->
 <RecordDetail
 	title={isLoading ? '' : 'Anne-Marie Ochieng-Whitfield'}
-	loading={isLoading ? 'Loading the Client' : undefined}
+	read={isLoading ? { status: 'loading', label: 'Loading the Client' } : undefined}
 	{summary}
 	summaryRows={summaryItems}
 	{actions}

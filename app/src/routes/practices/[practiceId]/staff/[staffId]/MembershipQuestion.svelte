@@ -27,6 +27,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { LOADED_PAGE, PageRead } from '#lib/pageRead.svelte.js';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import { staffRoute } from './staffRoute.svelte.js';
 	import { loadMember, memberHref } from './member.js';
@@ -72,9 +73,11 @@
 	const route = staffRoute();
 	const backHref = $derived(memberHref(route.practiceId, route.staffId));
 
-	let member = $state<StaffSummary | undefined>();
+	const memberRead = new PageRead<StaffSummary>();
+	const member = $derived(memberRead.value);
+	// Not a read: who is asking is already known. A refused page is
+	// loaded as it is.
 	let isRefused = $state(false);
-	let loadError = $state('');
 	const submission = new FormSubmission();
 
 	onMount(async () => {
@@ -82,13 +85,11 @@
 			isRefused = true;
 			return;
 		}
-		try {
+		await memberRead.load(async () => {
 			const loaded = await loadMember(apiFetchWithSession, route.practiceId, route.staffId);
 			start(loaded);
-			member = loaded;
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this Staff member';
-		}
+			return loaded;
+		}, 'Failed to load this Staff member');
 	});
 
 	async function handleSubmit(event: SubmitEvent) {
@@ -141,7 +142,6 @@
 		title={`Change ${subject}`}
 		fieldsets={isRefused ? [{ content: refusal }] : []}
 		actions={back}
-		loading={isRefused || loadError ? undefined : 'Loading this Staff member'}
-		loadError={loadError || undefined}
+		read={isRefused ? LOADED_PAGE : memberRead.frame('Loading this Staff member')}
 	/>
 {/if}

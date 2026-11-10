@@ -15,8 +15,11 @@ function fetcherFor(fields: unknown[] = [], practiceName = 'Highland Midwifery')
 }
 
 describe('IntakeFlow', () => {
-	it('is idle until it is asked to load', () => {
-		expect(new IntakeFlow().status).toBe('idle');
+	it('has read nothing until it is asked to load', () => {
+		const flow = new IntakeFlow();
+
+		expect(flow.read.state).toEqual({ status: 'loading' });
+		expect(flow.practiceName).toBe('');
 	});
 
 	it('reads the Practice name and its Client Field Template', async () => {
@@ -24,7 +27,7 @@ describe('IntakeFlow', () => {
 
 		await flow.load(fetcherFor([{ id: 'a', type: 'short_text', label: 'Allergies', order: 0, archived: false }]), 'p1');
 
-		expect(flow.status).toBe('ready');
+		expect(flow.read.isLoaded).toBe(true);
 		expect(flow.practiceName).toBe('Highland Midwifery');
 		expect(flow.sections).toEqual([
 			{ heading: 'Highland Midwifery', fields: [expect.objectContaining({ id: 'a' })] }
@@ -73,8 +76,7 @@ describe('IntakeFlow', () => {
 
 		await flow.load(fetcher, 'p1');
 
-		expect(flow.status).toBe('error');
-		expect(flow.loadError).toBeTruthy();
+		expect(flow.read.state).toEqual({ status: 'failed', message: expect.any(String) });
 	});
 
 	it('says what refused it when the Practice name cannot be read', async () => {
@@ -83,7 +85,7 @@ describe('IntakeFlow', () => {
 
 		await flow.load(fetcher, 'p1');
 
-		expect(flow.status).toBe('error');
+		expect(flow.read.state.status).toBe('failed');
 	});
 
 	it('reports a thrown non-Error as a failure to load', async () => {
@@ -94,7 +96,7 @@ describe('IntakeFlow', () => {
 
 		await flow.load(fetcher, 'p1');
 
-		expect(flow.loadError).toBe('Failed to load');
+		expect(flow.read.state).toEqual({ status: 'failed', message: 'Failed to load' });
 	});
 
 	it('tries again after a failure', async () => {
@@ -104,7 +106,26 @@ describe('IntakeFlow', () => {
 
 		await flow.load(fetcherFor(), 'p1');
 
-		expect(flow.status).toBe('ready');
+		expect(flow.read.isLoaded).toBe(true);
+	});
+
+	// The latest Practice's read wins: one asked for earlier that answers
+	// later is dropped.
+	it('drops a read for a Practice that answers after another was asked for', async () => {
+		const flow = new IntakeFlow();
+		let answerSession!: (response: Response) => void;
+		const slow = vi.fn((path: string) =>
+			path.endsWith('/session')
+				? new Promise<Response>((resolve) => (answerSession = resolve))
+				: Promise.resolve(jsonResponse({ fields: [] }))
+		);
+		const pending = flow.load(slow, 'p1');
+
+		await flow.load(fetcherFor([], 'Second Practice'), 'p2');
+		answerSession(jsonResponse({ practiceName: 'First Practice' }));
+		await pending;
+
+		expect(flow.practiceName).toBe('Second Practice');
 	});
 
 	it('exports one flow the whole sequence shares', () => {

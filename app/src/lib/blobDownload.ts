@@ -1,5 +1,6 @@
 import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { SectionState } from './sectionState.svelte.js';
 
 /**
  * Turns a Blob into a browser download: an object URL, a detached anchor
@@ -31,4 +32,34 @@ export async function fetchBlob(fetcher: Fetcher, path: string): Promise<Blob> {
 		throw new Error(await apiErrorMessage(response));
 	}
 	return response.blob();
+}
+
+/**
+ * A download button's own state -- whether it is fetching, and the last
+ * failure's words -- and the press itself, for every PDF a page offers
+ * (#302's rule: a failed download is said in words, never swallowed,
+ * because the anchor `triggerBlobDownload` clicks never reaches the
+ * tree for a screen reader or a failed navigation to fall back on).
+ *
+ * The three PDF pages (the Staff and portal Birth Plans, the portal
+ * Contract) each held an `isDownloadingPdf` and a `downloadError` and
+ * the same try/catch/finally around them. It is `SectionState`'s
+ * `mutate`, which already owns that lifecycle and refuses a second
+ * press while one is in flight.
+ */
+export class BlobDownload extends SectionState<void> {
+	constructor() {
+		super();
+	}
+
+	/**
+	 * Fetches the file and hands it to the browser as `filename`. On a
+	 * thrown `Error`, `error` is its message; on anything else,
+	 * `failureMessage`.
+	 */
+	async start(fetch: () => Promise<Blob>, filename: string, failureMessage: string): Promise<boolean> {
+		return this.mutate(async () => {
+			triggerBlobDownload(await fetch(), filename);
+		}, failureMessage);
+	}
 }

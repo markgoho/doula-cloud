@@ -73,7 +73,7 @@ describe('DocumentPage.svelte', () => {
 	});
 
 	it('renders the title, the back link and a skeleton while loading, instead of the content', async () => {
-		const { container } = await setup({ loading: 'Loading Contract' });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading Contract' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
 		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
@@ -84,7 +84,7 @@ describe('DocumentPage.svelte', () => {
 	});
 
 	it('renders the title, the back link and a Notice on a load failure, instead of the content', async () => {
-		const { container } = await setup({ loadError: 'Failed to load Contract' });
+		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load Contract' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
 		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
@@ -117,16 +117,15 @@ describe('DocumentPage.svelte', () => {
 			.toHaveAttribute('href', '/plan');
 	});
 
-	it('prefers loadError over loading, and loading over empty, when more than one is given', async () => {
-		await setup({ loadError: 'Failed to load Contract', loading: 'Loading Contract', empty: 'None yet.' });
+	it('prefers a failed read over empty', async () => {
+		await setup({ read: { status: 'failed', message: 'Failed to load Contract' }, empty: 'None yet.' });
 
 		await expect.element(page.getByText('Failed to load Contract')).toBeVisible();
-		await expect.element(page.getByRole('status', { name: 'Loading Contract' })).not.toBeInTheDocument();
 		await expect.element(page.getByText('None yet.')).not.toBeInTheDocument();
 	});
 
 	it('prefers loading over empty', async () => {
-		await setup({ loading: 'Loading Contract', empty: 'None yet.' });
+		await setup({ read: { status: 'loading', label: 'Loading Contract' }, empty: 'None yet.' });
 
 		await expect.element(page.getByRole('status', { name: 'Loading Contract' })).toBeVisible();
 		await expect.element(page.getByText('None yet.')).not.toBeInTheDocument();

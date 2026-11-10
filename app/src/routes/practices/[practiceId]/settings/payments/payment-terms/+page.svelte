@@ -37,6 +37,7 @@
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import QuestionPage from '#lib/components/templates/QuestionPage.svelte';
 	import { paymentTermsSavedMessage, paymentTermsValue } from '../gettingPaid.js';
 	import type { PracticeSession } from '../../../+layout.js';
@@ -53,18 +54,16 @@
 
 	let typedNetDays = $state('');
 	let currentValue = $state('');
-	let loadError = $state('');
+	const termsRead = new PageRead();
 	const submission = new FormSubmission();
 
-	onMount(async () => {
-		try {
+	onMount(() =>
+		termsRead.load(async () => {
 			const terms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
 			typedNetDays = String(terms.netDays);
 			currentValue = paymentTermsValue(terms);
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load payment terms';
-		}
-	});
+		}, 'Failed to load payment terms')
+	);
 
 	async function save(event: SubmitEvent) {
 		event.preventDefault();
@@ -94,13 +93,12 @@
 
 {#snippet noActions()}{/snippet}
 
-{#if !canChange || loadError}
+{#if !canChange || termsRead.state.status === 'failed'}
 	<FormPage
 		title="Payment terms"
 		fieldsets={[{ content: readOnly }]}
 		actions={noActions}
-		loading={currentValue === '' && !loadError ? 'Loading the payment terms' : undefined}
-		loadError={loadError || undefined}
+		read={termsRead.frame('Loading the payment terms')}
 	/>
 {:else}
 	<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the control and the button as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the input, not to arrange anything. -->

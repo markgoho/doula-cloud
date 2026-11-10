@@ -4,7 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadInstance, downloadBirthPlanPdf, type Instance } from '#lib/planInstance.js';
-	import { triggerBlobDownload } from '#lib/blobDownload.js';
+	import { BlobDownload } from '#lib/blobDownload.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -13,16 +14,13 @@
 
 	let { data }: PageProperties = $props();
 
-	// Distinct from `instance === undefined`, which the Plan Instance read
-	// also uses for "no Birth Plan created yet" (#planInstance.js's own
-	// doc comment) -- without this flag that absence is indistinguishable
-	// from "hasn't loaded yet", the same problem the hub's own
-	// `planLoaded` solves for its two Plan sections.
-	let isLoaded = $state(false);
-	let instance = $state<Instance | undefined>();
-	let error = $state('');
-	let isDownloadingPdf = $state(false);
-	let downloadError = $state('');
+	// A loaded read can hold `undefined`, which the Plan Instance read
+	// uses for "no Birth Plan created yet" (#planInstance.js's own doc
+	// comment); the read's own state is what says it has not loaded yet,
+	// so that absence is never mistaken for one.
+	const instanceRead = new PageRead<Instance | undefined>();
+	const instance = $derived(instanceRead.value);
+	const pdf = new BlobDownload();
 
 	const engagementHref = $derived(
 		resolve('/practices/[practiceId]/engagements/[engagementId]', {
@@ -36,39 +34,22 @@
 	// name, as her record and her Engagement are titled (#2111, #2350).
 	const heading = $derived(`${data.clientDisplayName}'s Birth Plan`);
 
-	onMount(async () => {
-		try {
-			instance = await loadInstance(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!,
-				'birth_plan'
-			);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Birth Plan';
-		} finally {
-			isLoaded = true;
-		}
-	});
+	onMount(() =>
+		instanceRead.load(
+			() => loadInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, 'birth_plan'),
+			'Failed to load Birth Plan'
+		)
+	);
 
 	// #306: built fresh from the plan's current answers on every request,
 	// never a stored snapshot -- the same PDF the Client's own portal page
 	// downloads, from the same rendering.
-	async function handleDownloadPdf() {
-		downloadError = '';
-		isDownloadingPdf = true;
-		try {
-			const blob = await downloadBirthPlanPdf(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				page.params.engagementId!
-			);
-			triggerBlobDownload(blob, 'birth-plan.pdf');
-		} catch (error_) {
-			downloadError = error_ instanceof Error ? error_.message : 'Failed to download Birth Plan';
-		} finally {
-			isDownloadingPdf = false;
-		}
+	function handleDownloadPdf() {
+		void pdf.start(
+			() => downloadBirthPlanPdf(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
+			'birth-plan.pdf',
+			'Failed to download Birth Plan'
+		);
 	}
 </script>
 
@@ -76,8 +57,7 @@
 	title={heading}
 	backHref={engagementHref}
 	backLabel="Back to {data.clientName}"
-	loadError={error || undefined}
-	loading={isLoaded ? undefined : 'Loading Birth Plan'}
+	read={instanceRead.frame('Loading Birth Plan')}
 	empty={instance === undefined ? 'No Birth Plan has been created for this work yet.' : undefined}
 >
 	{#snippet content()}
@@ -97,11 +77,11 @@
 						icon="file-text"
 						variant="secondary"
 						onClick={handleDownloadPdf}
-						loading={isDownloadingPdf}
+						loading={pdf.isBusy}
 					/>
 				</cluster-l>
-				{#if downloadError}
-					<Notice variant="error" message={downloadError} />
+				{#if pdf.error}
+					<Notice variant="error" message={pdf.error} />
 				{/if}
 			</div>
 			<!-- #2209: the masthead names her in full, the Practice, and when

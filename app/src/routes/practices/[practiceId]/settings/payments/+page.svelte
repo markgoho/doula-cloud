@@ -67,6 +67,7 @@
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
 
 	let status = $state<ConnectStatusResult | undefined>();
 	let website = $state<PracticeWebsite | undefined>();
@@ -501,6 +502,15 @@
 			(paymentTerms === undefined && !paymentTermsLoadError) ||
 			(isPracticeOwnerOrAdmin && !error && status === undefined)
 	);
+	// The Template's one read value, from the flags above. These flags stay
+	// as they are: the Connect status shares them with its poll.
+	const read = $derived<PageReadState>(
+		error
+			? { status: 'failed', message: error }
+			: (isLoading
+				? { status: 'loading', label: 'Loading how this Practice gets paid' }
+				: LOADED_PAGE)
+	);
 </script>
 
 {#snippet intro()}
@@ -802,8 +812,7 @@
 	{outcome}
 	fieldsets={[{ content: facts }, { content: onboarding }]}
 	{actions}
-	loading={isLoading ? 'Loading how this Practice gets paid' : undefined}
-	loadError={error || undefined}
+	{read}
 />
 
 <style>

@@ -74,5 +74,5 @@
 		</QuestionPage>
 	</form>
 {:else}
-	<FormPage title="Plan Templates" fieldsets={[]} actions={noActions} loadError="There is no plan of that kind." />
+	<FormPage title="Plan Templates" fieldsets={[]} actions={noActions} read={{ status: 'failed', message: 'There is no plan of that kind.' }} />
 {/if}

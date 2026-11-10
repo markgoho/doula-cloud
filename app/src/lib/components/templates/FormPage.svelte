@@ -27,6 +27,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
 
 	/*
 	 * `legend` is optional because a form can have a group that names
@@ -50,8 +51,8 @@
 		serviceName?: string;
 		/**
 		 * A screen's fixed purpose sentence, not its data -- so it renders
-		 * beside the title in all three states (loaded, `loading`,
-		 * `loadError`), not only once the fieldsets do. #256 needed a
+		 * beside the title in all three states of `read` (loading, failed,
+		 * loaded), not only once the fieldsets do. #256 needed a
 		 * Getting-paid screen to say what it is for before its Stripe
 		 * Connect status has resolved.
 		 */
@@ -70,9 +71,10 @@
 		 * the route (#467). Nothing renders here when it is absent -- not an
 		 * empty box, not a hidden live region.
 		 *
-		 * Distinct from `loadError` below: this is a validation failure on a
-		 * form the person is actively filling in; `loadError` is the page's
-		 * own data failing to arrive at all, before there is a form to fail.
+		 * Distinct from a failed `read` below: this is a validation failure
+		 * on a form the person is actively filling in; a failed `read` is
+		 * the page's own data failing to arrive at all, before there is a
+		 * form to fail.
 		 */
 		errorSummary?: Snippet;
 		/**
@@ -81,17 +83,15 @@
 		 */
 		actions?: Snippet;
 		/**
-		 * Presence is the state, value is the Skeleton's accessible label
-		 * (#480). Unlike `OverviewHub`/`RecordDetail`, `title` still renders
-		 * here: every `FormPage` route names its page statically ("Your
-		 * account", "Your website"), so the heading is never itself
-		 * data-dependent the way a hub's welcome line is.
+		 * The page's own read (#480, `pageRead.svelte.ts`): loading, with
+		 * the Skeleton's accessible label; failed, with the Notice's
+		 * message; or loaded, which is also what leaving it out means. One
+		 * value, so a page is never loading and failed at once. `title`
+		 * renders in every state: every `FormPage` route names its page
+		 * statically ("Your account", "Your website"), so the heading is
+		 * never itself data-dependent the way a hub's welcome line is.
 		 */
-		loading?: string;
-		/**
-		Presence is the state, value is the Notice's message (#480).
-		*/
-		loadError?: string;
+		read?: PageReadState;
 		/**
 		 * The title takes focus as it appears (#2561): for a route whose
 		 * steps swap in place at one address, so a screen reader is told the
@@ -110,13 +110,12 @@
 		fieldsets,
 		errorSummary,
 		actions,
-		loading,
-		loadError,
+		read = LOADED_PAGE,
 		isTitleFocused = false
 	}: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} isPending={Boolean(loading) && !loadError} />
+<PageTitle page={title} {serviceName} isError={Boolean(errorSummary)} isPending={read.status === 'loading'} />
 
 <!-- Shared by all three states below (#256): a fixed purpose sentence,
      not data, so it renders the same way whether the fieldsets, a
@@ -129,7 +128,7 @@
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
-		{#if loadError}
+		{#if read.status === 'failed'}
 			<!-- data-load-error: a fact this Template already has about its
 			     own state, not a test hook -- app/e2e/accessibility.e2e.ts
 			     reads it to refuse scanning this branch as though it were the
@@ -139,13 +138,13 @@
 			<stack-l space="var(--space-group)" data-load-error>
 				<Heading level={1} variant="page" text={title} />
 				{@render introRegion()}
-				<Notice variant="error" message={loadError} />
+				<Notice variant="error" message={read.message} />
 			</stack-l>
-		{:else if loading}
+		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-group)">
 				<Heading level={1} variant="page" text={title} />
 				{@render introRegion()}
-				<Skeleton variant="text" lines={4} label={loading} />
+				<Skeleton variant="text" lines={4} label={read.label} />
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-group)">

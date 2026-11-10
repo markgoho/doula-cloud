@@ -44,7 +44,7 @@ describe('OverviewHub.svelte', () => {
 	});
 
 	it('renders no outcome while the hub loads', async () => {
-		await setup({ outcome: 'You agreed.', loading: 'Loading your Practice' });
+		await setup({ outcome: 'You agreed.', read: { status: 'loading', label: 'Loading your Practice' } });
 
 		await expect.element(page.getByText('You agreed.')).not.toBeInTheDocument();
 	});
@@ -115,7 +115,7 @@ describe('OverviewHub.svelte', () => {
 	});
 
 	it('draws the title and a skeleton while loading, instead of the content (#480, #2248)', async () => {
-		const { container } = await setup({ loading: 'Loading your Practice' });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading your Practice' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByRole('status', { name: 'Loading your Practice' })).toBeVisible();
@@ -126,7 +126,7 @@ describe('OverviewHub.svelte', () => {
 	});
 
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the title or content (#480)', async () => {
-		const { container } = await setup({ loadError: 'Failed to load your Practice' });
+		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load your Practice' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByText('Failed to load your Practice')).toBeVisible();
@@ -135,12 +135,4 @@ describe('OverviewHub.svelte', () => {
 			.not.toBeInTheDocument();
 	});
 
-	it('prefers loadError over loading when both are somehow given', async () => {
-		await setup({ loadError: 'Failed to load your Practice', loading: 'Loading your Practice' });
-
-		await expect.element(page.getByText('Failed to load your Practice')).toBeVisible();
-		await expect
-			.element(page.getByRole('status', { name: 'Loading your Practice' }))
-			.not.toBeInTheDocument();
-	});
 });

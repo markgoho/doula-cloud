@@ -49,6 +49,7 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import { staffRoute } from './staffRoute.svelte.js';
 	import { loadMember, rosterHref } from './member.js';
 
@@ -58,8 +59,8 @@
 	// employment type question page. Read once, while the page renders.
 	const outcome = takeOutcome(page.url);
 
-	let member = $state<StaffSummary | undefined>();
-	let loadError = $state('');
+	const memberRead = new PageRead<StaffSummary>();
+	const member = $derived(memberRead.value);
 
 	/*
 	 * One work state entry as this page reads it: the endpoint's own
@@ -105,16 +106,15 @@
 	onMount(async () => {
 		void workStateHistory.ask();
 		void membershipHistory.ask();
-		try {
-			member = await loadMember(apiFetchWithSession, route.practiceId, route.staffId);
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this Staff member';
-		}
+		await memberRead.load(
+			() => loadMember(apiFetchWithSession, route.practiceId, route.staffId),
+			'Failed to load this Staff member'
+		);
 	});
 
 	// Empty while she loads, which `RecordDetail` draws as a heading-shaped
 	// bar; a read that failed still names the page (#2246).
-	const name = $derived(member?.name ?? (loadError ? 'Staff member' : ''));
+	const name = $derived(member?.name ?? (memberRead.state.status === 'failed' ? 'Staff member' : ''));
 
 	interface FactRow extends SummaryListRow {
 		href?: string;
@@ -340,6 +340,5 @@
 		{ heading: 'Membership history', content: membershipSection },
 		...(route.isOwner ? [{ heading: 'Access', content: accessSection }] : [])
 	]}
-	loading={member || loadError ? undefined : 'Loading this Staff member'}
-	loadError={loadError || undefined}
+	read={memberRead.frame('Loading this Staff member')}
 />

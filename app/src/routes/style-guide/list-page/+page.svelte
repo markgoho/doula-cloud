@@ -72,9 +72,9 @@
 {/snippet}
 
 {#if shown === 'loading'}
-	<ListPage title="Staff" {intro} {actions} {content} loading="Loading Staff" />
+	<ListPage title="Staff" {intro} {actions} {content} read={{ status: 'loading', label: 'Loading Staff' }} />
 {:else if shown === 'loadError'}
-	<ListPage title="Staff" {intro} {actions} {content} loadError="Failed to load Staff" />
+	<ListPage title="Staff" {intro} {actions} {content} read={{ status: 'failed', message: 'Failed to load Staff' }} />
 {:else}
 	<ListPage title="Staff" {intro} {actions} {content} />
 {/if}

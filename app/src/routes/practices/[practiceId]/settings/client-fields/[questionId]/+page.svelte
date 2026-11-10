@@ -100,7 +100,7 @@
 		title={page.params.questionId === 'new' ? 'Add a question' : 'Change a question'}
 		fieldsets={[{ content: readOnly }]}
 	/>
-{:else if question.loadError || !question.isLoaded}
+{:else if !question.isLoaded}
 	<FormPage {...question.waiting} />
 {:else}
 	<!-- stacked-form:ignore: #1108 -- this form wraps a Template. `QuestionPage` renders the controls and the actions as two separate regions of one column and stacks each itself, so the `<form>` here exists to put the submit button inside the form that owns the inputs, not to arrange anything. -->

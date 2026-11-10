@@ -186,7 +186,7 @@ describe('RecordDetail.svelte', () => {
 
 	it('draws the back link, the title and a skeleton while loading, instead of the record (#480, #2248)', async () => {
 		const { container } = await setup({
-			loading: 'Loading the work',
+			read: { status: 'loading', label: 'Loading the work' },
 			backHref: '/clients',
 			backLabel: 'Clients'
 		});
@@ -203,14 +203,14 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('draws one block of bars while loading a record that names no sections yet', async () => {
-		await setup({ loading: 'Loading the request', sections: [] });
+		await setup({ read: { status: 'loading', label: 'Loading the request' }, sections: [] });
 
 		await expect.element(page.getByRole('status', { name: 'Loading the request' })).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 2 })).not.toBeInTheDocument();
 	});
 
 	it('holds a heading-shaped bar, not an empty heading, while a title that is the data loads (#2248)', async () => {
-		await setup({ title: '', loading: 'Loading the Client' });
+		await setup({ title: '', read: { status: 'loading', label: 'Loading the Client' } });
 
 		await expect.element(page.getByRole('heading', { level: 1 })).not.toBeInTheDocument();
 		expect(page.getByRole('status').all()).toHaveLength(1);
@@ -220,7 +220,7 @@ describe('RecordDetail.svelte', () => {
 	// the contents are drawn from them at once, and land where the loaded
 	// ones do.
 	it('draws the contents from the named sections while loading, if the loaded record will have them (#480, #2257)', async () => {
-		const { container } = await setup({ loading: 'Loading the work', isContentsShown: true });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading the work' }, isContentsShown: true });
 
 		expect(page.getByRole('link', { name: 'Visits' }).element()).toHaveAttribute('href', '#visits');
 		expect(page.getByRole('link', { name: 'Invoices' }).element()).toHaveAttribute('href', '#invoices');
@@ -234,7 +234,7 @@ describe('RecordDetail.svelte', () => {
 	// since the section Skeleton already says the record is loading.
 	it('holds a card of the summary rows a route names while loading (#2251)', async () => {
 		const { container } = await setup({
-			loading: 'Loading the Staff member',
+			read: { status: 'loading', label: 'Loading the Staff member' },
 			summaryRows: [
 				{ label: 'Email address', value: 'given.family@example.com' },
 				{ label: 'Roles', value: 'Doula', action: 'Change' },
@@ -256,7 +256,7 @@ describe('RecordDetail.svelte', () => {
 	// Case 2 of the querySelector exception, as above.
 	it('holds the line of links a summary has under its card while loading (#2258)', async () => {
 		const { container } = await setup({
-			loading: 'Loading the work',
+			read: { status: 'loading', label: 'Loading the work' },
 			summaryRows: [{ label: 'Care', value: 'Birth' }],
 			summaryLinks: ['View Client']
 		});
@@ -266,14 +266,14 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('holds no summary card while loading a record that names no summary rows (#2251)', async () => {
-		const { container } = await setup({ loading: 'Loading the Client', summary: textSnippet('Due Mar 4') });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading the Client' }, summary: textSnippet('Due Mar 4') });
 
 		expect(container.querySelector('.summary')).toBeNull();
 	});
 
 	// Case 2 of the querySelector exception: a box with no role, holding a line.
 	it('holds the Back link line while loading a record whose Back link is its own data (#2251)', async () => {
-		const { container } = await setup({ loading: 'Loading your account', isBackPending: true });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading your account' }, isBackPending: true });
 
 		expect(container.querySelector('.back-placeholder')).not.toBeNull();
 		expect(page.getByRole('link').all()).toHaveLength(0);
@@ -282,7 +282,7 @@ describe('RecordDetail.svelte', () => {
 	it('draws the actions a route says do not wait on its record, beside a title bar, while loading (#2251)', async () => {
 		await setup({
 			title: '',
-			loading: 'Loading the Staff member',
+			read: { status: 'loading', label: 'Loading the Staff member' },
 			loadingActions: createRawSnippet(() => ({ render: () => '<a href="/recovery">Send a recovery code</a>' }))
 		});
 
@@ -292,7 +292,7 @@ describe('RecordDetail.svelte', () => {
 
 	it('draws the actions beside a known title while loading', async () => {
 		await setup({
-			loading: 'Loading the Staff member',
+			read: { status: 'loading', label: 'Loading the Staff member' },
 			loadingActions: createRawSnippet(() => ({ render: () => '<a href="/recovery">Send a recovery code</a>' }))
 		});
 
@@ -301,25 +301,19 @@ describe('RecordDetail.svelte', () => {
 	});
 
 	it('draws no contents while loading a record that has none', async () => {
-		await setup({ loading: 'Loading the work' });
+		await setup({ read: { status: 'loading', label: 'Loading the work' } });
 
 		await expect.element(page.getByText('Jump to')).not.toBeInTheDocument();
 	});
 
 	it('reserves the page frame for a Notice on a load failure, instead of rendering the record (#480)', async () => {
-		const { container } = await setup({ loadError: 'Failed to load the Engagement' });
+		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load the Engagement' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Ada Lovelace' })).not.toBeInTheDocument();
 	});
 
-	it('prefers loadError over loading when both are somehow given', async () => {
-		await setup({ loadError: 'Failed to load the Engagement', loading: 'Loading the work' });
-
-		await expect.element(page.getByText('Failed to load the Engagement')).toBeVisible();
-		await expect.element(page.getByRole('status', { name: 'Loading the work' })).not.toBeInTheDocument();
-	});
 
 	// #2508: a link from another screen to one section lands on it once
 	// the record is drawn, not on the loading bars it arrived on.
@@ -327,14 +321,14 @@ describe('RecordDetail.svelte', () => {
 		const scrolled = vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function noop() {});
 		history.replaceState(history.state, '', '#invoices');
 		try {
-			const { rerender } = await setup({ loading: 'Loading the work' });
+			const { rerender } = await setup({ read: { status: 'loading', label: 'Loading the work' } });
 			expect(scrolled).not.toHaveBeenCalled();
 
-			await rerender({ loading: undefined });
+			await rerender({ read: undefined });
 			await expect.poll(() => scrolled.mock.contexts.map((element) => (element as HTMLElement).id)).toEqual(['invoices']);
 
-			await rerender({ loading: 'Loading the work' });
-			await rerender({ loading: undefined });
+			await rerender({ read: { status: 'loading', label: 'Loading the work' } });
+			await rerender({ read: undefined });
 			expect(scrolled).toHaveBeenCalledTimes(1);
 		} finally {
 			history.replaceState(history.state, '', location.pathname);

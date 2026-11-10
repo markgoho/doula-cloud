@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { triggerBlobDownload } from './blobDownload.js';
+import { describe, expect, it, vi } from 'vitest';
+import { BlobDownload, triggerBlobDownload } from './blobDownload.js';
 
 // `.svelte.spec.ts` here isn't a Svelte module -- it's the naming vite.config.ts
 // routes to the real-Chromium `client` project (see its `include`), which is
@@ -31,5 +31,37 @@ describe('triggerBlobDownload', () => {
 
 		expect(createdURLs).toHaveLength(1);
 		expect(revokedURLs).toEqual(createdURLs);
+	});
+});
+
+describe('BlobDownload', () => {
+	it('hands the fetched file to the browser, and is busy only while it fetches', async () => {
+		const clicked = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+		const download = new BlobDownload();
+		let finish!: (blob: Blob) => void;
+
+		const pending = download.start(() => new Promise<Blob>((resolve) => (finish = resolve)), 'birth-plan.pdf', 'Failed');
+		expect(download.isBusy).toBe(true);
+		finish(new Blob(['%PDF-1.4'], { type: 'application/pdf' }));
+
+		expect(await pending).toBe(true);
+		expect(download.isBusy).toBe(false);
+		expect(download.error).toBe('');
+		expect(clicked).toHaveBeenCalledOnce();
+		clicked.mockRestore();
+	});
+
+	it("says why a download failed, in the thrown Error's own words or the fallback", async () => {
+		const download = new BlobDownload();
+
+		await download.start(async () => {
+			throw new Error('The PDF is not ready yet');
+		}, 'contract.pdf', 'Failed to download');
+		expect(download.error).toBe('The PDF is not ready yet');
+
+		await download.start(async () => {
+			throw 'offline';
+		}, 'contract.pdf', 'Failed to download');
+		expect(download.error).toBe('Failed to download');
 	});
 });

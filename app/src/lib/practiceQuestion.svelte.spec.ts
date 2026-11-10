@@ -66,16 +66,14 @@ describe('PracticeQuestion', () => {
 		expect(question.waiting).toEqual({
 			title: 'Add a question',
 			fieldsets: [],
-			loading: 'Loading the question',
-			loadError: undefined
+			read: { status: 'loading', label: 'Loading the question' }
 		});
 	});
 
 	it('says why it cannot be shown instead of loading', async () => {
 		const { question } = await setup({ load: () => Promise.reject(new Error('The list is down.')) });
 
-		expect(question.waiting.loading).toBeUndefined();
-		expect(question.waiting.loadError).toBe('The list is down.');
+		expect(question.waiting.read).toEqual({ status: 'failed', message: 'The list is down.' });
 	});
 
 	it('opens a question with no answers on an empty answers box', async () => {
@@ -174,7 +172,10 @@ describe('PracticeQuestion', () => {
 	it('sends a new question back to choose a kind when none was chosen', async () => {
 		const { question } = await setup({ questionId: 'new', kind: 'nonsense' });
 
-		expect(question.loadError).toBe('Choose the kind of answer first, from Add a question.');
+		expect(question.waiting.read).toEqual({
+			status: 'failed',
+			message: 'Choose the kind of answer first, from Add a question.'
+		});
 		expect(question.isLoaded).toBe(false);
 	});
 
@@ -187,18 +188,18 @@ describe('PracticeQuestion', () => {
 	it('says so for a question the caller does not let this page change', async () => {
 		const { question } = await setup({ isEditable: () => false });
 
-		expect(question.loadError).toBe('Not on the list any more.');
+		expect(question.waiting.read).toEqual({ status: 'failed', message: 'Not on the list any more.' });
 	});
 
 	it('says why the list could not be read', async () => {
 		const { question } = await setup({ load: () => Promise.reject(new Error('The list is down.')) });
 
-		expect(question.loadError).toBe('The list is down.');
+		expect(question.waiting.read).toEqual({ status: 'failed', message: 'The list is down.' });
 	});
 
 	it('falls back to the caller words for a rejection that carries none', async () => {
 		const { question } = await setup({ load: () => Promise.reject('down') });
 
-		expect(question.loadError).toBe('Failed to load');
+		expect(question.waiting.read).toEqual({ status: 'failed', message: 'Failed to load' });
 	});
 });

@@ -27,7 +27,7 @@
 	 * No role read of its own. The Settings hub already hides the link
 	 * from anyone but an Owner or an Admin, and the list endpoint's own
 	 * refusal is the right sentence for somebody who typed the URL --
-	 * which `ListPage`'s `loadError` region then announces.
+	 * which `ListPage`'s failed `read` then announces.
 	 */
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
@@ -44,10 +44,10 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
-	let suppressions = $state<EmailSuppression[]>([]);
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	const list = new PageRead<EmailSuppression[]>();
+	const LOAD_FAILURE = 'Failed to load the blocked addresses';
 
 	// Page-level, not per row: a lifted block takes its own row off the
 	// list, so a notice living on that row would have nowhere left to
@@ -59,25 +59,11 @@
 
 	const practiceId = $derived(page.params.practiceId!);
 
-	onMount(load);
-
-	/*
-	 * Deliberately does not put `isLoaded` back to false. It also runs
-	 * after a successful unblock, and dropping the whole table back to a
-	 * skeleton there would take the success notice down with it for as
-	 * long as the read takes.
-	 */
-	async function load() {
-		loadError = '';
-		try {
-			suppressions = await loadEmailSuppressions(apiFetchWithSession, practiceId);
-		} catch (error_) {
-			loadError =
-				error_ instanceof Error ? error_.message : 'Failed to load the blocked addresses';
-		} finally {
-			isLoaded = true;
-		}
+	function readList(): Promise<EmailSuppression[]> {
+		return loadEmailSuppressions(apiFetchWithSession, practiceId);
 	}
+
+	onMount(() => list.load(readList, LOAD_FAILURE));
 
 	// Rethrown so ConfirmDialog stays open and renders unblockError inside
 	// itself (#804), rather than closing over a failure on the row behind it.
@@ -87,7 +73,11 @@
 		try {
 			await clearEmailSuppression(apiFetchWithSession, practiceId, address);
 			unblockedAddress = address;
-			await load();
+			// A re-read in place, not a fresh load: dropping the table back
+			// to a skeleton, or to the page's failure, would take the
+			// success notice down with it. A failed re-read is said beside
+			// the notice instead.
+			await list.refresh(readList, LOAD_FAILURE);
 		} catch (error_) {
 			unblockError[address] =
 				error_ instanceof Error ? error_.message : 'Failed to unblock this address';
@@ -179,6 +169,9 @@
 	{#if unblockedAddress}
 		<Notice variant="status" message="{unblockedAddress} can receive email again." />
 	{/if}
+	{#if list.refreshError}
+		<Notice variant="error" message={list.refreshError} />
+	{/if}
 
 	<!--
 		Most Practices are empty here, and the sentence is written for them:
@@ -193,7 +186,7 @@
 	-->
 	<DataTable
 		{columns}
-		rows={suppressions}
+		rows={list.value ?? []}
 		rowActions={{ label: 'Actions', content: rowActions }}
 		hasMore={false}
 		emptyMessage="No blocked addresses. Every address this Practice writes to can still receive its email."
@@ -204,6 +197,5 @@
 	title="Blocked email addresses"
 	{intro}
 	{content}
-	loading={isLoaded ? undefined : 'Loading the blocked addresses'}
-	loadError={loadError || undefined}
+	read={list.frame('Loading the blocked addresses')}
 />

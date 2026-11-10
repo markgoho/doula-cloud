@@ -168,6 +168,24 @@ describe('the Practice landing page', () => {
 		expect(testPage.getByText('Declined').elements()).toHaveLength(0);
 	});
 
+	// The answer went through; only the hub's re-read after it failed.
+	// That re-read used to replace the whole hub with its load error.
+	it('keeps the hub drawn when the re-read after answering an Offer fails', async () => {
+		await setup();
+		await expect.element(testPage.getByRole('button', { name: 'Accept' })).toBeVisible();
+		const reads = apiFetchWithSession.getMockImplementation()!;
+		apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
+			if (init?.method === 'POST') return Promise.resolve(jsonResponse({ offerId: offers[0]!.offerId, state: 'accepted', engagementId: 'engagement-1', engagementKind: 'birth', clientName: 'Priya' }));
+			if (path.includes('/offers')) return Promise.resolve(jsonResponse({ message: 'Down' }, 503));
+			return reads(path, init);
+		});
+
+		await testPage.getByRole('button', { name: 'Accept' }).click();
+
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Overview' })).toBeVisible();
+		await expect.element(testPage.getByText('Down')).toBeVisible();
+	});
+
 	// #2141: the page is named for the nav item that opens it, not a
 	// welcome to the Practice the top bar already names.
 	it('is titled Overview', async () => {

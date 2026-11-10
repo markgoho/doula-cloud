@@ -172,6 +172,32 @@ describe('MFA settings screen', () => {
 			.toBeVisible();
 	});
 
+	// The save went through; only the re-read after it failed. That
+	// re-read wrote the page's own load error, which replaced the page,
+	// the success notice with it.
+	it('keeps the page and the success notice when the re-read after a save fails', async () => {
+		let reads = 0;
+		apiFetchWithSession.mockImplementation((_path: string, init?: RequestInit) => {
+			if (init?.method === 'PUT') return Promise.resolve(jsonResponse(undefined, 204));
+			reads += 1;
+			return Promise.resolve(
+				reads === 1 ? jsonResponse({ required: true, withoutSecondFactor: 2 }) : jsonResponse({ message: 'Down' }, 503)
+			);
+		});
+		pageState.data = {
+			session: { practiceId: 'practice-1', practiceName: 'Riverside', roles: ['owner'], isContractor: false, secondFactor: true }
+		};
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Stop requiring MFA for all Staff' }).click();
+
+		await expect
+			.element(testPage.getByText('Staff without a second factor can sign in without one again.'))
+			.toBeVisible();
+		await expect.element(testPage.getByRole('alert')).toBeVisible();
+		await expect.element(testPage.getByRole('term').filter({ hasText: 'Staff without a second factor' })).toBeVisible();
+	});
+
 	it('shows a load error when the impact endpoint cannot be read', async () => {
 		await setup({ impactOk: false });
 

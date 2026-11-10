@@ -16,5 +16,5 @@
 {:else if contracts.value}
 	<ContractsScreen data={contracts.value} />
 {:else}
-	<ListPage title="Contracts" loading="Loading your Contracts" content={nothing} />
+	<ListPage title="Contracts" read={{ status: 'loading', label: 'Loading your Contracts' }} content={nothing} />
 {/if}

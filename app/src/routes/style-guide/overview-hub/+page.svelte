@@ -103,5 +103,5 @@
 	{primary}
 	{isEmpty}
 	{empty}
-	loading={isLoading ? 'Loading your Practice' : undefined}
+	read={isLoading ? { status: 'loading', label: 'Loading your Practice' } : undefined}
 />

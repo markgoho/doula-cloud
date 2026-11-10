@@ -50,6 +50,7 @@
 		type ApprovalDetail
 	} from '#lib/engagementRequest.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -68,8 +69,8 @@
 	// GOV.UK's rule for a group.
 	const decisionFieldId = radioFieldId(decisionName, 'approve');
 
-	let detail = $state<ApprovalDetail | undefined>();
-	let loadError = $state('');
+	const detailRead = new PageRead<ApprovalDetail>();
+	const detail = $derived(detailRead.value);
 	/*
 	 * #2043: the two decisions are two answers to one question, "Do you
 	 * approve this work?", with one Continue -- the Birth outcome shape.
@@ -166,11 +167,10 @@
 
 	onMount(async () => {
 		forgetApprovalReturn();
-		try {
-			detail = await loadApprovalDetail(apiFetchWithSession, page.params.practiceId!, page.params.requestId!);
-		} catch (error_) {
-			loadError = error_ instanceof Error && error_.message ? error_.message : 'Failed to load the request';
-		}
+		await detailRead.load(
+			() => loadApprovalDetail(apiFetchWithSession, page.params.practiceId!, page.params.requestId!),
+			'Failed to load the request'
+		);
 	});
 
 	/*
@@ -300,8 +300,7 @@
 				{ heading: 'Decide', content: decideSection }
 			]
 		: []}
-	loading={detail || loadError ? undefined : 'Loading the request'}
-	loadError={loadError || undefined}
+	read={detailRead.frame('Loading the request')}
 />
 
 <style>

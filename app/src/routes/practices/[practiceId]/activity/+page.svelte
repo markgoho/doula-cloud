@@ -18,23 +18,21 @@
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
 	const activity = new PaginatedList<ActivityEntry>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, cursor),
 		failureMessage: 'Failed to load more activity'
 	});
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	// The first page's read; the pages after it are `activity`'s own.
+	const firstPage = new PageRead();
 
-	onMount(async () => {
-		try {
+	onMount(() =>
+		firstPage.load(async () => {
 			activity.reset(await loadPracticeActivityPage(apiFetchWithSession, page.params.practiceId!, ''));
-			isLoaded = true;
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load activity';
-		}
-	});
+		}, 'Failed to load activity')
+	);
 </script>
 
 {#snippet intro()}
@@ -57,6 +55,5 @@
 	title="Activity"
 	{intro}
 	{content}
-	loading={isLoaded || loadError ? undefined : 'Loading activity'}
-	loadError={loadError || undefined}
+	read={firstPage.frame('Loading activity')}
 />

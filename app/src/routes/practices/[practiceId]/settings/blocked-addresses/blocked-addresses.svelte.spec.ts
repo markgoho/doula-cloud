@@ -150,6 +150,34 @@ describe('the blocked email addresses screen', () => {
 			.toBeVisible();
 	});
 
+	// The unblock went through; only the re-read after it failed. That
+	// re-read used to replace the list and its success notice with the
+	// page's load error.
+	it('keeps the list and the success notice when the re-read after an unblock fails', async () => {
+		await testPage.viewport(1024, 800);
+		let reads = 0;
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/clear')) return Promise.resolve(jsonResponse(undefined, 204));
+			reads += 1;
+			return Promise.resolve(
+				reads === 1 ? jsonResponse({ suppressions }) : jsonResponse({ message: 'Down' }, 503)
+			);
+		});
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
+		await testPage
+			.getByRole('dialog', { name: 'Unblock this address' })
+			.getByRole('button', { name: 'Unblock this address' })
+			.click();
+
+		await expect.element(testPage.getByText(`${bounced!.address} can receive email again.`)).toBeVisible();
+		await expect.element(testPage.getByText('Down')).toBeVisible();
+		await expect
+			.element(testPage.getByRole('rowheader', { name: complained!.address, exact: true }))
+			.toBeVisible();
+	});
+
 	/*
 	 * A 502 says nothing was changed, and that clause is what decides
 	 * whether trying again is safe. It reaches the row verbatim.

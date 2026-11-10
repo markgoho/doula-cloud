@@ -58,6 +58,7 @@
 	import type { PracticeSession } from './+layout.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import OverviewHub from '#lib/components/templates/OverviewHub.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import SecondFactorRecommendation from '#lib/components/molecules/SecondFactorRecommendation.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
@@ -67,8 +68,11 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 
-	let landing = $state<PracticeLanding | undefined>();
-	let error = $state('');
+	// The page's read: the landing blocks, with the two lists beside them
+	// (below). Only the blocks can fail the page; a list says its own
+	// failure in its own place.
+	const landingRead = new PageRead<PracticeLanding>();
+	const landing = $derived(landingRead.value);
 
 	// What the act that sent her here did (#1710): creating the Practice
 	// at signup (#2182), or agreeing to a changed Terms of Service or
@@ -101,8 +105,7 @@
 	// answered, as Your care does (#2218), so neither empty line paints
 	// before the data and no row arriving later moves the cards under it
 	// (ADR-0020). The three reads run side by side, so the page waits for
-	// the slowest, not their sum.
-	let areListsAnswered = $state(false);
+	// the slowest, not their sum; the blocks' failure does not wait.
 
 	// Resolved once by practices/[practiceId]/+layout.ts (#835), not a
 	// fetch of loadPracticeLanding's own -- the Membership its roles are
@@ -118,12 +121,13 @@
 			: "Adding a Client is free. Starting work with a Client uses 1 of the Practice's Credits."
 	);
 
-	async function load() {
-		try {
-			landing = await loadPracticeLanding(apiFetchWithSession, page.params.practiceId!, session);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load your Practice';
-		}
+	async function readLanding(): Promise<PracticeLanding> {
+		const [loaded] = await Promise.all([
+			loadPracticeLanding(apiFetchWithSession, page.params.practiceId!, session),
+			loadActivity(),
+			loadWaitingOnReply()
+		]);
+		return loaded;
 	}
 
 	async function loadActivity() {
@@ -145,8 +149,7 @@
 	}
 
 	onMount(async () => {
-		await Promise.all([load(), loadActivity(), loadWaitingOnReply()]);
-		areListsAnswered = true;
+		await landingRead.load(readLanding, 'Failed to load your Practice');
 
 		// Fire-and-forget: #61's "once per device after login" push
 		// registration is best-effort and must never block landing on the
@@ -175,7 +178,13 @@
 	// Engagement, and it can spend a credit, so the other blocks are stale too.
 	async function handleDecide(offerId: string, action: 'accept' | 'decline') {
 		const decision = await decideOffer(apiFetchWithSession, page.params.practiceId!, offerId, action);
-		await load();
+		// A re-read in place: the decision went through, so a failure to
+		// read the hub back is said beside the Offers, not in place of the
+		// hub.
+		await landingRead.refresh(
+			() => loadPracticeLanding(apiFetchWithSession, page.params.practiceId!, session),
+			'Failed to load your Practice'
+		);
 		return decision;
 	}
 
@@ -266,6 +275,9 @@
 		engagementHref={offerEngagementHref}
 		bind:outcome={offerOutcome}
 	/>
+	{#if landingRead.refreshError}
+		<Notice variant="error" message={landingRead.refreshError} />
+	{/if}
 {/snippet}
 
 {#snippet primary()}
@@ -593,8 +605,7 @@
 	{primary}
 	feed={landing ? activityFeed : undefined}
 	{empty}
-	loading={error || (areListsAnswered && landing) ? undefined : 'Loading your Practice'}
-	loadError={error || undefined}
+	read={landingRead.frame('Loading your Practice')}
 	{outcome}
 />
 

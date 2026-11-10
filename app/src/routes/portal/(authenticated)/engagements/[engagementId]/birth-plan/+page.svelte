@@ -4,7 +4,8 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientBirthPlan, acknowledgeClientBirthPlan, downloadClientBirthPlanPdf, type Instance } from '#lib/planInstance.js';
-	import { triggerBlobDownload } from '#lib/blobDownload.js';
+	import { BlobDownload } from '#lib/blobDownload.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import { formatInstant } from '#lib/dates.js';
 	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -12,15 +13,16 @@
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
 	import ErrorPage from '#lib/components/templates/ErrorPage.svelte';
 
-	let instance = $state<Instance | null | undefined>();
-	let error = $state('');
+	// `null` once loaded is "no birth plan created yet"; not loaded is the
+	// read's own state, never the value standing in for it.
+	const instanceRead = new PageRead<Instance | null>();
+	const instance = $derived(instanceRead.value);
 	let isAcknowledging = $state(false);
 	let acknowledgeError = $state('');
 	// Set only by a confirmation made on this visit, so its Notice takes
 	// focus where the pressed button was (the Notification banner row).
 	let isAcknowledgedHere = $state(false);
-	let isDownloadingPdf = $state(false);
-	let downloadError = $state('');
+	const pdf = new BlobDownload();
 
 	onMount(async () => {
 		// Not applicable, per ADR-0015's suppression rule (#311's kind
@@ -29,11 +31,10 @@
 		// endpoint refuses this Engagement on its own either way; this
 		// only spares her the request.
 		if (!page.data.offersBirthPlan) return;
-		try {
-			instance = await loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load birth plan';
-		}
+		await instanceRead.load(
+			() => loadClientBirthPlan(apiFetchWithSession, page.params.engagementId!),
+			'Failed to load birth plan'
+		);
 	});
 
 	// Not gated to Print (#301): a Client can confirm she's read this
@@ -45,7 +46,7 @@
 		acknowledgeError = '';
 		isAcknowledging = true;
 		try {
-			instance = await acknowledgeClientBirthPlan(apiFetchWithSession, page.params.engagementId!);
+			instanceRead.set(await acknowledgeClientBirthPlan(apiFetchWithSession, page.params.engagementId!));
 			isAcknowledgedHere = true;
 		} catch (error_) {
 			acknowledgeError = error_ instanceof Error ? error_.message : 'Failed to confirm you read this birth plan';
@@ -59,17 +60,12 @@
 	// Plan the way a signed Contract has one. A fetch that fails is
 	// reported in words (mirrors contract's own handleDownloadSignedContractPdf),
 	// since triggerBlobDownload's anchor never reaches the DOM tree.
-	async function handleDownloadPdf() {
-		downloadError = '';
-		isDownloadingPdf = true;
-		try {
-			const blob = await downloadClientBirthPlanPdf(apiFetchWithSession, page.params.engagementId!);
-			triggerBlobDownload(blob, 'birth-plan.pdf');
-		} catch (error_) {
-			downloadError = error_ instanceof Error ? error_.message : 'Failed to download birth plan';
-		} finally {
-			isDownloadingPdf = false;
-		}
+	function handleDownloadPdf() {
+		void pdf.start(
+			() => downloadClientBirthPlanPdf(apiFetchWithSession, page.params.engagementId!),
+			'birth-plan.pdf',
+			'Failed to download birth plan'
+		);
 	}
 </script>
 
@@ -90,8 +86,7 @@
 		title="Birth plan"
 		serviceName={page.data.practiceName}
 		backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-		loadError={error || undefined}
-		loading={instance === undefined ? 'Loading birth plan' : undefined}
+		read={instanceRead.frame('Loading birth plan')}
 		empty={instance === null ? 'No birth plan has been created for your care yet.' : undefined}
 	>
 		{#snippet content()}
@@ -108,11 +103,11 @@
 						icon="file-text"
 						variant="secondary"
 						onClick={handleDownloadPdf}
-						loading={isDownloadingPdf}
+						loading={pdf.isBusy}
 					/>
 				</cluster-l>
-				{#if downloadError}
-					<div class="no-print"><Notice variant="error" message={downloadError} /></div>
+				{#if pdf.error}
+					<div class="no-print"><Notice variant="error" message={pdf.error} /></div>
 				{/if}
 				<PlanInstanceView fields={instance.fields} answers={instance.answers} masthead={instance.masthead} headingLevel={2} />
 				<!--
