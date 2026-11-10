@@ -384,6 +384,34 @@ func TestRefund_SaysWhenNothingCanBeRefunded(t *testing.T) {
 	}
 }
 
+// TestRefund_RefusesAPracticeWhoseBalanceWasForfeited is the audit's
+// finding through the ops route: a deleted Practice's forfeit drained
+// its purchase, so nothing is refundable and the balance stays at zero
+// -- before 00176 the forfeit left the lot open and this refund went
+// through, taking the balance below zero.
+func TestRefund_RefusesAPracticeWhoseBalanceWasForfeited(t *testing.T) {
+	s := newRefundStack(t)
+	cookie := s.steppedUpCookie()
+	deletedAt := opsStart.Add(-time.Hour)
+	testdb.SeedPracticeDeletion(t, s.db, s.practiceID, opsStart.AddDate(0, 0, -31), deletedAt, &deletedAt)
+	tx := s.db.BeginAs(t, testdb.Practice(s.practiceID))
+	if n, err := billing.Forfeit(t.Context(), tx, s.practiceID, deletedAt); err != nil || n != 5 {
+		t.Fatalf("Forfeit = %d, %v, want 5 Credits", n, err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+
+	w := s.refund(cookie, "refund-key", s.order(1))
+
+	if w.Code != http.StatusConflict || decodeError(t, w).Message != msgNothingRefundable {
+		t.Fatalf("status = %d, body %s, want 409 saying nothing is refundable", w.Code, w.Body)
+	}
+	if len(s.stripe.RefundCalls()) != 0 || s.count(`SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, s.practiceID) != 0 {
+		t.Error("a refund against a forfeited balance moved money or moved the balance off zero")
+	}
+}
+
 func TestRefund_AStripeRefusalChangesNothing(t *testing.T) {
 	s := newRefundStack(t)
 	s.stripe.RefundPaymentErr = errors.New("card network down")

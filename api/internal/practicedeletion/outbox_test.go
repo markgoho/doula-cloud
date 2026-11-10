@@ -181,6 +181,14 @@ func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testin
 	if balance := testdb.Scalar[int](t, db.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID); balance != 0 {
 		t.Fatalf("balance after forfeiture = %d, want 0", balance)
 	}
+	// One forfeit row per lot, naming it, stamped at the instant the
+	// Practice was deleted (billing.Forfeit, 00176).
+	if n := testdb.Scalar[int](t, db.Admin,
+		`SELECT count(*) FROM credit_ledger f JOIN practices p ON p.id = f.practice_id
+		  WHERE f.practice_id = $1 AND f.origin = 'forfeit' AND f.drawn_lot_id IS NOT NULL AND f.created_at = p.deleted_at`,
+		practiceID); n != 1 {
+		t.Fatalf("forfeit rows naming their lot at the deletion's instant = %d, want 1", n)
+	}
 	if actorKind := finalizedActivity(t, db, "actor_kind::text", practiceID); actorKind != "system" {
 		t.Fatalf("actor_kind = %s, want system", actorKind)
 	}

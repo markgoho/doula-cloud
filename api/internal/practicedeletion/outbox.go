@@ -191,8 +191,8 @@ func (w Worker) performFinalize(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 
 // finalize is the act itself: every Client still on file is erased
 // through the same client.Erase ADR-0027 already runs for a single
-// Owner-run erasure, any unspent Credit balance is forfeited as one
-// credit_ledger row, and practices.deleted_at is stamped -- in that
+// Owner-run erasure, any unspent Credit balance is forfeited lot by lot
+// (billing.Forfeit), and practices.deleted_at is stamped -- in that
 // order, so the Activity row below can name real counts.
 func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time) error {
 	// client.Erase writes through the same practice-scoped RLS policies
@@ -217,10 +217,10 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 		}
 	}
 
-	forfeited, err := forfeitBalance(ctx, tx, practiceID)
+	forfeited, err := billing.Forfeit(ctx, tx, practiceID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return err
+		return fmt.Errorf("practicedeletion: forfeit balance: %w", err)
 	}
 
 	ok, err := moved(tx.ExecContext(ctx,
@@ -293,30 +293,6 @@ func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]st
 		return nil, fmt.Errorf("practicedeletion: iterate clients: %w", err)
 	}
 	return ids, nil
-}
-
-// forfeitBalance writes one 'forfeit' credit_ledger row zeroing out
-// practiceID's current balance, and returns how many Credits it
-// forfeited. A zero or negative balance writes nothing: there is
-// nothing to forfeit, and an append-only ledger should not carry a
-// zero-quantity row that answers no question.
-func forfeitBalance(ctx context.Context, tx *sql.Tx, practiceID string) (int, error) {
-	balance, err := billing.Balance(ctx, tx, practiceID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("practicedeletion: read balance: %w", err)
-	}
-	if balance <= 0 {
-		return 0, nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'forfeit', $2)`,
-		practiceID, -balance,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("practicedeletion: forfeit balance: %w", err)
-	}
-	return balance, nil
 }
 
 // markErr gives an error from the outbox package -- a sibling package,
