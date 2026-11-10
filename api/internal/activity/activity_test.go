@@ -140,6 +140,7 @@ func TestMoneyActions_ContainsExactlyTheADR0008MoneySet(t *testing.T) {
 		activity.ActionPaymentRecorded,
 		activity.ActionInvoiceVoided,
 		activity.ActionInvoiceWrittenOff,
+		activity.ActionInvoiceNotSent,
 		activity.ActionPaymentReversed,
 		activity.ActionPaymentRefunded,
 		activity.ActionContractorFeePaid,
@@ -202,6 +203,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionPortalInviteRefused,
 		// #2520: a Draft she has not been sent.
 		activity.ActionContractEdited,
+		// An Invoice draft Stripe would not finalize never reached her.
+		activity.ActionInvoiceNotSent,
 	})
 }
 

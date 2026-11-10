@@ -462,6 +462,14 @@ const (
 	// was never paid.
 	ActionInvoiceVoided     EngagementAction = "invoice_voided"
 	ActionInvoiceWrittenOff EngagementAction = "invoice_written_off"
+	// ActionInvoiceNotSent records a Stripe-backed Invoice that Stripe
+	// would not finalize while it was being raised: its draft row is kept
+	// and voided (payments.TransitionAbandonDraft), so it is owed by
+	// nobody and refuses nothing. Always a SystemActor -- the raise was a
+	// Staff member's, the void is what DoulaCloud made of its failure.
+	// Kept off the Client's portal ledger (staffingActions): the Invoice
+	// never reached her.
+	ActionInvoiceNotSent EngagementAction = "invoice_not_sent"
 	// ActionPaymentReversed records reversing a manually recorded Payment
 	// (#945) -- a new, additive payments row, never an edit of the
 	// original, that returns the Invoice to 'open' once nothing covers it
@@ -626,6 +634,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,
+	ActionInvoiceNotSent:           true,
 	ActionPaymentReversed:          true,
 	ActionPaymentRefunded:          true,
 	// #2271: what the Practice paid one contractor is not another's to read.
@@ -722,6 +731,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionPortalInviteRefused: true,
 	// #2520: a Draft she has not been sent.
 	ActionContractEdited: true,
+	// And an Invoice draft Stripe would not finalize: it never reached her.
+	ActionInvoiceNotSent: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

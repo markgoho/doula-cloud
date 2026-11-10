@@ -50,26 +50,38 @@ func TestDays(t *testing.T) {
 	dueAt := time.Date(2026, 11, 24, 0, 0, 0, 0, time.UTC)
 
 	tests := []struct {
-		name   string
-		status string
-		now    time.Time
-		want   int
+		name       string
+		status     string
+		processing bool
+		now        time.Time
+		want       int
 	}{
 		// Under the instant rule this Invoice was overdue from 7pm Eastern
 		// on its own due day. A person reads that day as a whole day to
 		// pay in, so it is not late until the day after.
-		{"the due day itself is not late, even after the due instant", open, time.Date(2026, 11, 24, 4, 59, 0, 0, time.UTC), 0},
-		{"the start of the next Practice day is one day late", open, time.Date(2026, 11, 24, 5, 0, 0, 0, time.UTC), 1},
-		{"late on the next Practice day is still one day", open, time.Date(2026, 11, 25, 4, 59, 0, 0, time.UTC), 1},
-		{"three Practice days on", open, time.Date(2026, 11, 26, 15, 0, 0, 0, time.UTC), 3},
-		{"before the due day", open, time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC), 0},
-		{"a paid Invoice is never late", "paid", time.Date(2026, 12, 30, 15, 0, 0, 0, time.UTC), 0},
+		{"the due day itself is not late, even after the due instant", open, false, time.Date(2026, 11, 24, 4, 59, 0, 0, time.UTC), 0},
+		{"the start of the next Practice day is one day late", open, false, time.Date(2026, 11, 24, 5, 0, 0, 0, time.UTC), 1},
+		{"late on the next Practice day is still one day", open, false, time.Date(2026, 11, 25, 4, 59, 0, 0, time.UTC), 1},
+		{"three Practice days on", open, false, time.Date(2026, 11, 26, 15, 0, 0, 0, time.UTC), 3},
+		{"before the due day", open, false, time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC), 0},
+		{"a paid Invoice is never late", "paid", false, time.Date(2026, 12, 30, 15, 0, 0, 0, time.UTC), 0},
+		// #2225: the Client has paid and the money is clearing.
+		{"an Invoice with a payment on its way is never late", open, true, time.Date(2026, 11, 26, 15, 0, 0, 0, time.UTC), 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := overdue.Days(tt.status, dueAt, tt.now, eastern); got != tt.want {
-				t.Errorf("Days(%q, %v, %v) = %d, want %d", tt.status, dueAt, tt.now, got, tt.want)
+			if got := overdue.Days(tt.status, tt.processing, dueAt, tt.now, eastern); got != tt.want {
+				t.Errorf("Days(%q, %v, %v, %v) = %d, want %d", tt.status, tt.processing, dueAt, tt.now, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestExpr pins Days's SQL twin to the same three conditions, over the
+// alias and parameter its callers bind.
+func TestExpr(t *testing.T) {
+	want := `(i.status = 'open' AND NOT (i.status = 'open' AND i.payment_processing_since IS NOT NULL) AND i.due_at < $2)`
+	if got := overdue.Expr("$2"); got != want {
+		t.Fatalf("Expr($2) = %q, want %q", got, want)
 	}
 }

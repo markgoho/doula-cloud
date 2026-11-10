@@ -93,9 +93,10 @@ type PracticeInvoicesResponse struct {
 	// positive number: money the Practice has returned to Clients.
 	RefundedCents int64 `json:"refundedCents"`
 	// OverdueCents and OverdueCount (#768) are the part of the
-	// outstanding book that is past its due day: 'open' and due before
-	// the start of the Practice's own today (#1965, overdue.From),
-	// evaluated by Postgres at read. They are a narrowing of the
+	// outstanding book that is past its due day: 'open', no payment on
+	// its way, and due before the start of the Practice's own today
+	// (#1965, overdue.From, overdue.Expr), evaluated by Postgres at read.
+	// They are a narrowing of the
 	// outstanding figures beside them, never a separate book -- an
 	// overdue Invoice is counted in both pairs, because it is still money
 	// billed and not yet collected.
@@ -124,8 +125,9 @@ type PracticeInvoicesResponse struct {
 // unpaid, $450 outstanding" needs both numbers to agree with the list
 // underneath it, not with whatever page the reader happens to be on.
 //
-// ?overdue=true (#768) narrows further, to the open Invoices whose own
-// due day has passed in the Practice's zone (#1965) -- the Invoices
+// ?overdue=true (#768) narrows further, to the open Invoices with no
+// payment on its way whose own due day has passed in the Practice's zone
+// (#1965) -- the Invoices
 // making up OverdueCents/OverdueCount,
 // by the same rule, so the list and the figure above it cannot disagree.
 // It is a narrowing of ?unpaid=true, not an alternative to it, and wins
@@ -225,16 +227,18 @@ const (
 	narrowOverdue
 )
 
-// clause is the narrowing's fixed WHERE text. Overdue compares due_at
-// with overdue.From's instant, passed as the query parameter cutoffParam
-// names, so the boundary is the start of the Practice's own today
-// (#1965) and the comparison stays an instant one on the stored column.
+// clause is the narrowing's fixed WHERE text. Overdue is overdue.Expr,
+// comparing due_at with overdue.From's instant, passed as the query
+// parameter cutoffParam names, so the boundary is the start of the
+// Practice's own today (#1965) and the comparison stays an instant one on
+// the stored column. It leaves out an Invoice with a payment on its way,
+// as the row's own DaysOverdue does.
 func (n invoiceNarrowing) clause(cutoffParam string) string {
 	switch n {
 	case narrowUnpaid:
 		return ` AND i.status = 'open'`
 	case narrowOverdue:
-		return ` AND i.status = 'open' AND i.due_at < ` + cutoffParam
+		return ` AND ` + overdue.Expr(cutoffParam)
 	case narrowAll:
 	}
 	return ""
@@ -322,7 +326,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
 		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
-		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
+		it.DaysOverdue = overdue.Days(it.Status, it.PaymentProcessing, dueAt, days.now, days.zone)
 		it.BillingMode = billingModeOf(stripeInvoiceID)
 		items = append(items, it)
 	}
@@ -358,18 +362,19 @@ type invoiceTotals struct {
 // gone back to Clients, as a positive number.
 //
 // $2 is overdue.From's instant, the start of the Practice's today
-// (#1965): the same boundary the ?overdue=true narrowing binds.
-const practiceInvoiceTotalsQuery = `SELECT
-		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open'), 0),
-		COUNT(*) FILTER (WHERE status = 'open'),
-		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'paid'), 0),
-		COALESCE(SUM(amount_cents) FILTER (WHERE status = 'open' AND due_at < $2), 0),
-		COUNT(*) FILTER (WHERE status = 'open' AND due_at < $2),
+// (#1965): the same boundary, and the same overdue.Expr, the
+// ?overdue=true narrowing binds.
+var practiceInvoiceTotalsQuery = `SELECT
+		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'open'), 0),
+		COUNT(*) FILTER (WHERE i.status = 'open'),
+		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'paid'), 0),
+		COALESCE(SUM(i.amount_cents) FILTER (WHERE ` + overdue.Expr("$2") + `), 0),
+		COUNT(*) FILTER (WHERE ` + overdue.Expr("$2") + `),
 		(SELECT COALESCE(-SUM(p.amount_cents), 0) FROM payments p
 		   JOIN invoices ri ON ri.id = p.invoice_id
 		  WHERE ri.practice_id = $1 AND p.kind = 'refund'),
 		(SELECT ` + cardpayments.ClientsCanPayExpr + ` FROM practices WHERE id = $1)
-	FROM invoices WHERE practice_id = $1`
+	FROM invoices i WHERE i.practice_id = $1`
 
 // practiceInvoiceTotals sums the Practice's outstanding and paid money.
 // It reads every row rather than a page, which is why it stays an

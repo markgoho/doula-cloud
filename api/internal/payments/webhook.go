@@ -19,6 +19,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/stripemode"
 	"doula-cloud/api/internal/tasknudge"
 	"doula-cloud/api/internal/webhookarrival"
@@ -26,7 +27,8 @@ import (
 
 // The v1 snapshot event types the Connect endpoint handles: #82's
 // invoice.paid / invoice.payment_failed below, #2224's
-// invoice.marked_uncollectible, #2225's payment_intent.processing, and #1009's
+// invoice.marked_uncollectible, invoice.voided (an Invoice voided in the
+// Practice's Stripe Dashboard), #2225's payment_intent.processing, and #1009's
 // credit_note.created / refund.created (refund_webhook.go). Any other
 // event type is logged and dropped. WebhookEvent.Type is a plain string (the Client port
 // abstracts away *stripe.Event), so stripe-go's own typed constants are
@@ -44,6 +46,7 @@ const (
 	eventTypeInvoicePaid                = string(stripe.EventTypeInvoicePaid)
 	eventTypeInvoicePaymentFailed       = string(stripe.EventTypeInvoicePaymentFailed)
 	eventTypeInvoiceMarkedUncollectible = string(stripe.EventTypeInvoiceMarkedUncollectible)
+	eventTypeInvoiceVoided              = string(stripe.EventTypeInvoiceVoided)
 	eventTypePaymentIntentProcessing    = string(stripe.EventTypePaymentIntentProcessing)
 )
 
@@ -98,8 +101,11 @@ type invoiceEventObject struct {
 // account field): invoice.paid flips it to paid and creates exactly one
 // payments row; invoice.payment_failed records the failed attempt and
 // leaves it open, as Stripe does (#2224); invoice.marked_uncollectible
-// moves it to uncollectible; payment_intent.processing marks a payment
-// on its way and leaves it open (#2225). An event for an
+// moves it to uncollectible; invoice.voided moves it to void;
+// payment_intent.processing marks a payment on its way and leaves it open
+// (#2225). Every move is one lifecycle.go declares, asked through
+// takeStripeMove, and a move the table refuses is logged and
+// acknowledged. An event for an
 // unrecognized account id, an Invoice not found in DoulaCloud, or any
 // event type not handled here, is logged and dropped rather than
 // treated as an error -- Stripe retries indefinitely on anything but a
@@ -150,6 +156,9 @@ var connectEventHandlers = map[string]connectEventHandler{
 	},
 	eventTypeInvoiceMarkedUncollectible: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
 		handleInvoiceMarkedUncollectible(w, r, db, event)
+	},
+	eventTypeInvoiceVoided: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleInvoiceVoided(w, r, db, event)
 	},
 	eventTypePaymentIntentProcessing: func(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, _ tasknudge.Enqueuer) {
 		handlePaymentIntentProcessing(w, r, db, client, event)
@@ -389,23 +398,16 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	defer ev.rollbackUnlessCommitted()
 	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
-	// #271's already-paid guard: FOR UPDATE locks the row against a
-	// concurrent writer -- specifically PostManualPaymentHandler's own
-	// paid_out_of_band call, whose own invoice.paid echo can arrive here
-	// while that handler's transaction is still in flight -- and the
-	// status check itself catches the ordinary double-delivery case too
-	// (a real card payment webhook redelivered outside claimEvent's own
-	// dedup window is not the only way this event type can repeat). A
-	// no-op commit-and-ack, same shape as the alreadyProcessed branch
-	// above: this is not an error, just nothing left to do.
-	currentStatus, ok := lockInvoiceStatus(w, r, tx, invoiceID)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
-		return
-	}
-	if currentStatus == invoiceStatusPaid {
-		log.Printf("payments: connect webhook: invoice.paid for %q already paid, skipping (event id %s)", inv.ID, event.ID)
-		commitAndAck(w, tx, committed)
+	// #271's already-paid guard, now TransitionStripePaid's: FOR UPDATE
+	// locks the row against a concurrent writer -- specifically
+	// PostManualPaymentHandler's own paid_out_of_band call, whose own
+	// invoice.paid echo can arrive here while that handler's transaction
+	// is still in flight -- and an Invoice already paid is the ordinary
+	// double-delivery case (a real card payment webhook redelivered
+	// outside claimEvent's own dedup window is not the only way this
+	// event type can repeat), acknowledged with nothing left to do. A void
+	// Invoice is refused, not paid (TransitionStripePaid's comment).
+	if !takeStripeMove(w, r, ev, event, TransitionStripePaid) {
 		return
 	}
 
@@ -430,9 +432,7 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE invoices SET status = 'paid', paid_at = $1, payment_processing_since = NULL WHERE id = $2`, paidAt, invoiceID,
-	); err != nil {
+	if err := moveInvoice(r.Context(), tx, invoiceID, TransitionStripePaid, `, paid_at = $3, payment_processing_since = NULL`, paidAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -466,8 +466,8 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 // lockInvoiceStatus reads an Invoice's status under FOR UPDATE, so two
 // deliveries touching the same Invoice serialize. The row is known to
 // exist: resolveInvoiceForEvent found it a moment ago.
-func lockInvoiceStatus(w http.ResponseWriter, r *http.Request, tx *sql.Tx, invoiceID string) (string, bool) {
-	var status string
+func lockInvoiceStatus(w http.ResponseWriter, r *http.Request, tx *sql.Tx, invoiceID string) (invoicestatus.Status, bool) {
+	var status invoicestatus.Status
 	if err := tx.QueryRowContext(r.Context(),
 		`SELECT status FROM invoices WHERE id = $1 FOR UPDATE`, invoiceID,
 	).Scan(&status); err != nil {
@@ -476,6 +476,35 @@ func lockInvoiceStatus(w http.ResponseWriter, r *http.Request, tx *sql.Tx, invoi
 		return "", false
 	}
 	return status, true
+}
+
+// takeStripeMove is how every Connect webhook handler that moves an
+// Invoice asks the lifecycle table first: it locks the row ev names and
+// asks t.Check whether Stripe's event may move it from where it stands.
+// proceed=false means the response is already written. An Invoice already
+// where t leaves it is a redelivery under another event id: acknowledged,
+// nothing applied. One t does not start from is refused: logged, counted
+// as refused on the Platform's webhook screen so a person can reconcile
+// it with Stripe, and acknowledged -- never a 500, which Stripe would
+// redeliver for days with the same answer waiting.
+func takeStripeMove(w http.ResponseWriter, r *http.Request, ev invoiceEvent, event WebhookEvent, t InvoiceTransition) (proceed bool) {
+	current, ok := lockInvoiceStatus(w, r, ev.tx, ev.invoiceID)
+	if !ok {
+		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
+		return false
+	}
+	if t.Reached(current) {
+		log.Printf("payments: connect webhook: %s for invoice %s already %s, skipping (event id %s)", event.Type, ev.invoiceID, current, event.ID)
+		commitAndAck(w, ev.tx, ev.committed)
+		return false
+	}
+	if ok, refusal := t.Check(current, BillingModeStripe); !ok {
+		webhookarrival.Mark(r.Context(), webhookarrival.Refused)
+		log.Printf("payments: connect webhook: refusing %s for invoice %s: %s (event id %s)", event.Type, ev.invoiceID, refusal, event.ID)
+		commitAndAck(w, ev.tx, ev.committed)
+		return false
+	}
+	return true
 }
 
 // recordPaymentAttempt records an attempt to pay an Invoice on its
@@ -556,29 +585,40 @@ func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.
 // invoice_written_off with DoulaCloud as the actor -- no Staff member of
 // this system did it -- and an origin saying where it was done, the
 // footing a Dashboard Refund stands on (#1009). An Invoice already paid
-// or voided here is logged and acknowledged, unchanged.
+// or voided here is refused by TransitionStripeUncollectible: logged and
+// acknowledged, unchanged.
 func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
-	inv, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
+	handleDashboardMove(w, r, db, event, TransitionStripeUncollectible, activity.ActionInvoiceWrittenOff)
+}
+
+// handleInvoiceVoided is how a Stripe-backed Invoice reaches 'void': the
+// Practice voided it in her own Stripe Dashboard, which is where
+// MsgStripeInvoiceCannotBeVoidedOrWrittenOff sends her to do it. It
+// records invoice_voided with DoulaCloud as the actor and the Dashboard
+// as its origin, as a write-off from there does. Without it, an Invoice
+// voided on Stripe stayed open here: owed, overdue, and refusing the
+// Client's erasure and the Practice's deletion.
+func handleInvoiceVoided(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) {
+	handleDashboardMove(w, r, db, event, TransitionStripeVoided, activity.ActionInvoiceVoided)
+}
+
+// handleDashboardMove is the shared body of the two events that report
+// what the Practice did to an Invoice in her own Stripe account: t moves
+// it -- clearing any payment on its way, which only an open Invoice can
+// carry -- and action records it, by DoulaCloud, from the Dashboard.
+func handleDashboardMove(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent, t InvoiceTransition, action activity.EngagementAction) {
+	_, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
 	if !ok {
 		return
 	}
 	defer ev.rollbackUnlessCommitted()
 	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
-	currentStatus, ok := lockInvoiceStatus(w, r, tx, invoiceID)
-	if !ok {
-		// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
-		return
-	}
-	if currentStatus != invoiceStatusOpen {
-		log.Printf("payments: connect webhook: invoice.marked_uncollectible for %q at status %q, leaving it (event id %s)", inv.ID, currentStatus, event.ID)
-		commitAndAck(w, tx, committed)
+	if !takeStripeMove(w, r, ev, event, t) {
 		return
 	}
 
-	if _, err := tx.ExecContext(r.Context(),
-		`UPDATE invoices SET status = 'uncollectible', payment_processing_since = NULL WHERE id = $1`, invoiceID,
-	); err != nil {
+	if err := moveInvoice(r.Context(), tx, invoiceID, t, `, payment_processing_since = NULL`); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -589,7 +629,7 @@ func handleInvoiceMarkedUncollectible(w http.ResponseWriter, r *http.Request, db
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, activity.ActionInvoiceWrittenOff, diff, false); err != nil {
+	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, action, diff, false); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -648,20 +688,18 @@ func handlePaymentIntentProcessing(w http.ResponseWriter, r *http.Request, db *s
 		return
 	}
 
-	// Only an open Invoice has a payment on its way: one paid by hand or
-	// voided here meanwhile is left as it is.
-	result, err := tx.ExecContext(r.Context(),
-		`UPDATE invoices SET payment_processing_since = $1 WHERE id = $2 AND status = 'open'`,
-		clock.Now(r.Context()), invoiceID,
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	// Only an open Invoice has a payment on its way
+	// (TransitionPaymentOnItsWay): one paid by hand or voided meanwhile is
+	// refused and left as it is.
+	if !takeStripeMove(w, r, invoiceEvent{tx: tx, committed: committed, invoiceID: invoiceID, practiceID: practiceID}, event, TransitionPaymentOnItsWay) {
 		return
 	}
-	if rows, err := result.RowsAffected(); err != nil || rows == 0 {
-		log.Printf("payments: connect webhook: payment_intent.processing for %q on an invoice that is not open, leaving it (event id %s)", intent.StripeInvoiceID, event.ID)
-		commitAndAck(w, tx, committed)
+	if _, err := tx.ExecContext(r.Context(),
+		`UPDATE invoices SET payment_processing_since = $1 WHERE id = $2`,
+		clock.Now(r.Context()), invoiceID,
+	); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 

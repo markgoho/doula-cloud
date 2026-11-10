@@ -118,6 +118,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	payment_refunded: (name) => `Money returned to ${client(name)}`,
 	invoice_voided: (name) => `Invoice for ${client(name)} voided`,
 	invoice_written_off: (name) => `Invoice for ${client(name)} written off`,
+	// Stripe would not finalize the draft while it was being raised, so it
+	// was voided and never sent.
+	invoice_not_sent: (name) => `Invoice for ${client(name)} voided: Stripe could not send it`,
 	// #2271: the row's Detail names the Doula; neither names the fee.
 	contractor_fee_paid: (name) => `Doula paid for ${clients(name)} care`,
 	contractor_fee_payment_reversed: (name) => `Doula payment for ${clients(name)} care removed`,

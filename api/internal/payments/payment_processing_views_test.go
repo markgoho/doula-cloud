@@ -28,8 +28,9 @@ func markProcessing(t *testing.T, db *testdb.DB, invoiceID string) {
 // the Engagement's list as an Owner and as a contractor Doula (a status,
 // so hers to see under ADR-0008's #2094 amendment), and the Client's own
 // list and page -- is told a payment is on its way, and the status stays
-// open. A value left on an Invoice that has since been paid reads as
-// nothing on its way: only an open Invoice can be waiting on one.
+// open. A paid Invoice reads as nothing on its way: only an open Invoice
+// can be waiting on one, which invoices_processing_only_while_open (00167)
+// now holds in the schema too.
 func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
 	now := time.Now()
 	e := newEnv(t, atInstant(now), viaScene(fixture.WithClient(fixture.WithPortalLogin())))
@@ -37,7 +38,6 @@ func TestAPaymentOnItsWayReadsInEveryView(t *testing.T) {
 	onItsWay := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_on_its_way", invoiceStatusOpen, 15000, now.Add(-time.Hour))
 	markProcessing(t, e.DB, onItsWay)
 	settled := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_settled", invoiceStatusPaid, 5000, now.Add(-2*time.Hour))
-	markProcessing(t, e.DB, settled)
 	want := map[string]bool{onItsWay: true, settled: false}
 
 	check := func(view, id, status string, got bool) {

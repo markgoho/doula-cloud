@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
@@ -24,18 +25,6 @@ import (
 // returns per page -- mirrors message.pageSize's "fixed size is enough
 // for paginated to be true" reasoning.
 const invoicePageSize = 30
-
-// invoiceStatusOpen is the invoices.status value shared by every read and
-// write site in this package that tests for "billed and not yet
-// collected" -- named once so goconst's repeat threshold, crossed once
-// #271 added a second reader (manual_payment.go), doesn't see the same
-// literal typed twice.
-const invoiceStatusOpen = "open"
-
-// invoiceStatusPaid is "open"'s pair for a settled Invoice, named once
-// for the same goconst reason: #1009's Refund made a third reader of it,
-// beside the reversal and the invoice.paid webhook guard.
-const invoiceStatusPaid = "paid"
 
 // fieldMethod is the wire and diff name of a Payment's or a Refund's
 // method -- a field-error key on a 400 and a key in an Activity diff.
@@ -110,7 +99,8 @@ type InvoiceView struct {
 	// answers "is this Client owed money back".
 	RefundedCents int64 `json:"refundedCents"`
 	// DaysOverdue (#2122) is how many whole Practice days this Invoice is
-	// past DueOn, and 0 when it is not overdue or not open: counted by
+	// past DueOn, and 0 when it is not overdue, not open, or has a payment
+	// on its way (PaymentProcessing, which a screen reads first): counted by
 	// overdue.Days at the request's one instant, the same rule and the
 	// same count PracticeInvoiceView.DaysOverdue and a contractor's row
 	// carry, so one Invoice reads Overdue on every Staff screen or on
@@ -196,10 +186,16 @@ type CreateInvoiceRequest struct {
 // its own stored stripe_invoice_id -- NULL means by-hand, following the
 // migration's own "a NULL is the flag; there is no second column" rule.
 func billingModeOf(stripeInvoiceID sql.NullString) string {
+	return string(railOf(stripeInvoiceID))
+}
+
+// railOf is billingModeOf as the BillingMode an InvoiceTransition's Check
+// asks for.
+func railOf(stripeInvoiceID sql.NullString) BillingMode {
 	if stripeInvoiceID.Valid {
-		return string(BillingModeStripe)
+		return BillingModeStripe
 	}
-	return string(BillingModeByHand)
+	return BillingModeByHand
 }
 
 // MsgClientsCannotPay is PostInvoiceHandler's refusal (#270) when this
@@ -405,7 +401,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 	return InvoiceView{
 		ID:          invoiceID,
 		ContractID:  contractID,
-		Status:      invoiceStatusOpen,
+		Status:      string(invoicestatus.Open),
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
@@ -477,30 +473,55 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 
 	// A draft invoices row is now persisted (staffauth.Middleware commits
 	// the request-scoped tx regardless of the status this handler writes)
-	// even if FinalizeInvoice below fails.
+	// even if FinalizeInvoice below fails. It leaves Draft by one of its
+	// two declared exits: finalized, or voided because Stripe would not
+	// finalize it (TransitionAbandonDraft).
 	hostedInvoiceURL, number, err := client.FinalizeInvoice(ctx, accountID, stripeInvoiceID)
 	_ = hostedInvoiceURL // not yet surfaced anywhere; see #78's own discard of it
 	if err != nil {
+		if abandonErr := abandonDraft(ctx, tx, practiceID, invoiceID); abandonErr != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return InvoiceView{}, abandonErr
+		}
 		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE invoices SET status = 'open', reference = $2 WHERE id = $1`, invoiceID, number,
-	); err != nil {
+	if ok, refusal := TransitionFinalize.Check(invoicestatus.Draft, BillingModeStripe); !ok {
+		// coverage:ignore reason: the row was inserted as a Stripe-backed draft a moment ago, which TransitionFinalize always takes
+		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice row: %s", refusal)
+	}
+	if err := moveInvoice(ctx, tx, invoiceID, TransitionFinalize, `, reference = $3`, number); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice row: %w", err)
+		return InvoiceView{}, err
 	}
 
 	return InvoiceView{
 		ID:          invoiceID,
 		ContractID:  contractID,
-		Status:      invoiceStatusOpen,
+		Status:      string(invoicestatus.Open),
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
 		Reference:   number,
 		BillingMode: string(BillingModeStripe),
 	}, nil
+}
+
+// abandonDraft voids the draft createStripeInvoice inserted when Stripe
+// would not finalize it (TransitionAbandonDraft), and records
+// activity.ActionInvoiceNotSent with DoulaCloud as its actor: the raise
+// was a Staff member's, the void is what DoulaCloud made of its failure.
+// The row stays, so DoulaCloud still knows the Stripe draft exists.
+func abandonDraft(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) error {
+	if ok, refusal := TransitionAbandonDraft.Check(invoicestatus.Draft, BillingModeStripe); !ok {
+		// coverage:ignore reason: the row was inserted as a Stripe-backed draft a moment ago, which TransitionAbandonDraft always takes
+		return fmt.Errorf("payments: abandon draft: %s", refusal)
+	}
+	if err := moveInvoice(ctx, tx, invoiceID, TransitionAbandonDraft, ``); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	return recordInvoiceEvent(ctx, tx, practiceID, invoiceID, activity.ActionInvoiceNotSent, nil, false)
 }
 
 // GetInvoicesHandler lists every Invoice ever created against
@@ -768,13 +789,10 @@ const refundedCentsSubquery = `(SELECT COALESCE(-SUM(f.amount_cents), 0) FROM pa
 	 WHERE f.invoice_id = i.id AND f.kind = 'refund') AS refunded_cents`
 
 // paymentProcessingExpr is whether a payment on an Invoice is on its way
-// (#2225): payment_intent.processing set payment_processing_since and
-// nothing has ended it yet. Only an open Invoice counts, so a value left
-// behind by a way out of 'open' that does not clear it -- a Payment
-// recorded by hand, a void -- never reads as a payment still coming. One
-// expression for every reader, Staff and Client, so no two screens
-// disagree.
-const paymentProcessingExpr = `(i.status = 'open' AND i.payment_processing_since IS NOT NULL) AS payment_processing`
+// (#2225), as the payment_processing column: invoicestatus's one
+// expression, which the Clients list's rollup reads too, so no two
+// screens -- Staff or Client -- disagree.
+const paymentProcessingExpr = invoicestatus.PaymentOnItsWayExpr + ` AS payment_processing`
 
 const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
 	FROM invoices i
@@ -822,7 +840,7 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
 		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
-		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
+		it.DaysOverdue = overdue.Days(it.Status, it.PaymentProcessing, dueAt, days.now, days.zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String

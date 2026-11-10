@@ -213,8 +213,9 @@ func seedClientContract(t *testing.T, db *testdb.DB, engagementID, status string
 func seedClientInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
-		 VALUES ($1, $2, gen_random_uuid()::text, $3, $4, gen_random_uuid()::text, now() + interval '30 days') RETURNING id`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at, paid_at)
+		 VALUES ($1, $2, gen_random_uuid()::text, $3::invoice_status, $4, gen_random_uuid()::text, now() + interval '30 days',
+		         CASE WHEN $3::invoice_status = 'paid' THEN now() END) RETURNING id`,
 		practiceID, contractID, status, amountCents,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)

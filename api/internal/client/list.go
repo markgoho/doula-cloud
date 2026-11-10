@@ -13,6 +13,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
@@ -729,7 +730,7 @@ const openEngagementRollupQueryTemplate = `
 	    -- newest Invoice of any other status (paid, void, uncollectible,
 	    -- or draft) once nothing is outstanding.
 	    SELECT i.status, i.amount_cents, i.due_at,
-	           (i.status = 'open' AND i.payment_processing_since IS NOT NULL) AS payment_processing
+	           ` + invoicestatus.PaymentOnItsWayExpr + ` AS payment_processing
 	    FROM invoices i
 	    WHERE i.contract_id = ct.id
 	    ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
@@ -848,9 +849,9 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 			oe.InvoiceStatus = &status
 			// invoices.due_at is NOT NULL (00102), so a line with an
 			// Invoice status always carries its due instant.
-			late := overdue.Days(status, raw.invoiceDueAt.Time, days.now, days.zone)
-			oe.DaysOverdue = &late
 			processing := raw.paymentProcessing.Bool
+			late := overdue.Days(status, processing, raw.invoiceDueAt.Time, days.now, days.zone)
+			oe.DaysOverdue = &late
 			oe.PaymentProcessing = &processing
 		}
 		if raw.invoiceAmountCents.Valid {

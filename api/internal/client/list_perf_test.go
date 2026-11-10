@@ -49,9 +49,10 @@ func TestOpenEngagementRollupQueryPlanAtScale(t *testing.T) {
 		     SELECT id, 'signed', '', 150000 FROM e
 		     RETURNING id
 		 )
-		 INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
+		 INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at, paid_at)
 		 SELECT $1, k.id, gen_random_uuid()::text, s.status::invoice_status, 75000, gen_random_uuid()::text,
-		        now() + (CASE WHEN random() < 0.5 THEN interval '-12 days' ELSE interval '14 days' END)
+		        now() + (CASE WHEN random() < 0.5 THEN interval '-12 days' ELSE interval '14 days' END),
+		        CASE WHEN s.status = 'paid' THEN now() END
 		   FROM k CROSS JOIN (VALUES ('paid'), ('open')) AS s(status)`,
 		practiceID, rowCount); err != nil {
 		t.Fatalf("seed: %v", err)

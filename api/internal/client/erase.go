@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientkey"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -707,7 +708,7 @@ func unsettledInvoiceSummaries(ctx context.Context, tx *sql.Tx, clientID string)
 		`SELECT i.id, i.stripe_invoice_id, i.status, i.amount_cents, i.currency, i.created_at FROM invoices i
 		  JOIN contracts ct ON ct.id = i.contract_id
 		  JOIN engagements e ON e.id = ct.engagement_id
-		 WHERE e.client_id = $1 AND i.status IN ('draft', 'open')
+		 WHERE e.client_id = $1 AND `+invoicestatus.UnsettledExpr+`
 		 ORDER BY i.created_at`,
 		clientID,
 	)

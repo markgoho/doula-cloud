@@ -199,8 +199,8 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 		if !ok {
 			return
 		}
-		if status != invoiceStatusPaid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotPaidForRefund, nil)
+		if ok, refusal := TransitionRefund.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 

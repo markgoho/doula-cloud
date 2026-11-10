@@ -209,6 +209,8 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 		return paymentMethodDetail("Paying by ", diff)
 	case string(activity.ActionInvoiceWrittenOff):
 		return writtenOffDetail(diff)
+	case string(activity.ActionInvoiceVoided):
+		return voidedDetail(diff)
 	}
 	return reassignmentDetail(action, before, after)
 }
@@ -279,13 +281,26 @@ func paymentMethodDetail(lead string, diff []byte) string {
 // money; refundDetail's reason. One an Owner or Admin wrote off here
 // names her in the Who column already and gets no sentence.
 func writtenOffDetail(diff []byte) string {
+	return stripeAccountDetail(diff, "Marked as uncollectible in the Practice's Stripe account")
+}
+
+// voidedDetail says an Invoice was voided in the Practice's own Stripe
+// account (invoice.voided), for writtenOffDetail's reason. One an Owner
+// or Admin voided here names her in the Who column and gets no sentence.
+func voidedDetail(diff []byte) string {
+	return stripeAccountDetail(diff, "Voided in the Practice's Stripe account")
+}
+
+// stripeAccountDetail is sentence when diff's origin is the Practice's
+// Stripe Dashboard, and nothing otherwise.
+func stripeAccountDetail(diff []byte, sentence string) string {
 	var fields struct {
 		Origin string `json:"origin"`
 	}
 	if err := json.Unmarshal(diff, &fields); err != nil || fields.Origin != activity.OriginStripeDashboard {
 		return ""
 	}
-	return "Marked as uncollectible in the Practice's Stripe account"
+	return sentence
 }
 
 // reassignmentDetail renders a visit_reassigned entry as the move it

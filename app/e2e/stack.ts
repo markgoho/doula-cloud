@@ -662,10 +662,11 @@ export function seedInvoice(
 		   INSERT INTO contracts (engagement_id, status, prose, amount_cents)
 		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents} WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
 		 )
-		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
+		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at, paid_at)
 		 SELECT ${sqlLiteral(invoiceId)}::uuid, ${sqlLiteral(practiceId)}, (SELECT id FROM existing UNION ALL SELECT id FROM made LIMIT 1),
 		   ${stripeInvoiceId === undefined ? 'NULL' : sqlLiteral(stripeInvoiceId)}, ${sqlLiteral(status)}::invoice_status,
-		   ${amountCents}, 'usd', ${sqlLiteral(reference)}, now() + interval '30 days'`
+		   ${amountCents}, 'usd', ${sqlLiteral(reference)}, now() + interval '30 days',
+		   ${status === 'paid' ? 'now()' : 'NULL'}`
 	);
 	return invoiceId;
 }

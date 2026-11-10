@@ -120,8 +120,8 @@ func seedInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvo
 func seedInvoiceDue(t *testing.T, db *testdb.DB, practiceID, contractID, stripeInvoiceID, status string, amountCents int64, createdAt, dueAt time.Time) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at, reference, due_at)
-		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6, $3, $7) RETURNING id`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, created_at, reference, due_at, paid_at)
+		 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $6, $3, $7, CASE WHEN $4::invoice_status = 'paid' THEN $6::timestamptz END) RETURNING id`,
 		practiceID, contractID, stripeInvoiceID, status, amountCents, createdAt, dueAt,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)
@@ -505,8 +505,11 @@ func TestPostInvoiceHandler_InvalidBodyReturns400(t *testing.T) {
 // Stripe failure leaves behind. A failure creating the draft surfaces as
 // an internal error and never persists a row (the port failed before any
 // insert happened). A failure finalizing it, after the draft was created
-// on Stripe and inserted locally, still leaves the draft row committed --
-// DoulaCloud never loses track of an Invoice that exists on Stripe.
+// on Stripe and inserted locally, still leaves the row committed --
+// DoulaCloud never loses track of an Invoice that exists on Stripe -- but
+// voided (TransitionAbandonDraft) and recorded as invoice_not_sent by
+// DoulaCloud, so a draft nothing else would ever move cannot sit in the
+// way of the Client's erasure or the Practice's deletion.
 func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 	cases := []struct {
 		name       string
@@ -515,7 +518,7 @@ func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 		wantStatus string
 	}{
 		{"creating the draft", func(c *payments.FakeClient) { c.CreateInvoiceErr = errStripeFake }, 0, ""},
-		{"finalizing the draft", func(c *payments.FakeClient) { c.FinalizeInvoiceErr = errStripeFake }, 1, invoiceStatusDraft},
+		{"finalizing the draft", func(c *payments.FakeClient) { c.FinalizeInvoiceErr = errStripeFake }, 1, invoiceStatusVoid},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -534,6 +537,10 @@ func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 			}
 			if status := testdb.Scalar[string](t, e.DB.Admin, `SELECT status FROM invoices LIMIT 1`); status != tc.wantStatus {
 				t.Fatalf("persisted invoice status = %q, want %q", status, tc.wantStatus)
+			}
+			notSent := activityRows(t, e.DB, "invoice_not_sent", engagementID)
+			if len(notSent) != 1 || notSent[0].actorKind != "system" {
+				t.Fatalf("invoice_not_sent rows = %+v, want one by DoulaCloud", notSent)
 			}
 		})
 	}

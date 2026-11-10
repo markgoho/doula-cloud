@@ -35,6 +35,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -132,7 +133,7 @@ func hasUnsettledInvoices(ctx context.Context, tx *sql.Tx, practiceID string) (b
 			SELECT 1 FROM invoices i
 			JOIN contracts ct ON ct.id = i.contract_id
 			JOIN engagements e ON e.id = ct.engagement_id
-			WHERE e.practice_id = $1 AND i.status IN ('draft', 'open')
+			WHERE e.practice_id = $1 AND `+invoicestatus.UnsettledExpr+`
 		 )`,
 		practiceID,
 	).Scan(&blocked)

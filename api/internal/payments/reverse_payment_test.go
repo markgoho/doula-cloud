@@ -119,7 +119,7 @@ func TestPostReversePaymentHandler_Refusals(t *testing.T) {
 			name: "a Payment against a Stripe-backed Invoice",
 			setup: func(e *env) (string, string) {
 				invoiceID := e.stripeInvoice("in_reverse_stripe", "")
-				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, invoiceID); err != nil {
+				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1`, invoiceID); err != nil {
 					e.T.Fatalf("seed paid status: %v", err)
 				}
 				if _, err := e.DB.Admin.ExecContext(e.T.Context(),

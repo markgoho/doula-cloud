@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -142,7 +143,7 @@ type PaymentView struct {
 // Practice's (RLS already scopes the read; the WHERE clause is app-layer
 // redundancy on top of it, the same belt-and-braces every other handler
 // in this package applies).
-func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) (status string, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, err error) {
+func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) (status invoicestatus.Status, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, err error) {
 	err = tx.QueryRowContext(ctx,
 		`SELECT i.status, i.amount_cents, i.stripe_invoice_id, e.id
 		   FROM invoices i
@@ -162,7 +163,7 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 // requireInvoiceAtPractice is resolveInvoiceForPractice for a handler: an
 // Invoice that is not this Practice's is a 404 and any other failure a
 // 500, written here.
-func requireInvoiceAtPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string) (status string, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, ok bool) {
+func requireInvoiceAtPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string) (status invoicestatus.Status, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, ok bool) {
 	status, amountCents, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "invoice not found", http.StatusNotFound)
@@ -299,8 +300,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		if !ok {
 			return
 		}
-		if status != invoiceStatusOpen {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotOpen, nil)
+		if ok, refusal := TransitionRecordPayment.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 		var paymentOnItsWay bool
@@ -346,9 +347,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidOn, invoiceID,
-		); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, TransitionRecordPayment, `, paid_at = $3`, paidOn); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -414,12 +413,9 @@ type InvoiceTransitionView struct {
 // transitionByHandInvoice is PostVoidInvoiceHandler and
 // PostWriteOffInvoiceHandler's shared body -- both are the same shape of
 // act (an Owner or Admin moves a by-hand, still-open Invoice to a
-// terminal status that is not 'paid') and differ only in the UPDATE they
-// run and the Activity action they record. updateStatusQuery is the
-// literal statement to run (matching this package's own convention of
-// writing an enum value as a literal rather than a bound parameter,
-// e.g. handleInvoicePaid's `SET status = 'paid'`) -- both callers pass a
-// fixed, internal constant, never anything request-supplied.
+// terminal status that is not 'paid') and differ only in the declared
+// Transition they make (TransitionVoid, TransitionWriteOff) and the
+// Activity action they record.
 //
 // Owner and Admin is declared at each caller's own mount line, not
 // checked here (#990, following #970's own move for Contract writes):
@@ -427,7 +423,7 @@ type InvoiceTransitionView struct {
 // because a Doula is refused by the gate before either PostVoidInvoiceHandler
 // or PostWriteOffInvoiceHandler ever runs. Widening or narrowing either
 // route means editing its own ir.ExemptGated role list in mount.go.
-func transitionByHandInvoice(newStatus, updateStatusQuery string, action activity.EngagementAction) http.Handler {
+func transitionByHandInvoice(t InvoiceTransition, action activity.EngagementAction) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, invoiceID := c.Tx, c.PracticeID, c.ID("invoiceId")
 
@@ -435,16 +431,12 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 		if !ok {
 			return
 		}
-		if stripeInvoiceID.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeVoidedOrWrittenOff, nil)
-			return
-		}
-		if status != invoiceStatusOpen {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotOpen, nil)
+		if ok, refusal := t.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(), updateStatusQuery, invoiceID); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, t, ``); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -455,7 +447,7 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, InvoiceTransitionView{Status: newStatus})
+		apierr.WriteJSON(w, http.StatusOK, InvoiceTransitionView{Status: string(t.To)})
 	}, staffauth.PathID("invoice", "invoiceId"))
 }
 
@@ -465,7 +457,7 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 // Stripe's own Dashboard instead) or one that is not 'open'. Must be
 // mounted behind staffauth.Middleware.
 func PostVoidInvoiceHandler() http.Handler {
-	return transitionByHandInvoice("void", `UPDATE invoices SET status = 'void' WHERE id = $1`, activity.ActionInvoiceVoided)
+	return transitionByHandInvoice(TransitionVoid, activity.ActionInvoiceVoided)
 }
 
 // PostWriteOffInvoiceHandler moves a by-hand, still-open Invoice to
@@ -474,7 +466,7 @@ func PostVoidInvoiceHandler() http.Handler {
 // only via Stripe's own invoice.marked_uncollectible webhook) or one that
 // is not 'open'. Must be mounted behind staffauth.Middleware.
 func PostWriteOffInvoiceHandler() http.Handler {
-	return transitionByHandInvoice("uncollectible", `UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, activity.ActionInvoiceWrittenOff)
+	return transitionByHandInvoice(TransitionWriteOff, activity.ActionInvoiceWrittenOff)
 }
 
 // errPaymentAlreadyReversed signals that :paymentId is a manually recorded
@@ -592,12 +584,8 @@ func PostReversePaymentHandler() http.Handler {
 		if !ok {
 			return
 		}
-		if stripeInvoiceID.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeReversed, nil)
-			return
-		}
-		if status != invoiceStatusPaid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotPaid, nil)
+		if ok, refusal := TransitionReversePayment.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 
@@ -632,9 +620,7 @@ func PostReversePaymentHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE invoices SET status = 'open', paid_at = NULL WHERE id = $1`, invoiceID,
-		); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, TransitionReversePayment, `, paid_at = NULL`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

@@ -362,7 +362,7 @@ Whether a sandbox carries every Connect capability is not something to take on t
 
 **Platform billing.** The Practice pays us. A Stripe Customer plus a Checkout Session over one flat Price. One event matters: `checkout.session.completed`. The `credit_ledger` is credited by `api/internal/billing/webhook.go` and by nothing else — never by the browser redirect.
 
-**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Seven events matter, and they do not all arrive the same way:
+**Connect.** The Client pays the Practice. An **Accounts v2** connected account per Practice carrying the `merchant` configuration, onboarded through a hosted v2 Account Link, with Invoices raised on-behalf-of using the `Stripe-Account` header. Eight events matter, and they do not all arrive the same way:
 
 | Event | Kind | Route |
 | --- | --- | --- |
@@ -370,11 +370,12 @@ Whether a sandbox carries every Connect capability is not something to take on t
 | `invoice.paid` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.payment_failed` | snapshot | `/api/stripe/connect-webhook` |
 | `invoice.marked_uncollectible` | snapshot | `/api/stripe/connect-webhook` |
+| `invoice.voided` | snapshot | `/api/stripe/connect-webhook` |
 | `payment_intent.processing` | snapshot | `/api/stripe/connect-webhook` |
 | `credit_note.created` | snapshot | `/api/stripe/connect-webhook` |
 | `refund.created` | snapshot | `/api/stripe/connect-webhook` |
 
-`invoice.payment_failed` changes no status ([#2224](https://github.com/markgoho/doula-cloud/issues/2224)). Stripe sends it on every failed attempt, a declined card or a bank debit that bounces days later, and keeps the Invoice `open` for the next try, so ours stays open and the attempt is recorded on the Engagement's activity with the method tried. A Stripe-backed Invoice becomes `uncollectible` only on `invoice.marked_uncollectible`, which the Practice causes in her own Stripe Dashboard. Without that subscription a write-off there never reaches DoulaCloud. Stripe also sends `invoice.payment_failed` beside `invoice.payment_action_required` the moment a redirect method (Klarna) sends the Client away to approve it, before she has done anything (seen in the Sandbox on [#2225](https://github.com/markgoho/doula-cloud/issues/2225)), so the handler asks Stripe first and records nothing while the newest PaymentIntent is `requires_action`.
+`invoice.payment_failed` changes no status ([#2224](https://github.com/markgoho/doula-cloud/issues/2224)). Stripe sends it on every failed attempt, a declined card or a bank debit that bounces days later, and keeps the Invoice `open` for the next try, so ours stays open and the attempt is recorded on the Engagement's activity with the method tried. A Stripe-backed Invoice becomes `uncollectible` only on `invoice.marked_uncollectible`, which the Practice causes in her own Stripe Dashboard. Without that subscription a write-off there never reaches DoulaCloud. `invoice.voided` is the same for a void there, which is where DoulaCloud sends a Practice to void a Stripe-backed Invoice; without it the Invoice stayed `open` here. Each of these moves is one `api/internal/payments/lifecycle.go` declares, and a move it refuses (an `invoice.paid` for an Invoice already void, say) is logged, acknowledged and counted as refused on the Platform's webhook screen. Stripe also sends `invoice.payment_failed` beside `invoice.payment_action_required` the moment a redirect method (Klarna) sends the Client away to approve it, before she has done anything (seen in the Sandbox on [#2225](https://github.com/markgoho/doula-cloud/issues/2225)), so the handler asks Stripe first and records nothing while the newest PaymentIntent is `requires_action`.
 
 `payment_intent.processing` marks a payment on its way ([#2225](https://github.com/markgoho/doula-cloud/issues/2225)): a US bank debit stays `processing` for up to 4 business days, and Stripe keeps its Invoice `open` meanwhile, so ours stays open and `invoices.payment_processing_since` holds the fact beside it. Every Staff and Client read of the Invoice says "Payment on its way" while it is set, and `invoice.paid` or `invoice.payment_failed` clears it. Under API version `2026-07-29.dahlia` a PaymentIntent names no Invoice, so the handler asks Stripe which one it pays: `GET /v1/invoice_payments` filtered by `payment[type]=payment_intent` and `payment[payment_intent]`, with `data.payment.payment_intent.payment_method` expanded, which also gives the PaymentIntent's status now (a late delivery for a payment that already finished marks nothing) and its method. Verified read-only against a paid Invoice on a Sandbox connected account. Without the subscription a deployed bank payment reads "Not yet paid" until it clears.
 
@@ -448,7 +449,7 @@ They point at the raw Cloud Run URL — the one `gcloud run services describe` r
 | --- | --- | --- | --- | --- | --- |
 | `/api/stripe/webhook` | `checkout.session.completed` | snapshot | `@self` | `we_1U7NT01rKoVEA79vnOcBFqtV`, enabled, imported | created by [#2463](https://github.com/markgoho/doula-cloud/issues/2463) |
 | `/api/stripe/account-webhook` | `v2.core.account[configuration.merchant].capability_status_updated` | thin | `@self` | `ed_test_61VGn5QffuUmiONhX16VGl100QSQI7KSJpC2tKXrs4xU`, enabled, imported | created by #2463 |
-| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled, imported | created by #2463 |
+| `/api/stripe/connect-webhook` | `invoice.paid`, `invoice.payment_failed`, `invoice.marked_uncollectible`, `invoice.voided`, `credit_note.created`, `refund.created`, `payment_intent.processing` | snapshot | `@accounts` | `we_1U7Ocp1rKoVEA79vT9AXETKU`, enabled, imported | created by #2463 |
 
 The two `we_…` rows were created as v1 webhook endpoints, and Stripe lists them as v2 event destinations too, so the module imports them as it imports the `ed_test_` row. Their signing secrets do not change.
 
