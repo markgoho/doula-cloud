@@ -61,7 +61,8 @@ const SubjectClient = "client"
 // on-call settings), and staffauth's second-factor act seam (#1532's
 // refusal of one of the five acts) and its signup (#1547's terms_accepted,
 // the Practice's agreement to the Terms of Service and the Privacy
-// Policy) all write against it. Exported for the same reason
+// Policy) and staffinvitation.Record (a Staff Invitation sent, sent
+// again or withdrawn) all write against it. Exported for the same reason
 // SubjectClient is -- a second write site is exactly the drift this
 // prevents.
 const SubjectPractice = "practice"
@@ -101,6 +102,14 @@ const (
 	// ActionFoundingGrantIssued is a Platform operator's founding grant,
 	// from ops (#2482) -- diff staffCount, credits.
 	ActionFoundingGrantIssued PracticeAction = "founding_grant_issued"
+	// ActionStaffInvited, ActionStaffInvitationResent and
+	// ActionStaffInvitationRevoked are a Staff Invitation's own moves
+	// (staffinvitation.Transitions): sent, sent again, withdrawn -- diff
+	// invitationId, plus roles, employmentType and expiresAt on a send.
+	// Accepting one writes the Membership's 'joined' row instead.
+	ActionStaffInvited           PracticeAction = "staff_invited"
+	ActionStaffInvitationResent  PracticeAction = "staff_invitation_resent"
+	ActionStaffInvitationRevoked PracticeAction = "staff_invitation_revoked"
 )
 
 // SubjectMembership is the subject_kind every write site that touches
@@ -453,6 +462,14 @@ const (
 	// was never paid.
 	ActionInvoiceVoided     EngagementAction = "invoice_voided"
 	ActionInvoiceWrittenOff EngagementAction = "invoice_written_off"
+	// ActionInvoiceNotSent records a Stripe-backed Invoice that Stripe
+	// would not finalize while it was being raised: its draft row is kept
+	// and voided (payments.TransitionAbandonDraft), so it is owed by
+	// nobody and refuses nothing. Always a SystemActor -- the raise was a
+	// Staff member's, the void is what DoulaCloud made of its failure.
+	// Kept off the Client's portal ledger (staffingActions): the Invoice
+	// never reached her.
+	ActionInvoiceNotSent EngagementAction = "invoice_not_sent"
 	// ActionPaymentReversed records reversing a manually recorded Payment
 	// (#945) -- a new, additive payments row, never an edit of the
 	// original, that returns the Invoice to 'open' once nothing covers it
@@ -617,6 +634,7 @@ var moneyActions = map[EngagementAction]bool{
 	ActionPaymentRecorded:          true,
 	ActionInvoiceVoided:            true,
 	ActionInvoiceWrittenOff:        true,
+	ActionInvoiceNotSent:           true,
 	ActionPaymentReversed:          true,
 	ActionPaymentRefunded:          true,
 	// #2271: what the Practice paid one contractor is not another's to read.
@@ -713,6 +731,8 @@ var staffingActions = map[EngagementAction]bool{
 	ActionPortalInviteRefused: true,
 	// #2520: a Draft she has not been sent.
 	ActionContractEdited: true,
+	// And an Invoice draft Stripe would not finalize: it never reached her.
+	ActionInvoiceNotSent: true,
 }
 
 // StaffingActions returns every action GLOSSARY.md's Activity entry keeps

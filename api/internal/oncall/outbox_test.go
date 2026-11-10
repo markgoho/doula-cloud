@@ -100,8 +100,8 @@ func TestGapNoticeWorker_SendsNothingForAGapNoLongerOpen(t *testing.T) {
 			if len(sender.Sent()) != 0 {
 				t.Fatalf("mailed %d messages for a gap that was %s", len(sender.Sent()), tt.name)
 			}
-			if got := e.noticeStatus(); got != statusSent {
-				t.Fatalf("status = %q, want sent with nothing mailed", got)
+			if got := e.noticeStatus(); got != statusSkipped {
+				t.Fatalf("status = %q, want skipped with nothing mailed", got)
 			}
 		})
 	}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/staffinvitation"
 )
 
 // staffInviteSubject and staffInviteText are the Staff invitation's
@@ -21,9 +22,9 @@ import (
 // (neither applies here regardless). link is the only variable.
 const staffInviteSubject = "You've been invited to join a practice on DoulaCloud"
 
-// invitationStatusPending mirrors practice_invitations.status's live
-// value (00030): a row still open to being accepted.
-const invitationStatusPending = "pending"
+// invitationStatusPending is practice_invitations.status's live value: a
+// row still open to being accepted.
+const invitationStatusPending = string(staffinvitation.StatusPending)
 
 func staffInviteText(link string) string {
 	return "Hello,\n\n" +
@@ -103,15 +104,12 @@ type pendingRow struct {
 const claimQuery = `SELECT o.id, o.attempt_count, o.invite_token, pi.address, pi.status, pi.expires_at
 	 FROM staff_invite_outbox o
 	 JOIN practice_invitations pi ON pi.id = o.invitation_id
-	 WHERE o.status = 'pending' AND o.next_attempt_at <= now()
-	 ORDER BY o.next_attempt_at
-	 LIMIT $1
-	 FOR UPDATE OF o SKIP LOCKED`
+	 ` + outbox.ClaimNextAliasO
 
 func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
-	var meta outbox.RowMeta
 	var r pendingRow
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.inviteToken, &r.address, &r.status, &r.expiresAt); err != nil {
+	meta, err := outbox.ScanMeta(rows, &r.inviteToken, &r.address, &r.status, &r.expiresAt)
+	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, r, fmt.Errorf("staffinvite: scan outbox row: %w", err)
 	}
@@ -119,9 +117,9 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 }
 
 // compose resolves one pending row: skipped if the Invitation is no
-// longer pending or has expired -- accepted, revoked, or expired,
-// whether or not something has gotten around to flipping the status
-// column yet, either way nothing to deliver -- mailed otherwise. It
+// longer pending -- accepted, revoked, or expired by
+// staffinvitation.StateOf, the one derivation of expiry every reader of
+// an Invitation uses -- mailed otherwise. It
 // joins practice_invitations for the recipient's address and current
 // status at send time, so an Invitation resolved through some other path
 // before this row was sent is never mailed. The mailable token itself
@@ -129,7 +127,7 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 // ever holds its digest (00030).
 func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
 	return func(_ context.Context, _ *sql.Tx, r pendingRow, now time.Time) (string, string, string, error) {
-		if r.status != invitationStatusPending || !r.expiresAt.After(now) {
+		if staffinvitation.StateOf(staffinvitation.Status(r.status), r.expiresAt, now) != staffinvitation.StatePending {
 			return "", "", "", outbox.ErrAlreadyDone
 		}
 		link := mailer.AppBaseURL + "/accept-invite?token=" + r.inviteToken.String

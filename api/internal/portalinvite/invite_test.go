@@ -88,7 +88,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 	firstExpiresAt := inviteTokenExpiresAt(t, s.DB, firstOut.ClientPortalUserID)
 	// #2522: a refused accept on the first token is a fact about that
 	// token; rotating it asks again.
-	s.Exec(`UPDATE client_portal_users SET access_refused_at = now() WHERE id = $1`, firstOut.ClientPortalUserID)
+	s.Exec(`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE id = $1`, firstOut.ClientPortalUserID)
 
 	secondOut := inviteSucceeding(s, s.Engagement.ID, http.StatusOK)
 
@@ -132,7 +132,7 @@ func TestInviteHandler_ReinviteRotatesToken(t *testing.T) {
 func TestInviteHandler_AlreadyAcceptedConflict(t *testing.T) {
 	s := newInviteScene(t, invitedClient("Accepted Client", "accepted@example.com"))
 	testdb.SeedPortalAccount(t, s.DB, "already-accepted-uid", "already-accepted-uid@example.com")
-	s.Exec(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ('already-accepted-uid', $1)`, s.Engagement.Client.ID)
+	s.Exec(`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES ('already-accepted-uid', $1, 'accepted')`, s.Engagement.Client.ID)
 
 	out := reqtest.Expect[apierr.APIError](t, http.MethodPost, s.PracticeURL(invitePath(s.Engagement.ID)), http.StatusConflict, s.SignedIn)
 

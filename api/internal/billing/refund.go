@@ -17,6 +17,11 @@ import (
 // escheats an unspent balance to New York at three years' dormancy, so a
 // shorter window would mean refusing a Practice her own money and then
 // handing the same money to the State (#390, amended on #439).
+//
+// The window is decided in SQL, by credit_lot_refund_closes_at (00176),
+// because ops_record_refund refuses a lot outside it as well as the quote
+// leaving it out; this constant names the same three years for Go, and
+// lotstate_test.go holds the two to one another.
 const RefundWindowYears = 3
 
 var (
@@ -80,43 +85,29 @@ func refundByRequestKey(ctx context.Context, tx *sql.Tx, practiceID, requestKey 
 	return receipt, true, nil
 }
 
-// refundableLots is the FIFO-ordered subset of a Practice's open lots that
-// a refund may draw from: purchases only, inside the window.
-//
-// Credits given free of charge are not refundable -- /support promises a
-// refund on Credits a Practice "has purchased", and a grant is not one.
-// They are still spent first, because openLots is FIFO and a grant is
-// always older, so a Practice's own money is the last thing consumed.
-func refundableLots(lots []lot, now time.Time) []lot {
-	refundable := []lot{}
-	for _, l := range lots {
-		if l.unitPriceCents <= 0 || !l.stripePaymentIntentID.Valid {
-			continue
-		}
-		if now.After(l.createdAt.AddDate(RefundWindowYears, 0, 0)) {
-			continue
-		}
-		refundable = append(refundable, l)
-	}
-	return refundable
-}
-
-// planRefund draws from **one** lot: the oldest purchase that is unspent and
-// inside the window. A refund is a reversal of a payment, and two
+// planRefund draws from **one** lot: the oldest ActRefund admits, an open
+// purchase inside the window. A refund is a reversal of a payment, and two
 // purchases are two payments -- issuing one refund across both would mean
 // two Stripe calls that cannot both be undone if the second fails. A
 // Practice wanting more than one purchase back asks twice, and each
 // answer stands on its own.
 //
+// Credits given free of charge are not refundable -- /support promises a
+// refund on Credits a Practice "has purchased", and a grant is not one.
+// They are still spent first, because draws are FIFO and a grant is
+// always older, so a Practice's own money is the last thing consumed.
+// Forfeited Credits are not refundable either: a forfeit drains the lots
+// it draws on, so a deleted Practice has none ActRefund admits.
+//
 // Each tax share is computed cumulatively against the lot, so a run of
 // partial refunds returns exactly the tax the lot was charged.
 func planRefund(ctx context.Context, tx *sql.Tx, practiceID string, credits int, now time.Time) (lot, RefundQuote, error) {
-	lots, err := refundLots(ctx, tx, practiceID)
+	lots, err := refundLots(ctx, tx, practiceID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return lot{}, RefundQuote{}, err
 	}
-	refundable := refundableLots(lots, now)
+	refundable := ActRefund.from(lots)
 	if len(refundable) == 0 {
 		return lot{}, RefundQuote{}, ErrNothingRefundable
 	}

@@ -52,6 +52,7 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import type { FormError } from '#lib/formErrors.js';
 
@@ -65,7 +66,8 @@
 		href?: string;
 		change?: Fact | 'mode' | 'name';
 	}
-	let current = $state<PracticeWebsite | undefined>();
+	const site = new PageRead<PracticeWebsite>();
+	const current = $derived(site.value);
 	// Both come off practices/[practiceId]/+layout.ts's already-resolved
 	// read (#835), not a fetch this page makes itself: the Practice's
 	// name -- which the hosted page shows as the business name -- and the
@@ -74,7 +76,6 @@
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	let practiceName = $derived(session.practiceName);
 	let isPracticeOwner = $derived(isOwner(session));
-	let loadError = $state('');
 
 	/* MO-G15 (#2196): Getting paid sends her here before it offers Connect
 	   Stripe, and marks the link so. A save then takes her back there,
@@ -115,20 +116,20 @@
 	let policyRemaining = $derived(MAX_FACT_LENGTH - [...cancellationPolicy].length);
 
 	onMount(async () => {
-		try {
-			current = await loadWebsite(apiFetchWithSession, page.params.practiceId!);
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load your website settings';
-			return;
-		}
+		const isLoaded = await site.load(
+			() => loadWebsite(apiFetchWithSession, page.params.practiceId!),
+			'Failed to load your website settings'
+		);
+		if (!isLoaded) return;
+		const loaded = site.value!;
 
 		/* Whatever she has already said is what the form starts from, so
 		   coming back to change one word does not mean retyping the rest. */
-		ownUrl = current.ownUrl;
-		serviceDescription = current.serviceDescription;
-		cancellationPolicy = current.cancellationPolicy;
-		if (current.mode !== 'undeclared') {
-			choice = current.mode;
+		ownUrl = loaded.ownUrl;
+		serviceDescription = loaded.serviceDescription;
+		cancellationPolicy = loaded.cancellationPolicy;
+		if (loaded.mode !== 'undeclared') {
+			choice = loaded.mode;
 			step = 'saved';
 		} else if (!isPracticeOwner) {
 			/* #1968 (ADR-0055: no disabled submit button). Only an Owner
@@ -238,16 +239,17 @@
 			 * longer showing. A button that silently does nothing is the one
 			 * outcome worth designing out.
 			 */
-			current = await saveWebsite(
+			const saved = await saveWebsite(
 				apiFetchWithSession,
 				page.params.practiceId!,
 				choice === 'hosted'
 					? { mode: 'hosted', serviceDescription, cancellationPolicy }
 					: { mode: 'own', ownUrl }
 			);
+			site.set(saved);
 			fieldErrors = {};
 			if (isFromGettingPaid) {
-				await gotoWithOutcome(gettingPaidHref, websiteSavedMessage(current.mode));
+				await gotoWithOutcome(gettingPaidHref, websiteSavedMessage(saved.mode));
 				return;
 			}
 			goTo('saved');
@@ -550,9 +552,7 @@
 	{/if}
 {/snippet}
 
-{#if loadError}
-	<FormPage title="Your website" {loadError} fieldsets={[]} />
-{:else if current}
+{#if current}
 	{#if step === 'answers'}
 		<!-- `novalidate`: this page refuses the submit and says so once, at
 		     the top, rather than the browser stopping at the first empty
@@ -605,5 +605,5 @@
 		/>
 	{/if}
 {:else}
-	<FormPage title="Your website" loading="Loading your website settings" fieldsets={[]} />
+	<FormPage title="Your website" read={site.frame('Loading your website settings')} fieldsets={[]} />
 {/if}

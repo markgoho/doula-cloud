@@ -146,7 +146,7 @@ func TestPracticeList_ShowsEachPracticesFields(t *testing.T) {
 func TestPracticeList_CarriesNoClientPerStaffSignInBillingModeOrSubscriptionField(t *testing.T) {
 	s := newListStack(t)
 	cookie := s.signedInCookie()
-	s.exec(`UPDATE practices SET deleted_at = $2 WHERE id = $1`, testdb.SeedPractice(t, s.db, "Gone"), listGrantedAt)
+	testdb.SeedPracticeDeletion(t, s.db, testdb.SeedPractice(t, s.db, "Gone"), listSignedUp, listGrantedAt, &listGrantedAt)
 
 	for _, path := range []string{"/api/practices", "/api/practices/deleted"} {
 		page := decodeList(t, s.list(path, cookie))
@@ -175,11 +175,10 @@ func TestPracticeList_AFinalizedDeletionMovesToTheDeletedList(t *testing.T) {
 	s := newListStack(t)
 	cookie := s.signedInCookie()
 	pending := testdb.SeedPractice(t, s.db, "Pending Deletion")
-	s.exec(`UPDATE practices SET created_at = $2, deletion_requested_at = $3, deletion_finalize_at = $4 WHERE id = $1`,
-		pending, listSignedUp.Add(time.Hour), listGrantedAt, listGrantedAt.AddDate(0, 0, 30))
+	s.exec(`UPDATE practices SET created_at = $2 WHERE id = $1`, pending, listSignedUp.Add(time.Hour))
+	testdb.SeedPracticeDeletion(t, s.db, pending, opsStart.AddDate(0, 0, -1), opsStart.AddDate(0, 0, 29), nil)
 	gone := testdb.SeedPractice(t, s.db, "Gone")
-	s.exec(`UPDATE practices SET deletion_requested_at = $2, deletion_finalize_at = $3, deleted_at = $3 WHERE id = $1`,
-		gone, listSignedUp, listGrantedAt)
+	testdb.SeedPracticeDeletion(t, s.db, gone, listSignedUp, listGrantedAt, &listGrantedAt)
 
 	live := decodeList(t, s.list("/api/practices", cookie))
 	names := []string{}
@@ -191,16 +190,54 @@ func TestPracticeList_AFinalizedDeletionMovesToTheDeletedList(t *testing.T) {
 	if !slices.Equal(names, []string{"Pending Deletion", listPracticeName}) {
 		t.Errorf("live list = %v, want the pending Practice, newest first, and no deleted one", names)
 	}
-	if got := string(live.Items[0]["deletion"]); compactJSON(t, got) != compactJSON(t, `{"requestedAt":"2026-09-15T10:00:00Z","finalizesAt":"2026-10-15T10:00:00Z","deletedAt":null}`) {
+	if got := string(live.Items[0]["deletion"]); compactJSON(t, got) != compactJSON(t, `{"standing":"pending_deletion","requestedAt":"2026-11-01T09:00:00Z","finalizesAt":"2026-12-01T09:00:00Z","deletedAt":null}`) {
 		t.Errorf("pending deletion = %s", got)
+	}
+	var active *struct{}
+	if err := json.Unmarshal(live.Items[1]["deletion"], &active); err != nil || active != nil {
+		t.Errorf("an active Practice's deletion = %s, want none", live.Items[1]["deletion"])
 	}
 
 	deleted := decodeList(t, s.list("/api/practices/deleted", cookie))
 	if len(deleted.Items) != 1 || string(deleted.Items[0]["id"]) != `"`+gone+`"` {
 		t.Fatalf("deleted list = %+v, want only %s", deleted.Items, gone)
 	}
-	if got := string(deleted.Items[0]["deletion"]); compactJSON(t, got) != compactJSON(t, `{"requestedAt":"2026-09-14T15:00:00Z","finalizesAt":"2026-09-15T10:00:00Z","deletedAt":"2026-09-15T10:00:00Z"}`) {
+	if got := string(deleted.Items[0]["deletion"]); compactJSON(t, got) != compactJSON(t, `{"standing":"deleted","requestedAt":"2026-09-14T15:00:00Z","finalizesAt":"2026-09-15T10:00:00Z","deletedAt":"2026-09-15T10:00:00Z"}`) {
 		t.Errorf("finalized deletion = %s", got)
+	}
+}
+
+// A Practice still pending after its finalize date -- a finalization
+// that keeps failing, or a dead-lettered finalize row -- stays on the
+// live list and reads finalize_overdue, at the request's own instant:
+// nothing re-enqueues it, so ops is the one place it shows.
+func TestPracticeList_ADeletionPastItsDateReadsOverdue(t *testing.T) {
+	s := &listStack{opsStack: newOpsStack(t, false)}
+	cookie := s.signedInCookie()
+	stuck := testdb.SeedPractice(t, s.db, "Stuck")
+	finalizeAt := opsStart.Add(time.Minute)
+	testdb.SeedPracticeDeletion(t, s.db, stuck, finalizeAt.AddDate(0, 0, -30), finalizeAt, nil)
+	s.exec(`INSERT INTO practice_deletion_outbox (practice_id, act, status, next_attempt_at, attempt_count, dead_letter_reason)
+	        VALUES ($1, 'finalize', 'dead_lettered', $2, 5, 'retries_exhausted')`, stuck, finalizeAt)
+
+	standing := func() string {
+		t.Helper()
+		page := decodeList(t, s.list("/api/practices", cookie))
+		var d struct {
+			Standing string `json:"standing"`
+		}
+		if err := json.Unmarshal(page.Items[0]["deletion"], &d); err != nil {
+			t.Fatalf("decode deletion: %v", err)
+		}
+		return d.Standing
+	}
+
+	if got := standing(); got != "pending_deletion" {
+		t.Errorf("standing before its date = %s, want pending_deletion", got)
+	}
+	s.now = finalizeAt
+	if got := standing(); got != "finalize_overdue" {
+		t.Errorf("standing at its date, with the finalize row dead-lettered = %s, want finalize_overdue", got)
 	}
 }
 

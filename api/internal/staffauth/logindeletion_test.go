@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/authntest"
@@ -24,6 +25,17 @@ func newDeleter(t *testing.T, staff ...fixture.StaffOption) *env {
 	e := newSoleStaffEnv(t, staff...)
 	e.Colleague(fixture.Owner())
 	return e
+}
+
+// contractAtSecondPractice gives her a contractor Membership, holding
+// roles, at a second Practice with an Owner of its own.
+func (e *env) contractAtSecondPractice(roles string) fixture.PracticeRecord {
+	e.T.Helper()
+	second := fixture.Practice(e.T, e.DB, fixture.PracticeName("Second Practice"))
+	fixture.Staff(e.T, e.DB, second, fixture.Owner())
+	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES ($1, $2, $3, 'contractor')`, second.ID, e.Staff.ID, roles)
+	return second
 }
 
 // newSoleStaffEnv is newDeleter with nobody to stay behind: she is the
@@ -122,10 +134,7 @@ func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 // log carries the 'removed' event naming what the Membership held.
 func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
-	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
-	fixture.Staff(t, e.DB, second, fixture.Owner())
-	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, '{doula,admin}', 'contractor')`, second.ID, e.Staff.ID)
+	second := e.contractAtSecondPractice("{doula,admin}")
 
 	e.erase()
 
@@ -143,6 +152,25 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 		  WHERE practice_id = $1 AND subject_id = $2 AND action = 'removed'`, second.ID, e.Staff.ID)
 	if !strings.Contains(diff, "admin") || !strings.Contains(diff, contractorType) {
 		t.Fatalf("removal diff = %s, want the roles and employment type the membership held", diff)
+	}
+}
+
+// TestDeleteLoginHandler_EndsHerAttachmentsAtEveryPractice: deleting her
+// login ends each Membership, so it ends every Attachment she holds open
+// at each Practice, with her as the one who ended them.
+func TestDeleteLoginHandler_EndsHerAttachmentsAtEveryPractice(t *testing.T) {
+	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
+	second := e.contractAtSecondPractice("{doula}")
+	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, e.Practice).ID, e.Staff.ID)
+	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, second).ID, e.Staff.ID)
+
+	e.erase()
+
+	if n := countRows(t, e.DB,
+		`SELECT count(*) FROM engagement_attachments
+		  WHERE staff_id = $1 AND state = 'ended' AND ended_by = $1 AND ended_reason = 'membership_ended'`,
+		e.Staff.ID); n != 2 {
+		t.Fatalf("attachments ended by her own deletion = %d, want one at each Practice", n)
 	}
 }
 
@@ -203,7 +231,8 @@ func TestDeleteLoginHandler_RefusesWhileSoleOwner(t *testing.T) {
 // so being its Owner no longer means anything and must not trap her.
 func TestDeleteLoginHandler_AllowsSoleOwnerOfFinalizedPractice(t *testing.T) {
 	e := newSoleStaffEnv(t, fixture.Owner())
-	e.Exec(`UPDATE practices SET deleted_at = now() WHERE id = $1`, e.Practice.ID)
+	now := time.Now()
+	testdb.SeedPracticeDeletion(t, e.DB, e.Practice.ID, now.AddDate(0, 0, -30), now, &now)
 
 	e.erase()
 
@@ -385,14 +414,38 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 	e.erase()
 
 	for _, table := range []string{
-		"staff_token_mail_outbox",
+		tokenMailOutbox,
 		"session_notice_outbox",
-		"staff_mfa_recovery_outbox",
+		recoveryOutbox,
 	} {
 		//nolint:gosec // the table name is this test's own literal, from the slice above
 		if n := countRows(t, e.DB,
 			`SELECT count(*) FROM `+table+` WHERE status = 'pending'`); n != 0 {
 			t.Fatalf("%s: pending rows = %d, want every one addressed to her resolved", table, n)
+		}
+	}
+
+	// Each is resolved as skipped for her deletion, not marked sent, and
+	// the two that carried a plaintext secret -- her own reset or
+	// verification token, and a recovery code, which is a way back into
+	// another person's account -- no longer hold it. 00061 promises the
+	// token is gone the moment a row leaves pending; the deletion once
+	// marked these rows sent by hand and left both behind.
+	for _, table := range []string{
+		tokenMailOutbox,
+		"session_notice_outbox",
+		recoveryOutbox,
+	} {
+		//nolint:gosec // the table name is this test's own literal, from the slice above
+		if n := countRows(t, e.DB,
+			`SELECT count(*) FROM `+table+` WHERE status = 'skipped' AND skip_reason = 'login_deleted' AND skipped_at IS NOT NULL`); n != 1 {
+			t.Fatalf("%s: rows skipped for login_deleted = %d, want 1", table, n)
+		}
+	}
+	for _, table := range []string{tokenMailOutbox, recoveryOutbox} {
+		//nolint:gosec // the table name is this test's own literal, from the slice above
+		if n := countRows(t, e.DB, `SELECT count(*) FROM `+table+` WHERE token IS NOT NULL`); n != 0 {
+			t.Fatalf("%s: rows still holding a token = %d, want 0", table, n)
 		}
 	}
 
@@ -409,6 +462,12 @@ func TestDeleteLoginHandler_ResolvesQueuedMailAddressedToHer(t *testing.T) {
 
 // seedPendingMail queues one pending row addressed to her in each of the
 // four outbox tables the deletion has to resolve.
+// The two outboxes addressed to her whose rows hold a plaintext secret.
+const (
+	tokenMailOutbox = "staff_token_mail_outbox"
+	recoveryOutbox  = "staff_mfa_recovery_outbox"
+)
+
 func seedPendingMail(e *env) {
 	e.Exec(`INSERT INTO staff_token_mail_outbox (identity_uid, kind, token) VALUES ($1, 'email_verification', 'a-token')`, e.Staff.UID)
 	e.Exec(`INSERT INTO staff_email_change_outbox (identity_uid, old_email) VALUES ($1, 'old@example.com')`, e.Staff.UID)

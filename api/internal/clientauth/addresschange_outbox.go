@@ -38,7 +38,7 @@ type addressChangeRow struct {
 // No join, unlike magicLinkClaimQuery: to_address is on the row itself.
 const addressChangeClaimQuery = `SELECT id, attempt_count, token, to_address
 	 FROM portal_address_change_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`

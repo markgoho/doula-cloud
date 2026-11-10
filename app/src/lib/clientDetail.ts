@@ -8,6 +8,8 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { ClientStanding } from './clientStanding.js';
+import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 
@@ -133,6 +135,10 @@ export interface ClientDetail extends ClientRecord {
 	resolvedFields: ResolvedField[];
 	engagements: EngagementSummary[];
 	history: HistoryEntry[];
+	/** The record's one named standing -- mirrors clientstanding.Standing.
+	 * What a screen asks (through `clientStanding.ts`) to decide whether
+	 * the record can take a write; present on every response. */
+	standing: ClientStanding;
 	/** When this Client's data was erased on her own request (ADR-0027),
 	 * absent for every Client who has not asked. A screen reads it to
 	 * explain why her record shows a placeholder instead of a name, and
@@ -146,7 +152,8 @@ export interface ClientDetail extends ClientRecord {
 	/** Her portal-invite state, the same two facts a Clients list row
 	 * carried until #2022 moved them here -- absent status is "never
 	 * invited", and `emailSuppressed` is a blocked address (#785). */
-	portalInviteStatus?: string;
+	portalInviteStatus?: PortalAccessState;
+	portalInviteDelivery?: PortalInviteDelivery;
 	emailSuppressed?: boolean;
 	/** The survivor's id, present only once this row has been absorbed
 	 * into another Client (ADR-0017's amendment, #814). Every other field

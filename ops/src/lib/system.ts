@@ -13,7 +13,16 @@ export type System = {
 	};
 	webhooks: { route: string; lastArrivalAt: Instant | null; refusals: Refusals }[];
 	eventTypes: { route: string; type: string; lastArrivalAt: Instant | null }[];
-	outboxes: { name: string; pending: number; deadLettered: number; oldestDueAt: Instant | null }[];
+	outboxes: {
+		name: string;
+		pending: number;
+		sent: number;
+		skipped: number;
+		deadLettered: number;
+		bounced: number;
+		complained: number;
+		oldestDueAt: Instant | null;
+	}[];
 	pilot: {
 		gate: { openedAt: Instant | null; openedBy: string | null };
 		allowlist: { total: number; items: { address: string; addedAt: Instant; addedBy: string | null }[] };

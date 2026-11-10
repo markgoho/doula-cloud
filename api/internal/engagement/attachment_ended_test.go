@@ -22,16 +22,16 @@ func (e *env) detailRefusal(want int) apierr.APIError {
 
 func (e *env) endAttachments(endedAt string) {
 	e.T.Helper()
-	e.Exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
+	e.Exec(`UPDATE engagement_attachments SET ended_at = $2::timestamptz, ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, e.Engagement.ID, endedAt)
 }
 
 func (e *env) seedAcceptedOffer(dueDate string) {
 	e.T.Helper()
 	e.Exec(`INSERT INTO engagement_offers
 		     (engagement_id, staff_id, employment_type, amount_cents, terms, client_first_initial, client_area,
-		      due_date, state, offered_by, expires_at, decided_at, decided_by)
+		      due_date, state, offered_by, expires_at, decided_at, decided_by, decided_by_kind)
 		 VALUES ($1, $2, 'contractor', 55000, 'Primary doula', 'A', 'Rochester', $3::date, 'accepted', $2,
-		         now() + interval '7 days', now(), $2)`,
+		         now() + interval '7 days', now(), $2, 'staff')`,
 		e.Engagement.ID, e.Staff.ID, dueDate)
 }
 

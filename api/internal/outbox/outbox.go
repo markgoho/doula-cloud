@@ -1,8 +1,9 @@
 // Package outbox is the shared durable-mail-dispatch machinery ADR-0010
 // and ADR-0013 describe once but this codebase used to implement eight
 // times over: pending row -> backoff -> batch claim under
-// FOR UPDATE SKIP LOCKED -> mark sent/failed/dead-lettered -> HTTP send
-// wrapper. Every mail kind (portalinvite, billing's low-credit,
+// FOR UPDATE SKIP LOCKED -> mark sent/skipped/failed/dead-lettered -> HTTP
+// send wrapper. lifecycle.go declares the row's states and the moves
+// between them once; every Mark* method here is one of those moves. Every mail kind (portalinvite, billing's low-credit,
 // payments' payout and payment-received, sessionnotice, staffinvite,
 // offer, engagementrequest) keeps its own outbox table, claim query, row
 // shape, recipient resolution, copy, and skip-at-send recheck -- those
@@ -62,15 +63,15 @@ const (
 // transaction.
 const MaxBatch = 100
 
-// Worker holds what every mail kind's worker needs to mark a row sent,
-// failed, or dead-lettered and to mail it. Table drives every UPDATE this
-// package issues; it is always a compile-time constant a package passes
-// in, never request data, so building it into SQL via fmt.Sprintf carries
-// no injection risk. ClearOnTerminal names outbox columns to null out
-// once a row leaves 'pending' for good (sent, or dead-lettered) -- only
-// staffinvite and offer need this, for the plaintext invite tokens/access
-// codes their outbox rows hold that practice_invitations/engagement_offers
-// only ever store a digest of; every other kind leaves it nil.
+// Worker holds what every mail kind's worker needs to move a row through
+// the lifecycle lifecycle.go declares and to mail it. Table drives every
+// UPDATE this package issues; it is always a compile-time constant a
+// package passes in, never request data, so building it into SQL via
+// fmt.Sprintf carries no injection risk. ClearOnTerminal names outbox
+// columns to null out once a row leaves 'pending' for good (sent,
+// skipped, or dead-lettered) -- the plaintext tokens and access codes a
+// few kinds' rows hold, of which the record they serve only ever stores
+// a digest; every other kind leaves it nil.
 type Worker struct {
 	Sender          mail.Sender
 	Now             func() time.Time
@@ -80,27 +81,50 @@ type Worker struct {
 	ClearOnTerminal []string
 }
 
-func (w Worker) clearClause() string {
-	var b strings.Builder
-	for _, col := range w.ClearOnTerminal {
-		b.WriteString(", ")
-		b.WriteString(col)
-		b.WriteString(" = NULL")
+// apply runs t against id: it sets t.To (when the move changes the
+// state), the move's own columns in set (placeholders $1.. in order,
+// filled from args), and on an exit from pending the ClearOnTerminal
+// columns, all only WHERE the row is still in t.From. A statement that
+// moved no row is ErrNotInState, never silently done.
+func (w Worker) apply(ctx context.Context, tx *sql.Tx, t Transition, id string, set []string, args ...any) error {
+	if t.To != t.From {
+		set = append([]string{fmt.Sprintf("status = '%s'", t.To)}, set...)
 	}
-	return b.String()
-}
-
-// MarkSent records id as delivered.
-func (w Worker) MarkSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
-	//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
-	if _, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET status = 'sent', sent_at = $1, last_error = NULL%s WHERE id = $2`, w.Table, w.clearClause()),
-		now, id,
-	); err != nil {
+	if t.LeavesPending() {
+		for _, col := range w.ClearOnTerminal {
+			set = append(set, col+" = NULL")
+		}
+	}
+	//nolint:gosec // query is built from w.Table, a compile-time constant each package supplies, and this file's own column names and declared states -- never request data
+	query := fmt.Sprintf(`UPDATE %s SET %s WHERE id = $%d AND status = '%s'`,
+		w.Table, strings.Join(set, ", "), len(args)+1, t.From)
+	res, err := tx.ExecContext(ctx, query, append(args, id)...)
+	if err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("outbox: mark %s row sent: %w", w.Table, err)
+		return fmt.Errorf("outbox: %s %s row: %w", t.Name, w.Table, err)
+	}
+	affected, err := res.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: driver failure, not exercised by unit tests
+		return fmt.Errorf("outbox: %s %s row: %w", t.Name, w.Table, err)
+	}
+	if affected != 1 {
+		return fmt.Errorf("outbox: %s %s row %s: %w", t.Name, w.Table, id, ErrNotInState)
 	}
 	return nil
+}
+
+// MarkSent records id as sent: mailed, or its job done.
+func (w Worker) MarkSent(ctx context.Context, tx *sql.Tx, id string, now time.Time) error {
+	return w.apply(ctx, tx, TransitionSend, id, []string{"sent_at = $1", "last_error = NULL"}, now)
+}
+
+// MarkSkipped records id as resolved with nothing sent, and why: the
+// send-time recheck, or the act that queued it, found nothing left to do.
+// It is what a row used to be marked sent for, and is told apart from a
+// send now (00169).
+func (w Worker) MarkSkipped(ctx context.Context, tx *sql.Tx, id string, reason SkipReason, now time.Time) error {
+	return w.apply(ctx, tx, TransitionSkip, id, []string{"skip_reason = $1", "skipped_at = $2", "last_error = NULL"}, reason, now)
 }
 
 // MarkDeadLetteredNow dead-letters id outright, with no further retry --
@@ -108,13 +132,74 @@ func (w Worker) MarkSent(ctx context.Context, tx *sql.Tx, id string, now time.Ti
 // portalinvite's Client with no email on file), unlike MarkFailed's
 // transient-send-error retries.
 func (w Worker) MarkDeadLetteredNow(ctx context.Context, tx *sql.Tx, id, reason string) error {
-	//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
-	if _, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', dead_letter_reason = $1, last_error = $2%s WHERE id = $3`, w.Table, w.clearClause()),
-		OwnData, reason, id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("outbox: dead-letter %s row: %w", w.Table, err)
+	return w.apply(ctx, tx, TransitionDeadLetter, id, []string{"dead_letter_reason = $1", "last_error = $2"}, OwnData, reason)
+}
+
+// MarkReported moves a sent id to what Mailgun later reported of it,
+// t being TransitionBounce or TransitionComplain. Any other transition is
+// refused before the database is asked.
+func (w Worker) MarkReported(ctx context.Context, tx *sql.Tx, id string, t Transition) error {
+	if t != TransitionBounce && t != TransitionComplain {
+		return fmt.Errorf("outbox: %s is not a delivery report", t.Name)
+	}
+	return w.apply(ctx, tx, t, id, nil)
+}
+
+// LockPending runs query, which selects the id of each row of w.Table to
+// resolve and takes its lock (FOR UPDATE), and returns those ids. It is
+// how an act outside a worker -- a login deletion, an edit that revokes
+// an invitation -- reaches the rows queued for it, so that it moves each
+// through the same declared transition a worker would, ClearOnTerminal
+// included, rather than with a status UPDATE of its own. The owning
+// package writes query, as it writes its claim query.
+func (w Worker) LockPending(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("outbox: lock pending %s rows: %w", w.Table, err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("outbox: scan %s id: %w", w.Table, err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: DB row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("outbox: iterate %s ids: %w", w.Table, err)
+	}
+	return ids, nil
+}
+
+// SkipPending marks every row LockPending's query selects skipped, with
+// reason.
+func (w Worker) SkipPending(ctx context.Context, tx *sql.Tx, query string, reason SkipReason, now time.Time, args ...any) error {
+	ids, err := w.LockPending(ctx, tx, query, args...)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := w.MarkSkipped(ctx, tx, id, reason, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// DeadLetterPending dead-letters every row LockPending's query selects,
+// outright, with reason as MarkDeadLetteredNow records it.
+func (w Worker) DeadLetterPending(ctx context.Context, tx *sql.Tx, query, reason string, args ...any) error {
+	ids, err := w.LockPending(ctx, tx, query, args...)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := w.MarkDeadLetteredNow(ctx, tx, id, reason); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -135,32 +220,20 @@ func (w Worker) MarkFailed(ctx context.Context, tx *sql.Tx, id string, attemptCo
 	}
 	nextAttempt := attemptCount + 1
 	if nextAttempt >= len(BackoffSchedule) {
-		//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
-		if _, err := tx.ExecContext(ctx,
-			fmt.Sprintf(`UPDATE %s SET status = 'dead_lettered', dead_letter_reason = $1, attempt_count = $2, last_error = $3%s WHERE id = $4`, w.Table, w.clearClause()),
-			RetriesExhausted, nextAttempt, sendErr.Error(), id,
-		); err != nil {
-			// coverage:ignore reason: DB update failure, not exercised by unit tests
-			return fmt.Errorf("outbox: dead-letter %s row: %w", w.Table, err)
-		}
-		return nil
+		return w.apply(ctx, tx, TransitionDeadLetter, id,
+			[]string{"dead_letter_reason = $1", "attempt_count = $2", "last_error = $3"},
+			RetriesExhausted, nextAttempt, sendErr.Error())
 	}
-	//nolint:gosec // w.Table is a compile-time constant each package supplies, never request data
-	if _, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET attempt_count = $1, next_attempt_at = $2, last_error = $3 WHERE id = $4`, w.Table),
-		nextAttempt, now.Add(BackoffSchedule[nextAttempt-1]), sendErr.Error(), id,
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("outbox: schedule %s retry: %w", w.Table, err)
-	}
-	return nil
+	return w.apply(ctx, tx, TransitionRetry, id,
+		[]string{"attempt_count = $1", "next_attempt_at = $2", "last_error = $3"},
+		nextAttempt, now.Add(BackoffSchedule[nextAttempt-1]), sendErr.Error())
 }
 
 // SendAll mails the same subject/text to every address, stopping at the
 // first failure, and marks id accordingly -- sent once every attempted
-// address succeeded (or addresses is empty: a Practice with nobody left
-// to notify, e.g. billing/payments' owner-resolution kinds, is marked
-// sent with nothing to mail), failed otherwise. Only the multi-recipient
+// address succeeded, skipped (SkipNoRecipients) when addresses is empty
+// (a Practice with nobody left to notify, e.g. billing/payments'
+// owner-resolution kinds), failed otherwise. Only the multi-recipient
 // kinds (billing's low-credit, payments' payout and payment-received) use
 // this; single-recipient kinds call w.Sender.Send directly.
 //
@@ -197,6 +270,9 @@ func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount
 	if suppressed > 0 && suppressed == len(addresses) {
 		return w.MarkDeadLetteredNow(ctx, tx, id, suppressedErr.Error())
 	}
+	if len(addresses) == 0 {
+		return w.MarkSkipped(ctx, tx, id, SkipNoRecipients, now)
+	}
 	return w.MarkSent(ctx, tx, id, now)
 }
 
@@ -212,8 +288,9 @@ func (w Worker) SendAll(ctx context.Context, tx *sql.Tx, id string, attemptCount
 // milliseconds of skew against the Go process's clock could make a row
 // queued this instant look not yet due to a w.Now()-based comparison run
 // immediately after. Every claimQuery this package receives follows that
-// rule; it is enforced by convention in each caller's SQL, not by this
-// function.
+// rule by spelling its predicate as ClaimDue or ClaimDueAliasO
+// (lifecycle.go), and lifecycle_test.go fails on a claim that restates
+// the predicate instead.
 //
 // #1992 weighed moving the claims to w.Now() and kept them here. The
 // reason above still holds for a row's first attempt, which every

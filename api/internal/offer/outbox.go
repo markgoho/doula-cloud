@@ -78,7 +78,7 @@ type pendingRow struct {
 	inviteToken  sql.NullString
 	accessCode   sql.NullString
 	address      string
-	state        string
+	state        State
 	expiresAt    time.Time
 }
 
@@ -87,7 +87,7 @@ const claimQuery = `SELECT o.id, o.offer_id, o.attempt_count, o.invite_token, o.
 	   FROM engagement_offer_outbox o
 	   JOIN engagement_offers eo ON eo.id = o.offer_id
 	   JOIN practice_invitations pi ON pi.id = eo.invitation_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  WHERE ` + outbox.ClaimDueAliasO + `
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
 	  FOR UPDATE OF o SKIP LOCKED`
@@ -126,8 +126,8 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, p pen
 	// Not (still) open, or past its own expires_at -- decided, withdrawn,
 	// or run out, whether or not something has gotten around to flipping
 	// the state column yet -- either way, nothing to deliver.
-	if p.state != stateOffered || !p.expiresAt.After(now) {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, p.id, now))
+	if !OpenAt(p.state, p.expiresAt, now) {
+		return wrapOutboxErr(inner.MarkSkipped(ctx, tx, p.id, outbox.SkipAlreadyResolved, now))
 	}
 
 	link := w.AppBaseURL + "/offers/" + p.offerID + "?token=" + p.inviteToken.String

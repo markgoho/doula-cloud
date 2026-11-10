@@ -33,6 +33,7 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
 	const requests = new PaginatedList<PendingRequestItem>({
 		first: { items: [], hasMore: false },
@@ -40,8 +41,8 @@
 			loadPendingRequests(apiFetchWithSession, page.params.practiceId!, cursor),
 		failureMessage: 'Failed to load more pending requests'
 	});
-	let error = $state('');
-	let isLoaded = $state(false);
+	// The first page's read; the pages after it are `requests`' own.
+	const firstPage = new PageRead();
 
 	const columns = [
 		{ label: 'Client', accessor: (request: PendingRequestItem) => request.clientName },
@@ -70,13 +71,10 @@
 		void loadFirstPage();
 	});
 
-	async function loadFirstPage() {
-		try {
+	function loadFirstPage() {
+		return firstPage.load(async () => {
 			requests.reset(await loadPendingRequests(apiFetchWithSession, page.params.practiceId!));
-			isLoaded = true;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load pending requests';
-		}
+		}, 'Failed to load pending requests');
 	}
 </script>
 
@@ -95,7 +93,6 @@
 
 <ListPage
 	title="Requests awaiting approval"
-	loadError={error || undefined}
-	loading={isLoaded ? undefined : 'Loading pending requests'}
+	read={firstPage.frame('Loading pending requests')}
 	{content}
 />

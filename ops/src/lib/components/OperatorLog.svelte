@@ -2,19 +2,15 @@
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import type { FormError } from '../authRefusal.ts';
 	import { sentAt } from '../feedback.ts';
+	import { PagedList } from '../pagedList.svelte.ts';
 	import { ACTION_LABELS, logDetail, readOperatorLog, subjectFact, type LogRow } from '../operatorLog.ts';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let { onsignedout, fetcher = fetch }: { onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
-	let rows = $state<LogRow[]>([]);
-	let nextCursor = $state<string | undefined>();
-	let hasLoaded = $state(false);
-	let isLoading = $state(false);
-	let errors = $state<FormError[]>([]);
+	const log = new PagedList<LogRow>((cursor) => readOperatorLog(cursor, fetcher), () => onsignedout());
 
 	function facts(row: LogRow): { label: string; value: string }[] {
 		const out = [
@@ -27,38 +23,17 @@
 		return out;
 	}
 
-	async function load(cursor?: string) {
-		isLoading = true;
-		try {
-			const outcome = await readOperatorLog(cursor, fetcher);
-			if (outcome.kind === 'signed-out') return onsignedout();
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			/* v8 ignore next -- a read asks no fresh code, so 'step-up' never arrives */
-			if (outcome.kind === 'ok') {
-				errors = [];
-				rows = [...rows, ...outcome.value.items];
-				nextCursor = outcome.value.hasMore ? outcome.value.nextCursor : undefined;
-				hasLoaded = true;
-			}
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	onMount(() => load());
+	onMount(() => log.load());
 </script>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={log.errors} />
 
-{#if hasLoaded}
-	{#if rows.length === 0}
+{#if log.state.status === 'loaded'}
+	{#if log.state.items.length === 0}
 		<p>Nothing has been recorded yet.</p>
 	{:else}
 		<ul class="log" role="list">
-			{#each rows as row (row.id)}
+			{#each log.state.items as row (row.id)}
 				<li>
 					<stack-l>
 						<h2>{ACTION_LABELS[row.action] ?? row.action}</h2>
@@ -71,8 +46,8 @@
 				</li>
 			{/each}
 		</ul>
-		{#if nextCursor}
-			<Button label="Show more" loading={isLoading} onClick={() => load(nextCursor)} />
+		{#if log.state.nextCursor}
+			<Button label="Show more" loading={log.isLoadingMore} onClick={() => log.more()} />
 		{/if}
 	{/if}
 {/if}

@@ -25,8 +25,26 @@ const system: System = {
 		{ route: 'stripe_connect', type: 'invoice.paid', lastArrivalAt: null }
 	],
 	outboxes: [
-		{ name: 'portal_invite_outbox', pending: 3, deadLettered: 1, oldestDueAt: '2026-11-02T13:00:00Z' },
-		{ name: 'low_credit_outbox', pending: 0, deadLettered: 0, oldestDueAt: null }
+		{
+			name: 'portal_invite_outbox',
+			pending: 3,
+			sent: 7,
+			skipped: 2,
+			deadLettered: 1,
+			bounced: 4,
+			complained: 5,
+			oldestDueAt: '2026-11-02T13:00:00Z'
+		},
+		{
+			name: 'low_credit_outbox',
+			pending: 0,
+			sent: 0,
+			skipped: 0,
+			deadLettered: 0,
+			bounced: 0,
+			complained: 0,
+			oldestDueAt: null
+		}
 	],
 	pilot: {
 		gate: { openedAt: null, openedBy: null },
@@ -93,12 +111,14 @@ describe('System', () => {
 		await expect.element(table.getByRole('row', { name: 'invoice.paid Stripe Connect Not seen yet' })).toBeVisible();
 	});
 
-	it('counts each outbox’s pending and dead-lettered rows and dates the oldest one due', async () => {
+	it('counts each outbox’s rows in every state, a skip apart from a send, and dates the oldest one due', async () => {
 		await show();
 
-		const table = page.getByRole('table', { name: 'Rows waiting to be sent, and rows that failed for good' });
-		await expect.element(table.getByRole('row', { name: 'Portal invite 3 1 November 2, 2026 at 8:00 AM EST' })).toBeVisible();
-		await expect.element(table.getByRole('row', { name: 'Low credit 0 0 None due' })).toBeVisible();
+		const table = page.getByRole('table', { name: 'Rows waiting, sent, skipped with nothing to send, and failed for good' });
+		await expect
+			.element(table.getByRole('row', { name: 'Portal invite 3 7 2 1 4 5 November 2, 2026 at 8:00 AM EST' }))
+			.toBeVisible();
+		await expect.element(table.getByRole('row', { name: 'Low credit 0 0 0 0 0 0 None due' })).toBeVisible();
 	});
 
 	it('says the gate is closed', async () => {
@@ -155,5 +175,13 @@ describe('System', () => {
 
 		await expect.element(page.getByRole('alert')).toBeVisible();
 		await expect.element(page.getByRole('table')).not.toBeInTheDocument();
+	});
+
+	it('shows a read that cannot reach doula-ops in words', async () => {
+		const fetcher = vi.fn<typeof fetch>().mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+		await render(SystemSection, { fetcher, onsignedout: vi.fn() });
+
+		await expect.element(page.getByRole('alert')).toBeVisible();
 	});
 });

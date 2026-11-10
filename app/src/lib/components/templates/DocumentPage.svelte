@@ -12,7 +12,7 @@
 	 * `empty` is a string, not `OverviewHub`'s `isEmpty`/`empty` Snippet
 	 * pair: a document that does not exist yet is one sentence ("No Contract
 	 * has been sent for your care yet."), and presence-is-state keeps it the
-	 * same shape as `loading` and `loadError` beside it. A hub's empty state
+	 * same shape as the other optional props beside it. A hub's empty state
 	 * is a whole body; a document's is a line. That line is drawn as an
 	 * `EmptyState` (#2015), with `emptyAction` beside it where the reader has
 	 * one.
@@ -24,35 +24,27 @@
 	import type { Snippet } from 'svelte';
 	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageReadPending from '#lib/components/molecules/PageReadPending.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import EmptyState, { type EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
+	import { LOADED_PAGE, type PageReadState, type PageTitling } from '#lib/pageRead.svelte.js';
 
-	interface Properties {
-		/**
-		 * The one `<h1>` and the tab title, in every state. A route whose
-		 * title depends on its data passes a generic name until it arrives.
-		 */
-		title: string;
-		/**
-		 * The Staff side leaves this unset and gets the product name; the
-		 * Client portal passes its Practice's name (#431, #487).
-		 */
-		serviceName?: string;
+	/**
+	A route whose title depends on its data passes a generic name until it arrives.
+	*/
+	interface Properties extends PageTitling {
 		backHref: string;
 		backLabel?: string;
 		content: Snippet;
 		/**
-		Presence is the state, value is the Skeleton's accessible label (#480).
-		*/
-		loading?: string;
+		 * The document's own read (#480, `pageRead.svelte.ts`): loading,
+		 * with the Skeleton's accessible label; failed, with the Notice's
+		 * message; or loaded, which is also what leaving it out means.
+		 */
+		read?: PageReadState;
 		/**
-		Presence is the state, value is the Notice's message (#480).
-		*/
-		loadError?: string;
-		/**
-		Presence is the state, value is the "none yet" sentence.
+		Presence is the state, value is the "none yet" sentence. Drawn only
+		once `read` is loaded.
 		*/
 		empty?: string;
 		/**
@@ -67,33 +59,30 @@
 		backHref,
 		backLabel,
 		content,
-		loading,
-		loadError,
+		read = LOADED_PAGE,
 		empty,
 		emptyAction
 	}: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
+<PageTitle page={title} {serviceName} isPending={read.status === 'loading'} />
 
 <container-l>
 	<center-l max="var(--measure)" gutters="var(--page-gutter)">
 		<stack-l space="var(--space-5)">
 			<div class="no-print"><BackLink href={backHref} label={backLabel} /></div>
 
-			{#if loadError}
+			{#if read.status === 'failed'}
 				<!-- data-load-error: see FormPage.svelte's own comment on this
 				     attribute (#1258) -- the same fact, the same reason. -->
 				<stack-l space="var(--space-group)" data-load-error>
-					<Heading level={1} variant="page" text={title} />
-					<Notice variant="error" message={loadError} />
+					<PageReadPending {title} {read} skeleton="text" />
 				</stack-l>
-			{:else if loading}
+			{:else if read.status === 'loading'}
 				<stack-l space="var(--space-group)">
-					<Heading level={1} variant="page" text={title} />
 					<!-- `text`, not ListPage's `row`: what is coming is prose and
 					     a list of facts, not table rows. -->
-					<Skeleton variant="text" lines={6} label={loading} />
+					<PageReadPending {title} {read} skeleton="text" />
 				</stack-l>
 			{:else if empty}
 				<stack-l space="var(--space-group)">

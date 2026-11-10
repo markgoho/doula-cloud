@@ -2,26 +2,21 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
-	import type { FormError } from '#lib/authRefusal.js';
+	import { CheckRead } from '#lib/checkRead.svelte.js';
 	import { readLegalVersions, type LegalVersion } from '#lib/legalVersions.js';
 	import { newYorkDay } from '#lib/dates.js';
 	import { longDate } from '#lib/dates.js';
-		import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
+	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 
-	let versions = $state<LegalVersion[] | undefined>();
-	let errors = $state<FormError[]>([]);
+	const read = new CheckRead<LegalVersion[]>(() => goto(resolve('/sign-in')));
+	const versions = $derived(read.value);
 
-	onMount(async () => {
-		const outcome = await readLegalVersions();
-		if (outcome.kind === 'signed-out') return goto(resolve('/sign-in'));
-		if (outcome.kind === 'ok') versions = outcome.value;
-		else if (outcome.kind === 'refused') errors = outcome.errors;
-	});
+	onMount(() => read.load(() => readLegalVersions()));
 </script>
 
 <svelte:head><title>Legal versions – DoulaCloud operations</title></svelte:head>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={read.errors} />
 
 <h1>Legal versions</h1>
 <p>

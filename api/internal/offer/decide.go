@@ -10,6 +10,8 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/staffauth"
@@ -41,7 +43,7 @@ type DecisionResponse struct {
 // which is a different statement from "only one of N concurrent
 // acceptances wins". The row lock on the Engagement below is what makes
 // the second one true -- two accepts of two different Offer rows would
-// otherwise each pass their own state = 'offered' guard.
+// otherwise each pass their own TransitionAccept guard.
 //
 // Must be mounted behind staffauth.Middleware.
 func AcceptHandler() http.Handler {
@@ -51,7 +53,7 @@ func AcceptHandler() http.Handler {
 // DeclineHandler turns an Offer down. There is no reason field: #229
 // settled that a decline is durable and repeatable, and asking why turns
 // a no into a negotiation. Declining does not bar a re-offer -- 00030's
-// partial index only covers state = 'offered', so the Practice may offer
+// partial index only covers an Offer stored as open, so the Practice may offer
 // the same Engagement again, and #229 explicitly wants it to be able to.
 func DeclineHandler() http.Handler {
 	return decisionHandler(decline)
@@ -78,17 +80,15 @@ func decisionHandler(decide func(context.Context, *sql.Tx, string, string, strin
 
 // accept runs the whole acceptance in one locked window.
 func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, staffID string) (DecisionResponse, int, string) {
+	now := clock.Now(ctx)
 	var amountCents sql.NullInt64
 	var terms sql.NullString
 	err := tx.QueryRowContext(ctx,
-		`UPDATE engagement_offers
-		    SET state = 'accepted', decided_at = now(), decided_by = $1
-		  WHERE id = $2 AND staff_id = $1 AND state = 'offered'
-		 RETURNING amount_cents, terms`,
-		staffID, offerID,
+		TransitionAccept.update(`id = $3 AND staff_id = $2`, `amount_cents, terms`),
+		now, staffID, offerID,
 	).Scan(&amountCents, &terms)
 	if errors.Is(err, sql.ErrNoRows) {
-		return DecisionResponse{}, http.StatusConflict, closedMessage(ctx, tx, offerID)
+		return DecisionResponse{}, http.StatusConflict, refusal(ctx, tx, TransitionAccept, offerID)
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -107,13 +107,13 @@ func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, 
 
 	// Every other open Offer on this Engagement loses, named to the
 	// person whose yes closed it -- the supersession has a human cause
-	// and records it, unlike completion's cascade (ADR-0008).
+	// and records it, unlike completion's cascade (ADR-0008). Only an
+	// Offer still open now: one that had lapsed was recorded as expired
+	// by lockOwnOffer, and the guard would pass it over even if it had
+	// not been.
 	supersededIDs, err := dbtx.Strings(ctx, tx,
-		`UPDATE engagement_offers
-		    SET state = 'superseded', decided_at = now(), decided_by = $1
-		  WHERE engagement_id = $2 AND state = 'offered' AND id <> $3
-		 RETURNING id`,
-		staffID, engagementID, offerID,
+		TransitionSupersede.update(`engagement_id = $3 AND id <> $4`, `id`),
+		now, staffID, engagementID, offerID,
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -140,7 +140,7 @@ func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, 
 
 	// attached_by is the accepter herself: an Offer's attachment is
 	// opened by her agreement, not by the Practice reaching in.
-	if err := staffauth.Grant(ctx, tx, engagementID, staffID, staffID, nullableInt64(amountCents), nullableString(terms)); err != nil {
+	if err := attachmentstate.Grant(ctx, tx, engagementID, staffID, staffID, nullableInt64(amountCents), nullableString(terms), now); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
@@ -175,10 +175,8 @@ func accept(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, 
 // re-sent click.
 func decline(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID, staffID string) (DecisionResponse, int, string) {
 	result, err := tx.ExecContext(ctx,
-		`UPDATE engagement_offers
-		    SET state = 'declined', decided_at = now(), decided_by = $1
-		  WHERE id = $2 AND staff_id = $1 AND state = 'offered'`,
-		staffID, offerID,
+		TransitionDecline.update(`id = $3 AND staff_id = $2`, ""),
+		clock.Now(ctx), staffID, offerID,
 	)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -190,10 +188,10 @@ func decline(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID,
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	if rows == 0 {
-		if state, err := currentState(ctx, tx, offerID); err == nil && state == stateDeclined {
-			return DecisionResponse{OfferID: offerID, State: stateDeclined}, http.StatusOK, ""
+		if state, err := currentState(ctx, tx, offerID); err == nil && state == StateDeclined {
+			return DecisionResponse{OfferID: offerID, State: string(StateDeclined)}, http.StatusOK, ""
 		}
-		return DecisionResponse{}, http.StatusConflict, closedMessage(ctx, tx, offerID)
+		return DecisionResponse{}, http.StatusConflict, refusal(ctx, tx, TransitionDecline, offerID)
 	}
 	if err := activity.Record(ctx, tx, activity.Entry{
 		PracticeID:  practiceID,
@@ -205,13 +203,14 @@ func decline(ctx context.Context, tx *sql.Tx, practiceID, engagementID, offerID,
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return DecisionResponse{}, http.StatusInternalServerError, apierr.MsgInternalError
 	}
-	return DecisionResponse{OfferID: offerID, State: stateDeclined}, http.StatusOK, ""
+	return DecisionResponse{OfferID: offerID, State: string(StateDeclined)}, http.StatusOK, ""
 }
 
 // lockOwnOffer finds the Engagement an Offer belongs to, takes a row lock
-// on that Engagement, and expires the Offer if it has run past its own
-// expires_at -- in that order, so the expiry check and the decision that
-// follows it see one consistent view. The Offer must be the caller's own:
+// on that Engagement, and records every lapse among that Engagement's
+// Offers -- in that order, so the lapse and the decision that follows it
+// see one consistent view, and an acceptance's supersession finds a
+// lapsed sibling already 'expired'. The Offer must be the caller's own:
 // RLS scopes engagement_offers to the Practice, not to a person, so
 // "someone else's Offer at my Practice" is refused here rather than in a
 // policy.
@@ -232,28 +231,32 @@ func lockOwnOffer(ctx context.Context, tx *sql.Tx, offerID, staffID string) (eng
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
-	if err := expireOpen(ctx, tx, byID, offerID); err != nil {
+	if err := recordLapses(ctx, tx, byEngagementID, engagementID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", http.StatusInternalServerError, apierr.MsgInternalError
 	}
 	return engagementID, http.StatusOK, ""
 }
 
-// closedMessage says what an Offer that could not be decided is now, so
-// the person clicking finds out whether she was too slow, whether the
-// Practice took it back, or whether it simply ran out.
-func closedMessage(ctx context.Context, tx *sql.Tx, offerID string) string {
+// refusal says what an Offer that t could not move is now, so the person
+// clicking finds out whether she was too slow, whether the Practice took
+// it back, or whether it simply ran out.
+func refusal(ctx context.Context, tx *sql.Tx, t Transition, offerID string) string {
 	state, err := currentState(ctx, tx, offerID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "that offer is no longer open"
+		return "This Offer is no longer open."
 	}
-	return "that offer is no longer open -- it is " + state
+	return t.refusal(state)
 }
 
-func currentState(ctx context.Context, tx *sql.Tx, offerID string) (string, error) {
-	var state string
-	err := tx.QueryRowContext(ctx, `SELECT state::text FROM engagement_offers WHERE id = $1`, offerID).Scan(&state)
+// currentState is what the Offer is now, through offer_state_at.
+func currentState(ctx context.Context, tx *sql.Tx, offerID string) (State, error) {
+	var state State
+	err := tx.QueryRowContext(ctx,
+		`SELECT offer_state_at(state, expires_at, $2)::text FROM engagement_offers WHERE id = $1`,
+		offerID, clock.Now(ctx),
+	).Scan(&state)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
 		return "", fmt.Errorf("offer: read offer state: %w", err)

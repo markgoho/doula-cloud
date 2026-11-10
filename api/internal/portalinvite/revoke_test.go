@@ -16,7 +16,7 @@ func TestRevokePending_DeadLettersThePendingRow(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "revoke-owner", []string{doulaRole}, "employee")
 	clientID, _ := testdb.SeedNamedEngagement(t, db, practiceID, "Revoke Client", "revoke@example.com")
-	portalUserID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+	portalUserID := testdb.Scalar[string](t, db.Admin, `INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days') RETURNING id`,
 		clientID)
 	outboxID := seedPortalInviteOutboxRow(t, db, portalUserID, 0, time.Now())
 

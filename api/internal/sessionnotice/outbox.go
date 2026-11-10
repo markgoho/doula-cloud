@@ -237,15 +237,34 @@ func QueueMFARecoveryCleared(ctx context.Context, tx *sql.Tx, identityUID string
 // actionable.
 type Worker = outbox.MailWorker[pendingRow]
 
+// noticeOutbox is session_notice_outbox. Its rows hold no secret, so it
+// carries no exit duty beyond the transition itself.
+var noticeOutbox = outbox.Worker{Table: "session_notice_outbox"}
+
 // NewWorker builds the session-notice outbox worker around mailer.
 func NewWorker(mailer outbox.Mailer) Worker {
 	return Worker{
 		Mailer:     mailer,
-		Table:      "session_notice_outbox",
+		Table:      noticeOutbox.Table,
 		ClaimQuery: claimQuery,
 		Scan:       scanRow,
 		Compose:    compose,
 	}
+}
+
+// SkipPendingTo marks every pending notice addressed to identityUID
+// skipped, for reason, through the same transition a worker's skip
+// takes. It is for an act that makes the notice moot before it goes out:
+// a person deleting her own login (staffauth's resolveQueuedMail).
+func SkipPendingTo(ctx context.Context, tx *sql.Tx, identityUID string, reason outbox.SkipReason, now time.Time) error {
+	if err := noticeOutbox.SkipPending(ctx, tx,
+		`SELECT id FROM session_notice_outbox WHERE identity_uid = $1 AND status = 'pending' FOR UPDATE`,
+		reason, now, identityUID,
+	); err != nil {
+		// coverage:ignore reason: DB failure inside the outbox package, not exercised by unit tests
+		return fmt.Errorf("sessionnotice: skip pending notices: %w", err)
+	}
+	return nil
 }
 
 type pendingRow struct {
@@ -255,7 +274,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, identity_uid, kind, attempt_count
 	 FROM session_notice_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -277,7 +296,7 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 // account deleted between queuing and send has no address left to
 // notify, and neither does a person who deleted her own login (#892)
 // after this notice was queued. Both land in the same branch, and both
-// mean the same thing here: mark sent, mail nothing.
+// mean the same thing here: mark skipped, mail nothing.
 func compose(ctx context.Context, tx *sql.Tx, r pendingRow, _ time.Time) (string, string, string, error) {
 	email, found, err := staffEmail(ctx, tx, r.identityUID)
 	if err != nil {

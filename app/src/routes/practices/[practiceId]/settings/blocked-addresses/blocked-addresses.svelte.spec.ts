@@ -83,6 +83,14 @@ function describedByText(button: ReturnType<typeof testPage.getByRole>): string 
 	return document.querySelector(`#${CSS.escape(describedBy)}`)?.textContent?.trim() ?? '';
 }
 
+async function unblockFirst() {
+	await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
+	await testPage
+		.getByRole('dialog', { name: 'Unblock this address' })
+		.getByRole('button', { name: 'Unblock this address' })
+		.click();
+}
+
 describe('the blocked email addresses screen', () => {
 	it('lists every blocked address with why the mail stopped and when', async () => {
 		await setup();
@@ -132,11 +140,7 @@ describe('the blocked email addresses screen', () => {
 	it('takes an unblocked address off the list and says it can receive email again', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
-		await testPage
-			.getByRole('dialog', { name: 'Unblock this address' })
-			.getByRole('button', { name: 'Unblock this address' })
-			.click();
+		await unblockFirst();
 
 		await expect
 			.element(testPage.getByText(`${bounced!.address} can receive email again.`))
@@ -145,6 +149,30 @@ describe('the blocked email addresses screen', () => {
 			.element(testPage.getByRole('rowheader', { name: bounced!.address, exact: true }))
 			.not.toBeInTheDocument();
 		// The complaint is untouched -- it was never this action's row.
+		await expect
+			.element(testPage.getByRole('rowheader', { name: complained!.address, exact: true }))
+			.toBeVisible();
+	});
+
+	// The unblock went through; only the re-read after it failed. That
+	// re-read used to replace the list and its success notice with the
+	// page's load error.
+	it('keeps the list and the success notice when the re-read after an unblock fails', async () => {
+		await testPage.viewport(1024, 800);
+		let reads = 0;
+		apiFetchWithSession.mockImplementation((path: string) => {
+			if (path.endsWith('/clear')) return Promise.resolve(jsonResponse(undefined, 204));
+			reads += 1;
+			return Promise.resolve(
+				reads === 1 ? jsonResponse({ suppressions }) : jsonResponse({ message: 'Down' }, 503)
+			);
+		});
+		await render(Page, {});
+
+		await unblockFirst();
+
+		await expect.element(testPage.getByText(`${bounced!.address} can receive email again.`)).toBeVisible();
+		await expect.element(testPage.getByText('Down')).toBeVisible();
 		await expect
 			.element(testPage.getByRole('rowheader', { name: complained!.address, exact: true }))
 			.toBeVisible();
@@ -162,11 +190,7 @@ describe('the blocked email addresses screen', () => {
 			)
 		});
 
-		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
-		await testPage
-			.getByRole('dialog', { name: 'Unblock this address' })
-			.getByRole('button', { name: 'Unblock this address' })
-			.click();
+		await unblockFirst();
 
 		await expect
 			.element(

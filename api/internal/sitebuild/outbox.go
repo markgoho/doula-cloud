@@ -45,6 +45,8 @@ type Worker struct {
 // so Cloud Scheduler's cadence retries it -- the durability half of
 // ADR-0013, and the reason a nudge that never arrives loses nothing.
 // Rows past MaxAttempts are dead-lettered rather than retried forever.
+// The states and why this machine is not the other outboxes' are
+// declared at outbox.SiteBuildStatus.
 func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 	// The other twelve outboxes claim their rows with FOR UPDATE SKIP
 	// LOCKED, which no aggregate over "every pending row" can express.
@@ -106,10 +108,10 @@ func (w Worker) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 // failure is recorded, not propagated, so the transaction commits the
 // record of it rather than rolling it back and forgetting.
 func (w Worker) recordFailure(ctx context.Context, tx *sql.Tx, attempt int, cause error) error {
-	status := "pending"
+	status := outbox.SiteBuildPending
 	var reason *outbox.DeadLetterReason
 	if attempt >= MaxAttempts {
-		status = "dead_lettered"
+		status = outbox.SiteBuildDeadLettered
 		exhausted := outbox.RetriesExhausted
 		reason = &exhausted
 	}

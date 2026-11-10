@@ -202,6 +202,48 @@ describe('pollConnectStatus', () => {
 		expect(onStopped).toHaveBeenCalledTimes(1);
 	});
 
+	it('says when each re-read goes out, before its answer lands', async () => {
+		vi.useFakeTimers();
+		let resolveFetch!: (response: Response) => void;
+		const fetcher = vi.fn(() => new Promise<Response>((resolve) => (resolveFetch = resolve)));
+		const onRead = vi.fn();
+		const onResult = vi.fn();
+
+		const handle = pollConnectStatus(
+			fetcher,
+			practiceId,
+			statusResult(),
+			{ onRead, onResult, onError: vi.fn(), onStopped: vi.fn() },
+			[10, 20]
+		);
+		await vi.advanceTimersByTimeAsync(10);
+
+		expect(onRead).toHaveBeenCalledTimes(1);
+		expect(onResult).not.toHaveBeenCalled();
+
+		resolveFetch(jsonResponse(statusResult({ status: 'pending' })));
+		await vi.advanceTimersByTimeAsync(0);
+		expect(onResult).toHaveBeenCalledTimes(1);
+		handle.stop();
+	});
+
+	it('schedules nothing more, and does not report stopping, when the caller stops it from onResult', async () => {
+		vi.useFakeTimers();
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(statusResult({ status: 'pending' })));
+		const onStopped = vi.fn();
+		const callbacks = {
+			onResult: () => handle.stop(),
+			onError: vi.fn(),
+			onStopped
+		};
+		const handle = pollConnectStatus(fetcher, practiceId, statusResult(), callbacks, [10, 20]);
+
+		await vi.advanceTimersByTimeAsync(1000);
+
+		expect(fetcher).toHaveBeenCalledTimes(1);
+		expect(onStopped).not.toHaveBeenCalled();
+	});
+
 	it('stops at the ceiling, never reading past the end of the delay schedule', async () => {
 		vi.useFakeTimers();
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse(statusResult({ status: 'pending' })));

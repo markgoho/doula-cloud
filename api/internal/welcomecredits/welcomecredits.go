@@ -7,7 +7,7 @@
 // for quiet Practices (ADR-0038).
 //
 // The worker rechecks the Practice live when the row comes due and skips,
-// marking the row sent with nothing mailed and the reason on the row,
+// marking the row skipped with nothing mailed and the reason on the row,
 // when the Practice has an Engagement, holds a founding grant, is
 // deleting or deleted, has no Owner, or every Owner's address is
 // suppressed (ADR-0029). Recipients are every current Owner, resolved at
@@ -56,14 +56,18 @@ func text(link string) string {
 		"This is the only email about it. If you have questions, reply to this email.\n"
 }
 
-type skipReason string
+// skipReason is the shared outbox.SkipReason, under the names this
+// package's checks read best by. The reasons are declared once, in
+// outbox's lifecycle, because the column (outbox_skip_reason, 00169) is
+// shared by every outbox.
+type skipReason = outbox.SkipReason
 
 const (
-	skipEngagementStarted skipReason = "engagement_started"
-	skipFoundingGrant     skipReason = "founding_grant"
-	skipPracticeDeleting  skipReason = "practice_deleting"
-	skipOwnersSuppressed  skipReason = "owners_suppressed"
-	skipNoOwners          skipReason = "no_owners"
+	skipEngagementStarted = outbox.SkipEngagementStarted
+	skipFoundingGrant     = outbox.SkipFoundingGrant
+	skipPracticeDeleting  = outbox.SkipPracticeDeleting
+	skipOwnersSuppressed  = outbox.SkipOwnersSuppressed
+	skipNoOwners          = outbox.SkipNoRecipients
 )
 
 // Worker sends due welcome_credits_outbox rows. Hand-written rather than
@@ -85,7 +89,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, practice_id, attempt_count
 	 FROM welcome_credits_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -177,13 +181,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pen
 }
 
 func markSkipped(ctx context.Context, tx *sql.Tx, inner outbox.Worker, id string, reason skipReason, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE welcome_credits_outbox SET skip_reason = $2 WHERE id = $1`, id, string(reason),
-	); err != nil {
-		// coverage:ignore reason: DB update failure, not exercised by unit tests
-		return fmt.Errorf("welcomecredits: record skip: %w", err)
-	}
-	if err := inner.MarkSent(ctx, tx, id, now); err != nil {
+	if err := inner.MarkSkipped(ctx, tx, id, reason, now); err != nil {
 		// coverage:ignore reason: DB update failure, not exercised by unit tests
 		return fmt.Errorf("welcomecredits: %w", err)
 	}
@@ -196,7 +194,7 @@ func practiceSkip(ctx context.Context, tx *sql.Tx, practiceID string) (skipReaso
 	var deleting, engaged, founding bool
 	if err := tx.QueryRowContext(ctx,
 		`SELECT
-			p.deletion_requested_at IS NOT NULL OR p.deleted_at IS NOT NULL,
+			p.standing <> 'active',
 			EXISTS (SELECT 1 FROM engagements e WHERE e.practice_id = p.id),
 			EXISTS (SELECT 1 FROM credit_ledger c WHERE c.practice_id = p.id AND c.origin = 'founding_grant')
 		 FROM practices p WHERE p.id = $1`,

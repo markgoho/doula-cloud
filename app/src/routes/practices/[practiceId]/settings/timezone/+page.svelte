@@ -14,7 +14,8 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import WarningText from '#lib/components/atoms/WarningText.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
-	import { errorsFromCause } from '#lib/formErrors.js';
+	import { errorsFromCause, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import { FormSubmission, type FormError } from '#lib/formSubmission.svelte.js';
 
 	const timezoneId = 'practice-timezone';
@@ -37,8 +38,10 @@
 	// made after the save has not been saved.
 	let savedLabel = $state<string>();
 	/* Until the read answers, the zone is unknown: an empty select or an
-	   empty read-only row would say "no zone" when the truth is "not yet". */
-	let isLoaded = $state(false);
+	   empty read-only row would say "no zone" when the truth is "not yet".
+	   A read that failed is not an answer either, so it is drawn as the
+	   page's failure, never as the form with an empty zone. */
+	const zoneRead = new PageRead();
 	const submission = new FormSubmission();
 
 	/* The label a person would say, from the same list the select offers,
@@ -56,14 +59,10 @@
 	}
 
 	async function load() {
-		try {
+		await zoneRead.load(async () => {
 			const current = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
 			timezone = current.timezone;
-		} catch (error) {
-			submission.errors = errorsFromCause(error);
-		} finally {
-			isLoaded = true;
-		}
+		}, SERVICE_PROBLEM);
 	}
 
 	async function save() {
@@ -143,6 +142,6 @@
 	title="Timezone"
 	fieldsets={[{ content: canChangeTimezone ? fields : readOnlyFields }]}
 	{actions}
-	loading={isLoaded ? undefined : 'Loading the timezone'}
+	read={zoneRead.frame('Loading the timezone')}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 />

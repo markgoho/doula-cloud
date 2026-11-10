@@ -84,10 +84,10 @@ type Refusal struct {
 	// missing name and work state are the two that do.
 	Details map[string]string
 	// Keep tells Issue to commit the transaction despite refusing to
-	// mint, for the one caller whose step wrote something that must
-	// survive the refusal -- staffauth's accept-invite flips a pending
-	// Invitation to 'expired' on the way past and that discovery is
-	// worth keeping. Every other refusal rolls back, which is what
+	// mint, for a caller whose step wrote something that must survive
+	// the refusal (portalinvite's accept). Staff accept-invite no longer
+	// sets it: a Staff Invitation's expiry is derived, never written
+	// (staffinvitation.StateOf). Every other refusal rolls back, which is what
 	// leaves a signup or invitation still claimable on the confirmed
 	// retry.
 	Keep bool

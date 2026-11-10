@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/lifecycletest"
 )
 
 // TestTransitions_DeclaresEveryContractRoute is the guardrail #275's
@@ -132,20 +133,11 @@ func TestTransition_Check(t *testing.T) {
 // written for the person who reads it -- a capital, "you", a full stop,
 // and no "contract cannot be billed: it is voided" engineer form.
 func TestTransition_CheckSpeaksToThePerson(t *testing.T) {
-	cases := []struct {
-		transition contracts.Transition
-		current    contracts.Status
-		want       string
-	}{
-		{contracts.TransitionBill, contracts.StatusVoided, "This Contract is voided, so you cannot create an Invoice for it."},
-		{contracts.TransitionBill, contracts.StatusDraft, "This Contract is still a draft, so you cannot create an Invoice for it."},
-		{contracts.TransitionVoid, contracts.StatusSent, "This Contract has been sent and is not signed yet, so you cannot void it."},
-		{contracts.TransitionEdit, contracts.StatusSigned, "This Contract is signed, so you cannot change it."},
-		{contracts.TransitionSign, contracts.Status("archived"), "This Contract is archived, so you cannot sign it."},
-	}
-	for _, tc := range cases {
-		if _, refusal := tc.transition.Check(tc.current); refusal != tc.want {
-			t.Errorf("Check(%q) = %q, want %q", tc.current, refusal, tc.want)
-		}
-	}
+	lifecycletest.RequireRefusals(t, []lifecycletest.Refusal[contracts.Transition, contracts.Status]{
+		{Transition: contracts.TransitionBill, Current: contracts.StatusVoided, Want: "This Contract is voided, so you cannot create an Invoice for it."},
+		{Transition: contracts.TransitionBill, Current: contracts.StatusDraft, Want: "This Contract is still a draft, so you cannot create an Invoice for it."},
+		{Transition: contracts.TransitionVoid, Current: contracts.StatusSent, Want: "This Contract has been sent and is not signed yet, so you cannot void it."},
+		{Transition: contracts.TransitionEdit, Current: contracts.StatusSigned, Want: "This Contract is signed, so you cannot change it."},
+		{Transition: contracts.TransitionSign, Current: contracts.Status("archived"), Want: "This Contract is archived, so you cannot sign it."},
+	})
 }

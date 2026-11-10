@@ -140,7 +140,7 @@ func listAwaiting(ctx context.Context, tx *sql.Tx, practiceID string, after *pag
 }
 
 // listAttachedAwaiting is listAwaiting narrowed to Engagements staffID
-// holds an open (ended_at IS NULL), granted-origin engagement_attachments
+// holds an open, granted (state = 'granted') engagement_attachments
 // row on -- the literal predicate staffauth.Reader.CanAccessEngagement
 // runs, applied here as a SQL filter the same way
 // message.listAttachedAwaitingReply already does for its own Practice-wide,
@@ -150,7 +150,7 @@ func listAttachedAwaiting(ctx context.Context, tx *sql.Tx, practiceID, staffID s
 	             AND EXISTS (
 	                 SELECT 1 FROM engagement_attachments ea
 	                 WHERE ea.engagement_id = e.id AND ea.staff_id = $2
-	                   AND ea.origin = 'granted' AND ea.ended_at IS NULL
+	                   AND ea.state = 'granted'
 	             )`
 	args := []any{practiceID, staffID}
 	if after != nil {

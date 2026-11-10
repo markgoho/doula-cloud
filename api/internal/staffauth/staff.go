@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/staffinvitation"
 )
 
 // invitationPageSize is the fixed number of pending Invitations returned
@@ -58,8 +59,9 @@ type InvitationSummary struct {
 	// EmploymentType is what the Membership will carry on acceptance.
 	EmploymentType string `json:"employmentType"`
 	ExpiresAt      string `json:"expiresAt"`
-	// Expired is true once expires_at has passed. The Invitation is still
-	// listed: nothing sweeps expiries, so it keeps its slot in
+	// Expired is staffinvitation.StateOf's answer, the one every reader
+	// of an Invitation asks. The Invitation is still listed: expiry is
+	// derived and never stored, so it keeps its slot in
 	// practice_invitations_one_pending until it is revoked or re-sent, and
 	// an Owner who cannot see it cannot act on it.
 	Expired bool `json:"expired"`
@@ -170,12 +172,13 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 
 // listPendingInvitations reads the pending group -- every row still
 // holding 'pending', lapsed or not. "Pending" means exactly what
-// practice_invitations_one_pending (00039) means by it, because nothing
-// sweeps expiries: a lapsed Invitation still occupies that address's slot
-// until it is revoked or re-sent, so hiding it would leave the Owner
-// unable to act on the thing blocking her. Whether it has lapsed rides
-// along as Expired instead, judged at clock.Now(ctx) (#1992): the clock
-// MintInvitation writes expires_at from, and the one acceptInvite reads.
+// practice_invitations_one_pending (00039) means by it, because expiry is
+// never stored (staffinvitation.StateOf): a lapsed Invitation still
+// occupies that address's slot until it is revoked or re-sent, so hiding
+// it would leave the Owner unable to act on the thing blocking her.
+// Whether it has lapsed rides along as Expired instead, judged by
+// StateOf at clock.Now(ctx) (#1992): the clock MintInvitation writes
+// expires_at from, and the one acceptInvite reads.
 //
 // The dead-letter flag is #339's passive Staff-visible signal, whose only
 // read surface is this screen. It is a scalar subquery rather than a join
@@ -187,7 +190,7 @@ func listMembers(ctx context.Context, tx *sql.Tx, practiceID string) ([]StaffSum
 // which a re-invite clears -- rather than a permanent mark.
 func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string, after *pagecursor.Cursor) ([]InvitationSummary, error) {
 	query := `SELECT pi.id, pi.address, array_to_string(pi.roles, ','), pi.employment_type::text,
-		        pi.expires_at, pi.expires_at <= $2,
+		        pi.status::text, pi.expires_at,
 		        COALESCE((SELECT o.status = 'dead_lettered'
 		                  FROM staff_invite_outbox o
 		                  WHERE o.invitation_id = pi.id
@@ -196,14 +199,15 @@ func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string, 
 		        pi.created_at
 		 FROM practice_invitations pi
 		 WHERE pi.practice_id = $1 AND pi.status = 'pending'`
-	args := []any{practiceID, clock.Now(ctx)}
+	args := []any{practiceID}
 	if after != nil {
-		query += ` AND (pi.created_at, pi.id) < ($3, $4) ORDER BY pi.created_at DESC, pi.id DESC LIMIT $5`
+		query += ` AND (pi.created_at, pi.id) < ($2, $3) ORDER BY pi.created_at DESC, pi.id DESC LIMIT $4`
 		args = append(args, after.At, after.ID, invitationPageSize+1)
 	} else {
-		query += ` ORDER BY pi.created_at DESC, pi.id DESC LIMIT $3`
+		query += ` ORDER BY pi.created_at DESC, pi.id DESC LIMIT $2`
 		args = append(args, invitationPageSize+1)
 	}
+	now := clock.Now(ctx)
 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -216,11 +220,13 @@ func listPendingInvitations(ctx context.Context, tx *sql.Tx, practiceID string, 
 	for rows.Next() {
 		var inv InvitationSummary
 		var roles string
+		var status staffinvitation.Status
 		var expiresAt time.Time
-		if err := rows.Scan(&inv.InvitationID, &inv.Address, &roles, &inv.EmploymentType, &expiresAt, &inv.Expired, &inv.DeliveryFailed, &inv.createdAt); err != nil {
+		if err := rows.Scan(&inv.InvitationID, &inv.Address, &roles, &inv.EmploymentType, &status, &expiresAt, &inv.DeliveryFailed, &inv.createdAt); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("staffauth: scan invitation: %w", err)
 		}
+		inv.Expired = staffinvitation.StateOf(status, expiresAt, now) == staffinvitation.StateExpired
 		inv.Roles = splitRoles(roles)
 		inv.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)
 		list = append(list, inv)

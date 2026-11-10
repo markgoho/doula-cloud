@@ -6,6 +6,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
 import { RefusalError, refusalError } from './formErrors.js';
@@ -18,7 +19,8 @@ export interface ClientListItem {
 	name: string;
 	email: string;
 	hasWork: boolean;
-	portalInviteStatus?: string;
+	portalInviteStatus?: PortalAccessState;
+	portalInviteDelivery?: PortalInviteDelivery;
 	/** Whether this Client's address is suppressed right now (#785,
 	 * ADR-0029) -- a bounce or a spam complaint that has not been lifted
 	 * on **Blocked email addresses** (#744). A failed invite reads

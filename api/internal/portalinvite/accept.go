@@ -181,8 +181,8 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 	var expiresAt sql.NullTime
 	err := tx.QueryRowContext(ctx,
 		`SELECT client_id, invite_token_expires_at FROM client_portal_users
-		 WHERE identity_uid IS NULL AND invite_token = $1`,
-		inviteToken,
+		 WHERE invite_token = $1 AND state = ANY($2::portal_access_state[])`,
+		inviteToken, TransitionAccept.FromStates(),
 	).Scan(&clientID, &expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return acceptResult{}, "", "", false, http.StatusNotFound, apierr.CodeLinkUnusable, "invite not found or already accepted"
@@ -192,13 +192,11 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
-	// A pending row with no expiry can never be accepted -- the property
-	// #616's AC wants -- and one past its expiry is refused the same way.
-	// There is no status column to flip here the way staffauth.acceptInvite
-	// flips practice_invitations.status: a re-invite already rotates both
-	// invite_token and invite_token_expires_at, so nothing needs marking
-	// on the way past.
-	if !expiresAt.Valid || !expiresAt.Time.After(clock.Now(ctx)) {
+	// TokenExpired is the same test Derive reads an invited row through,
+	// so the link a Practice sees as "expired" is the link refused here.
+	// Not marked on the way past: expired is derived, never stored, and a
+	// re-invite rotates the token and its expiry together.
+	if TokenExpired(expiresAt, clock.Now(ctx)) {
 		return acceptResult{}, "", "", false, http.StatusGone, apierr.CodeLinkUnusable, "this invitation has expired -- ask your practice to send a new one"
 	}
 
@@ -309,14 +307,22 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		}
 	}
 
-	if _, err := tx.ExecContext(ctx,
+	// TransitionAccept, guarded by its own From: a refused invitation
+	// accepted once its cause is gone stops being refused, rather than
+	// carrying both facts and leaving a reader's `if` order to pick one.
+	res, err := tx.ExecContext(ctx,
 		`UPDATE client_portal_users
-		    SET identity_uid = $1, invite_token = NULL, invite_token_expires_at = NULL
-		  WHERE invite_token = $2`,
-		identifier, inviteToken,
-	); err != nil {
+		    SET state = $1, identity_uid = $2, invite_token = NULL, invite_token_expires_at = NULL, access_refused_at = NULL
+		  WHERE invite_token = $3 AND state = ANY($4::portal_access_state[])`,
+		string(TransitionAccept.To), identifier, inviteToken, TransitionAccept.FromStates(),
+	)
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+	}
+	if claimed, err := res.RowsAffected(); err != nil || claimed != 1 {
+		// coverage:ignore reason: the row was read under the same token and From a moment ago in this transaction; only a concurrent accept or revoke between the two statements reaches this
+		return acceptResult{}, "", "", false, http.StatusNotFound, apierr.CodeLinkUnusable, "invite not found or already accepted"
 	}
 
 	return acceptResult{ClientID: clientID, practiceID: practiceID}, identifier, engagementID, reused, http.StatusOK, "", ""

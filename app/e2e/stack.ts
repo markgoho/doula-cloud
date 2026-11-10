@@ -511,7 +511,7 @@ export function seedClientPortalUser(signInAddress: string, clientID: string) {
 	execSQL(
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(signInAddress)})`
 	);
-	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)})`);
+	execSQL(`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES (${sqlLiteral(identifier)}, ${sqlLiteral(clientID)}, 'accepted')`);
 }
 
 /**
@@ -559,11 +559,14 @@ export function seedPracticeWithStaff(name: string, staffCount: number): string 
 
 /**
  * Marks a seeded Practice's Deletion finalized, so ops lists it on the
- * Deleted list (#2475).
+ * Deleted list (#2475). The request names the Practice's Owner as who
+ * asked, since a request carries all three of its facts (00172).
  */
 export function finalizePracticeDeletion(practiceId: string): void {
 	execSQL(
-		`UPDATE practices SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now() WHERE id = ${sqlLiteral(practiceId)};`
+		`UPDATE practices p SET deletion_requested_at = now() - interval '30 days', deletion_finalize_at = now(), deleted_at = now(),
+		        deletion_requested_by = (SELECT pm.staff_id FROM practice_memberships pm WHERE pm.practice_id = p.id AND 'owner' = ANY (pm.roles) ORDER BY pm.staff_id LIMIT 1)
+		  WHERE p.id = ${sqlLiteral(practiceId)};`
 	);
 }
 
@@ -662,10 +665,11 @@ export function seedInvoice(
 		   INSERT INTO contracts (engagement_id, status, prose, amount_cents)
 		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents} WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
 		 )
-		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
+		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at, paid_at)
 		 SELECT ${sqlLiteral(invoiceId)}::uuid, ${sqlLiteral(practiceId)}, (SELECT id FROM existing UNION ALL SELECT id FROM made LIMIT 1),
 		   ${stripeInvoiceId === undefined ? 'NULL' : sqlLiteral(stripeInvoiceId)}, ${sqlLiteral(status)}::invoice_status,
-		   ${amountCents}, 'usd', ${sqlLiteral(reference)}, now() + interval '30 days'`
+		   ${amountCents}, 'usd', ${sqlLiteral(reference)}, now() + interval '30 days',
+		   ${status === 'paid' ? 'now()' : 'NULL'}`
 	);
 	return invoiceId;
 }

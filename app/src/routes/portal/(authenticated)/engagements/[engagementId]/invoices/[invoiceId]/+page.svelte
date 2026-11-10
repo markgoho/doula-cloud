@@ -35,10 +35,11 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import DocumentPage from '#lib/components/templates/DocumentPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import PayInvoice from './PayInvoice.svelte';
 
-	let invoice = $state<ClientInvoice | undefined>();
-	let error = $state('');
+	const invoiceRead = new PageRead<ClientInvoice>();
+	const invoice = $derived(invoiceRead.value);
 	// What the Payment Element mounts with, or the Practice's setup in the
 	// way (#2039), or the server's own sentence for why this Invoice cannot
 	// be paid here. Read fresh on every visit: the secret is a credential
@@ -64,15 +65,15 @@
 			replaceState(url, {});
 		}
 		returnUrl = url.href;
-		try {
-			invoice = await loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load invoice';
-			return;
-		}
+		const isLoaded = await invoiceRead.load(
+			() => loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!),
+			'Failed to load invoice'
+		);
+		if (!isLoaded) return;
+		const loaded = invoiceRead.value!;
 		// Only an open Stripe-rail Invoice can be paid here; asking for any
 		// other would be refused, and the by-hand rail has nothing to ask.
-		if (invoice.status === 'open' && invoice.billingMode === 'stripe' && !invoice.paymentProcessing) {
+		if (loaded.status === 'open' && loaded.billingMode === 'stripe' && !loaded.paymentProcessing) {
 			try {
 				payment = await loadClientPayment(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
 			} catch (error_) {
@@ -91,7 +92,7 @@
 		try {
 			const now = await loadClientInvoice(apiFetchWithSession, page.params.engagementId!, page.params.invoiceId!);
 			if (now.status !== 'open' || now.paymentProcessing) {
-				invoice = now;
+				invoiceRead.set(now);
 				paymentError = '';
 			}
 		} catch {
@@ -102,7 +103,7 @@
 	/** Stripe says her payment is on its way: the page says so where the
 	 * Element was, as it will once the webhook has recorded it. */
 	function markProcessing() {
-		if (invoice) invoice = { ...invoice, paymentProcessing: true };
+		if (invoice) invoiceRead.set({ ...invoice, paymentProcessing: true });
 	}
 </script>
 
@@ -118,8 +119,7 @@
 		engagementId: page.params.engagementId!
 	})}
 	backLabel="Back to {INVOICES_HEADING}"
-	loadError={error || undefined}
-	loading={invoice === undefined ? 'Loading invoice' : undefined}
+	read={invoiceRead.frame('Loading invoice')}
 >
 	{#snippet content()}
 		<!-- `content` renders only once the Template's own states are past,

@@ -77,6 +77,8 @@ describe('client fields settings screen (#2193)', () => {
 	it('lists each question still asked with a Change to its own page, for an Owner', async () => {
 		await setup();
 
+		// The list is drawn once its read lands, not by the time render returns.
+		await expect.element(changeLinks().first()).toBeVisible();
 		expect(changeLinks().elements()).toHaveLength(activeFields.length);
 		await expect
 			.element(changeLinks().first())

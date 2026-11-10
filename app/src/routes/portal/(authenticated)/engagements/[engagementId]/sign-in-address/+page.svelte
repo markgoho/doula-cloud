@@ -28,14 +28,13 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
 	// Read while the page renders, before `goto` settles (#1710): what the
 	// change question sent, said once.
 	const outcome = takeOutcome(page.url);
 
-	let currentAddress = $state('');
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	const address = new PageRead<string>();
 
 	// #618, ADR-0026: her own "sign out everywhere", a separate act from
 	// the address change -- its own section, its own confirmation.
@@ -44,24 +43,17 @@
 	let signOutEverywhereError = $state('');
 
 	// onMount, not $effect: this reads once, and an effect would re-run
-	// every time it set `isLoaded` -- the sibling Notifications screen
-	// loads its own state the same way.
-	onMount(loadCurrentAddress);
-
-	async function loadCurrentAddress() {
-		try {
+	// every time the read changed state -- the sibling Notifications
+	// screen loads its own state the same way. Every failure, refused or
+	// unreached, is worded as the service's.
+	onMount(() =>
+		address.load(async () => {
 			const response = await apiFetchWithSession('/api/portal/session');
-			if (!response.ok) {
-				loadError = SERVICE_PROBLEM;
-				return;
-			}
+			if (!response.ok) throw new Error(SERVICE_PROBLEM);
 			const session: { signInAddress?: string } = await response.json();
-			currentAddress = session.signInAddress ?? '';
-			isLoaded = true;
-		} catch {
-			loadError = SERVICE_PROBLEM;
-		}
-	}
+			return session.signInAddress ?? '';
+		}, () => SERVICE_PROBLEM)
+	);
 
 	// Ends every session on every device, this one included (#618) -- so
 	// a successful call lands her back on the login screen rather than
@@ -112,7 +104,7 @@
 			rows={[
 				{
 					label: 'Sign-in address',
-					value: currentAddress,
+					value: address.value ?? '',
 					changes: 'sign-in address',
 					href: resolve('/portal/(authenticated)/engagements/[engagementId]/sign-in-address/change', {
 						engagementId: page.params.engagementId!
@@ -159,6 +151,5 @@
 	{outcome}
 	{summary}
 	sections={[{ heading: 'Sign out of every device', content: signOutEverywhere }]}
-	loading={isLoaded || loadError ? undefined : 'Loading your sign-in address'}
-	loadError={loadError || undefined}
+	read={address.frame('Loading your sign-in address')}
 />

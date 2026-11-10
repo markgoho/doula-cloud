@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -20,7 +22,7 @@ import (
 // Owner who sent it.
 type Summary struct {
 	OfferID            string `json:"offerId"`
-	State              string `json:"state"`
+	State              State  `json:"state"`
 	ClientFirstInitial string `json:"clientFirstInitial"`
 	ClientArea         string `json:"clientArea"`
 	DueDate            string `json:"dueDate"`
@@ -85,7 +87,7 @@ func InboxHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, staffID, reader := c.Tx, c.StaffID, c.Reader
 
-		if err := expireOpen(r.Context(), tx, byStaffID, staffID); err != nil {
+		if err := recordLapses(r.Context(), tx, byStaffID, staffID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -96,15 +98,15 @@ func InboxHandler() http.Handler {
 			return
 		}
 		page, err := list(r.Context(), tx,
-			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
+			`SELECT o.id, offer_state_at(o.state, o.expires_at, $6)::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
-			        o.decided_at, '', '', fp.amount_cents, fp.method, fp.paid_on::text,
+			        COALESCE(o.decided_at, CASE WHEN NOT offer_open_at(o.state, o.expires_at, $6) THEN o.expires_at END), '', '', fp.amount_cents, fp.method, fp.paid_on::text,
 			        CASE WHEN o.state = 'accepted' THEN to_char(o.due_date, 'YYYY-MM') END,
 			        -- #2269: a confined contractor reaches the Engagement
 			        -- only through the open Attachment; anyone else reaches
 			        -- every Engagement at the Practice (ADR-0008).
 			        CASE WHEN o.state = 'accepted'
-			              AND (NOT $5::boolean OR (att.id IS NOT NULL AND att.ended_at IS NULL))
+			              AND (NOT $5::boolean OR att.state = 'granted')
 			             THEN o.engagement_id::text END,
 			        to_char((att.ended_at AT TIME ZONE p.timezone)::date, 'YYYY-MM-DD'),
 			        CASE WHEN o.state = 'accepted'
@@ -114,10 +116,10 @@ func InboxHandler() http.Handler {
 			   JOIN practices p ON p.id = e.practice_id
 			   -- The Attachment in force when this Offer was accepted: the
 			   -- latest granted one on the pair, opened no later than the
-			   -- acceptance (staffauth.Grant writes both in one transaction).
+			   -- acceptance (attachmentstate.Grant writes both in one transaction).
 			   -- An employee's carries no fee, and so no Fee Payment.
 			   LEFT JOIN LATERAL (
-			        SELECT ea.id, ea.ended_at FROM engagement_attachments ea
+			        SELECT ea.id, ea.ended_at, ea.state FROM engagement_attachments ea
 			         WHERE o.state = 'accepted'
 			           AND ea.engagement_id = o.engagement_id AND ea.staff_id = o.staff_id
 			           AND ea.origin = 'granted'
@@ -128,8 +130,7 @@ func InboxHandler() http.Handler {
 			   LEFT JOIN LATERAL (
 			        SELECT f.amount_cents, f.method::text AS method, f.paid_on
 			          FROM attachment_fee_payments f
-			         WHERE f.attachment_id = att.id AND f.kind = 'recorded'
-			           AND NOT EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
+			         WHERE f.attachment_id = att.id AND `+paymentstanding.FeeStandsExpr+`
 			         ORDER BY f.recorded_at DESC
 			         LIMIT 1
 			   ) fp ON true
@@ -137,7 +138,7 @@ func InboxHandler() http.Handler {
 			    AND ($2::timestamptz IS NULL OR (o.offered_at, o.id) < ($2::timestamptz, $3::uuid))
 			  ORDER BY o.offered_at DESC, o.id DESC
 			  LIMIT $4`,
-			staffID, after, reader.IsAmbientContractor())
+			staffID, after, reader.IsAmbientContractor(), clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -154,7 +155,7 @@ func InboxHandler() http.Handler {
 func EngagementListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, engagementID := c.Tx, c.EngagementID
-		if err := expireOpen(r.Context(), tx, byEngagementID, engagementID); err != nil {
+		if err := recordLapses(r.Context(), tx, byEngagementID, engagementID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -168,9 +169,9 @@ func EngagementListHandler() http.Handler {
 			return
 		}
 		page, err := list(r.Context(), tx,
-			`SELECT o.id, o.state::text, o.client_first_initial, o.client_area, o.due_date,
+			`SELECT o.id, offer_state_at(o.state, o.expires_at, $5)::text, o.client_first_initial, o.client_area, o.due_date,
 			        o.amount_cents, o.terms, o.employment_type::text, o.offered_at, o.expires_at,
-			        o.decided_at, COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
+			        COALESCE(o.decided_at, CASE WHEN NOT offer_open_at(o.state, o.expires_at, $5) THEN o.expires_at END), COALESCE(s.name, ''), COALESCE(s.email, pi.address, ''),
 			        NULL::bigint, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text, NULL::text
 			   FROM engagement_offers o
 			   LEFT JOIN staff s ON s.id = o.staff_id
@@ -179,7 +180,7 @@ func EngagementListHandler() http.Handler {
 			    AND ($2::timestamptz IS NULL OR (o.offered_at, o.id) < ($2::timestamptz, $3::uuid))
 			  ORDER BY o.offered_at DESC, o.id DESC
 			  LIMIT $4`,
-			engagementID, after)
+			engagementID, after, clock.Now(r.Context()))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -207,7 +208,10 @@ func parseCursor(w http.ResponseWriter, r *http.Request) (*cursor, bool) {
 // list runs one of the two queries above and scans one page of Summary
 // rows out of it. Both select the same twenty columns in the same order
 // and take the same first four parameters, which is what lets one scanner
-// serve both; extra is the inbox's fifth. It asks for pageSize+1 rows and returns pageSize, so
+// serve both; extra is the rest, ending with the instant both read an
+// Offer's state at (offer_state_at), so a lapse shows as expired, dated
+// at its expires_at, whether or not recordLapses has written it down.
+// It asks for pageSize+1 rows and returns pageSize, so
 // "is there another page" is answered without a second count query.
 func list(ctx context.Context, tx *sql.Tx, query, arg string, after *cursor, extra ...any) (ListResponse, error) {
 	var afterTime *time.Time

@@ -140,6 +140,16 @@ describe('the Timezone screen', () => {
 		await expect.element(testPage.getByText('internal error')).toBeVisible();
 	});
 
+	// A failed read is not "no zone": the form, with its empty select and
+	// a Save that would write whatever came first, is not drawn at all.
+	it('draws a failed read as the page failing, with no control and no Save', async () => {
+		await setup(jsonResponse('internal error', 500));
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('internal error');
+		expect(control().query()).toBeNull();
+		expect(testPage.getByRole('button', { name: 'Save' }).query()).toBeNull();
+	});
+
 	it('offers an Owner the editable field and a Save button', async () => {
 		await setup(jsonResponse({ timezone: 'America/Denver' }));
 

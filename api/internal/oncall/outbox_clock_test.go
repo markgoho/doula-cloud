@@ -38,8 +38,12 @@ func TestGapNoticeWorker_GapStillOpenUntilEndsAtOnTheWorkerClock(t *testing.T) {
 			if mailed := len(sender.Sent()) > 0; mailed != c.wantMailed {
 				t.Fatalf("mailed = %v (%d messages), want %v", mailed, len(sender.Sent()), c.wantMailed)
 			}
-			if got := e.noticeStatus(); got != statusSent {
-				t.Fatalf("status = %q, want sent", got)
+			want := statusSent
+			if !c.wantMailed {
+				want = statusSkipped
+			}
+			if got := e.noticeStatus(); got != want {
+				t.Fatalf("status = %q, want %s", got, want)
 			}
 		})
 	}

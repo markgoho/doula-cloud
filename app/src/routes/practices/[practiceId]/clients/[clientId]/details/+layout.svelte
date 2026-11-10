@@ -30,10 +30,12 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { fullName } from '#lib/personName.js';
 	import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
+	import { isErased, isLive } from '#lib/clientStanding.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { bothReads, LOADED_PAGE, pageReadState } from '#lib/pageRead.svelte.js';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import { detailsSave } from './detailsSave.svelte.js';
 
@@ -42,9 +44,18 @@
 	const practiceId = $derived(page.params.practiceId ?? '');
 	const clientId = $derived(page.params.clientId ?? '');
 	const record = $derived(clientDetails.record);
-	const loadError = $derived(clientDetails.loadError || intakeFlow.loadError);
-	const isReady = $derived(clientDetails.status === 'ready' && intakeFlow.status === 'ready');
-	const isErased = $derived(isReady && Boolean(record?.erasedAt));
+	// The journey's two reads as one: the first failure wins, and it is
+	// loaded only once both are.
+	const read = $derived(bothReads(clientDetails.read.state, intakeFlow.read.state));
+	const isErasedRecord = $derived(read.status === 'loaded' && isErased(record));
+	// The frame, when the journey is not drawn: an erased record is a page
+	// of its own, and a merged one is loaded but on its way to the record
+	// it became, so it is held as loading until that navigation lands.
+	const frame = $derived(
+		isErasedRecord
+			? LOADED_PAGE
+			: pageReadState(read.status === 'loaded' ? { status: 'loading' } : read, 'Loading the questions to ask')
+	);
 
 	/*
 	 * `untrack`, because each `load` reads its own state to decide whether
@@ -82,13 +93,12 @@
 	</stack-l>
 {/snippet}
 
-{#if isReady && !loadError && !isErased && !record?.mergedInto}
+{#if read.status === 'loaded' && isLive(record)}
 	{@render children()}
 {:else}
 	<FormPage
 		title="Client details"
-		loadError={loadError || undefined}
-		loading={isErased ? undefined : 'Loading the questions to ask'}
+		read={frame}
 		fieldsets={[{ content: erased }]}
 	/>
 {/if}

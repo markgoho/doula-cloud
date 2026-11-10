@@ -26,7 +26,7 @@ import (
 // copy, never a view" true at the query level and not only in prose.
 type PreAccountOffer struct {
 	OfferID            string  `json:"offerId"`
-	State              string  `json:"state"`
+	State              State   `json:"state"`
 	ClientFirstInitial string  `json:"clientFirstInitial"`
 	ClientArea         string  `json:"clientArea"`
 	DueDate            string  `json:"dueDate"`
@@ -82,8 +82,9 @@ type DeclineByTokenRequest struct {
 // decided_by is NULL here for the same reason ADR-0008 leaves it NULL on
 // completion's cascade: there is no staff row, and inventing one would
 // record a person who does not exist. The audit answer is the row itself
-// -- the Invitation it names, and the moment it was decided, which
-// together identify the holder of a token and a mailed code.
+// -- decided_by_kind 'invitee' (TransitionDeclineByToken), the Invitation
+// it names, and the moment it was decided, which together identify the
+// holder of a token and a mailed code.
 func DeclineByTokenHandler(db *sql.DB) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req DeclineByTokenRequest
@@ -97,15 +98,15 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 		}
 		withTokenTx(w, r, db, strings.TrimSpace(req.Token), strings.TrimSpace(req.Code),
 			func(ctx context.Context, tx *sql.Tx, o PreAccountOffer) (any, int, string) {
-				if o.State == stateDeclined {
-					return DecisionResponse{OfferID: o.OfferID, State: stateDeclined}, http.StatusOK, ""
+				if o.State == StateDeclined {
+					return DecisionResponse{OfferID: o.OfferID, State: string(StateDeclined)}, http.StatusOK, ""
 				}
-				if o.State != stateOffered {
-					return nil, http.StatusConflict, "that offer is no longer open -- it is " + o.State
+				if ok, refusal := TransitionDeclineByToken.Check(o.State); !ok {
+					return nil, http.StatusConflict, refusal
 				}
 				if _, err := tx.ExecContext(ctx,
-					`UPDATE engagement_offers SET state = 'declined', decided_at = now() WHERE id = $1 AND state = 'offered'`,
-					o.OfferID,
+					TransitionDeclineByToken.update(`id = $3`, ""),
+					clock.Now(ctx), nil, o.OfferID,
 				); err != nil {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					return nil, http.StatusInternalServerError, apierr.MsgInternalError
@@ -114,7 +115,7 @@ func DeclineByTokenHandler(db *sql.DB) http.Handler {
 					// coverage:ignore reason: DB query failure, not exercised by unit tests
 					return nil, http.StatusInternalServerError, apierr.MsgInternalError
 				}
-				return DecisionResponse{OfferID: o.OfferID, State: stateDeclined}, http.StatusOK, ""
+				return DecisionResponse{OfferID: o.OfferID, State: string(StateDeclined)}, http.StatusOK, ""
 			})
 	})
 }
@@ -274,13 +275,11 @@ func resolveByToken(ctx context.Context, tx *sql.Tx, offerID, token, code string
 		return PreAccountOffer{}, http.StatusForbidden, "", "that code is not right"
 	}
 
-	if err := expireOpen(ctx, tx, byID, o.OfferID); err != nil {
+	if err := recordLapses(ctx, tx, byID, o.OfferID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return PreAccountOffer{}, http.StatusInternalServerError, "", apierr.MsgInternalError
 	}
-	if o.State == stateOffered && !expiresAt.After(clock.Now(ctx)) {
-		o.State = stateExpired
-	}
+	o.State = StateAt(o.State, expiresAt, clock.Now(ctx))
 
 	o.ClientFirstInitial, o.ClientArea, o.DueDate = clientFields(initial, area, dueDate)
 	o.ExpiresAt = expiresAt.UTC().Format(time.RFC3339)

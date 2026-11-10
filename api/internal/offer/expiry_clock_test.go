@@ -57,7 +57,7 @@ func TestExpireOpen_LapsesAtExpiresAtOnTheRequestClock(t *testing.T) {
 	cases := []struct {
 		name      string
 		now       time.Time
-		wantState string
+		wantState offer.State
 	}{
 		{"just-before", expiresAt.Add(-expiryEdge), stateOffered},
 		{"at-expiry", expiresAt, stateExpired},

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
@@ -57,6 +58,9 @@ func RequestHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 		}
 		if !clientExists(r.Context(), tx, clientID) {
 			apierr.WriteError(w, "client not found", http.StatusNotFound)
+			return
+		}
+		if !clientstanding.ActRequestEngagement.Require(w, r, tx, clientID) {
 			return
 		}
 
@@ -143,7 +147,10 @@ func collapse(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknudge.
 }
 
 // clientExists reports whether clientID is visible to the caller's
-// Practice -- RLS (clients_select, 00042) already scopes the read.
+// Practice -- RLS (clients_select, 00042) already scopes the read. It
+// asks nothing about the record's standing on purpose: whether a record
+// that exists may be asked for work is clientstanding's question, put
+// right after this one.
 func clientExists(ctx context.Context, tx *sql.Tx, clientID string) bool {
 	var exists bool
 	// coverage:ignore reason: DB query failure, not exercised by unit tests -- treated as "not found" either way

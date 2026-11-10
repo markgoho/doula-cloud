@@ -95,6 +95,7 @@ export const clientId = 'client-1';
 
 export const record: ClientDetail = {
 	id: clientId,
+	standing: 'live',
 	givenName: 'Anne-Marie',
 	familyName: 'Ochieng-Whitfield',
 	preferredName: '',
@@ -122,14 +123,10 @@ export const record: ClientDetail = {
  * import time by every fixture in the journey. */
 export function seedDetails(): void {
 	intakeFlow.practiceId = practiceId;
-	intakeFlow.practiceName = practiceName;
-	intakeFlow.fields = fields;
-	intakeFlow.status = 'ready';
+	intakeFlow.read.set({ practiceName, fields });
 
 	clientDetails.clientId = clientId;
-	clientDetails.status = 'ready';
-	clientDetails.loadError = '';
-	clientDetails.record = record;
+	clientDetails.read.set(record);
 	clientDetails.engagementId = undefined;
 	clientDetails.draft.scope = clientId;
 	clientDetails.draft.answers = { ...answersOnFile(record), phone: '+1 (585) 555-0142' };

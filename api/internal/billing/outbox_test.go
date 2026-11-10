@@ -185,7 +185,7 @@ func TestLowCreditWorker_ProcessPending_Outcomes(t *testing.T) {
 		wantReason   string
 	}{
 		{name: "a row not yet due is skipped", owners: 1, dueIn: time.Hour, wantStatus: testLowCreditStatusPending},
-		{name: "no Owners is marked sent with no mail", dueIn: -time.Minute, wantStatus: testLowCreditStatusSent},
+		{name: "no Owners is marked skipped with no mail", dueIn: -time.Minute, wantStatus: "skipped"},
 		{
 			name: "a send failure schedules a retry", owners: 1, dueIn: -time.Minute, sendErr: mailgunDown,
 			wantStatus: testLowCreditStatusPending, wantAttempts: 1,

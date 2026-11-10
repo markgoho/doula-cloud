@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -142,7 +143,7 @@ type PaymentView struct {
 // Practice's (RLS already scopes the read; the WHERE clause is app-layer
 // redundancy on top of it, the same belt-and-braces every other handler
 // in this package applies).
-func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) (status string, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, err error) {
+func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) (status invoicestatus.Status, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, err error) {
 	err = tx.QueryRowContext(ctx,
 		`SELECT i.status, i.amount_cents, i.stripe_invoice_id, e.id
 		   FROM invoices i
@@ -162,7 +163,7 @@ func resolveInvoiceForPractice(ctx context.Context, tx *sql.Tx, practiceID, invo
 // requireInvoiceAtPractice is resolveInvoiceForPractice for a handler: an
 // Invoice that is not this Practice's is a 404 and any other failure a
 // 500, written here.
-func requireInvoiceAtPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string) (status string, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, ok bool) {
+func requireInvoiceAtPractice(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID, invoiceID string) (status invoicestatus.Status, amountCents int64, stripeInvoiceID sql.NullString, engagementID string, ok bool) {
 	status, amountCents, stripeInvoiceID, engagementID, err := resolveInvoiceForPractice(r.Context(), tx, practiceID, invoiceID)
 	if errors.Is(err, sql.ErrNoRows) {
 		apierr.WriteError(w, "invoice not found", http.StatusNotFound)
@@ -299,8 +300,8 @@ func PostManualPaymentHandler(client Client) http.Handler {
 		if !ok {
 			return
 		}
-		if status != invoiceStatusOpen {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotOpen, nil)
+		if ok, refusal := TransitionRecordPayment.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 		var paymentOnItsWay bool
@@ -346,9 +347,7 @@ func PostManualPaymentHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE invoices SET status = 'paid', paid_at = $1 WHERE id = $2`, paidOn, invoiceID,
-		); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, TransitionRecordPayment, `, paid_at = $3`, paidOn); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -414,12 +413,9 @@ type InvoiceTransitionView struct {
 // transitionByHandInvoice is PostVoidInvoiceHandler and
 // PostWriteOffInvoiceHandler's shared body -- both are the same shape of
 // act (an Owner or Admin moves a by-hand, still-open Invoice to a
-// terminal status that is not 'paid') and differ only in the UPDATE they
-// run and the Activity action they record. updateStatusQuery is the
-// literal statement to run (matching this package's own convention of
-// writing an enum value as a literal rather than a bound parameter,
-// e.g. handleInvoicePaid's `SET status = 'paid'`) -- both callers pass a
-// fixed, internal constant, never anything request-supplied.
+// terminal status that is not 'paid') and differ only in the declared
+// Transition they make (TransitionVoid, TransitionWriteOff) and the
+// Activity action they record.
 //
 // Owner and Admin is declared at each caller's own mount line, not
 // checked here (#990, following #970's own move for Contract writes):
@@ -427,7 +423,7 @@ type InvoiceTransitionView struct {
 // because a Doula is refused by the gate before either PostVoidInvoiceHandler
 // or PostWriteOffInvoiceHandler ever runs. Widening or narrowing either
 // route means editing its own ir.ExemptGated role list in mount.go.
-func transitionByHandInvoice(newStatus, updateStatusQuery string, action activity.EngagementAction) http.Handler {
+func transitionByHandInvoice(t InvoiceTransition, action activity.EngagementAction) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, invoiceID := c.Tx, c.PracticeID, c.ID("invoiceId")
 
@@ -435,16 +431,12 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 		if !ok {
 			return
 		}
-		if stripeInvoiceID.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeVoidedOrWrittenOff, nil)
-			return
-		}
-		if status != invoiceStatusOpen {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotOpen, nil)
+		if ok, refusal := t.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 
-		if _, err := tx.ExecContext(r.Context(), updateStatusQuery, invoiceID); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, t, ``); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -455,7 +447,7 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, InvoiceTransitionView{Status: newStatus})
+		apierr.WriteJSON(w, http.StatusOK, InvoiceTransitionView{Status: string(t.To)})
 	}, staffauth.PathID("invoice", "invoiceId"))
 }
 
@@ -465,7 +457,7 @@ func transitionByHandInvoice(newStatus, updateStatusQuery string, action activit
 // Stripe's own Dashboard instead) or one that is not 'open'. Must be
 // mounted behind staffauth.Middleware.
 func PostVoidInvoiceHandler() http.Handler {
-	return transitionByHandInvoice("void", `UPDATE invoices SET status = 'void' WHERE id = $1`, activity.ActionInvoiceVoided)
+	return transitionByHandInvoice(TransitionVoid, activity.ActionInvoiceVoided)
 }
 
 // PostWriteOffInvoiceHandler moves a by-hand, still-open Invoice to
@@ -474,21 +466,8 @@ func PostVoidInvoiceHandler() http.Handler {
 // only via Stripe's own invoice.marked_uncollectible webhook) or one that
 // is not 'open'. Must be mounted behind staffauth.Middleware.
 func PostWriteOffInvoiceHandler() http.Handler {
-	return transitionByHandInvoice("uncollectible", `UPDATE invoices SET status = 'uncollectible' WHERE id = $1`, activity.ActionInvoiceWrittenOff)
+	return transitionByHandInvoice(TransitionWriteOff, activity.ActionInvoiceWrittenOff)
 }
-
-// errPaymentAlreadyReversed signals that :paymentId is a manually recorded
-// Payment belonging to :invoiceId, but a reversal row already targets it
-// -- distinct from sql.ErrNoRows (no such Payment at all, or one that is
-// not manually recorded) so the handler can tell the two refusals apart.
-var errPaymentAlreadyReversed = errors.New("payments: payment already reversed")
-
-// errPaymentRefunded signals that :paymentId has at least one Refund
-// against it (#1009), so it cannot be reversed. Before #1009 a reversal
-// was the only row that could point at a Payment, and "something points
-// at it" meant "already reversed"; a Refund now points at one too, and
-// reads the opposite way.
-var errPaymentRefunded = errors.New("payments: payment has been refunded")
 
 // MsgRefundedPaymentCannotBeReversed refuses reversing a Payment money has
 // already been returned against (#1009). A reversal says the money never
@@ -506,57 +485,17 @@ type ReversePaymentRequest struct {
 	Reason string `json:"reason"`
 }
 
-// resolvePaymentForReversal locks :paymentId's row FOR UPDATE, scoped to
-// :invoiceId and to kind = 'manual' -- a Stripe-collected Payment or a
-// reversal row itself never matches, so either one reaches the same
-// sql.ErrNoRows a nonexistent id would (MsgPaymentNotReversible covers
-// all three; the caller does not need to tell them apart). Returns
-// errPaymentAlreadyReversed if a reversal already targets this Payment --
-// payments_one_reversal_per_payment (00115_payment_refund.sql, rebuilt
-// from 00103's index) is the same invariant enforced at the database
-// level, but this pre-check turns it into a clean 409 instead of a raw
-// constraint violation -- and errPaymentRefunded if a Refund does
-// (#1009), which no index can express, because a Payment may carry any
-// number of Refunds.
-func resolvePaymentForReversal(ctx context.Context, tx *sql.Tx, invoiceID, paymentID string) (amountCents int64, err error) {
-	err = tx.QueryRowContext(ctx,
-		`SELECT amount_cents FROM payments
-		  WHERE id = $1 AND invoice_id = $2 AND kind = 'manual'
-		  FOR UPDATE`,
-		paymentID, invoiceID,
-	).Scan(&amountCents)
-	// coverage:ignore reason: the sql.ErrNoRows branch is exercised by unit tests; a non-ErrNoRows DB failure here is not
-	if err != nil {
-		return 0, fmt.Errorf("payments: resolve payment for reversal: %w", err)
-	}
-	// Both kinds that can point at a Payment are read in one pass, and
-	// told apart, because since #1009 "something points at this Payment"
-	// no longer means only "it was reversed".
-	var alreadyReversed, refunded bool
-	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM payments WHERE target_payment_id = $1 AND kind = 'reversal'),
-		        EXISTS (SELECT 1 FROM payments WHERE target_payment_id = $1 AND kind = 'refund')`, paymentID,
-	).Scan(&alreadyReversed, &refunded); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("payments: check payment already reversed: %w", err)
-	}
-	if alreadyReversed {
-		return 0, errPaymentAlreadyReversed
-	}
-	if refunded {
-		return 0, errPaymentRefunded
-	}
-	return amountCents, nil
-}
-
 // PostReversePaymentHandler reverses one manually recorded Payment (#945):
 // an additive row in the same append-only payments table -- never an
 // UPDATE or DELETE on the original -- that nets the original's amount to
 // zero and returns its Invoice to 'open' once nothing covers it any more.
-// A reversal cannot itself be reversed (resolvePaymentForReversal's own
-// kind = 'manual' scope refuses a reversal row as a target), and a
-// Payment already reversed cannot be reversed again
-// (MsgPaymentAlreadyReversed).
+// What the Payment must be is ActReversePayment's: a by-hand one (a card
+// Payment, a reversal or a Refund row is MsgPaymentNotReversible, as a
+// nonexistent id is), standing Live -- not already reversed
+// (MsgPaymentAlreadyReversed) and with no money gone back against it
+// (MsgRefundedPaymentCannotBeReversed). lockPaymentFor asks it under the
+// Payment's row lock; payments_one_reversal_per_payment (00115) and
+// 00175's trigger refuse the same rows in the database.
 //
 // Refused against a Stripe-backed Invoice (MsgStripeInvoiceCannotBeReversed:
 // Stripe's own detach_payment call cannot undo a paid_out_of_band mark,
@@ -592,26 +531,18 @@ func PostReversePaymentHandler() http.Handler {
 		if !ok {
 			return
 		}
-		if stripeInvoiceID.Valid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgStripeInvoiceCannotBeReversed, nil)
-			return
-		}
-		if status != invoiceStatusPaid {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgInvoiceNotPaid, nil)
+		if ok, refusal := TransitionReversePayment.Check(status, railOf(stripeInvoiceID)); !ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		}
 
-		amountCents, err := resolvePaymentForReversal(r.Context(), tx, invoiceID, paymentID)
+		target, err := lockPaymentFor(r.Context(), tx, ActReversePayment, invoiceID, paymentID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, MsgPaymentNotReversible, http.StatusNotFound)
 			return
 		}
-		if errors.Is(err, errPaymentAlreadyReversed) {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgPaymentAlreadyReversed, nil)
-			return
-		}
-		if errors.Is(err, errPaymentRefunded) {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgRefundedPaymentCannotBeReversed, nil)
+		if refused, ok := errors.AsType[paymentActRefusedError](err); ok {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refused.message, nil)
 			return
 		}
 		if err != nil {
@@ -626,15 +557,13 @@ func PostReversePaymentHandler() http.Handler {
 		if err := tx.QueryRowContext(r.Context(),
 			`INSERT INTO payments (invoice_id, amount_cents, paid_at, kind, target_payment_id, reason)
 			 VALUES ($1, $2, $3, 'reversal', $4, $5) RETURNING id, created_at`,
-			invoiceID, -amountCents, reversedAt, paymentID, req.Reason,
+			invoiceID, -target.amountCents, reversedAt, paymentID, req.Reason,
 		).Scan(&reversalID, &createdAt); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE invoices SET status = 'open', paid_at = NULL WHERE id = $1`, invoiceID,
-		); err != nil {
+		if err := moveInvoice(r.Context(), tx, invoiceID, TransitionReversePayment, `, paid_at = NULL`); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -645,7 +574,7 @@ func PostReversePaymentHandler() http.Handler {
 		// field never lands anywhere but the one column the erasure sweep
 		// (client.redactPaymentReasons) actually reaches.
 		if !recordEngagementActivity(w, r, c, engagementID, activity.ActionPaymentReversed,
-			map[string]any{diffKeyAmountCents: -amountCents, "targetPaymentId": paymentID}) {
+			map[string]any{diffKeyAmountCents: -target.amountCents, "targetPaymentId": paymentID}) {
 			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
@@ -654,7 +583,7 @@ func PostReversePaymentHandler() http.Handler {
 			ID:              reversalID,
 			InvoiceID:       invoiceID,
 			Kind:            paymentKindReversal,
-			AmountCents:     -amountCents,
+			AmountCents:     -target.amountCents,
 			TargetPaymentID: &paymentID,
 			Reason:          &req.Reason,
 			PaidAt:          reversedAt,

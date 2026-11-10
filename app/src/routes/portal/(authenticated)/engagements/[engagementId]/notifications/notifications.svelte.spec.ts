@@ -201,4 +201,22 @@ describe('the Client portal Notifications settings screen', () => {
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('too many requests -- try again later');
 	});
+
+	it("shows the server's own words when the read is refused", async () => {
+		await setup({ loadResponse: refusal(403, 'You cannot see this Engagement') });
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('You cannot see this Engagement');
+	});
+
+	// A read that never answered set neither flag, so the Skeleton stood
+	// for good. It is the page failing, in the service's words.
+	it('reports a read that never reached the server, rather than loading for good', async () => {
+		apiFetchWithSession.mockRejectedValue(new TypeError('Failed to fetch'));
+		await render(Page, {});
+
+		await expect
+			.element(page.getByRole('alert'))
+			.toHaveTextContent('There is a problem with the service. Try again in a few minutes.');
+		expect(page.getByRole('status', { name: 'Loading your notification settings' }).query()).toBeNull();
+	});
 });

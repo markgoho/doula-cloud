@@ -23,7 +23,7 @@ func (f putOnFixture) takenOffNotice() staffnotice.Notice {
 func (f putOnFixture) endAttachment(t *testing.T) {
 	t.Helper()
 	if _, err := f.db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = now(), ended_by = $2 WHERE engagement_id = $1`,
+		`UPDATE engagement_attachments SET ended_at = now(), ended_by = $2, ended_reason = 'taken_off' WHERE engagement_id = $1`,
 		f.engagementID, f.ownerID); err != nil {
 		t.Fatalf("end attachment: %v", err)
 	}

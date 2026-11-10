@@ -28,9 +28,9 @@ const doulaCountsQuery = `SELECT da.staff_id, count(DISTINCT c.id)
 	  FROM clients c
 	  JOIN engagements de ON de.client_id = c.id
 	  JOIN engagement_attachments da ON da.engagement_id = de.id
-	 WHERE c.practice_id = $1 AND c.merged_into IS NULL
+	 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased')
 	   AND de.status <> 'completed'
-	   AND da.origin = 'granted' AND da.ended_at IS NULL
+	   AND da.state = 'granted'
 	   AND ($2::uuid IS NULL OR da.staff_id = $2::uuid)
 	 GROUP BY da.staff_id`
 

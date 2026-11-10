@@ -355,20 +355,21 @@ func SeedEngagementInStatus(t *testing.T, db *DB, practiceID, name, email, statu
 
 // SeedAttachment inserts an engagement_attachments row directly, using the
 // superuser Admin connection -- origin is "accrued" or "granted"
-// (ADR-0008), and ended sets ended_at to now() rather than leaving the
+// (ADR-0008), and ended ends it at now(), by staffID herself, taken off
+// (00173 requires an ending to say who and why) rather than leaving the
 // attachment open. attached_by is always staffID: no caller here needs to
 // distinguish an accrual from a grant by a different actor. Collapses the
 // identical seedAttachment copies #706 found duplicated in staffauth_test
 // and activitygate_test.
 func SeedAttachment(t *testing.T, db *DB, engagementID, staffID, origin string, ended bool) {
 	t.Helper()
-	endedAt := "NULL"
+	ending := "NULL, NULL, NULL"
 	if ended {
-		endedAt = "now()"
+		ending = "now(), $2, 'taken_off'"
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at)
-		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`)`,
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason)
+		 VALUES ($1, $2, $3::attachment_origin, $2, `+ending+`)`,
 		engagementID, staffID, origin,
 	); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
@@ -440,7 +441,7 @@ func recordActivityOn(t *testing.T, conn *sql.DB, entry activity.Entry) {
 func AttachPortalUser(t *testing.T, db *DB, identifier, clientID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`,
+		`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES ($1, $2, 'accepted')`,
 		identifier, clientID,
 	); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test
@@ -585,20 +586,16 @@ func SeedPortalUser(t *testing.T, db *DB, identityUID, clientID string) {
 	AttachPortalUser(t, db, identityUID, clientID)
 }
 
-// SeedPendingPortalInvite inserts a client_portal_users row for clientID
-// with no identity_uid, plus its portal_invite_outbox row (default status
-// 'pending') -- mirroring what portalinvite.invite() leaves behind right
-// after a Staff member sends an invite (#255): "invited, not yet
-// accepted". The outbox row matters, not just the client_portal_users
-// one -- PortalInviteStatus reads a portal user row with no outbox row
-// at all the same as "never invited" (see its own doc comment), so a
-// fixture missing it would silently fail any Send-precondition test that
-// wants a genuinely pending invite. Returns the client_portal_users row's
-// id.
+// SeedPendingPortalInvite inserts an 'invited' client_portal_users row
+// for clientID with a token good for seven days, plus its
+// portal_invite_outbox row (default status 'pending') -- mirroring what
+// portalinvite.invite() leaves behind right after a Staff member sends an
+// invite (#255): "invited, not yet accepted", with the send still
+// queued. Returns the client_portal_users row's id.
 func SeedPendingPortalInvite(t *testing.T, db *DB, clientID string) (clientPortalUserID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days') RETURNING id`,
 		clientID,
 	).Scan(&clientPortalUserID); err != nil {
 		// coverage:ignore reason: fixture insert failure, not exercised by the happy-path test

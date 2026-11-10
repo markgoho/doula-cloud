@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/ratelimit"
 )
 
@@ -96,7 +97,7 @@ func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler 
 			return
 		}
 
-		var status string
+		var status invoicestatus.Status
 		var stripeInvoiceID, accountID sql.NullString
 		var clientsCanPay, paymentProcessing bool
 		err := c.Tx.QueryRowContext(r.Context(), payableInvoiceQuery, c.EngagementID, invoiceID).
@@ -111,12 +112,10 @@ func ClientGetPaymentHandler(client Client, publishableKey string) http.Handler 
 			return
 		}
 
+		payable, refusal := TransitionClientPay.Check(status, railOf(stripeInvoiceID))
 		switch {
-		case !stripeInvoiceID.Valid:
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientInvoiceByHand, nil)
-			return
-		case status != invoiceStatusOpen:
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientInvoiceNotOpen, nil)
+		case !payable:
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
 			return
 		case paymentProcessing:
 			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgClientPaymentOnItsWay, nil)

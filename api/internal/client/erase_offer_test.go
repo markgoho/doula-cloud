@@ -18,8 +18,10 @@ func TestEraseHandler_RedactsOfferClientFields(t *testing.T) {
 	e.Exec(`UPDATE engagements SET due_date = '2027-02-14' WHERE id = $1`, engagementID)
 	e.Exec(`INSERT INTO engagement_offers
 	            (engagement_id, staff_id, employment_type, amount_cents, client_first_initial, client_area,
-	             due_date, state, offered_by, expires_at)
-	        SELECT $1, $2, 'contractor', 45000, 'A', 'North side', '2027-02-14', s, $3, now() + interval '7 days'
+	             due_date, state, offered_by, expires_at, decided_at, decided_by, decided_by_kind)
+	        SELECT $1, $2, 'contractor', 45000, 'A', 'North side', '2027-02-14', s, $3, now() + interval '7 days',
+	               CASE WHEN s = 'accepted' THEN now() END, CASE WHEN s = 'accepted' THEN $2::uuid END,
+	               CASE WHEN s = 'accepted' THEN 'staff'::offer_decider_kind END
 	          FROM unnest(ARRAY['accepted', 'offered']::offer_state[]) AS s`,
 		engagementID, lena.ID, e.Staff.ID)
 

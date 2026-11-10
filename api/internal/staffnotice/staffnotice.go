@@ -102,7 +102,7 @@ const claimQuery = `SELECT o.id, o.attempt_count, o.id, o.practice_id, o.recipie
 	   FROM staff_notice_outbox o
 	   JOIN staff s ON s.id = o.recipient_staff_id
 	   JOIN practices p ON p.id = o.practice_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  WHERE ` + outbox.ClaimDueAliasO + `
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
 	  FOR UPDATE OF o SKIP LOCKED`
@@ -121,8 +121,8 @@ func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
 }
 
 // compose rechecks the row at send time: a person who has left the
-// Practice, or a record already resolved, is marked sent with nothing
-// mailed. The address it goes to is written on the row before the send,
+// Practice, or a record already resolved, is marked skipped with
+// nothing mailed. The address it goes to is written on the row before the send,
 // so the row says whom it reached; a retry overwrites it.
 func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, time.Time) (string, string, string, error) {
 	return func(ctx context.Context, tx *sql.Tx, p pendingRow, now time.Time) (string, string, string, error) {
@@ -204,13 +204,14 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 
 // openOffer reports whether the Offer is still open at now, and when it
 // expires. Read through 00041's engagement_offers notification-worker
-// policy.
+// policy. "Open" is offer_open_at (00174), the one definition offer's
+// lifecycle declares; this package cannot import offer, which imports it.
 func openOffer(ctx context.Context, tx *sql.Tx, offerID string, now time.Time) (time.Time, bool, error) {
-	var state string
+	var open bool
 	var expiresAt time.Time
 	err := tx.QueryRowContext(ctx,
-		`SELECT state::text, expires_at FROM engagement_offers WHERE id = $1`, offerID,
-	).Scan(&state, &expiresAt)
+		`SELECT offer_open_at(state, expires_at, $2), expires_at FROM engagement_offers WHERE id = $1`, offerID, now,
+	).Scan(&open, &expiresAt)
 	if err == sql.ErrNoRows {
 		return time.Time{}, false, nil
 	}
@@ -218,7 +219,7 @@ func openOffer(ctx context.Context, tx *sql.Tx, offerID string, now time.Time) (
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return time.Time{}, false, fmt.Errorf("staffnotice: read offer: %w", err)
 	}
-	return expiresAt, state == "offered" && expiresAt.After(now), nil
+	return expiresAt, open, nil
 }
 
 // stillOn reports whether staffID still holds an open, granted
@@ -229,7 +230,7 @@ func stillOn(ctx context.Context, tx *sql.Tx, engagementID, staffID string) (boo
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM engagement_attachments
 		                 WHERE engagement_id = $1 AND staff_id = $2
-		                   AND origin = 'granted' AND ended_at IS NULL)`,
+		                   AND state = 'granted')`,
 		engagementID, staffID,
 	).Scan(&on); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests

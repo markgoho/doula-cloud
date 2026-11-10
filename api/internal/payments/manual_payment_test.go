@@ -381,7 +381,7 @@ func TestPostInvoiceTransitionHandler_Refusals(t *testing.T) {
 			{"a Stripe-backed Invoice", tc.staff, func(e *env) string { id := e.stripeInvoice("in_"+tc.action+"_stripe", ""); return id }, "", http.StatusConflict},
 			{"an Invoice that is not open", tc.staff, func(e *env) string {
 				_, id := e.byHandInvoice()
-				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid' WHERE id = $1`, id); err != nil {
+				if _, err := e.DB.Admin.ExecContext(e.T.Context(), `UPDATE invoices SET status = 'paid', paid_at = now() WHERE id = $1`, id); err != nil {
 					e.T.Fatalf("seed paid status: %v", err)
 				}
 				return id

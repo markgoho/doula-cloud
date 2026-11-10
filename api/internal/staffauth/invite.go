@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
+	"doula-cloud/api/internal/staffinvitation"
 	"doula-cloud/api/internal/staffinvite"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -178,43 +180,55 @@ func invite(ctx context.Context, tx *sql.Tx, practiceID, actorStaffID, address s
 // than the Staff invitation's, so it needs the upsert without
 // staffinvite.Queue attached to it.
 //
-// The read below decides `rotated` only. The write is an upsert either
-// way, so a row appearing between the two costs an inaccurate status
-// code, never a second Invitation. Letting the INSERT fail and retrying
-// as an UPDATE is not the alternative it looks like: a constraint
-// violation aborts the whole transaction in Postgres, taking the retry
-// with it.
+// The insert is the whole write, whichever move it turns out to be:
+// meeting an open Invitation on practice_invitations_one_pending turns it
+// into staffinvitation.TransitionReinvite, whose Requires (pending or
+// lapsed) is exactly that index's status = 'pending' predicate. xmax = 0
+// on the returned row is Postgres's own answer to which it was -- zero
+// for a row this statement inserted, this transaction's id for one it
+// updated -- so there is no separate read for a concurrent invite to
+// slip between.
+//
+// A re-invite rewrites the token, the expiry and the Membership it
+// offers, never invited_by or created_at: those say who first invited
+// this address and when. Who sent it again, and when, is the
+// TransitionReinvite activity row recorded below.
 func MintInvitation(ctx context.Context, tx *sql.Tx, practiceID, invitedBy, address, rolesLiteral, employmentType string) (invitationID, token string, expiresAt time.Time, rotated bool, err error) {
-	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS(
-			SELECT 1 FROM practice_invitations
-			WHERE practice_id = $1 AND lower(address) = $2 AND status = 'pending'
-		)`,
-		practiceID, address,
-	).Scan(&rotated); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", time.Time{}, false, fmt.Errorf("staffauth: check pending invitation: %w", err)
-	}
-
 	token = uuid.NewString()
 	// created_at and expires_at are one instant from clock.Now(ctx)
-	// (#1992), on the insert as well as the re-send, rather than created_at
-	// left to the column's DEFAULT now(): the row's start and its lapse are
-	// read on the same clock listPendingInvitations and acceptInvite read.
+	// (#1992), rather than created_at left to the column's DEFAULT now():
+	// the row's start and its lapse are read on the same clock
+	// listPendingInvitations and acceptInvite read.
 	mintedAt := clock.Now(ctx)
 	expiresAt = mintedAt.Add(InvitationLifetime)
+	var inserted bool
 	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO practice_invitations
 		     (practice_id, address, roles, employment_type, token_digest, invited_by, expires_at, created_at)
 		 VALUES ($1, $2, $3::practice_role[], $4::employment_type, $5, $6, $7, $8)
 		 ON CONFLICT (practice_id, lower(address)) WHERE status = 'pending'
 		 DO UPDATE SET roles = $3::practice_role[], employment_type = $4::employment_type,
-		               token_digest = $5, invited_by = $6, created_at = $8, expires_at = $7
-		 RETURNING id`,
+		               token_digest = $5, expires_at = $7
+		 RETURNING id, xmax = 0`,
 		practiceID, address, rolesLiteral, employmentType, TokenDigest(token), invitedBy, expiresAt, mintedAt,
-	).Scan(&invitationID); err != nil {
+	).Scan(&invitationID, &inserted); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return "", "", time.Time{}, false, fmt.Errorf("staffauth: mint invitation: %w", err)
+	}
+	rotated = !inserted
+
+	move := staffinvitation.TransitionInvite
+	if rotated {
+		move = staffinvitation.TransitionReinvite
+	}
+	if err := staffinvitation.Record(ctx, tx, move, practiceID, invitedBy, mintedAt, staffinvitation.Diff{
+		InvitationID:   invitationID,
+		Roles:          splitRoles(strings.Trim(rolesLiteral, "{}")),
+		EmploymentType: employmentType,
+		ExpiresAt:      expiresAt,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", "", time.Time{}, false, fmt.Errorf("staffauth: record invitation: %w", err)
 	}
 	return invitationID, token, expiresAt, rotated, nil
 }
@@ -246,7 +260,9 @@ func AddressHoldsMembership(ctx context.Context, tx *sql.Tx, practiceID, address
 // RevokeInvitationHandler lets a Practice Owner withdraw a pending
 // Invitation. The row is not deleted -- who was invited and when is part
 // of the record, the same reasoning 00030 applies to the table as a whole
-// -- so this flips status and records the actor and the moment. Must be
+// -- so this flips status, records the actor and the moment on the row,
+// and writes staffinvitation.TransitionRevoke's activity row. An
+// Invitation already accepted or withdrawn is a 409 saying which. Must be
 // mounted behind staffauth.Middleware.
 //
 // Owner-only is declared at the mount, not checked here (#1028,
@@ -260,19 +276,50 @@ func RevokeInvitationHandler() http.Handler {
 		actorStaffID := c.StaffID
 
 		invitationID := c.ID("invitationId")
+		ctx := r.Context()
+		now := clock.Now(ctx)
 
-		rows, ok := dbtx.ExecRows(r.Context(), w, tx,
+		// Locked, so an acceptance racing this withdrawal waits for it
+		// and then finds the row no longer pending (acceptInvite's own
+		// guarded write), rather than overwriting it.
+		var status string
+		var expiresAt time.Time
+		err := tx.QueryRowContext(ctx,
+			`SELECT status::text, expires_at FROM practice_invitations
+			  WHERE id = $1 AND practice_id = $2
+			  FOR UPDATE`,
+			invitationID, practiceID,
+		).Scan(&status, &expiresAt)
+		if errors.Is(err, sql.ErrNoRows) {
+			apierr.WriteError(w, "no invitation found at this practice", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if ok, refusal := staffinvitation.TransitionRevoke.Check(staffinvitation.StateOf(staffinvitation.Status(status), expiresAt, now)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+
+		// status = 'pending' is TransitionRevoke's Requires (pending or
+		// lapsed) as the column holds it; the row lock above means it
+		// still holds here.
+		if _, ok := dbtx.ExecRows(ctx, w, tx,
 			`UPDATE practice_invitations
-			    SET status = 'revoked', revoked_by = $1, revoked_at = now()
+			    SET status = 'revoked', revoked_by = $1, revoked_at = $4
 			  WHERE id = $2 AND practice_id = $3 AND status = 'pending'`,
-			actorStaffID, invitationID, practiceID,
-		)
-		if !ok {
+			actorStaffID, invitationID, practiceID, now,
+		); !ok {
 			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure or a missing Middleware value, not exercised by unit tests
 			return
 		}
-		if rows == 0 {
-			apierr.WriteError(w, "no pending invitation found at this practice", http.StatusNotFound)
+		if err := staffinvitation.Record(ctx, tx, staffinvitation.TransitionRevoke, practiceID, actorStaffID, now,
+			staffinvitation.Diff{InvitationID: invitationID}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

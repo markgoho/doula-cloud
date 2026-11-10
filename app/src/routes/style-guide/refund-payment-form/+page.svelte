@@ -19,6 +19,8 @@
 		dueOn: '2027-10-14',
 		reference: 'INV-0014',
 		refundedCents: 37_450,
+		refundableCents: 387_550,
+		reversible: false,
 		daysOverdue: 0,
 		billingMode: 'by_hand',
 		activePaymentId: 'pay_1',

@@ -127,7 +127,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	// the same gate recording one already carries -- an additive row in
 	// the same append-only payments table, never an UPDATE or DELETE.
 	// Money-moving, so Replayable like recording one: a double-click must
-	// not reverse the same Payment twice (resolvePaymentForReversal's own
+	// not reverse the same Payment twice (ActReversePayment's own
 	// already-reversed check would 409 the retry regardless, but the
 	// Idempotency-Key still replays the first response rather than
 	// re-running the check). Refused entirely against a Stripe-backed

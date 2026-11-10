@@ -45,7 +45,7 @@ func connectNudgeRowCount(t *testing.T, db *testdb.DB, practiceID string) int {
 func backdateConnectNudge(t *testing.T, db *testdb.DB, practiceID string, days int) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE connect_nudge_outbox SET created_at = created_at - make_interval(days => $2), status = 'sent'
+		`UPDATE connect_nudge_outbox SET created_at = created_at - make_interval(days => $2), status = 'sent', sent_at = now()
 		 WHERE practice_id = $1`, practiceID, days,
 	); err != nil {
 		t.Fatalf("backdate connect_nudge_outbox: %v", err)
@@ -285,8 +285,8 @@ func TestConnectNudgeWorker_SendsNothingWhenThereIsNobodyToTell(t *testing.T) {
 				t.Fatalf("sent %d messages, want 0", len(sender.Sent()))
 			}
 			status := testdb.Scalar[string](t, e.DB.Admin, `SELECT status FROM connect_nudge_outbox WHERE practice_id = $1`, e.Practice.ID)
-			if status != testPayoutStatusSent {
-				t.Fatalf("status = %q, want %s (marked sent with nothing to mail)", status, testPayoutStatusSent)
+			if status != testOutboxStatusSkipped {
+				t.Fatalf("status = %q, want %s (marked skipped with nothing to mail)", status, testOutboxStatusSkipped)
 			}
 		})
 	}

@@ -97,8 +97,8 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		amount int64
 	}{{"open", 4000}, {"open", 5000}, {"paid", 7000}, {"void", 8000}, {"draft", 9000}} {
 		ref := "in_detail_" + string(rune('a'+i))
-		e.Exec(`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at)
-			 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $3, now())`,
+		e.Exec(`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at, paid_at)
+			 VALUES ($1, $2, $3, $4::invoice_status, $5, 'usd', $3, now(), CASE WHEN $4::invoice_status = 'paid' THEN now() END)`,
 			e.Practice.ID, contractID, ref, inv.status, inv.amount)
 	}
 
@@ -110,7 +110,7 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 		t.Fatalf("open invoices = %d, only = %v, want 2 and none", out.OpenInvoiceCount, out.OnlyOpenInvoiceID)
 	}
 
-	e.Exec(`UPDATE invoices SET status = 'paid' WHERE stripe_invoice_id = 'in_detail_b'`)
+	e.Exec(`UPDATE invoices SET status = 'paid', paid_at = now() WHERE stripe_invoice_id = 'in_detail_b'`)
 	var onlyID string
 	if err := e.DB.Admin.QueryRowContext(t.Context(),
 		`SELECT id FROM invoices WHERE stripe_invoice_id = 'in_detail_a'`).Scan(&onlyID); err != nil {

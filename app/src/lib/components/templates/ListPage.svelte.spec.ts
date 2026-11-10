@@ -113,7 +113,7 @@ describe('ListPage.svelte', () => {
 	});
 
 	it('renders the title and a skeleton while loading, instead of the content (#480)', async () => {
-		const { container } = await setup({ loading: 'Loading Staff' });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading Staff' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
@@ -122,7 +122,7 @@ describe('ListPage.svelte', () => {
 	});
 
 	it('renders the title and a Notice on a load failure, instead of the content (#480)', async () => {
-		const { container } = await setup({ loadError: 'Failed to load Staff' });
+		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load Staff' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'none');
 		await expect.element(page.getByRole('heading', { level: 1, name: 'Staff' })).toBeVisible();
@@ -190,10 +190,4 @@ describe('ListPage.svelte', () => {
 		expect(gap).toBeLessThan(sectionStep - 0.5);
 	});
 
-	it('prefers loadError over loading when both are somehow given', async () => {
-		await setup({ loadError: 'Failed to load Staff', loading: 'Loading Staff' });
-
-		await expect.element(page.getByText('Failed to load Staff')).toBeVisible();
-		await expect.element(page.getByRole('status', { name: 'Loading Staff' })).not.toBeInTheDocument();
-	});
 });

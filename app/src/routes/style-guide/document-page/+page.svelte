@@ -54,7 +54,10 @@
 	backHref="#"
 	backLabel="Back to {INVOICES_HEADING}"
 	{content}
-	loading={shown === 'loading' ? 'Loading invoice' : undefined}
-	loadError={shown === 'loadError' ? 'Failed to load invoice' : undefined}
+	read={shown === 'loading'
+		? { status: 'loading', label: 'Loading invoice' }
+		: (shown === 'loadError'
+			? { status: 'failed', message: 'Failed to load invoice' }
+			: undefined)}
 	empty={shown === 'empty' ? NO_CONTRACT_MESSAGE : undefined}
 />

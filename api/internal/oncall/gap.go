@@ -234,7 +234,7 @@ func whyNotOnCall(ctx context.Context, tx *sql.Tx, practiceID, engagementID stri
 	if err := tx.QueryRowContext(ctx,
 		`SELECT e.kind::text, e.status::text,
 		        EXISTS (SELECT 1 FROM engagement_attachments ea
-		                 WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
+		                 WHERE ea.engagement_id = e.id AND ea.state = 'granted')
 		   FROM engagements e WHERE e.id = $1 AND e.practice_id = $2`,
 		engagementID, practiceID,
 	).Scan(&kind, &status, &granted); err != nil {

@@ -61,9 +61,10 @@ func TestListStaffHandler_InvitationExpiredAtExpiresAtOnTheRequestClock(t *testi
 
 // TestInviteHandler_StampsCreatedAtAndExpiresAtFromOneClock is #1992's
 // third box for the Invitation: MintInvitation writes created_at and
-// expires_at from the same clock.Now(ctx), on the first send and on a
-// re-send, so the row's start and its lapse are on the clock every read
-// of them uses.
+// expires_at from the same clock.Now(ctx), so the row's start and its
+// lapse are on the clock every read of them uses. A re-send moves
+// expires_at and leaves created_at at the first send; its own instant is
+// the re-send's activity row, on the same clock.
 func TestInviteHandler_StampsCreatedAtAndExpiresAtFromOneClock(t *testing.T) {
 	db := testdb.New(t)
 	const ownerUID = "owner-invites-on-a-fixed-clock"
@@ -88,9 +89,35 @@ func TestInviteHandler_StampsCreatedAtAndExpiresAtFromOneClock(t *testing.T) {
 		).Scan(&createdAt, &expiresAt); err != nil {
 			t.Fatalf("read invitation: %v", err)
 		}
-		if !createdAt.Equal(at) || !expiresAt.Equal(at.Add(staffauth.InvitationLifetime)) {
-			t.Fatalf("created_at = %v, expires_at = %v; want %v and %v", createdAt, expiresAt, at, at.Add(staffauth.InvitationLifetime))
+		if !createdAt.Equal(sentAt) || !expiresAt.Equal(at.Add(staffauth.InvitationLifetime)) {
+			t.Fatalf("created_at = %v, expires_at = %v; want %v and %v", createdAt, expiresAt, sentAt, at.Add(staffauth.InvitationLifetime))
 		}
+	}
+
+	got := readInvitationActivity(t, db, practiceID)
+	if len(got) != 2 || !got[0].at.Equal(sentAt) || !got[1].at.Equal(resentAt) {
+		t.Fatalf("invitation activity = %+v, want the send at %v and the re-send at %v", got, sentAt, resentAt)
+	}
+}
+
+// TestRevokeInvitationHandler_StampsRevokedAtFromTheRequestClock proves
+// a withdrawal reads its instant through clock.Now(ctx), not the
+// database's now().
+func TestRevokeInvitationHandler_StampsRevokedAtFromTheRequestClock(t *testing.T) {
+	db := testdb.New(t)
+	const ownerUID = "owner-revokes-on-a-fixed-clock"
+	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
+	invitationID := seedInvitation(t, db, practiceID, ownerID, "clocked-revoke@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
+	at := time.Now().Add(-time.Hour).Truncate(time.Microsecond).UTC()
+
+	srv, session := newClockedStaffServer(t, db, ownerUID, at)
+	resp := doInviteRequest(t, srv, session, "/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+	_ = resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+
+	revokedAt := testdb.Scalar[time.Time](t, db.Admin, `SELECT revoked_at FROM practice_invitations WHERE id = $1`, invitationID)
+	if !revokedAt.Equal(at) {
+		t.Fatalf("revoked_at = %v, want the request clock's %v", revokedAt, at)
 	}
 }
 

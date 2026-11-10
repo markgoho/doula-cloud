@@ -142,7 +142,7 @@ func TestCreateGap_SaysWhichReasonThereIsNoWindow(t *testing.T) {
 		{"there is no due date", `UPDATE engagements SET due_date = NULL WHERE id = $1`, oncall.MsgNoWindowNoDueDate},
 		{"postpartum care is not on-call work", `UPDATE engagements SET kind = 'postpartum' WHERE id = $1`, oncall.MsgNoWindowPostpartum},
 		{"care has ended", `UPDATE engagements SET status = 'completed', ending_reason = 'care_complete', birth_outcome = 'unknown' WHERE id = $1`, oncall.MsgNoWindowCompleted},
-		{"nobody is on the birth", `UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, oncall.MsgNoWindowNobodyOnIt},
+		{"nobody is on the birth", `UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, oncall.MsgNoWindowNobodyOnIt},
 		{"the baby arrived before on call would have opened", `UPDATE engagements SET birth_outcome = 'live_birth', pregnancy_ended_on = '2026-09-20' WHERE id = $1`, oncall.MsgNoWindowEnded},
 	}
 	for _, tt := range tests {

@@ -13,6 +13,7 @@
 		type ListedQuestion
 	} from '#lib/components/organisms/PracticeQuestionList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import { loadTemplate, type Field } from '#lib/planTemplate.js';
 	import { PLAN_TYPES, planTypeFromQuery, type PlanType } from './planTemplatePages.js';
 	import type { PracticeSession } from '../../+layout.js';
@@ -36,21 +37,19 @@
 	const outcome = takeOutcome(page.url);
 
 	let planType = $state<PlanType>(planTypeFromQuery(page.url));
-	let fields = $state<Field[]>([]);
-	let isLoaded = $state(false);
-	let error = $state('');
+	// The tab in view's questions. A tab chosen while another's read is in
+	// flight wins: the earlier answer is dropped.
+	const template = new PageRead<Field[]>();
 	let tabElements = $state<HTMLButtonElement[]>([]);
 
 	async function load() {
-		error = '';
-		isLoaded = false;
-		try {
-			const template = await loadTemplate(apiFetchWithSession, practiceId, planType);
-			fields = template.fields;
-			isLoaded = true;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load plan template';
-		}
+		await template.load(
+			async () => {
+				const loaded = await loadTemplate(apiFetchWithSession, practiceId, planType);
+				return loaded.fields;
+			},
+			'Failed to load plan template'
+		);
 	}
 
 	function selectPlanType(value: PlanType) {
@@ -162,8 +161,8 @@
 
 {#snippet list()}
 	<stack-l space="var(--space-5)" role="tabpanel" id={panelId(planType)} aria-labelledby={tabId(planType)} tabindex="0"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
-		{#if error}
-			<Notice variant="error" message={error} />
+		{#if template.state.status === 'failed'}
+			<Notice variant="error" message={template.state.message} />
 		{/if}
 		<!-- #2244: the PUT is OwnerOnly (#1407). Anyone else reads the
 			questions, with no Change and no add, and is told why, as the
@@ -171,9 +170,9 @@
 		{#if !canChange}
 			<Notice variant="info" message="Only a Practice Owner can change these questions." />
 		{/if}
-		{#if isLoaded}
+		{#if template.state.status === 'loaded'}
 			<PracticeQuestionList
-				questions={fields}
+				questions={template.state.value}
 				emptyMessage="No questions yet."
 				changeHref={canChange ? changeHref : undefined}
 				addHref={canChange ? addHref : undefined}

@@ -11,10 +11,13 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
@@ -24,18 +27,6 @@ import (
 // returns per page -- mirrors message.pageSize's "fixed size is enough
 // for paginated to be true" reasoning.
 const invoicePageSize = 30
-
-// invoiceStatusOpen is the invoices.status value shared by every read and
-// write site in this package that tests for "billed and not yet
-// collected" -- named once so goconst's repeat threshold, crossed once
-// #271 added a second reader (manual_payment.go), doesn't see the same
-// literal typed twice.
-const invoiceStatusOpen = "open"
-
-// invoiceStatusPaid is "open"'s pair for a settled Invoice, named once
-// for the same goconst reason: #1009's Refund made a third reader of it,
-// beside the reversal and the invoice.paid webhook guard.
-const invoiceStatusPaid = "paid"
 
 // fieldMethod is the wire and diff name of a Payment's or a Refund's
 // method -- a field-error key on a 400 and a key in an Activity diff.
@@ -109,8 +100,19 @@ type InvoiceView struct {
 	// (00115_payment_refund.sql), so this field is the only thing that
 	// answers "is this Client owed money back".
 	RefundedCents int64 `json:"refundedCents"`
+	// RefundableCents is how much a Staff member may still return against
+	// ActivePaymentID -- what is left on it, when the Invoice and the
+	// Payment are where TransitionRefund and ActRefundPayment start from --
+	// and 0 when there is nothing to return. Reversible is whether
+	// TransitionReversePayment and ActReversePayment both admit reversing
+	// it. The routes ask the same two declarations, so a screen that offers
+	// "Return money" and "Reverse payment" from these offers exactly what
+	// the routes would take (paymentActsOpen).
+	RefundableCents int64 `json:"refundableCents"`
+	Reversible      bool  `json:"reversible"`
 	// DaysOverdue (#2122) is how many whole Practice days this Invoice is
-	// past DueOn, and 0 when it is not overdue or not open: counted by
+	// past DueOn, and 0 when it is not overdue, not open, or has a payment
+	// on its way (PaymentProcessing, which a screen reads first): counted by
 	// overdue.Days at the request's one instant, the same rule and the
 	// same count PracticeInvoiceView.DaysOverdue and a contractor's row
 	// carry, so one Invoice reads Overdue on every Staff screen or on
@@ -196,10 +198,16 @@ type CreateInvoiceRequest struct {
 // its own stored stripe_invoice_id -- NULL means by-hand, following the
 // migration's own "a NULL is the flag; there is no second column" rule.
 func billingModeOf(stripeInvoiceID sql.NullString) string {
+	return string(railOf(stripeInvoiceID))
+}
+
+// railOf is billingModeOf as the BillingMode an InvoiceTransition's Check
+// asks for.
+func railOf(stripeInvoiceID sql.NullString) BillingMode {
 	if stripeInvoiceID.Valid {
-		return string(BillingModeStripe)
+		return BillingModeStripe
 	}
-	return string(BillingModeByHand)
+	return BillingModeByHand
 }
 
 // MsgClientsCannotPay is PostInvoiceHandler's refusal (#270) when this
@@ -263,6 +271,12 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 		if billable, refusal := contracts.TransitionBill.Check(contractStatus); !billable {
 			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+		// Stripe mode already refuses an erased record for its missing
+		// email (#430); a by-hand Invoice asks for none, so this is the
+		// only refusal it meets.
+		if !clientstanding.ActCreateInvoice.RequireForEngagement(w, r, tx, engagementID) {
 			return
 		}
 
@@ -405,7 +419,7 @@ func createByHandInvoice(ctx context.Context, tx *sql.Tx, practiceID, contractID
 	return InvoiceView{
 		ID:          invoiceID,
 		ContractID:  contractID,
-		Status:      invoiceStatusOpen,
+		Status:      string(invoicestatus.Open),
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
@@ -477,30 +491,55 @@ func createStripeInvoice(ctx context.Context, tx *sql.Tx, client Client, practic
 
 	// A draft invoices row is now persisted (staffauth.Middleware commits
 	// the request-scoped tx regardless of the status this handler writes)
-	// even if FinalizeInvoice below fails.
+	// even if FinalizeInvoice below fails. It leaves Draft by one of its
+	// two declared exits: finalized, or voided because Stripe would not
+	// finalize it (TransitionAbandonDraft).
 	hostedInvoiceURL, number, err := client.FinalizeInvoice(ctx, accountID, stripeInvoiceID)
 	_ = hostedInvoiceURL // not yet surfaced anywhere; see #78's own discard of it
 	if err != nil {
+		if abandonErr := abandonDraft(ctx, tx, practiceID, invoiceID); abandonErr != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return InvoiceView{}, abandonErr
+		}
 		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE invoices SET status = 'open', reference = $2 WHERE id = $1`, invoiceID, number,
-	); err != nil {
+	if ok, refusal := TransitionFinalize.Check(invoicestatus.Draft, BillingModeStripe); !ok {
+		// coverage:ignore reason: the row was inserted as a Stripe-backed draft a moment ago, which TransitionFinalize always takes
+		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice row: %s", refusal)
+	}
+	if err := moveInvoice(ctx, tx, invoiceID, TransitionFinalize, `, reference = $3`, number); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return InvoiceView{}, fmt.Errorf("payments: finalize stripe invoice row: %w", err)
+		return InvoiceView{}, err
 	}
 
 	return InvoiceView{
 		ID:          invoiceID,
 		ContractID:  contractID,
-		Status:      invoiceStatusOpen,
+		Status:      string(invoicestatus.Open),
 		AmountCents: amountCents,
 		Currency:    "usd",
 		CreatedAt:   createdAt,
 		Reference:   number,
 		BillingMode: string(BillingModeStripe),
 	}, nil
+}
+
+// abandonDraft voids the draft createStripeInvoice inserted when Stripe
+// would not finalize it (TransitionAbandonDraft), and records
+// activity.ActionInvoiceNotSent with DoulaCloud as its actor: the raise
+// was a Staff member's, the void is what DoulaCloud made of its failure.
+// The row stays, so DoulaCloud still knows the Stripe draft exists.
+func abandonDraft(ctx context.Context, tx *sql.Tx, practiceID, invoiceID string) error {
+	if ok, refusal := TransitionAbandonDraft.Check(invoicestatus.Draft, BillingModeStripe); !ok {
+		// coverage:ignore reason: the row was inserted as a Stripe-backed draft a moment ago, which TransitionAbandonDraft always takes
+		return fmt.Errorf("payments: abandon draft: %s", refusal)
+	}
+	if err := moveInvoice(ctx, tx, invoiceID, TransitionAbandonDraft, ``); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	return recordInvoiceEvent(ctx, tx, practiceID, invoiceID, activity.ActionInvoiceNotSent, nil, false)
 }
 
 // GetInvoicesHandler lists every Invoice ever created against
@@ -716,6 +755,39 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 	return customerID, nil
 }
 
+// activePaymentJoin is the Payment standing on each Invoice, alias ap
+// (paymentstanding.InvoicePaymentJoin): the one Payment currently
+// covering it, if any. Both acts that target a specific Payment need its
+// id in their own path rather than just :invoiceId --
+// PostReversePaymentHandler (#945) and PostRefundPaymentHandler (#1009)
+// -- and a Staff screen needs its kind, because a Stripe-backed Invoice
+// can be covered by a card Payment or by one recorded by hand against it,
+// and a Refund of the two asks different questions. A refunded Payment
+// still stands (paymentstanding.FullyRefunded): only a reversal takes one
+// off its Invoice.
+const activePaymentJoin = paymentstanding.InvoicePaymentJoin
+
+// refundedCentsColumn is how much of an Invoice has been returned to the
+// Client (#1009) -- a positive number, and 0 when none has: the standing
+// Payment's refunded_cents, since every Refund on an Invoice returns the
+// Payment standing on it. It is the whole reason the Invoice's own status
+// does not have to move: "is this Client owed money back, and how much
+// came back already" is answered here, and never by invoice_status, which
+// stays 'paid' exactly as Stripe's own does (00115's comment).
+const refundedCentsColumn = `COALESCE(ap.refunded_cents, 0) AS refunded_cents`
+
+// standingPaymentColumns are the standing Payment's columns an Invoice
+// list reads, after refundedCentsColumn: its amount and its standing,
+// from which paymentActsOpen works out what a person may still do with
+// it.
+const standingPaymentColumns = `ap.amount_cents, ap.standing`
+
+// paymentProcessingExpr is whether a payment on an Invoice is on its way
+// (#2225), as the payment_processing column: invoicestatus's one
+// expression, which the Clients list's rollup reads too, so no two
+// screens -- Staff or Client -- disagree.
+const paymentProcessingExpr = invoicestatus.PaymentOnItsWayExpr + ` AS payment_processing`
+
 // listInvoicesQuery and listInvoicesAfterQuery share the same column list
 // and JOIN; the only difference is the cursor's WHERE clause and LIMIT
 // placeholder position -- mirrors message's listMessagesQuery /
@@ -723,67 +795,14 @@ func resolveStripeCustomer(ctx context.Context, tx *sql.Tx, stripeClient Client,
 // direct contract_id = $1 filter) so an Invoice created against a
 // since-voided Contract still lists under the Engagement that Contract
 // belonged to.
-// activePaymentIDSubquery is #945's own addition: the one Payment
-// currently covering an Invoice, if any. The all-or-nothing Payment model
-// means at most one ever exists at a time for a 'paid' Invoice, so
-// ORDER BY ... LIMIT 1 is a safety net against a future model change
-// rather than a real ambiguity today. Both acts that target a specific
-// Payment need this id in their own path rather than just :invoiceId --
-// PostReversePaymentHandler and, since #1009, PostRefundPaymentHandler --
-// and nothing before #945 ever exposed it to a caller.
-//
-// #1009 widened it twice. The kind filter was 'manual' alone, because
-// reversal was the only act and it refuses a Stripe-backed Invoice; a
-// Refund reaches a Stripe-collected Payment too, so 'stripe' joins it.
-// Reverse stays by-hand-only at its own gate -- InvoiceSection.svelte
-// shows that button only when billingMode is 'by_hand', and
-// PostReversePaymentHandler refuses the rest -- so widening here offers
-// nothing that was not already refused.
-//
-// The NOT EXISTS now names kind = 'reversal' explicitly. It did not have
-// to before, when a reversal was the only row that could point at a
-// Payment; a Refund points at one through the same column (00115) without
-// undoing it, so an unqualified NOT EXISTS would make a refunded Payment
-// vanish from this column and hide every act still available against it.
-//
-// It is a LATERAL join rather than the scalar subquery #945 wrote,
-// because #1009 needs the Payment's kind as well as its id -- one lookup,
-// two columns -- and a scalar subquery can return only one. The kind is
-// what a Staff screen cannot work out any other way: a Stripe-backed
-// Invoice can be covered by a card Payment or by one recorded by hand
-// against it, and a Refund of the two asks different questions.
-const activePaymentJoin = `LEFT JOIN LATERAL (SELECT p.id, p.kind::text AS kind, p.method::text AS method, p.note FROM payments p
-	 WHERE p.invoice_id = i.id AND p.kind IN ('manual', 'stripe')
-	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.target_payment_id = p.id AND r.kind = 'reversal')
-	 ORDER BY p.created_at DESC LIMIT 1) ap ON true`
-
-// refundedCentsSubquery is how much of an Invoice has been returned to
-// the Client (#1009) -- a positive number, summed from the negative
-// Refund rows against it, and 0 when there are none. It is the whole
-// reason the Invoice's own status does not have to move: "is this Client
-// owed money back, and how much came back already" is answered here, and
-// never by invoice_status, which stays 'paid' exactly as Stripe's own
-// does (00115's comment).
-const refundedCentsSubquery = `(SELECT COALESCE(-SUM(f.amount_cents), 0) FROM payments f
-	 WHERE f.invoice_id = i.id AND f.kind = 'refund') AS refunded_cents`
-
-// paymentProcessingExpr is whether a payment on an Invoice is on its way
-// (#2225): payment_intent.processing set payment_processing_since and
-// nothing has ended it yet. Only an open Invoice counts, so a value left
-// behind by a way out of 'open' that does not clear it -- a Payment
-// recorded by hand, a void -- never reads as a payment still coming. One
-// expression for every reader, Staff and Client, so no two screens
-// disagree.
-const paymentProcessingExpr = `(i.status = 'open' AND i.payment_processing_since IS NOT NULL) AS payment_processing`
-
-const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
+const listInvoicesQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsColumn + `, ` + standingPaymentColumns + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1
 	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
 
-const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
+const listInvoicesAfterQuery = `SELECT i.id, i.contract_id, i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.id, ap.kind, ap.method, ap.note, ` + refundedCentsColumn + `, ` + standingPaymentColumns + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	` + activePaymentJoin + `
@@ -814,15 +833,16 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 		var paidAt sql.NullTime
 		var dueAt time.Time
 		var stripeInvoiceID sql.NullString
-		var activePaymentID, activePaymentKind, activePaymentMethod, activePaymentNote sql.NullString
-		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents, &it.PaymentProcessing); err != nil {
+		var activePaymentID, activePaymentKind, activePaymentMethod, activePaymentNote, activePaymentStanding sql.NullString
+		var activePaymentAmount sql.NullInt64
+		if err := rows.Scan(&it.ID, &it.ContractID, &it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentID, &activePaymentKind, &activePaymentMethod, &activePaymentNote, &it.RefundedCents, &activePaymentAmount, &activePaymentStanding, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("payments: scan invoice row: %w", err)
 		}
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
 		it.DueOn = practiceDay(dueAt, days.zone)
 		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
-		it.DaysOverdue = overdue.Days(it.Status, dueAt, days.now, days.zone)
+		it.DaysOverdue = overdue.Days(it.Status, it.PaymentProcessing, dueAt, days.now, days.zone)
 		if activePaymentID.Valid {
 			it.ActivePaymentID = &activePaymentID.String
 			it.ActivePaymentKind = activePaymentKind.String
@@ -832,6 +852,8 @@ func listInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *i
 			it.ActivePaymentNote = activePaymentNote.String
 		}
 		it.BillingMode = billingModeOf(stripeInvoiceID)
+		it.RefundableCents, it.Reversible = paymentActsOpen(invoicestatus.Status(it.Status), railOf(stripeInvoiceID), activePaymentKind.String,
+			paymentstanding.Standing(activePaymentStanding.String), activePaymentAmount.Int64-it.RefundedCents)
 		items = append(items, it)
 	}
 	if err := rows.Err(); err != nil {

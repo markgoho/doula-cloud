@@ -43,7 +43,7 @@ func TestDetailHandler_HasDoulaFeesAfterTheAttachmentEnded(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()), withEngagement(fixture.Status(fixture.StatusActive)))
 	lena := e.Colleague(fixture.Contractor())
 	seedFeeAttachment(t, e.DB, e.Engagement.ID, lena.ID, lena.ID, 45000, "2026-07-01T12:00:00Z")
-	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id WHERE engagement_id = $1`, e.Engagement.ID)
+	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, e.Engagement.ID)
 
 	if !e.detail().HasDoulaFees {
 		t.Error("hasDoulaFees = false, want true for a fee on an ended Attachment")

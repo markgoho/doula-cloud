@@ -27,6 +27,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { NO_DOULA_YET_LABEL } from './engagementRequest.js';
@@ -95,7 +96,10 @@ export interface EngagementSummary {
 	/** The Client's portal-invite state (#255), using the same
 	 * derivation the Clients list's own ClientListItem.portalInviteStatus
 	 * carries -- absent when she has never been invited. */
-	clientPortalInviteStatus?: string;
+	clientPortalInviteStatus?: PortalAccessState;
+	/** The latest send of a live invitation, present only while
+	 * clientPortalInviteStatus is `invited`. */
+	clientPortalInviteDelivery?: PortalInviteDelivery;
 	/** Mirrors ClientListItem.emailSuppressed (#785, ADR-0029): whether
 	 * the Client's address is currently suppressed. */
 	clientEmailSuppressed?: boolean;

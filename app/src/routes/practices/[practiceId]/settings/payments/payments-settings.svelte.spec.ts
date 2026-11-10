@@ -781,6 +781,23 @@ describe('payments settings screen: re-reading Connect status on return from Str
 			.not.toBeInTheDocument();
 	});
 
+	it('stops checking the moment the on-demand check answers active mid-poll, and says so at once', async () => {
+		vi.useFakeTimers();
+		returnedFromStripe('return');
+		await setupSequence([{ status: 'pending' }, { status: 'active' }]);
+		await expect.element(testPage.getByText('Stripe is checking your details', { exact: false })).toBeVisible();
+
+		await testPage.getByRole('button', { name: 'Check status again' }).click();
+
+		await expect.element(testPage.getByText('Taking payments', { exact: true })).toBeVisible();
+		// Read once, not waited for: the banner has to agree with the badge
+		// the moment the badge is drawn, not after the poll's next read.
+		expect(testPage.getByText('Stripe is checking your details', { exact: false }).query()).toBeNull();
+		expect(testPage.getByText('Stripe onboarding finished.', { exact: true }).query()).not.toBeNull();
+		await vi.advanceTimersByTimeAsync(CONNECT_STATUS_POLL_DELAYS_MS.reduce((sum, ms) => sum + ms, 0));
+		expect(connectCallCount()).toBe(2);
+	});
+
 	it('shows the plain finished banner, with no promise to keep checking, for a status already settled', async () => {
 		returnedFromStripe('return');
 		await setupSequence([{ status: 'active' }]);

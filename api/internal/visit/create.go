@@ -8,6 +8,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -67,6 +68,9 @@ type CreateResponse struct {
 func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		engagementID := c.EngagementID
+		if !clientstanding.ActAddVisit.RequireForEngagement(w, r, c.Tx, engagementID) {
+			return
+		}
 
 		var req CreateRequest
 		if !apierr.DecodeJSONOptional(w, r, &req) {

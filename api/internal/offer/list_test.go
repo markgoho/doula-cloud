@@ -104,11 +104,7 @@ func TestTransitionHandler_CompletingRunsTheCascade(t *testing.T) {
 	secondID := testdb.SeedStaffAtPractice(t, f.db, f.practiceID, "uid-doula-2", []string{doulaRole}, contractorType)
 	stillOpen := f.makeOffer(t, offerBody(secondID, 45000))
 
-	testdb.SeedBirthOutcome(t, f.db, f.engagementID)
-	expectStatus(t, do(t, http.MethodPatch,
-		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/status", f.ownerSession,
-		completeStatusBody),
-		http.StatusOK)
+	completeEngagement(t, f)
 
 	state, decidedBy := offerState(t, f.db, stillOpen)
 	if state != stateWithdrawn {

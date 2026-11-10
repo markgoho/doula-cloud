@@ -28,6 +28,13 @@ import (
 // package-wide, not just within one file.
 const statusPending = "pending"
 
+// statusAccepted and statusRevoked are practice_invitations.status's two
+// other stored values, named for the same goconst reason.
+const (
+	statusAccepted = "accepted"
+	statusRevoked  = "revoked"
+)
+
 func TestSignupHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "signup-with-portal-session"
@@ -117,8 +124,8 @@ func TestAcceptInviteHandler_LivePortalSessionRefusesThenConfirmedRetrySucceeds(
 	if err := db.Admin.QueryRowContext(t.Context(), `SELECT status FROM practice_invitations WHERE token_digest = $1`, staffauth.TokenDigest(inviteToken)).Scan(&status); err != nil {
 		t.Fatalf("read invitation status: %v", err)
 	}
-	if status != "accepted" {
-		t.Errorf("invitation status = %q, want %q -- the confirmed retry succeeds", status, "accepted")
+	if status != statusAccepted {
+		t.Errorf("invitation status = %q, want %q -- the confirmed retry succeeds", status, statusAccepted)
 	}
 	if got := authntest.CountFor(t, db.App, portalUID); got != 0 {
 		t.Errorf("portal session rows = %d, want 0 -- confirmed, evicted", got)

@@ -18,6 +18,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"doula-cloud/api/internal/clock"
 )
 
 // ErrNoCreditsRemaining is returned by ConsumeCredit when a Practice's
@@ -51,21 +53,25 @@ func ConsumeCredit(ctx context.Context, tx *sql.Tx, practiceID, engagementID str
 
 	// Which Credit is spent is no longer arbitrary: #420 made a Credit's
 	// price part of its own row, so a consumption has to name the lot it
-	// drew from. The oldest open lot is that lot -- one FIFO rule for
-	// consumption and refunds alike, documented on openLots.
-	lots, err := openLots(ctx, tx, practiceID)
+	// drew from. The oldest lot ActConsume admits is that lot -- one FIFO
+	// rule for every draw, documented on lotsAt. A forfeited lot is
+	// drained like a spent one, so a Practice whose balance was forfeited
+	// has nothing to consume.
+	now := clock.Now(ctx)
+	all, err := lotsAt(ctx, tx, practiceID, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
+	lots := ActConsume.from(all)
 	if len(lots) == 0 {
 		return ErrNoCreditsRemaining
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO credit_ledger (practice_id, origin, quantity, consumed_engagement_id, consumed_at, drawn_lot_id)
-		 VALUES ($1, 'consumption', -1, $2, now(), $3)`,
-		practiceID, engagementID, lots[0].id,
+		`INSERT INTO credit_ledger (practice_id, origin, quantity, consumed_engagement_id, consumed_at, drawn_lot_id, created_at)
+		 VALUES ($1, $2, -1, $3, $4, $5, $4)`,
+		practiceID, ActConsume.Origin, engagementID, now, lots[0].id,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("billing: insert consumption row: %w", err)

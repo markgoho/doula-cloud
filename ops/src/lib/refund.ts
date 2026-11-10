@@ -1,4 +1,4 @@
-import { postAct, refusal, type Outcome } from './act.ts';
+import { postAct, refusal, stepUpRefusal, type Outcome, type StepUpOutcome } from './act.ts';
 import type { FormError } from './authRefusal.ts';
 
 export const CREDITS_FIELD = 'credits';
@@ -58,8 +58,8 @@ export async function sendRefund(
 	order: { credits: number; requestedBy: string; requestedOn: string },
 	key: string,
 	fetcher: Fetch = fetch
-): Promise<Outcome<RefundResult>> {
+): Promise<StepUpOutcome<RefundResult>> {
 	const response = await postAct(`/api/practices/${practiceId}/refunds`, key, order, fetcher);
 	if (response.ok) return { kind: 'ok', value: await response.json() };
-	return refusal(response, FIELD_OF);
+	return stepUpRefusal(response, FIELD_OF);
 }

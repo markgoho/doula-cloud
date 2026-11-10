@@ -32,7 +32,7 @@ func TestEditHandler_EmailChangeLeavesPortalAccessAlone(t *testing.T) {
 	portalIdentifier := portalaccount.NewIdentifier()
 	testdb.SeedPortalAccount(t, db, portalIdentifier, "her-own@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (identity_uid, client_id) VALUES ($1, $2)`, portalIdentifier, clientID,
+		`INSERT INTO client_portal_users (identity_uid, client_id, state) VALUES ($1, $2, 'accepted')`, portalIdentifier, clientID,
 	); err != nil {
 		t.Fatalf("seed client_portal_users: %v", err)
 	}

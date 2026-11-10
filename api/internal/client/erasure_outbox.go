@@ -55,7 +55,7 @@ type erasurePendingRow struct {
 // simply not yet due.
 const erasureClaimQuery = `SELECT id, practice_id, act::text, target, attempt_count
 	 FROM client_erasure_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`

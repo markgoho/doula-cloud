@@ -62,7 +62,7 @@ describe('loadClients', () => {
 	it('fetches the practice clients path and returns the decoded page', async () => {
 		const page = {
 			items: [
-				{ clientId: 'client-1', name: 'Ada Lovelace', email: 'ada@example.com', hasWork: true, portalInviteStatus: 'sent' },
+				{ clientId: 'client-1', name: 'Ada Lovelace', email: 'ada@example.com', hasWork: true, portalInviteStatus: 'invited', portalInviteDelivery: 'sent' },
 				{ clientId: 'client-2', name: 'Grace Hopper', email: 'grace@example.com', hasWork: false }
 			],
 			hasMore: false

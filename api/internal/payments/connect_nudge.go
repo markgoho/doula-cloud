@@ -229,7 +229,7 @@ type connectNudgePendingRow struct {
 
 const connectNudgeClaimQuery = `SELECT id, practice_id, attempt_count
 	 FROM connect_nudge_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -250,7 +250,7 @@ func (w ConnectNudgeWorker) ProcessPending(ctx context.Context, tx *sql.Tx) erro
 // The recheck is Worker.send's own shape (#343's requirementsStill-
 // Outstanding) applied to this row's own condition: a Practice that
 // connected Stripe between the press and the send -- a retry after a
-// Mailgun failure can be up to a day later -- is marked sent with
+// Mailgun failure can be up to a day later -- is marked skipped with
 // nothing mailed, rather than telling every Owner to do something that
 // is already done.
 func (w ConnectNudgeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r connectNudgePendingRow, now time.Time) error {
@@ -260,7 +260,7 @@ func (w ConnectNudgeWorker) send(ctx context.Context, tx *sql.Tx, inner outbox.W
 		return err
 	}
 	if !stillUnconnected {
-		return wrapOutboxErr(inner.MarkSent(ctx, tx, r.id, now))
+		return wrapOutboxErr(inner.MarkSkipped(ctx, tx, r.id, outbox.SkipAlreadyResolved, now))
 	}
 
 	staffIDs, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)

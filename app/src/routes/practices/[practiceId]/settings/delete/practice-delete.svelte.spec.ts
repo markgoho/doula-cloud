@@ -33,6 +33,29 @@ describe('Delete-this-Practice settings screen, once deletion has started', () =
 
 		await expect.element(testPage.getByText('Deletion pending')).toHaveClass('info');
 	});
+
+	// The restore went through; only the re-read after it failed, and that
+	// re-read used to replace the page and its notice with a load error.
+	it('keeps the page and the restored notice when the re-read after restoring fails', async () => {
+		let reads = 0;
+		Object.assign(pageState, toPageState(fixture));
+		apiFetchWithSession.mockImplementation((_path: string, init?: RequestInit) => {
+			if (init?.method === 'DELETE') return Promise.resolve(jsonResponse(undefined, 204));
+			reads += 1;
+			return Promise.resolve(
+				reads === 1
+					? jsonResponse({ pending: true, hasUnsettledInvoices: false, finalizeAt: '2027-02-01T00:00:00Z' })
+					: jsonResponse({ message: 'Down' }, 503)
+			);
+		});
+		await render(Page, {});
+
+		await testPage.getByRole('button', { name: 'Restore this Practice' }).click();
+
+		await expect.element(testPage.getByText('This Practice has been restored.')).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).toBeVisible();
+		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Delete this Practice' })).toBeVisible();
+	});
 });
 
 describe('Delete-this-Practice settings screen', () => {

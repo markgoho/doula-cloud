@@ -45,9 +45,10 @@
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
-	let isLoaded = $state(false);
-	let error = $state('');
+	// The first page's read; the pages after it are `invoices`' own.
+	const firstPage = new PageRead();
 	// The whole-Engagement figure from the server, repeated on every page.
 	let totalToPayCents = $state(0);
 
@@ -61,16 +62,13 @@
 		failureMessage: 'Failed to load more invoices'
 	});
 
-	onMount(async () => {
-		try {
+	onMount(() =>
+		firstPage.load(async () => {
 			const first = await loadClientInvoicesPage(apiFetchWithSession, page.params.engagementId!, '');
 			totalToPayCents = first.totalToPayCents;
 			invoices.reset(first);
-			isLoaded = true;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load invoices';
-		}
-	});
+		}, 'Failed to load invoices')
+	);
 
 	const currency = $derived(invoices.items[0]?.currency ?? 'usd');
 	const owed = $derived(stillOwed(invoices.items));
@@ -145,13 +143,12 @@
 	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', {
 		engagementId: page.params.engagementId!
 	})}
-	sections={isLoaded
+	sections={firstPage.isLoaded
 		? [
 				{ heading: OWED_HEADING, content: owedSection },
 				{ heading: PAID_HEADING, content: paidSection },
 				...(released.length > 0 ? [{ heading: NO_LONGER_OWED_HEADING, content: releasedSection }] : [])
 			]
 		: []}
-	loading={isLoaded || error ? undefined : 'Loading your invoices'}
-	loadError={error || undefined}
+	read={firstPage.frame('Loading your invoices')}
 />

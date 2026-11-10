@@ -178,7 +178,7 @@ const issueClaimQuery = `SELECT o.id, o.attempt_count, o.act::text, COALESCE(o.i
 	        array_to_string(f.roles, ','), f.portal_account
 	   FROM feedback_issue_outbox o
 	   LEFT JOIN feedback f ON f.id = o.feedback_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
+	  WHERE ` + outbox.ClaimDueAliasO + `
 	  ORDER BY o.next_attempt_at
 	  LIMIT $1
 	  FOR UPDATE OF o SKIP LOCKED`
@@ -302,7 +302,7 @@ func (w IssueWorker) performGone(ctx context.Context, tx *sql.Tx, inner outbox.W
 		return markIssueErr(inner.MarkFailed(ctx, tx, r.id, r.attemptCount, err, now))
 	}
 	if number == 0 {
-		return markIssueErr(inner.MarkSent(ctx, tx, r.id, now))
+		return markIssueErr(inner.MarkSkipped(ctx, tx, r.id, outbox.SkipAlreadyResolved, now))
 	}
 	return w.finishClose(ctx, tx, inner, r, number, now)
 }

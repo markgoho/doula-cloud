@@ -6,35 +6,25 @@
 	import TextInput from '$ui/atoms/TextInput.svelte';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import LabeledField from '$ui/molecules/LabeledField.svelte';
-	import type { FormError } from '#lib/authRefusal.js';
-		import { findStaff, LOOKUP_EMAIL_FIELD, lookupErrors, type FoundStaff } from '#lib/staffLookup.js';
+	import { CheckAct } from '#lib/checkAct.svelte.js';
+	import { findStaff, LOOKUP_EMAIL_FIELD, lookupErrors, type FoundStaff } from '#lib/staffLookup.js';
 
-		let email = $state('');
-	let errors = $state<FormError[]>([]);
-	let isSending = $state(false);
-	let found = $state<FoundStaff[] | undefined>();
-
-	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
+	let email = $state('');
 
 	async function signedOut() {
 		await goto(resolve('/sign-in'));
 	}
 
+	const lookup = new CheckAct<FoundStaff[]>({ onsignedout: signedOut });
+	const errors = $derived(lookup.errors);
+	const found = $derived(lookup.value);
+	const errorFor = (field: string) => errors.find((error) => error.targetId === field)?.message;
 
 	async function lookUp(event: SubmitEvent) {
 		event.preventDefault();
-		found = undefined;
-		errors = lookupErrors(email);
-		if (errors.length > 0) return;
-		isSending = true;
-		try {
-			const outcome = await findStaff(email);
-			if (outcome.kind === 'signed-out') return signedOut();
-			if (outcome.kind === 'ok') found = outcome.value;
-			else errors = outcome.kind === 'refused' ? outcome.errors : [];
-		} finally {
-			isSending = false;
-		}
+		const local = lookupErrors(email);
+		if (local.length > 0) return lookup.refuse(local);
+		await lookup.run(() => findStaff(email));
 	}
 </script>
 
@@ -59,7 +49,7 @@
 					/>
 				{/snippet}
 			</LabeledField>
-			<Button label="Find" type="submit" loading={isSending} />
+			<Button label="Find" type="submit" loading={lookup.isSending} />
 		</stack-l>
 	</form>
 	{#if found}

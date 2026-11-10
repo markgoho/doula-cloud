@@ -10,7 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/attachmentstate"
 )
 
 // AttachingWrite is ADR-0008's write-side seam. It wraps an
@@ -40,7 +40,8 @@ import (
 //   - Only the actor attaches. A Doula merely named in someone else's
 //     payload -- an Admin scheduling her onto a Visit -- is not the actor
 //     and does not accrue here; that is a granted attachment, written
-//     explicitly by the Visit handlers and Offer accept via Grant below.
+//     explicitly by the Visit handlers and Offer accept via
+//     attachmentstate.Grant.
 //   - An Owner or Admin acting on an Engagement is never attached by it.
 //   - The seam never mints 'granted'. Accrual is a record of work, never
 //     a key; minting granted by accident is what would silently defeat
@@ -93,14 +94,15 @@ func AttachingWrite(next http.Handler) http.Handler {
 	})
 }
 
-// attachActor inserts the accrued attachment, or does nothing at all if
-// the caller is not a plain Doula. reader is the caller's own Reader,
-// already resolved by Middleware -- attachActor makes no
-// practice_memberships query of its own. ON CONFLICT DO NOTHING is what
-// makes the seam safe to run on every Engagement-scoped write: an
-// attachment already open for this pair -- accrued from an earlier
-// write, or granted by an Offer or a Visit -- is left exactly as it is,
-// so origin can only ever travel accrued -> granted.
+// attachActor makes attachmentstate.TransitionAccrue for the acting
+// Doula, or does nothing at all if the caller is not a plain Doula.
+// reader is the caller's own Reader, already resolved by Middleware --
+// attachActor makes no practice_memberships query of its own. Accrue
+// leaving an open attachment alone is what makes the seam safe to run on
+// every Engagement-scoped write: one already open for this pair --
+// accrued from an earlier write, or granted by an Offer or a Visit --
+// stays exactly as it is, so origin can only ever travel accrued ->
+// granted.
 func attachActor(ctx context.Context, tx *sql.Tx, engagementID, staffID string, reader Reader) error {
 	if engagementID == "" || staffID == "" {
 		// coverage:ignore reason: every route this wraps carries {engagementId} behind Middleware
@@ -110,95 +112,11 @@ func attachActor(ctx context.Context, tx *sql.Tx, engagementID, staffID string, 
 		return nil
 	}
 
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by)
-		 VALUES ($1, $2, 'accrued', $2)
-		 ON CONFLICT (engagement_id, staff_id) WHERE ended_at IS NULL DO NOTHING`,
-		engagementID, staffID,
-	); err != nil {
+	if err := attachmentstate.Accrue(ctx, tx, engagementID, staffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("staffauth: accrue attachment: %w", err)
 	}
 	return nil
-}
-
-// Grant opens a granted attachment for staffID on engagementID, or
-// upgrades an open accrued one in place. Granted is the only origin that
-// reaches (see CanAccessEngagement), so it is written explicitly -- by
-// Offer acceptance, by the Visit handlers, which put a named Doula on a
-// birth, by approval of an Engagement Request that names a Doula
-// (engagementrequest.approve, #1596, ADR-0008's amendment on #1515), and
-// by "Put me on this Engagement" (engagement.AttachSelfHandler, #1598)
-// -- never by AttachingWrite's seam. Who each of the writers that need no
-// Offer may attach is one rule, attachment.Membership.WhyNotAttachable
-// (#1625).
-//
-// feeAmountCents and feeTerms are the Offer's own, copied at acceptance
-// so nothing can later rewrite what she agreed to; both are nil
-// everywhere else, a Request's approval included. On an upgrade they are
-// COALESCEd rather than assigned:
-// an acceptance over an existing accrued row still copies its fee on,
-// while a later Visit-create granting the same pair -- which carries no
-// fee -- cannot blank the fee an Offer already copied.
-func Grant(ctx context.Context, tx *sql.Tx, engagementID, staffID, attachedBy string, feeAmountCents *int64, feeTerms *string) error {
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO engagement_attachments
-		     (engagement_id, staff_id, origin, attached_by, fee_amount_cents, fee_terms)
-		 VALUES ($1, $2, 'granted', $3, $4, $5)
-		 ON CONFLICT (engagement_id, staff_id) WHERE ended_at IS NULL
-		 DO UPDATE SET origin = 'granted', attached_by = $3,
-		               fee_amount_cents = COALESCE($4, engagement_attachments.fee_amount_cents),
-		               fee_terms = COALESCE($5, engagement_attachments.fee_terms)
-		 WHERE engagement_attachments.origin = 'accrued'`,
-		engagementID, staffID, attachedBy, feeAmountCents, feeTerms,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("staffauth: grant attachment: %w", err)
-	}
-	return nil
-}
-
-// EndAttachments closes every open attachment on engagementID, recording
-// who closed them. ADR-0008 names four triggers for ending one; this is
-// the Engagement-completes trigger (#317), and the shape the other three
-// will reuse. Ending is ended_at, never a delete -- "on this from
-// February to May" is more of the record, not less.
-func EndAttachments(ctx context.Context, tx *sql.Tx, engagementID, endedBy string) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE engagement_attachments
-		    SET ended_at = now(), ended_by = $1
-		  WHERE engagement_id = $2 AND ended_at IS NULL`,
-		endedBy, engagementID,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("staffauth: end attachments: %w", err)
-	}
-	return nil
-}
-
-// EndGranted ends staffID's open granted attachment on engagementID,
-// recording who ended it and when: the Practice-takes-her-off trigger
-// ADR-0008 names (#2596). It reports whether there was one to end, so a
-// second press writes and reports nothing. Ending is ended_at, never a
-// delete.
-func EndGranted(ctx context.Context, tx *sql.Tx, engagementID, staffID, endedBy string) (bool, error) {
-	res, err := tx.ExecContext(ctx,
-		`UPDATE engagement_attachments
-		    SET ended_at = $4, ended_by = $3
-		  WHERE engagement_id = $1 AND staff_id = $2
-		    AND origin = 'granted' AND ended_at IS NULL`,
-		engagementID, staffID, endedBy, clock.Now(ctx),
-	)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("staffauth: end granted attachment: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		// coverage:ignore reason: the pgx driver always reports rows affected
-		return false, fmt.Errorf("staffauth: end granted attachment: %w", err)
-	}
-	return n > 0, nil
 }
 
 // statusRecorder remembers the status code a handler wrote, so

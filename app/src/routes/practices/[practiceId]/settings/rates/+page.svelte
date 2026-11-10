@@ -36,6 +36,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 
 	const FIELD_IDS: Readonly<Record<EngagementKind, string>> = {
 		birth: 'rate-birth',
@@ -44,8 +45,8 @@
 	const KIND_WORDS: Readonly<Record<EngagementKind, string>> = { birth: 'birth', postpartum: 'postpartum' };
 
 	let dollars = $state<Record<EngagementKind, string>>({ birth: '', postpartum: '' });
-	let loadError = $state('');
-	let isLoaded = $state(false);
+	// Read into the boxes, not kept: what the page holds is what is typed.
+	const rateCard = new PageRead();
 	let savedMessage = $state('');
 	const submission = new FormSubmission();
 	// Each kind's stored rate, as last read -- so an emptied box
@@ -59,15 +60,12 @@
 		}
 	}
 
-	onMount(async () => {
-		try {
+	onMount(() =>
+		rateCard.load(async () => {
 			const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);
 			fill(rates);
-			isLoaded = true;
-		} catch (error) {
-			loadError = error instanceof Error ? error.message : 'Failed to load rates';
-		}
-	});
+		}, 'Failed to load rates')
+	);
 
 	// Every box checked before anything is sent, so a refused postpartum
 	// rate never leaves a birth rate half-saved behind it.
@@ -162,6 +160,5 @@
 	fieldsets={[{ content: fields }]}
 	{actions}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
-	loading={isLoaded ? undefined : 'Loading your rates'}
-	loadError={loadError || undefined}
+	read={rateCard.frame('Loading your rates')}
 />

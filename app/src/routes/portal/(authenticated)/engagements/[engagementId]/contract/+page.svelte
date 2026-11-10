@@ -9,7 +9,8 @@
 		downloadClientSignedContractPdf,
 		type Contract
 	} from '#lib/contract.js';
-	import { triggerBlobDownload } from '#lib/blobDownload.js';
+	import { BlobDownload } from '#lib/blobDownload.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import {
 		NO_CONTRACT_MESSAGE,
 		contractSignedNotice,
@@ -33,24 +34,23 @@
 		signed: 'success'
 	};
 
-	let contract = $state<Contract | null | undefined>();
-	let error = $state('');
-	let isDownloadingPdf = $state(false);
-	let downloadError = $state('');
+	// `null` once loaded is "no Contract sent yet"; not loaded is the
+	// read's own state, never the value standing in for it.
+	const contractRead = new PageRead<Contract | null>();
+	const contract = $derived(contractRead.value);
+	const pdf = new BlobDownload();
 	// Set only by a signature made on this visit, so the Notice is news
 	// and takes focus; a signed Contract loaded fresh announces nothing.
 	let isSignedHere = $state(false);
 
-	onMount(async () => {
-		try {
-			contract = await loadClientContract(apiFetchWithSession, page.params.engagementId!);
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load contract';
-		}
-	});
+	onMount(() =>
+		contractRead.load(() => loadClientContract(apiFetchWithSession, page.params.engagementId!), 'Failed to load contract')
+	);
 
 	async function handleSign(fullLegalName: string, isAttestation: boolean) {
-		contract = await signContract(apiFetchWithSession, page.params.engagementId!, fullLegalName, isAttestation);
+		contractRead.set(
+			await signContract(apiFetchWithSession, page.params.engagementId!, fullLegalName, isAttestation)
+		);
 		isSignedHere = true;
 	}
 
@@ -58,17 +58,12 @@
 	// local/CI) is reported in words rather than swallowed -- the anchor
 	// triggerBlobDownload creates never reaches the DOM tree, so there's
 	// no href for a screen reader or a failed navigation to fall back on.
-	async function handleDownloadSignedContractPdf() {
-		downloadError = '';
-		isDownloadingPdf = true;
-		try {
-			const blob = await downloadClientSignedContractPdf(apiFetchWithSession, page.params.engagementId!);
-			triggerBlobDownload(blob, 'signed-contract.pdf');
-		} catch (error_) {
-			downloadError = error_ instanceof Error ? error_.message : 'Failed to download signed contract';
-		} finally {
-			isDownloadingPdf = false;
-		}
+	function handleDownloadSignedContractPdf() {
+		void pdf.start(
+			() => downloadClientSignedContractPdf(apiFetchWithSession, page.params.engagementId!),
+			'signed-contract.pdf',
+			'Failed to download signed contract'
+		);
 	}
 </script>
 
@@ -76,8 +71,7 @@
 	title="Contract"
 	serviceName={page.data.practiceName}
 	backHref={resolve('/portal/(authenticated)/engagements/[engagementId]', { engagementId: page.params.engagementId! })}
-	loadError={error || undefined}
-	loading={contract === undefined ? 'Loading contract' : undefined}
+	read={contractRead.frame('Loading contract')}
 	empty={contract === null ? NO_CONTRACT_MESSAGE : undefined}
 >
 	{#snippet content()}
@@ -114,10 +108,10 @@
 					icon="file-text"
 					variant="secondary"
 					onClick={handleDownloadSignedContractPdf}
-					loading={isDownloadingPdf}
+					loading={pdf.isBusy}
 				/>
-				{#if downloadError}
-					<Notice variant="error" message={downloadError} />
+				{#if pdf.error}
+					<Notice variant="error" message={pdf.error} />
 				{/if}
 			{/if}
 		{/if}

@@ -118,6 +118,9 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	payment_refunded: (name) => `Money returned to ${client(name)}`,
 	invoice_voided: (name) => `Invoice for ${client(name)} voided`,
 	invoice_written_off: (name) => `Invoice for ${client(name)} written off`,
+	// Stripe would not finalize the draft while it was being raised, so it
+	// was voided and never sent.
+	invoice_not_sent: (name) => `Invoice for ${client(name)} voided: Stripe could not send it`,
 	// #2271: the row's Detail names the Doula; neither names the fee.
 	contractor_fee_paid: (name) => `Doula paid for ${clients(name)} care`,
 	contractor_fee_payment_reversed: (name) => `Doula payment for ${clients(name)} care removed`,
@@ -175,7 +178,13 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	mfa_required_disabled: fixed('Two-factor authentication no longer a must for all Staff'),
 	welcome_credits_email_sent: fixed('Practice Owners emailed about the Welcome credits'),
 	credits_refunded: fixed('Purchased Credits refunded'),
-	founding_grant_issued: fixed('Founding member credits given')
+	founding_grant_issued: fixed('Founding member credits given'),
+	// A Staff Invitation, recorded against the Practice: the row names
+	// no address, so neither does the phrase. Accepting one is the
+	// Membership's own `joined` row above.
+	staff_invited: fixed('Invitation to join the Practice sent'),
+	staff_invitation_resent: fixed('Invitation to join the Practice sent again'),
+	staff_invitation_revoked: fixed('Invitation to join the Practice revoked')
 };
 
 /**

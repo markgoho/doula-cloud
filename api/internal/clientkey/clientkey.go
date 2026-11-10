@@ -75,8 +75,10 @@ func IsSealed(raw jsontext.Value) bool {
 // where "she has no key" is a decision rather than an omission, and
 // quietly undoing it would make everything written after the erasure
 // readable again -- so the INSERT selects through clients and finds
-// nothing when erased_at is set. A caller that seals afterwards gets
-// ErrNoKey, which is the correct refusal.
+// nothing for a record in either erased standing (clients.standing,
+// 00171). A merged record that is not erased still gets one: the merge
+// seals its 'absorbed' entry under the tombstone's own key. A caller that
+// seals afterwards gets ErrNoKey, which is the correct refusal.
 func Ensure(ctx context.Context, tx *sql.Tx, practiceID, clientID string) error {
 	key := make([]byte, keyLength)
 	if _, err := rand.Read(key); err != nil {
@@ -85,7 +87,7 @@ func Ensure(ctx context.Context, tx *sql.Tx, practiceID, clientID string) error 
 	}
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO client_data_keys (client_id, practice_id, key)
-		 SELECT $1, $2, $3 FROM clients WHERE id = $1 AND erased_at IS NULL
+		 SELECT $1, $2, $3 FROM clients WHERE id = $1 AND standing IN ('live', 'merged')
 		 ON CONFLICT (client_id) DO NOTHING`,
 		clientID, practiceID, key,
 	); err != nil {

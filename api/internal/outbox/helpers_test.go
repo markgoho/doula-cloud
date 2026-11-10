@@ -20,6 +20,7 @@ const (
 	testTable         = "outbox_test_rows"
 	testStatusPending = "pending"
 	testStatusSent    = "sent"
+	testStatusSkipped = "skipped"
 	testStatusDead    = "dead_lettered"
 	testFrom          = "sender@example.test"
 	testReplyTo       = "reply@example.test"
@@ -62,9 +63,13 @@ func createTestTable(t *testing.T, db *testdb.DB) {
 			sent_at timestamptz,
 			last_error text,
 			dead_letter_reason outbox_dead_letter_reason,
+			skip_reason outbox_skip_reason,
+			skipped_at timestamptz,
 			secret_a text,
 			secret_b text,
-			CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL))
+			CHECK ((status = 'dead_lettered') = (dead_letter_reason IS NOT NULL)),
+			CHECK ((sent_at IS NOT NULL) = (status IN ('sent', 'bounced', 'complained'))),
+			CHECK ((skip_reason IS NOT NULL) = (status = 'skipped') AND (skipped_at IS NOT NULL) = (status = 'skipped'))
 		)`); err != nil {
 		t.Fatalf("create test table: %v", err)
 	}
@@ -94,6 +99,7 @@ func insertTestRow(t *testing.T, db *testdb.DB, id string, attemptCount int, due
 
 type testRowState struct {
 	status       string
+	skipReason   sql.NullString
 	attemptCount int
 	lastError    sql.NullString
 	reason       sql.NullString
@@ -105,8 +111,8 @@ func readTestRow(t *testing.T, db *testdb.DB, id string) testRowState {
 	t.Helper()
 	var s testRowState
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`SELECT status, attempt_count, last_error, dead_letter_reason, secret_a, secret_b FROM outbox_test_rows WHERE id = $1`, id,
-	).Scan(&s.status, &s.attemptCount, &s.lastError, &s.reason, &s.secretA, &s.secretB); err != nil {
+		`SELECT status, skip_reason, attempt_count, last_error, dead_letter_reason, secret_a, secret_b FROM outbox_test_rows WHERE id = $1`, id,
+	).Scan(&s.status, &s.skipReason, &s.attemptCount, &s.lastError, &s.reason, &s.secretA, &s.secretB); err != nil {
 		t.Fatalf("read test row: %v", err)
 	}
 	return s
@@ -153,6 +159,7 @@ type rowWant struct {
 	status   string
 	attempts int
 	reason   outbox.DeadLetterReason
+	skip     outbox.SkipReason
 	// lastError, when set, must appear in the row's last_error.
 	lastError string
 	cleared   []string
@@ -169,6 +176,9 @@ func (e *rowEnv) expect(want rowWant) {
 	}
 	if got.reason.String != string(want.reason) {
 		e.T.Errorf("dead_letter_reason = %+v, want %q", got.reason, want.reason)
+	}
+	if got.skipReason.String != string(want.skip) {
+		e.T.Errorf("skip_reason = %+v, want %q", got.skipReason, want.skip)
 	}
 	if want.lastError != "" && !strings.Contains(got.lastError.String, want.lastError) {
 		e.T.Errorf("last_error = %q, want it to contain %q", got.lastError.String, want.lastError)

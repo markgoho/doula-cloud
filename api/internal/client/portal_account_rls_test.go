@@ -36,7 +36,7 @@ func seedTwoPracticeLogin(t *testing.T, db *testdb.DB, tag string) (practiceA, c
 func markErased(t *testing.T, db *testdb.DB, clientID string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET erased_at = now() WHERE id = $1`, clientID,
+		`UPDATE clients SET erased_at = now(), erased_by_kind = 'system' WHERE id = $1`, clientID,
 	); err != nil {
 		t.Fatalf("mark erased: %v", err)
 	}

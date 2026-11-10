@@ -15,6 +15,7 @@
 		type ListedQuestion
 	} from '#lib/components/organisms/PracticeQuestionList.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import { startHref } from '../../clients/new/intake.js';
 	import {
 		fieldCountWarning,
@@ -50,9 +51,11 @@
 	const practiceId = $derived(page.params.practiceId!);
 
 	let outcome = $state(takeOutcome(page.url));
-	let fields = $state<Field[]>([]);
-	let isLoaded = $state(false);
-	let error = $state('');
+	// The list's read, and a save's own failure beside it: two facts, so a
+	// refused save never reads as a list that failed to load.
+	const templateRead = new PageRead<Field[]>();
+	const fields = $derived(templateRead.value ?? []);
+	let saveError = $state('');
 
 	const activeFields = $derived(fields.filter((field) => !field.archived));
 	const countWarning = $derived(fieldCountWarning(fields));
@@ -68,24 +71,24 @@
 	);
 
 	async function load() {
-		try {
-			const template = await loadTemplate(apiFetchWithSession, practiceId);
-			fields = template.fields;
-			isLoaded = true;
-		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to load Client Field Template';
-		}
+		await templateRead.load(
+			async () => {
+				const template = await loadTemplate(apiFetchWithSession, practiceId);
+				return template.fields;
+			},
+			'Failed to load Client Field Template'
+		);
 	}
 
 	async function collectAgain(id: string) {
-		error = '';
+		saveError = '';
 		outcome = undefined;
 		try {
 			const template = await saveTemplate(apiFetchWithSession, practiceId, unarchiveField(fields, id));
-			fields = template.fields;
+			templateRead.set(template.fields);
 			outcome = clientFieldsSavedMessage;
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to save Client Field Template';
+			saveError = error_ instanceof Error ? error_.message : 'Failed to save Client Field Template';
 		}
 	}
 
@@ -120,13 +123,16 @@
 {/snippet}
 
 {#snippet list()}
-	{#if error}
-		<Notice variant="error" message={error} />
+	{#if templateRead.state.status === 'failed'}
+		<Notice variant="error" message={templateRead.state.message} />
+	{/if}
+	{#if saveError}
+		<Notice variant="error" message={saveError} />
 	{/if}
 	{#if countWarning}
 		<Notice variant="info" message={countWarning} />
 	{/if}
-	{#if isLoaded}
+	{#if templateRead.isLoaded}
 		<PracticeQuestionList
 			questions={activeFields}
 			emptyMessage="No extra questions yet."

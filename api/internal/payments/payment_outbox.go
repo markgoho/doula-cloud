@@ -76,7 +76,7 @@ type paymentReceivedPendingRow struct {
 
 const paymentReceivedClaimQuery = `SELECT id, practice_id, attempt_count
 	 FROM payment_received_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`

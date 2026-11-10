@@ -48,15 +48,12 @@ const claimQuery = `SELECT o.id, o.attempt_count, o.document, o.version::text, o
 	   FROM legal_notice_outbox o
 	   JOIN practices p ON p.id = o.practice_id
 	   JOIN staff s ON s.id = o.staff_id
-	  WHERE o.status = 'pending' AND o.next_attempt_at <= now()
-	  ORDER BY o.next_attempt_at
-	  LIMIT $1
-	  FOR UPDATE OF o SKIP LOCKED`
+	  ` + outbox.ClaimNextAliasO
 
 func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
-	var meta outbox.RowMeta
 	var p pendingRow
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &p.document, &p.version, &p.practiceID, &p.practiceName, &p.address, &p.loginDeleted); err != nil {
+	meta, err := outbox.ScanMeta(rows, &p.document, &p.version, &p.practiceID, &p.practiceName, &p.address, &p.loginDeleted)
+	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, p, fmt.Errorf("legalnotice: scan outbox row: %w", err)
 	}

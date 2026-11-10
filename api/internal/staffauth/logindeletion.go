@@ -10,9 +10,14 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/attachmentstate"
+	"doula-cloud/api/internal/authmail"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/dbtx"
+	"doula-cloud/api/internal/mfarecoverymail"
+	"doula-cloud/api/internal/outbox"
+	"doula-cloud/api/internal/sessionnotice"
 )
 
 // DeletedStaffFirstName and DeletedStaffLastName are what a deleted
@@ -271,7 +276,7 @@ func listOwnMemberships(ctx context.Context, tx *sql.Tx, staffID string) ([]ownM
 // does not (nobody can reach it). Spelled out because it is the kind of
 // divergence that reads as a copy someone forgot to keep in step --
 // a person refused this act deserves to be told which Practices are in
-// the way, not merely that some are. The deleted_at filter is what makes
+// the way, not merely that some are. The standing filter is what makes
 // a finalized Practice stop blocking: nobody can reach it any more, so an
 // Owner it has no longer means anything. A Practice merely *pending*
 // deletion still blocks, deliberately: ADR-0031 promises a restore during
@@ -284,7 +289,7 @@ func soleOwnerPractices(ctx context.Context, tx *sql.Tx, staffID string) ([]sole
 		   JOIN practices p ON p.id = pm.practice_id
 		  WHERE pm.staff_id = $1
 		    AND 'owner' = ANY(pm.roles)
-		    AND p.deleted_at IS NULL
+		    AND p.standing <> 'deleted'
 		    AND NOT EXISTS (
 		        SELECT 1 FROM practice_memberships other
 		         WHERE other.practice_id = pm.practice_id
@@ -344,6 +349,12 @@ func endEveryMembership(ctx context.Context, tx *sql.Tx, staffID string, members
 		}); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return err
+		}
+		// ADR-0008's Membership-ends trigger, as RemoveMembershipHandler
+		// makes it, with her as the one who ended them.
+		if err := attachmentstate.EndForMembership(ctx, tx, m.practiceID, staffID, staffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("staffauth: end own attachments: %w", err)
 		}
 		if _, err := tx.ExecContext(ctx,
 			`DELETE FROM practice_memberships WHERE practice_id = $1 AND staff_id = $2`,
@@ -424,16 +435,18 @@ func redactStaffRow(ctx context.Context, tx *sql.Tx, staffID, uid string, now ti
 	return nil
 }
 
-// pendingMailAddressedToHer is one outbox table's "every pending row for this uid"
-// statement. Written out one per table rather than built from a table
-// name and a column name: the interpolation that would take would be a
-// SQL string this file assembles at runtime, which is the shape gosec
-// refuses on sight and which no reader can check by eye. Four literals
-// are longer and are exactly what they appear to be.
-var pendingMailAddressedToHer = []string{
-	`UPDATE staff_token_mail_outbox   SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
-	`UPDATE session_notice_outbox     SET status = 'sent', sent_at = $1 WHERE identity_uid = $2 AND status = 'pending'`,
-	`UPDATE staff_mfa_recovery_outbox SET status = 'sent', sent_at = $1 WHERE recipient_identity_uid = $2 AND status = 'pending'`,
+// pendingMailAddressedToHer resolves one outbox table's pending rows for
+// her uid, each through its owning package's declared skip. Each owner
+// writes its own literal selection and holds its own exit duty -- the
+// token and the recovery code those rows carry are cleared on the way
+// out, as a send would clear them -- so nothing here interpolates a
+// table name into SQL, and nothing here can forget the duty. These were
+// once three status UPDATEs of this file's own, which marked the rows
+// sent and left both plaintext secrets on the finished rows.
+var pendingMailAddressedToHer = []func(ctx context.Context, tx *sql.Tx, uid string, reason outbox.SkipReason, now time.Time) error{
+	authmail.SkipPendingTokenMail,
+	sessionnotice.SkipPendingTo,
+	mfarecoverymail.SkipPendingTo,
 }
 
 // staff_email_change_outbox is deliberately not in that list, and this is
@@ -445,11 +458,12 @@ var pendingMailAddressedToHer = []string{
 // since. Suppressing it would hand anyone who reached her session a way
 // to move her address and then silence the notice by deleting the login.
 
-// resolveQueuedMail marks every pending outbox row addressed to her sent,
-// having sent nothing -- ADR-0033's skip-at-send recheck, moved to the
-// source. It runs before the sentinel is written, for the same reason the
-// session delete does: every table here is keyed on identity_uid, so a
-// row addressed to the old uid becomes unfindable the moment it changes.
+// resolveQueuedMail marks every pending outbox row addressed to her
+// skipped (outbox.SkipLoginDeleted), having sent nothing -- ADR-0033's
+// skip-at-send recheck, moved to the source. It runs before the sentinel
+// is written, for the same reason the session delete does: every table
+// here is keyed on identity_uid, so a row addressed to the old uid
+// becomes unfindable the moment it changes.
 //
 // Each worker also rechecks her live state at send time, and that recheck
 // is not redundant with this. This resolves what is queued at the moment
@@ -464,8 +478,8 @@ var pendingMailAddressedToHer = []string{
 // guess. Here there is no guess to make -- this uid is hers, and she just
 // asked for it to stop existing.
 func resolveQueuedMail(ctx context.Context, tx *sql.Tx, uid string, now time.Time) error {
-	for _, statement := range pendingMailAddressedToHer {
-		if _, err := tx.ExecContext(ctx, statement, now, uid); err != nil {
+	for _, skip := range pendingMailAddressedToHer {
+		if err := skip(ctx, tx, uid, outbox.SkipLoginDeleted, now); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return fmt.Errorf("staffauth: resolve queued mail: %w", err)
 		}

@@ -143,7 +143,7 @@ func PutNarrowingHandler() http.Handler {
 			   FROM engagement_attachments ea
 			   JOIN engagements e ON e.id = ea.engagement_id
 			  WHERE ea.engagement_id = $1 AND ea.staff_id = $2 AND e.practice_id = $3
-			    AND ea.origin = 'granted' AND ea.ended_at IS NULL
+			    AND ea.state = 'granted'
 			  FOR UPDATE OF ea`,
 			c.EngagementID, staffID, c.PracticeID,
 		).Scan(&from, &to)
@@ -161,7 +161,7 @@ func PutNarrowingHandler() http.Handler {
 		if !sameString(before.From, req.From) || !sameString(before.To, req.To) {
 			if !updateAndRecord(w, r, c, activity.ActionOnCallNarrowingChanged, map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req},
 				`UPDATE engagement_attachments SET on_call_from = $3, on_call_to = $4
-				  WHERE engagement_id = $1 AND staff_id = $2 AND ended_at IS NULL`,
+				  WHERE engagement_id = $1 AND staff_id = $2 AND state = 'granted'`,
 				c.EngagementID, staffID, req.From, req.To) {
 				// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 				return

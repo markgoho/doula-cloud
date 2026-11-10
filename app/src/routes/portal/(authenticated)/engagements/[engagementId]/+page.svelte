@@ -20,6 +20,8 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { PORTAL_ENGAGEMENT_DEPENDENCY, isEngagementReadNew } from '#lib/portalEngagementRead.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
+	import { SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import {
 		clientActivityLedgerColumns,
 		loadPortalActivityPage,
@@ -84,7 +86,10 @@
 		lastMessage?: LastMessage;
 	};
 
-	let detail = $state.raw<Detail | undefined>();
+	// Her care as the page draws it, loaded once the lists below have
+	// answered too (#2218).
+	const care = new PageRead<Detail>();
+	const detail = $derived(care.value);
 
 	const label = $derived(
 		engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })
@@ -140,12 +145,16 @@
 			})()
 		]);
 
-		if (!isEngagementReadNew()) {
-			await invalidate(PORTAL_ENGAGEMENT_DEPENDENCY);
-			isEngagementReadNew();
-		}
-		await listsRead;
-		detail = page.data as Detail;
+		// A refreshed read that never answered is the service's problem,
+		// said as such, rather than a Skeleton that stands for good.
+		await care.load(async () => {
+			if (!isEngagementReadNew()) {
+				await invalidate(PORTAL_ENGAGEMENT_DEPENDENCY);
+				isEngagementReadNew();
+			}
+			await listsRead;
+			return page.data as Detail;
+		}, () => SERVICE_PROBLEM);
 	});
 
 	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, detail?.careEnded));
@@ -312,7 +321,7 @@
 				{ heading: 'Everything that has happened', content: activitySection }
 			]
 		: []}
-	loading={detail ? undefined : 'Loading your care'}
+	read={care.frame('Loading your care')}
 />
 
 <style>

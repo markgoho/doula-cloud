@@ -61,7 +61,7 @@ func TestPostConnectNudgeHandler_CooldownEdgeOnTheRequestClock(t *testing.T) {
 			}
 			// Sent, so the one-pending index is not what answers the second ask.
 			if _, err := db.Admin.ExecContext(t.Context(),
-				`UPDATE connect_nudge_outbox SET status = 'sent' WHERE practice_id = $1`, practiceID,
+				`UPDATE connect_nudge_outbox SET status = 'sent', sent_at = now() WHERE practice_id = $1`, practiceID,
 			); err != nil {
 				t.Fatalf("mark sent: %v", err)
 			}

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
@@ -761,13 +762,12 @@ func TestListHandler_PendingRequestKindsOnRow(t *testing.T) {
 	}
 }
 
-// TestListHandler_PortalInviteStatusVariants proves the four shapes
-// PortalInviteStatus can take: nil (never invited), "pending" (an
-// outbox row), "accepted" (identity_uid set, taking precedence over
-// whatever the outbox says), and nil again for a portal user row with no
-// outbox row at all (shouldn't occur, per portalInviteStatus's doc
-// comment, but reads the same as never invited rather than as a
-// distinct state).
+// TestListHandler_PortalInviteStatusVariants proves the shapes
+// portalinvite.Derive gives the list: nil (never invited), "invited"
+// with the latest send's delivery beside it, "invited" with no delivery
+// for a row nothing was queued for, "accepted" with no delivery whatever
+// the outbox says, "refused" (#2522), and "expired" -- an invited row
+// past its expiry, which used to read as the outbox's "sent".
 func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	db := testdb.New(t)
 	const identityUID = "staff-portal-status"
@@ -779,7 +779,7 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	seedAcceptedPortalUser(t, db, accepted)
 	portalUserNoOutbox, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "No Outbox Client", "no-outbox@example.com", "active")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid())`, portalUserNoOutbox,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days')`, portalUserNoOutbox,
 	); err != nil {
 		t.Fatalf("seed portal user with no outbox row: %v", err)
 	}
@@ -787,9 +787,16 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	refused, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Refused Client", "refused@example.com", "active")
 	seedPendingOutboxRow(t, db, refused)
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE client_portal_users SET access_refused_at = now() WHERE client_id = $1`, refused,
+		`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE client_id = $1`, refused,
 	); err != nil {
 		t.Fatalf("mark refused: %v", err)
+	}
+	expired, _ := testdb.SeedEngagementInStatus(t, db, practiceID, "Expired Client", "expired@example.com", "active")
+	seedPendingOutboxRow(t, db, expired)
+	if _, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE client_portal_users SET invite_token_expires_at = now() - interval '1 day' WHERE client_id = $1`, expired,
+	); err != nil {
+		t.Fatalf("expire invite: %v", err)
 	}
 
 	srv, session := newServer(t, db, identityUID)
@@ -806,17 +813,28 @@ func TestListHandler_PortalInviteStatusVariants(t *testing.T) {
 	if byID[neverInvited].PortalInviteStatus != nil {
 		t.Fatalf("never-invited status = %v, want nil", byID[neverInvited].PortalInviteStatus)
 	}
-	if got := byID[invited].PortalInviteStatus; got == nil || *got != pendingStatus {
-		t.Fatalf("invited status = %v, want \"pending\"", got)
-	}
-	if got := byID[accepted].PortalInviteStatus; got == nil || *got != "accepted" {
-		t.Fatalf("accepted status = %v, want \"accepted\"", got)
-	}
-	if byID[portalUserNoOutbox].PortalInviteStatus != nil {
-		t.Fatalf("no-outbox status = %v, want nil", byID[portalUserNoOutbox].PortalInviteStatus)
-	}
-	if got := byID[refused].PortalInviteStatus; got == nil || *got != client.PortalInviteRefused {
-		t.Fatalf("refused status = %v, want %q", got, client.PortalInviteRefused)
+	for _, tc := range []struct {
+		name, clientID string
+		state          portalinvite.State
+		delivery       string
+	}{
+		{"invited", invited, portalinvite.StateInvited, pendingStatus},
+		{"accepted", accepted, portalinvite.StateAccepted, ""},
+		{"no outbox", portalUserNoOutbox, portalinvite.StateInvited, ""},
+		{"refused", refused, portalinvite.StateRefused, ""},
+		{"expired", expired, portalinvite.StateExpired, ""},
+	} {
+		item := byID[tc.clientID]
+		if item.PortalInviteStatus == nil || *item.PortalInviteStatus != tc.state {
+			t.Errorf("%s status = %v, want %q", tc.name, item.PortalInviteStatus, tc.state)
+		}
+		gotDelivery := ""
+		if item.PortalInviteDelivery != nil {
+			gotDelivery = *item.PortalInviteDelivery
+		}
+		if gotDelivery != tc.delivery {
+			t.Errorf("%s delivery = %q, want %q", tc.name, gotDelivery, tc.delivery)
+		}
 	}
 }
 
@@ -1592,7 +1610,7 @@ func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.
 	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 90000)
 
 	endedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
-	seedAttachmentWithFee(t, db, endedEngagement, contractorID, "granted", true, 40000)
+	seedAttachmentWithFee(t, db, endedEngagement, contractorID, true, 40000)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()
@@ -1616,7 +1634,8 @@ func TestListHandler_OpenEngagementsRollup_EndedAttachmentShowsNoFee(t *testing.
 // TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee
 // proves fetchOpenEngagements' own "att.origin = 'granted'" condition
 // (#742): an accrued-only attachment (#228 -- a record of work, never a
-// key) must not surface a fee or its Engagement line either, even though
+// key, and one the schema refuses a fee on since 00173) must not surface
+// its Engagement line either, even though
 // the same contractor holds a separate open, granted attachment
 // elsewhere on the same Client.
 func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testing.T) {
@@ -1629,7 +1648,7 @@ func TestListHandler_OpenEngagementsRollup_AccruedAttachmentShowsNoFee(t *testin
 	seedGrantedAttachmentWithFee(t, db, openEngagement, contractorID, 85000)
 
 	accruedEngagement := seedEngagementForClient(t, db, clientID, practiceID, "active", "postpartum")
-	seedAttachmentWithFee(t, db, accruedEngagement, contractorID, "accrued", false, 5000)
+	testdb.SeedAttachment(t, db, accruedEngagement, contractorID, "accrued", false)
 
 	srv, session := newServer(t, db, contractorUID)
 	defer srv.Close()

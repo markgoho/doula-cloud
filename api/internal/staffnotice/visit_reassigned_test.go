@@ -123,8 +123,8 @@ func TestWorker_MailsNothingOnceTheMoveIsNoLongerTrue(t *testing.T) {
 			).Scan(&status); err != nil {
 				t.Fatalf("read outbox: %v", err)
 			}
-			if status != statusSent {
-				t.Fatalf("status = %s, want sent", status)
+			if status != statusSkipped {
+				t.Fatalf("status = %s, want skipped", status)
 			}
 		})
 	}

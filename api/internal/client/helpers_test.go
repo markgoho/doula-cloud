@@ -162,26 +162,27 @@ func seedFieldTemplate(t *testing.T, db *testdb.DB, practiceID, fieldsJSON strin
 // list rollup's contractor-only field (#264).
 func seedGrantedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID string, feeAmountCents int64) {
 	t.Helper()
-	seedAttachmentWithFee(t, db, engagementID, staffID, "granted", false, feeAmountCents)
+	seedAttachmentWithFee(t, db, engagementID, staffID, false, feeAmountCents)
 }
 
-// seedAttachmentWithFee is testdb.SeedAttachment plus a fee_amount_cents
-// value -- #742's rollup tests need an ended or accrued attachment to
-// carry its own distinct fee, so deleting the SQL condition that is
+// seedAttachmentWithFee is a granted testdb.SeedAttachment plus a
+// fee_amount_cents value -- #742's rollup tests need an ended attachment
+// to carry its own distinct fee, so deleting the SQL condition that is
 // supposed to keep it hidden surfaces a visibly wrong fee rather than a
-// silent nil either way.
-func seedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID, origin string, ended bool, feeAmountCents int64) {
+// silent nil either way. Only a granted attachment can carry a fee
+// (00173's engagement_attachments_fee_only_when_granted).
+func seedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID string, ended bool, feeAmountCents int64) {
 	t.Helper()
-	endedAt := "NULL"
+	ending := "NULL, NULL, NULL"
 	if ended {
-		endedAt = "now()"
+		ending = "now(), $2, 'taken_off'"
 	}
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, fee_amount_cents)
-		 VALUES ($1, $2, $3::attachment_origin, $2, `+endedAt+`, $4)`,
-		engagementID, staffID, origin, feeAmountCents,
+		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason, fee_amount_cents)
+		 VALUES ($1, $2, 'granted', $2, `+ending+`, $3)`,
+		engagementID, staffID, feeAmountCents,
 	); err != nil {
-		t.Fatalf("seed attachment with fee (origin=%s, ended=%v): %v", origin, ended, err)
+		t.Fatalf("seed attachment with fee (ended=%v): %v", ended, err)
 	}
 }
 
@@ -213,8 +214,9 @@ func seedClientContract(t *testing.T, db *testdb.DB, engagementID, status string
 func seedClientInvoice(t *testing.T, db *testdb.DB, practiceID, contractID, status string, amountCents int64) (invoiceID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
-		 VALUES ($1, $2, gen_random_uuid()::text, $3, $4, gen_random_uuid()::text, now() + interval '30 days') RETURNING id`,
+		`INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at, paid_at)
+		 VALUES ($1, $2, gen_random_uuid()::text, $3::invoice_status, $4, gen_random_uuid()::text, now() + interval '30 days',
+		         CASE WHEN $3::invoice_status = 'paid' THEN now() END) RETURNING id`,
 		practiceID, contractID, status, amountCents,
 	).Scan(&invoiceID); err != nil {
 		t.Fatalf("seed invoice: %v", err)
@@ -231,7 +233,7 @@ func seedPendingOutboxRow(t *testing.T, db *testdb.DB, clientID string) (outboxI
 
 	var portalUserID string
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token) VALUES ($1, gen_random_uuid()) RETURNING id`,
+		`INSERT INTO client_portal_users (client_id, state, invite_token, invite_token_expires_at) VALUES ($1, 'invited', gen_random_uuid(), now() + interval '7 days') RETURNING id`,
 		clientID,
 	).Scan(&portalUserID); err != nil {
 		t.Fatalf("seed portal user: %v", err)
@@ -254,7 +256,7 @@ func seedAcceptedPortalUser(t *testing.T, db *testdb.DB, clientID string) {
 	identityUID := "identity-" + clientID
 	testdb.SeedPortalAccount(t, db, identityUID, identityUID+"@example.com")
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO client_portal_users (client_id, invite_token, identity_uid) VALUES ($1, gen_random_uuid(), $2)`,
+		`INSERT INTO client_portal_users (client_id, state, identity_uid) VALUES ($1, 'accepted', $2)`,
 		clientID, identityUID,
 	); err != nil {
 		t.Fatalf("seed accepted portal user: %v", err)

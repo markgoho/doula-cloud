@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/objectstore"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/push"
@@ -77,6 +78,13 @@ func CreateHandler(store objectstore.ObjectStore, pusher push.Pusher) http.Handl
 // engagementID's thread as senderID, notifies the recipient and answers
 // 201. Shared by CreateHandler and ClientCreateHandler.
 func postMessage(w http.ResponseWriter, r *http.Request, tx *sql.Tx, store objectstore.ObjectStore, pusher push.Pusher, engagementID, senderType, senderID string) {
+	// Before the body is read, so a refused Message stores no attachment.
+	// A Client of an erased or merged record already cannot reach this
+	// thread (her portal link is removed or moved), so for her this is
+	// the declared backstop; for Staff it is the refusal.
+	if !clientstanding.ActSendMessage.RequireForEngagement(w, r, tx, engagementID) {
+		return
+	}
 	messageID := uuid.NewString()
 	body, attachment, ok := decodeCreate(w, r, store, engagementID, messageID, apierr.MsgInternalError)
 	if !ok {

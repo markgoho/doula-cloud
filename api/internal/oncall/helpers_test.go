@@ -17,14 +17,15 @@ import (
 // Named once each so goconst does not see independent literals across
 // this package's tests.
 const (
-	doulaRole    = "doula"
-	ownerRole    = "owner"
-	adminRole    = "admin"
-	employeeType = "employee"
-	zone         = "America/New_York"
-	backupName   = "Bo Backup"
-	statusSent   = "sent"
-	fieldWeek    = "startWeek"
+	doulaRole     = "doula"
+	ownerRole     = "owner"
+	adminRole     = "admin"
+	employeeType  = "employee"
+	zone          = "America/New_York"
+	backupName    = "Bo Backup"
+	statusSent    = "sent"
+	statusSkipped = "skipped"
+	fieldWeek     = "startWeek"
 )
 
 // The fixture calendar, named once. Every date test in this package

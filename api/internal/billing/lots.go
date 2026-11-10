@@ -23,54 +23,42 @@ type lot struct {
 	taxRefundedCents      int64
 	stripePaymentIntentID sql.NullString
 	createdAt             time.Time
+	state                 LotState
+	refundable            bool
 }
 
-// openLots lists a Practice's lots that still hold unspent Credits,
-// oldest first.
+// lotsAt lists every one of a Practice's lots as it stands at at, oldest
+// first, read from credit_lots (00176) -- the one derivation of a lot's
+// remainder, its state and whether a refund may draw on it. A caller
+// picks the lots its act may draw on with LotAct.from.
 //
-// FIFO is the one draw order, for consumption and for refunds alike
-// (#390). Oldest-first is what makes a grant reach the Practice it was
-// given to before anything she paid for is touched, and it drains the
+// FIFO is the one draw order, for consumption, refunds and forfeiture
+// alike (#390). Oldest-first is what makes a grant reach the Practice it
+// was given to before anything she paid for is touched, and it drains the
 // lots nearest their three-year refund window first, which is the
 // direction that favors the Practice.
 //
 // remaining subtracts every draw already made against the lot --
-// consumption rows and refund rows both point at it through drawn_lot_id,
-// and both carry a negative quantity, so one sum covers them.
+// consumption, refund and forfeit rows all point at it through
+// drawn_lot_id and all carry a negative quantity, so one sum covers them,
+// and the remainders of a Practice's lots sum to its balance.
 //
 // refundedCount and taxRefundedCents count only the refunds, and they are
 // what stop a partly refunded lot from returning its tax twice. They are
 // separate from remaining because a spent Credit and a refunded Credit
 // both leave the balance and mean opposite things about the tax: tax
 // follows the money back only when the money goes back.
-func openLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT l.id, l.origin, l.quantity, l.unit_price_cents, l.tax_cents,
-		        l.stripe_payment_intent_id, l.created_at,
-		        l.quantity + COALESCE((
-		            SELECT SUM(d.quantity) FROM credit_ledger d WHERE d.drawn_lot_id = l.id
-		        ), 0) AS remaining,
-		        COALESCE((
-		            SELECT SUM(-d.quantity) FROM credit_ledger d
-		            WHERE d.drawn_lot_id = l.id AND d.origin = 'refund'
-		        ), 0) AS refunded_count,
-		        COALESCE((
-		            SELECT SUM(-d.tax_cents) FROM credit_ledger d
-		            WHERE d.drawn_lot_id = l.id AND d.origin = 'refund'
-		        ), 0) AS tax_refunded
-		 FROM credit_ledger l
-		 WHERE l.practice_id = $1 AND l.quantity > 0
-		 ORDER BY l.created_at, l.id`,
-		practiceID,
-	)
+func lotsAt(ctx context.Context, tx *sql.Tx, practiceID string, at time.Time) ([]lot, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT * FROM credit_lots($1, $2)`, practiceID, at)
 	return scanLots(rows, err)
 }
 
-// refundLots is openLots as ops_runtime reads it, through
-// ops_refund_lots (00148), which also locks the Practice row the way
-// ConsumeCredit does, so two refunds cannot both read one lot as unspent.
-func refundLots(ctx context.Context, tx *sql.Tx, practiceID string) ([]lot, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT * FROM ops_refund_lots($1)`, practiceID)
+// refundLots is lotsAt as ops_runtime reads it, through ops_refund_lots
+// (00148, restated over credit_lots by 00176), which also locks the
+// Practice row the way ConsumeCredit does, so two refunds cannot both
+// read one lot as unspent.
+func refundLots(ctx context.Context, tx *sql.Tx, practiceID string, at time.Time) ([]lot, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT * FROM ops_refund_lots($1, $2)`, practiceID, at)
 	return scanLots(rows, err)
 }
 
@@ -85,13 +73,12 @@ func scanLots(rows *sql.Rows, err error) ([]lot, error) {
 	for rows.Next() {
 		var l lot
 		if err := rows.Scan(&l.id, &l.origin, &l.quantity, &l.unitPriceCents, &l.taxCents,
-			&l.stripePaymentIntentID, &l.createdAt, &l.remaining, &l.refundedCount, &l.taxRefundedCents); err != nil {
+			&l.stripePaymentIntentID, &l.createdAt, &l.remaining, &l.refundedCount, &l.taxRefundedCents,
+			&l.state, &l.refundable); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("billing: scan credit lot: %w", err)
 		}
-		if l.remaining > 0 {
-			lots = append(lots, l)
-		}
+		lots = append(lots, l)
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests

@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/sessionmint"
+	"doula-cloud/api/internal/staffinvitation"
 	"doula-cloud/api/internal/tasknudge"
 )
 
@@ -83,13 +84,11 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 		step := func(ctx context.Context, tx *sql.Tx) (sessionmint.Result, error) {
 			resp, status, code, msg, details := acceptInvite(ctx, tx, verified, req)
 			if status != http.StatusOK {
-				// 410 is the one failure that wrote something:
-				// acceptInvite marks an Invitation it finds past its
-				// expiry, and that discovery is a fact worth keeping
-				// rather than rolling back with the acceptance that
-				// didn't happen.
+				// Every refusal rolls back, a lapsed Invitation's 410
+				// included: expiry is derived, never written, so a refused
+				// acceptance leaves nothing behind.
 				return sessionmint.Result{Refusal: &sessionmint.Refusal{
-					Status: status, Code: code, Message: msg, Details: details, Keep: status == http.StatusGone,
+					Status: status, Code: code, Message: msg, Details: details,
 				}}, nil
 			}
 
@@ -110,16 +109,22 @@ func AcceptInviteHandler(verifier authn.Verifier, accounts authn.AccountManager,
 	})
 }
 
-// invitation is one pending practice_invitations row, as the accept path
-// reads it.
+// invitation is one practice_invitations row, as the accept path reads
+// it.
 type invitation struct {
 	id             string
 	practiceID     string
 	address        string
 	roles          string
 	employmentType string
+	status         staffinvitation.Status
 	expiresAt      time.Time
 }
+
+// msgInvitationUnusable is accept's answer to a token that opens no
+// Invitation it may accept and is not merely lapsed: none, an accepted
+// one, or a withdrawn one, deliberately alike.
+const msgInvitationUnusable = "invitation not found, already accepted, or revoked"
 
 // MsgNoAddressToAcceptAnInvitation is what acceptInvite answers an
 // invitee whose ID token carries no email claim: with no address there is
@@ -151,19 +156,35 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
 	}
 
+	// One instant for the whole acceptance: the expiry judged below and
+	// the accepted_at written at the end are the same moment.
+	now := clock.Now(ctx)
+
 	var inv invitation
 	err := tx.QueryRowContext(ctx,
-		`SELECT id, practice_id, address, array_to_string(roles, ','), employment_type::text, expires_at
+		`SELECT id, practice_id, address, array_to_string(roles, ','), employment_type::text, status::text, expires_at
 		 FROM practice_invitations
-		 WHERE token_digest = $1 AND status = 'pending'`,
+		 WHERE token_digest = $1`,
 		digest,
-	).Scan(&inv.id, &inv.practiceID, &inv.address, &inv.roles, &inv.employmentType, &inv.expiresAt)
+	).Scan(&inv.id, &inv.practiceID, &inv.address, &inv.roles, &inv.employmentType, &inv.status, &inv.expiresAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return AcceptInviteResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, "invitation not found, already accepted, or revoked", nil
+		return AcceptInviteResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, msgInvitationUnusable, nil
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
+	}
+
+	// TransitionAccept's own refusal sentence is not what this answers: an
+	// accepted and a withdrawn Invitation read the same as none at all, and
+	// only a lapsed one -- whose holder can usefully ask for another -- is
+	// told apart. Expiry is never written down here: it is
+	// staffinvitation.StateOf's to derive, the same way for the Owner's
+	// Staff screen as for this link.
+	state := staffinvitation.StateOf(inv.status, inv.expiresAt, now)
+	acceptable, _ := staffinvitation.TransitionAccept.Check(state)
+	if !acceptable && state != staffinvitation.StateExpired {
+		return AcceptInviteResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, msgInvitationUnusable, nil
 	}
 
 	// An address mismatch is deliberately the same 403 whether the caller
@@ -173,25 +194,7 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 		return AcceptInviteResponse{}, http.StatusForbidden, "", "this invitation was sent to a different email address", nil
 	}
 
-	if !inv.expiresAt.After(clock.Now(ctx)) {
-		// Flip the column on the way past rather than waiting for a
-		// sweep: the person holding the link is the one who found out it
-		// is stale, and the Owner's Staff screen should say so too. The
-		// Practice context is set first because
-		// practice_invitations_accept_lookup (00039) is SELECT-only on
-		// purpose -- a write to this row goes through the practice-tier
-		// policy, and nothing else in this branch needs the pre-Practice
-		// window.
-		if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, inv.practiceID); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
-		}
-		if _, err := tx.ExecContext(ctx,
-			`UPDATE practice_invitations SET status = 'expired' WHERE id = $1`, inv.id,
-		); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
-		}
+	if !acceptable {
 		return AcceptInviteResponse{}, http.StatusGone, apierr.CodeLinkUnusable, "this invitation has expired -- ask for a new one", nil
 	}
 
@@ -217,6 +220,36 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 	}
 	if alreadyMember {
 		return AcceptInviteResponse{}, http.StatusConflict, "", "you already hold a membership at this practice", nil
+	}
+
+	// TransitionAccept's Requires, stated again where the row moves:
+	// still pending, and still the token this caller presented. The read
+	// above took no lock (practice_invitations_accept_lookup is SELECT-only,
+	// and FOR UPDATE would need the practice-tier policy that was not yet
+	// in force), so a withdrawal or a re-invite can commit between it and
+	// here; this write then matches nothing, and the refusal rolls back the
+	// whole acceptance instead of overwriting a revoked row with
+	// 'accepted'. Expiry needs no second clause: it was judged at now, and
+	// accepted_at is that same instant. It is the first write after the
+	// read, so a withdrawal arriving later waits on this row's lock and
+	// finds it accepted.
+	result, err := tx.ExecContext(ctx,
+		`UPDATE practice_invitations
+		    SET status = 'accepted', accepted_staff_id = $1, accepted_at = $3
+		  WHERE id = $2 AND status = 'pending' AND token_digest = $4`,
+		staffID, inv.id, now, digest,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
+	}
+	moved, err := result.RowsAffected()
+	if err != nil {
+		// coverage:ignore reason: driver RowsAffected failure, not exercised by unit tests
+		return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
+	}
+	if moved == 0 {
+		return AcceptInviteResponse{}, http.StatusNotFound, apierr.CodeLinkUnusable, msgInvitationUnusable, nil
 	}
 
 	if _, err := tx.ExecContext(ctx,
@@ -266,16 +299,6 @@ func acceptInvite(ctx context.Context, tx *sql.Tx, verified authn.VerifiedToken,
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
 		}
-	}
-
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE practice_invitations
-		    SET status = 'accepted', accepted_staff_id = $1, accepted_at = now()
-		  WHERE id = $2`,
-		staffID, inv.id,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return AcceptInviteResponse{}, http.StatusInternalServerError, "", apierr.MsgInternalError, nil
 	}
 
 	// An Offer mailed to this address (#317) named the Invitation, not a

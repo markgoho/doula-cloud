@@ -19,7 +19,8 @@
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { RefusalError, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import {
 		isPushPermissionGranted,
 		portalNotificationPreferencePath,
@@ -40,8 +41,9 @@
 	// two variables have to be kept in step to represent.
 	type NotificationStatus = 'off' | 'on' | 'blocked';
 
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	// The preference's read. Its value is held in `notificationStatus`
+	// below, which a toggle then moves.
+	const preference = new PageRead();
 	let notificationStatus: NotificationStatus = $state('off');
 	let isSaving = $state(false);
 	let saveError = $state('');
@@ -53,12 +55,12 @@
 		return portalNotificationPreferencePath(page.params.engagementId!);
 	}
 
+	// A refusal says what the server said; a read that never answered --
+	// a dropped connection, an unreadable body -- is the service's problem,
+	// the same as the sibling Sign-in address screen words it.
 	async function loadPreference() {
 		const response = await apiFetchWithSession(preferenceURL());
-		if (!response.ok) {
-			loadError = await refusalMessage(response);
-			return;
-		}
+		if (!response.ok) throw new RefusalError(await refusalMessage(response));
 		const data: { enabled: boolean } = await response.json();
 		if (data.enabled) {
 			// A read of the device's current permission, never a subscribe
@@ -70,10 +72,11 @@
 		} else {
 			notificationStatus = 'off';
 		}
-		isLoaded = true;
 	}
 
-	onMount(loadPreference);
+	onMount(() =>
+		preference.load(loadPreference, (error) => (error instanceof RefusalError ? error.message : SERVICE_PROBLEM))
+	);
 
 	/*
 	 * The durable preference is written before the device is
@@ -162,8 +165,7 @@
 	title="Notifications"
 	serviceName={page.data.practiceName}
 	{intro}
-	fieldsets={isLoaded ? [{ content: status }] : []}
+	fieldsets={[{ content: status }]}
 	{actions}
-	loading={isLoaded || loadError ? undefined : 'Loading your notification settings'}
-	{loadError}
+	read={preference.frame('Loading your notification settings')}
 />

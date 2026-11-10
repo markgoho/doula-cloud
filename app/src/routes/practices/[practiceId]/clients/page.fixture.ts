@@ -29,7 +29,8 @@ export const clients: ClientListItem[] = [
 		name: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 		email: 'anne-marie.ochieng-whitfield@example.test',
 		hasWork: true,
-		portalInviteStatus: 'sent',
+		portalInviteStatus: 'invited',
+		portalInviteDelivery: 'sent',
 		pendingRequestKinds: ['birth'],
 		/*
 		 * #264: both ends of the rollup on one Client -- ADR-0017's "two
@@ -121,7 +122,8 @@ export const clients: ClientListItem[] = [
 		name: 'Persephone Adebayo-Lindqvist',
 		email: 'persephone.adebayo-lindqvist@example.test',
 		hasWork: true,
-		portalInviteStatus: 'bounced',
+		portalInviteStatus: 'invited',
+		portalInviteDelivery: 'bounced',
 		emailSuppressed: true,
 		pendingRequestKinds: ['birth', 'postpartum']
 	},
@@ -217,7 +219,8 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 		name: person.name,
 		email: person.email,
 		hasWork: !isNew,
-		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'sent' : 'accepted'),
+		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'invited' : 'accepted'),
+		portalInviteDelivery: !isNew && index % 4 === 1 ? 'sent' : undefined,
 		pendingRequestKinds: index === 5 ? ['birth'] : [],
 		// The Client with a pending birth Request has no Engagement yet: the
 		// Request is what asks for one (ADR-0017), so her row holds the one badge.

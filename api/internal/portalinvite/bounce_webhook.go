@@ -7,6 +7,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"encoding/json/v2"
+	"errors"
 	"io"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/dbtx"
 	"doula-cloud/api/internal/mailsuppress"
+	"doula-cloud/api/internal/outbox"
 	"doula-cloud/api/internal/webhookarrival"
 )
 
@@ -102,10 +104,11 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 			return
 		}
 
-		var newStatus, suppressionCause string
+		var report outbox.Transition
+		var suppressionCause string
 		switch {
 		case payload.EventData.Event == "failed" && payload.EventData.Severity == "permanent":
-			newStatus = "bounced"
+			report = outbox.TransitionBounce
 			// A "suppress-*" reason is Mailgun declining a send it never
 			// made; the address is already suppressed, on Mailgun's list
 			// and on ours, so the portal-invite row still records that
@@ -114,7 +117,7 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 				suppressionCause = mailsuppress.CauseBounce
 			}
 		case payload.EventData.Event == "complained":
-			newStatus = "complained"
+			report = outbox.TransitionComplain
 			suppressionCause = mailsuppress.CauseComplaint
 		default:
 			// Every other event type -- delivered, opened, clicked,
@@ -184,22 +187,32 @@ func PostBounceWebhookHandler(db *sql.DB, signingKey string) http.Handler {
 		// should read this state knowing that limit. An address with no
 		// matching sent row (nothing sent yet, or already
 		// bounced/complained/dead_lettered) is a silent no-op.
-		if _, err := tx.ExecContext(r.Context(),
-			`UPDATE portal_invite_outbox SET status = $1
-			 WHERE id = (
-			     SELECT o.id FROM portal_invite_outbox o
-			     JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
-			     JOIN clients c ON c.id = pu.client_id
-			     WHERE lower(c.email) = lower($2) AND o.status = 'sent'
-			     ORDER BY o.sent_at DESC
-			     LIMIT 1
-			     FOR UPDATE OF o
-			 )`,
-			newStatus, payload.EventData.Recipient,
-		); err != nil {
+		// The move itself is outbox.TransitionBounce or
+		// TransitionComplain, declared once beside every other outbox
+		// transition; this query only finds the row it applies to.
+		var rowID string
+		err = tx.QueryRowContext(r.Context(),
+			`SELECT o.id FROM portal_invite_outbox o
+			 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
+			 JOIN clients c ON c.id = pu.client_id
+			 WHERE lower(c.email) = lower($1) AND o.status = 'sent'
+			 ORDER BY o.sent_at DESC
+			 LIMIT 1
+			 FOR UPDATE OF o`,
+			payload.EventData.Recipient,
+		).Scan(&rowID)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+		case err != nil:
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		default:
+			if err := inviteOutbox.MarkReported(r.Context(), tx, rowID, report); err != nil {
+				// coverage:ignore reason: DB update failure, not exercised by unit tests -- the row is held FOR UPDATE in status 'sent', which is what both reports require
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
 		}
 
 		dbtx.CommitWith(w, tx, http.StatusOK)

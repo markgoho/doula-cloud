@@ -72,7 +72,7 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 	ownerID, practiceID := seedOwnerMembership(t, db, "owner-whose-invites-are-unusable")
 	expiredID, expired := seedInvitationWithToken(t, db, practiceID, ownerID, "late@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
 	revokedID, revoked := seedInvitationWithToken(t, db, practiceID, ownerID, "gone@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
-	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_invitations SET status = 'revoked' WHERE id = $1`, revokedID); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`, revokedID, ownerID); err != nil {
 		t.Fatalf("revoke: %v", err)
 	}
 
@@ -87,7 +87,7 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 	}{
 		{"no token", "  ", http.StatusBadRequest, apierr.CodeInvalidArgument},
 		{"unknown", "no-such-token", http.StatusNotFound, apierr.CodeLinkUnusable},
-		{"revoked", revoked, http.StatusNotFound, apierr.CodeLinkUnusable},
+		{statusRevoked, revoked, http.StatusNotFound, apierr.CodeLinkUnusable},
 		{"expired", expired, http.StatusGone, apierr.CodeLinkUnusable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 		})
 	}
 
-	// A read writes nothing: the accept path is what marks it expired.
+	// A read writes nothing: expiry is derived, never stored.
 	status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, expiredID)
 	if status != statusPending {
 		t.Fatalf("status = %q, want pending", status)

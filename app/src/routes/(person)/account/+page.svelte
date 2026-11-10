@@ -43,7 +43,7 @@
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
-	import { refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
+	import { RefusalError, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { Membership } from '#lib/landing.js';
 	import { rotateSavedCodes } from '#lib/mfaRecovery.js';
@@ -51,6 +51,7 @@
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
+	import { PageRead } from '#lib/pageRead.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -77,8 +78,9 @@
 	// see SessionInfo's own doc comment for why that is not the same
 	// question as "is one currently enrolled".
 	let hasSecondFactor = $state(false);
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	// The session's read. What it holds is copied into the fields above,
+	// which the page's own acts then change.
+	const account = new PageRead();
 
 	/*
 	 * The way back, at the top of the column (#2044). It was a heading at
@@ -152,15 +154,12 @@
 		}
 	}
 
-	async function loadAccount() {
+	async function readAccount() {
 		const result = await loadAccountSession();
-		if (!result.ok) {
-			// 404 means the verified identity has no staff row behind it --
-			// signed in, but nobody here yet. Say so and render nothing to
-			// edit, rather than offering a form whose save cannot land.
-			loadError = result.message;
-			return;
-		}
+		// 404 means the verified identity has no staff row behind it --
+		// signed in, but nobody here yet. Say so and render nothing to
+		// edit, rather than offering a form whose save cannot land.
+		if (!result.ok) throw new RefusalError(result.message);
 
 		firstName = result.session.firstName;
 		lastName = result.session.lastName;
@@ -171,10 +170,14 @@
 		lastPracticeId = result.session.lastPracticeId;
 		hasSecondFactor = result.session.secondFactor;
 		isSoleOwner = result.session.soleOwner;
-		isLoaded = true;
 	}
 
-	onMount(loadAccount);
+	// A refusal says what the server said; a read that never answered is
+	// the service's problem, said as such, rather than a Skeleton that
+	// stands for good.
+	onMount(() =>
+		account.load(readAccount, (error) => (error instanceof RefusalError ? error.message : SERVICE_PROBLEM))
+	);
 
 	function signOutOfMfaFirebaseSDK() {
 		void signOut(getFirebaseAuth());
@@ -563,11 +566,11 @@
 {/snippet}
 
 <!--
-	A 404 `loadError` means the verified identity has no staff row behind
+	A 404 read means the verified identity has no staff row behind
 	it -- signed in, but nobody here yet -- so there is nothing to change,
 	and offering a control whose save could never land would be worse than
-	saying so. `loading`/`loadError` are `RecordDetail`'s own
-	frame-reserving states (#480).
+	saying so. A loading or failed `read` is `RecordDetail`'s own
+	frame-reserving state (#480).
 -->
 <RecordDetail
 	title="Your account"
@@ -586,8 +589,7 @@
 		...(isSoleOwner && hasSecondFactor ? [{ heading: 'Recovery codes', content: savedCodesSection }] : []),
 		{ heading: 'Delete your login', content: deleteLoginSection }
 	]}
-	loading={isLoaded || loadError ? undefined : 'Loading your account'}
-	loadError={loadError || undefined}
+	read={account.frame('Loading your account')}
 />
 
 <style>

@@ -16,8 +16,8 @@ import (
 func TestVisitReads_FlagAnOpenVisitWhoseDoulaWasTakenOff(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	takenOff, staysOn, never := e.Colleague(), e.Colleague(), e.Colleague()
-	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by)
-		 VALUES ($1, $2, 'granted', $2, now(), $2)`, e.Engagement.ID, takenOff.ID)
+	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, ended_at, ended_by, ended_reason)
+		 VALUES ($1, $2, 'granted', $2, now(), $2, 'taken_off')`, e.Engagement.ID, takenOff.ID)
 	e.Exec(`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by)
 		 VALUES ($1, $2, 'granted', $2)`, e.Engagement.ID, staysOn.ID)
 	soon := time.Now().Add(3 * 24 * time.Hour)

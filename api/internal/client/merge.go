@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
@@ -70,28 +71,11 @@ func MergeHandler() http.Handler {
 		if !ok {
 			return
 		}
-		sourceErased, err := isErased(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if sourceErased {
-			apierr.WriteError(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
-			return
-		}
-		sourceMergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if sourceMergedInto != nil {
-			// The retry-safety case the route's idempotency exemption
-			// names: a second merge of the same source 409s here rather
-			// than setMergedInto's UPDATE silently matching zero rows
-			// under clients_update's USING clause.
-			apierr.WriteError(w, "this client record has already been merged into another", http.StatusConflict)
+		// A tombstone here is the retry-safety case the route's
+		// idempotency exemption names: a second merge of the same source
+		// 409s rather than setMergedInto's UPDATE silently matching zero
+		// rows under clients_update's USING clause.
+		if !clientstanding.ActMerge.Require(w, r, c.Tx, c.ClientID) {
 			return
 		}
 
@@ -119,24 +103,9 @@ func MergeHandler() http.Handler {
 		if !ok {
 			return
 		}
-		otherMergedInto, err := readMergedInto(r.Context(), c.Tx, otherClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if otherMergedInto != nil {
-			apierr.WriteError(w, "that client record has already been merged into another", http.StatusConflict)
-			return
-		}
-		otherErased, err := isErased(r.Context(), c.Tx, otherClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if otherErased {
-			apierr.WriteError(w, "an erased client cannot be a merge target", http.StatusConflict)
+		// Never a chain and never into an erased record (ADR-0017's
+		// amendment): the other record must be live too.
+		if !clientstanding.ActMergeInto.Require(w, r, c.Tx, otherClientID) {
 			return
 		}
 
@@ -196,7 +165,7 @@ func MergeHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		moved, err := moveAttachments(r.Context(), c.Tx, absorbedID, survivorID)
+		moved, err := moveAttachments(r.Context(), c.Tx, absorbedID, survivorID, c.StaffID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -219,7 +188,7 @@ func MergeHandler() http.Handler {
 			return
 		}
 		if strings.TrimSpace(survivorOnFile.Email) != strings.TrimSpace(merged.Email) {
-			if err := portalinvite.RevokePending(r.Context(), c.Tx, survivorID, portalinvite.RevokedEmailChanged); err != nil {
+			if _, err := portalinvite.Revoke(r.Context(), c.Tx, survivorID, c.StaffID, portalinvite.RevokedEmailChanged, clock.Now(r.Context()).UTC()); err != nil {
 				// coverage:ignore reason: DB query failure, not exercised by unit tests
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 				return
@@ -354,7 +323,7 @@ func readMergedInto(ctx context.Context, tx *sql.Tx, clientID string) (*string, 
 // stamps the plaintext audit of the act alongside it -- who did it and
 // when, in columns that outlive the shredding of both data keys
 // (00112). The three are written in one statement because they must be:
-// clients_update's USING clause (00080) carries merged_into IS NULL, so
+// clients_update's USING clause (00171) admits only a live record, so
 // this is the last write app_runtime will ever make to this row, and
 // clients_merge_is_dated (00112) refuses a tombstone with no date.
 //
@@ -433,7 +402,7 @@ type movedCounts struct {
 // are plain practice_id comparisons that this transaction already
 // satisfies. What could refuse them is the narrowed trigger, and that
 // raises rather than matching zero rows.
-func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID string) (movedCounts, error) {
+func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID, staffID string) (movedCounts, error) {
 	var moved movedCounts
 
 	engagements, err := moveRows(ctx, tx,
@@ -454,25 +423,16 @@ func moveAttachments(ctx context.Context, tx *sql.Tx, absorbedID, survivorID str
 
 	// A pending invitation is revoked rather than moved. It is
 	// re-sendable, moving one would collide with
-	// client_portal_users_one_pending_per_client (00026) whenever the
+	// client_portal_users_one_open_invite_per_client (00168) whenever the
 	// survivor holds her own, and the address it was sent to may not even
-	// be the address the fold kept.
-	revoked, err := moveRows(ctx, tx,
-		`UPDATE client_portal_users
-		    SET invite_token = NULL, invite_token_expires_at = NULL
-		  WHERE client_id = $1 AND identity_uid IS NULL AND invite_token IS NOT NULL`,
-		absorbedID)
+	// be the address the fold kept. portalinvite.Revoke records who and
+	// when on the row, and stops any send still queued for it.
+	revoked, err := portalinvite.Revoke(ctx, tx, absorbedID, staffID, portalinvite.RevokedRecordMerged, clock.Now(ctx).UTC())
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return movedCounts{}, err
+		return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
 	}
 	moved.RevokedInvitations = revoked
-	if revoked > 0 {
-		if err := portalinvite.RevokePending(ctx, tx, absorbedID, portalinvite.RevokedRecordMerged); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			return movedCounts{}, fmt.Errorf("client: revoke absorbed record's pending invite: %w", err)
-		}
-	}
 
 	// Counted before the move, so the move has something to be wrong
 	// about. Read through the caller's own RLS, which admits the absorbed

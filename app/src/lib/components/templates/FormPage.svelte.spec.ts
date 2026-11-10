@@ -64,7 +64,7 @@ describe('FormPage.svelte', () => {
 	// Skeleton in its place would announce the message twice, once now and
 	// again when the form arrives and the region mounts a second time.
 	it('renders no outcome while the form loads', async () => {
-		await setup({ outcome: 'Ada saved as a Client.', loading: 'Loading the Client' });
+		await setup({ outcome: 'Ada saved as a Client.', read: { status: 'loading', label: 'Loading the Client' } });
 
 		await expect.element(page.getByText('Ada saved as a Client.')).not.toBeInTheDocument();
 	});
@@ -179,7 +179,7 @@ describe('FormPage.svelte', () => {
 	});
 
 	it('renders the title and a skeleton while loading, instead of the fieldsets (#480)', async () => {
-		const { container } = await setup({ loading: 'Loading your account' });
+		const { container } = await setup({ read: { status: 'loading', label: 'Loading your account' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--form-max)');
 		await expect.element(page.getByRole('heading', { level: 1, name: 'New client' })).toBeVisible();
@@ -189,7 +189,7 @@ describe('FormPage.svelte', () => {
 	});
 
 	it('renders the title and a Notice on a load failure, instead of the fieldsets (#480)', async () => {
-		const { container } = await setup({ loadError: 'Failed to load your account' });
+		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load your account' } });
 
 		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--form-max)');
 		await expect.element(page.getByRole('heading', { level: 1, name: 'New client' })).toBeVisible();
@@ -197,12 +197,4 @@ describe('FormPage.svelte', () => {
 		expect(container.querySelectorAll('fieldset')).toHaveLength(0);
 	});
 
-	it('prefers loadError over loading when both are somehow given', async () => {
-		await setup({ loadError: 'Failed to load your account', loading: 'Loading your account' });
-
-		await expect.element(page.getByText('Failed to load your account')).toBeVisible();
-		await expect
-			.element(page.getByRole('status', { name: 'Loading your account' }))
-			.not.toBeInTheDocument();
-	});
 });

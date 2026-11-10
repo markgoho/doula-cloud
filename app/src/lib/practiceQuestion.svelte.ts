@@ -1,4 +1,5 @@
 import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
+import { PageRead } from '#lib/pageRead.svelte.js';
 import { FIELD_TYPES, isSelectType, type FieldType } from '#lib/planTemplate.js';
 import { practiceQuestionIds } from '#lib/components/organisms/PracticeQuestionForm.svelte';
 import {
@@ -76,12 +77,35 @@ export class PracticeQuestion<F extends Listed> {
 	label = $state('');
 	optionsText = $state('');
 	position = $state<number | undefined>();
-	isLoaded = $state(false);
-	loadError = $state('');
+	/**
+	The list's read, and whether the question it names can be asked:
+	one value, failed with why when it cannot.
+	*/
+	readonly read = new PageRead();
 	isConfirmingRetire = $state(false);
 
 	constructor(options: PracticeQuestionOptions<F>) {
 		this.#options = options;
+	}
+
+	// Opens the question the route names on the list just read, or throws
+	// the sentence that says why it cannot be.
+	#open(): void {
+		const { kind, questionId, notOnList, isEditable } = this.#options;
+		if (this.isNew) {
+			const started = FIELD_TYPES.find((candidate) => candidate === kind);
+			if (!started) throw new Error('Choose the kind of answer first, from Add a question.');
+			this.id = crypto.randomUUID();
+			this.type = started;
+		} else {
+			const question = this.fields.find((field) => field.id === questionId && (isEditable?.(field) ?? true));
+			if (!question) throw new Error(notOnList);
+			this.id = question.id;
+			this.type = question.type;
+			this.label = question.label;
+			this.optionsText = (question.options ?? []).join('\n');
+			this.position = questionPosition(this.fields, this.id);
+		}
 	}
 
 	get ids() {
@@ -94,6 +118,10 @@ export class PracticeQuestion<F extends Listed> {
 
 	get isNew() {
 		return this.#options.questionId === 'new';
+	}
+
+	get isLoaded() {
+		return this.read.isLoaded;
 	}
 
 	get title() {
@@ -112,8 +140,7 @@ export class PracticeQuestion<F extends Listed> {
 		return {
 			title: this.title,
 			fieldsets: [],
-			loading: this.loadError ? undefined : 'Loading the question',
-			loadError: this.loadError || undefined
+			read: this.read.frame('Loading the question')
 		};
 	}
 
@@ -138,34 +165,11 @@ export class PracticeQuestion<F extends Listed> {
 	}
 
 	async load() {
-		const { load, loadFailure, kind, questionId, notOnList, isEditable } = this.#options;
-		try {
+		const { load, loadFailure } = this.#options;
+		await this.read.load(async () => {
 			this.fields = await load();
-		} catch (error) {
-			this.loadError = error instanceof Error ? error.message : loadFailure;
-			return;
-		}
-		if (this.isNew) {
-			const started = FIELD_TYPES.find((candidate) => candidate === kind);
-			if (!started) {
-				this.loadError = 'Choose the kind of answer first, from Add a question.';
-				return;
-			}
-			this.id = crypto.randomUUID();
-			this.type = started;
-		} else {
-			const question = this.fields.find((field) => field.id === questionId && (isEditable?.(field) ?? true));
-			if (!question) {
-				this.loadError = notOnList;
-				return;
-			}
-			this.id = question.id;
-			this.type = question.type;
-			this.label = question.label;
-			this.optionsText = (question.options ?? []).join('\n');
-			this.position = questionPosition(this.fields, this.id);
-		}
-		this.isLoaded = true;
+			this.#open();
+		}, loadFailure);
 	}
 
 	async save(event: SubmitEvent) {

@@ -81,21 +81,20 @@ type ClientInvoicesResponse struct {
 	TotalToPayCount int                 `json:"totalToPayCount"`
 }
 
-// clientInvoiceSelect reads the ClientInvoiceView columns. The LATERAL
-// picks the method of the live manual Payment -- one nothing has reversed
-// -- and only for a paid Invoice, so a reopened Invoice never shows the
-// method of money that is no longer counted.
+// clientInvoiceSelect reads the ClientInvoiceView columns. The method is
+// the standing Payment's (activePaymentJoin), when it was recorded by
+// hand, and only on a paid Invoice: a reversed Payment no longer stands,
+// so a reopened Invoice never shows the method of money that is no
+// longer counted.
 //
 // c.engagement_id = $1 and status <> 'draft' are the handler's own
 // filters on top of the RLS the Client session already carries.
 const clientInvoiceSelect = `SELECT i.id, i.status, i.amount_cents, i.currency, i.reference, i.stripe_invoice_id,
-		i.created_at, i.paid_at, mp.method, ` + refundedCentsSubquery + `, ` + paymentProcessingExpr + `
+		i.created_at, i.paid_at, CASE WHEN ap.kind = 'manual' AND i.status = 'paid' THEN ap.method END,
+		` + refundedCentsColumn + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
-	LEFT JOIN LATERAL (SELECT p.method::text AS method FROM payments p
-	 WHERE p.invoice_id = i.id AND p.kind = 'manual' AND i.status = 'paid'
-	   AND NOT EXISTS (SELECT 1 FROM payments r WHERE r.target_payment_id = p.id AND r.kind = 'reversal')
-	 ORDER BY p.created_at DESC LIMIT 1) mp ON true
+	` + activePaymentJoin + `
 	WHERE c.engagement_id = $1 AND i.status <> 'draft'`
 
 const (

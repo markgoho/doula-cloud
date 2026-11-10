@@ -69,7 +69,7 @@ func TestAcceptInviteHandler_Refusals(t *testing.T) {
 			// #616: an invitation past its invite_token_expires_at is
 			// refused with 410, and the pending row is left untouched (the
 			// doula re-sends rather than this handler flipping any state --
-			// client_portal_users has no status column to flip).
+			// expired is derived from the clock, never stored).
 			name: "an expired invitation", expired: true, want: http.StatusGone, code: apierr.CodeLinkUnusable,
 		},
 	}

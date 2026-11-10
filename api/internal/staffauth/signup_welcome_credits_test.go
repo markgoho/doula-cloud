@@ -51,7 +51,7 @@ func TestSignupHandler_EnqueuesTheWelcomeCreditsEmailOnce(t *testing.T) {
 	).Scan(&count, &due, &created, &status); err != nil {
 		t.Fatalf("read welcome_credits_outbox: %v", err)
 	}
-	if count != 1 || status != "pending" {
+	if count != 1 || status != statusPending {
 		t.Fatalf("rows = %d status %q, want 1 pending", count, status)
 	}
 	if !due.Equal(signedUpAt.Add(welcomecredits.Delay)) || !created.Equal(signedUpAt) {

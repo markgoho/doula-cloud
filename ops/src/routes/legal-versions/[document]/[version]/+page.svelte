@@ -1,11 +1,11 @@
 <script lang="ts">
-	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { FormError } from '#lib/authRefusal.js';
+	import { CheckAct } from '#lib/checkAct.svelte.js';
+	import { CheckRead } from '#lib/checkRead.svelte.js';
 	import { freshIdToken } from '#lib/firebase.js';
 	import {
 		owners,
@@ -17,7 +17,6 @@
 	import { newYorkDay } from '#lib/dates.js';
 	import { longDate } from '#lib/dates.js';
 	import { type Operator } from '#lib/session.js';
-	import { stepUp } from '#lib/stepUp.js';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import StepUpFields from '#lib/components/StepUpFields.svelte';
 	import SummaryList from '$ui/molecules/SummaryList.svelte';
@@ -26,47 +25,22 @@
 	const version = $derived(page.params.version ?? '');
 
 	const operator = $derived(page.data.operator as Operator);
-	let check = $state<LegalVersionCheck | undefined>();
-	let result = $state<LegalPublication | undefined>();
-	let errors = $state<FormError[]>([]);
-	let isSending = $state(false);
-	let password = $state('');
-	let code = $state('');
-	const requestKey = actKey();
 
 	async function signedOut() {
 		await goto(resolve('/sign-in'));
 	}
 
-	onMount(async () => {
-		const outcome = await readLegalVersionCheck(document_, version);
-		if (outcome.kind === 'signed-out') return signedOut();
-		if (outcome.kind === 'ok') check = outcome.value;
-		else if (outcome.kind === 'refused') errors = outcome.errors;
-	});
+	const read = new CheckRead<LegalVersionCheck>(signedOut);
+	const act = new CheckAct<LegalPublication>({ onsignedout: signedOut, stepUp: { email: () => operator.email, freshIdToken } });
+	const errors = $derived(read.state.status === 'failed' ? read.errors : act.errors);
+
+	onMount(() => read.load(() => readLegalVersionCheck(document_, version)));
 
 	async function publish(event: SubmitEvent) {
 		event.preventDefault();
-		isSending = true;
-		try {
-			errors = await stepUp({ email: operator!.email, password, code }, { freshIdToken });
-			if (errors.length > 0) return;
-			const outcome = await sendLegalPublication(document_, version, requestKey);
-			if (outcome.kind === 'signed-out') return signedOut();
-			if (outcome.kind === 'step-up') {
-				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', targetId: 'step-up-code' }];
-				return;
-			}
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			result = outcome.value;
-			await tick();
-			document.querySelector('h1')?.focus();
-		} finally {
-			isSending = false;
-		}
+		if (!(await act.run((key) => sendLegalPublication(document_, version, key)))) return;
+		await tick();
+		document.querySelector('h1')?.focus();
 	}
 </script>
 
@@ -74,7 +48,8 @@
 
 <ErrorSummary {errors} />
 
-{#if result}
+{#if act.state.status === 'done'}
+	{@const result = act.state.value}
 	<stack-l role="status">
 		<h1 tabindex="-1">Version published</h1>
 		<p>
@@ -89,43 +64,46 @@
 		</p>
 	</stack-l>
 	<p><a href={resolve('/legal-versions')}>Back to legal versions</a></p>
-{:else if check?.publishedAt}
-	<stack-l>
-		<h1 tabindex="-1">This version is published</h1>
-		<p>
-			The {check.documentName} that takes effect {longDate(check.version)} was published on {newYorkDay(
-				check.publishedAt
-			)}. A version is published once.
-		</p>
-	</stack-l>
-	<p><a href={resolve('/legal-versions')}>Back to legal versions</a></p>
-{:else if check}
-	<h1 tabindex="-1">Check the version before you publish it</h1>
-	<SummaryList
-		rows={[
-			{ label: 'Document', value: check.documentName },
-			{ label: 'Version', value: check.change },
-			{ label: 'Material', value: check.material ? 'Yes' : 'No' },
-			{ label: 'Owners emailed', value: owners(check.material, check.owners) },
-			{ label: 'Takes effect', value: longDate(check.version) }
-		]}
-	/>
-	<form novalidate onsubmit={publish}>
-		<stack-l>
-			<p>
-				{#if check.material}
-					Each Owner is emailed once, now, about this version. A publication cannot be undone.
-				{:else}
-					A publication cannot be undone.
-				{/if}
-			</p>
-			<StepUpFields {errors} bind:password bind:code />
-			<Button label="Publish" type="submit" loading={isSending} />
-		</stack-l>
-	</form>
-{:else if errors.length > 0}
+{:else if read.state.status === 'failed'}
 	<h1 tabindex="-1">Publish a legal version</h1>
 	<p><a href={resolve('/legal-versions')}>Back to legal versions</a></p>
+{:else if read.state.status === 'loaded'}
+	{@const check = read.state.value}
+	{#if check.publishedAt}
+		<stack-l>
+			<h1 tabindex="-1">This version is published</h1>
+			<p>
+				The {check.documentName} that takes effect {longDate(check.version)} was published on {newYorkDay(
+					check.publishedAt
+				)}. A version is published once.
+			</p>
+		</stack-l>
+		<p><a href={resolve('/legal-versions')}>Back to legal versions</a></p>
+	{:else}
+		<h1 tabindex="-1">Check the version before you publish it</h1>
+		<SummaryList
+			rows={[
+				{ label: 'Document', value: check.documentName },
+				{ label: 'Version', value: check.change },
+				{ label: 'Material', value: check.material ? 'Yes' : 'No' },
+				{ label: 'Owners emailed', value: owners(check.material, check.owners) },
+				{ label: 'Takes effect', value: longDate(check.version) }
+			]}
+		/>
+		<form novalidate onsubmit={publish}>
+			<stack-l>
+				<p>
+					{#if check.material}
+						Each Owner is emailed once, now, about this version. A publication cannot be undone.
+					{:else}
+						A publication cannot be undone.
+					{/if}
+				</p>
+				<StepUpFields {errors} bind:password={act.password} bind:code={act.code} />
+				<Button label="Publish" type="submit" loading={act.isSending} />
+			</stack-l>
+		</form>
+	{/if}
 {/if}
 
 <style>

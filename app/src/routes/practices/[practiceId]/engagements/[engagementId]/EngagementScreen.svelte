@@ -57,6 +57,7 @@
 		type VisitAssignee
 	} from '#lib/staff.js';
 	import {
+		canReachPortal,
 		hasAcceptedPortalInvite,
 		hasNeverBeenInvited,
 		isRefusedInvite,
@@ -630,24 +631,28 @@
 	// #255: once a portal invite send succeeds, this overlays the
 	// load-time read the same way statusOverride (#253, below) does --
 	// so the Contract section's block lifts and the "Send portal invite"
-	// action's own visibility updates without a reload. 'pending' is the
-	// outbox row's own default status (portalinvite.invite()), so this
-	// is exactly what a fresh send actually leaves behind.
+	// action's own visibility updates without a reload. An invited row
+	// whose send is queued ('pending', the outbox row's own default) is
+	// exactly what portalinvite.invite() leaves behind.
 	let clientPortalOverride = $state<PortalInviteSubject | undefined>();
 	const clientPortalState = $derived<PortalInviteSubject>(
 		clientPortalOverride ?? {
 			portalInviteStatus: detail?.clientPortalInviteStatus,
+			portalInviteDelivery: detail?.clientPortalInviteDelivery,
 			emailSuppressed: detail?.clientEmailSuppressed
 		}
 	);
 	const hasNeverInvitedClient = $derived(hasNeverBeenInvited(clientPortalState));
 	// #2522: an accept refused because her login reaches another record
 	// here. Nothing from this record reaches her, so it holds the Contract
-	// back as never-invited does. Send portal invite stays: an email
-	// changed since keeps the row and its refusal, and a new invite to
-	// the new address asks again (InviteHandler clears the refusal).
+	// back as never-invited does. Send portal invite stays: a new invite
+	// asks again (InviteHandler clears the refusal).
 	const isInviteRefused = $derived(isRefusedInvite(clientPortalState));
 	const hasAcceptedPortalAccess = $derived(hasAcceptedPortalInvite(clientPortalState));
+	// The question PostSendContractHandler asks (portalinvite's
+	// CanReachPortal): an invite that expired, was withdrawn or never
+	// arrived holds Send back as never-invited does.
+	const canClientReachPortal = $derived(canReachPortal(clientPortalState));
 	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
 	// InvoiceSection's own standing check (#270) -- defaults true so an
 	// in-flight load never flashes the "cannot pay" Notice before
@@ -683,15 +688,18 @@
 		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
 	const noEmailForInviteMessage = 'This Client has no email address on file. Add one before sending a portal invite.';
 	const refusedBeforeContractMessage = `This Client signs in through another record, so cannot sign a Contract sent from this one. ${refusedInviteWayOn}`;
+	const newInviteBeforeContractMessage =
+		'Send this Client a new portal invite before sending the Contract — the last one did not arrive or can no longer be accepted.';
 	// #2146: what the empty Contract section says while the Client has no
-	// portal account: the same three states as messageBlock above. An
-	// invite already sent does not hold Send back (PostSendContractHandler
-	// asks only that one was sent), so that state names the acceptance
-	// signing waits on rather than asking for an invite again.
+	// portal account: the same states as messageBlock above. An invite
+	// that can still be accepted does not hold Send back, so that state
+	// names the acceptance signing waits on rather than asking for an
+	// invite again; one that cannot asks for a new one.
 	const contractInviteBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
 		if (isInviteRefused) return refusedBeforeContractMessage;
 		if (hasNeverInvitedClient || !hasClientEmailOnFile) return inviteBeforeContractMessage;
+		if (!canClientReachPortal) return newInviteBeforeContractMessage;
 		return 'The Contract can only be viewed and signed once this Client has accepted the portal invite.';
 	});
 
@@ -1989,7 +1997,7 @@
 			// #255: a fresh invite is always pending, never suppressed --
 			// lifts the Contract section's block and hides this action's
 			// own visibility question ("never invited") right away.
-			clientPortalOverride = { portalInviteStatus: 'pending', emailSuppressed: false };
+			clientPortalOverride = { portalInviteStatus: 'invited', portalInviteDelivery: 'pending', emailSuppressed: false };
 			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
 		}, 'Failed to send portal invite');
 		if (isSent) await loadActivity();
@@ -2978,9 +2986,11 @@
 						<Notice variant="info" message={refusedBeforeContractMessage} />
 					{:else if hasNeverInvitedClient}
 						<Notice variant="info" message={inviteBeforeContractMessage} />
+					{:else if !canClientReachPortal}
+						<Notice variant="info" message={newInviteBeforeContractMessage} />
 					{/if}
 					<cluster-l space="var(--space-3)">
-						{#if missingMergeFields.length === 0 && !hasNeverInvitedClient && !isInviteRefused}
+						{#if missingMergeFields.length === 0 && canClientReachPortal}
 							<Button label="Send Contract" onClick={handleSendContract} loading={isContractBusy} />
 						{/if}
 						{#if contractEditableFields.length > 0}

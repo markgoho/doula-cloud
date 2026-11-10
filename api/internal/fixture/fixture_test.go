@@ -121,6 +121,25 @@ func TestClient_DefaultsAndOptions(t *testing.T) {
 	}
 }
 
+func TestEraseClientAndMergeClient_SetTheStanding(t *testing.T) {
+	db := testdb.New(t)
+	p := fixture.Practice(t, db)
+	erased := fixture.Client(t, db, p)
+	absorbed := fixture.Client(t, db, p)
+	survivor := fixture.Client(t, db, p)
+
+	fixture.EraseClient(t, db, erased.ID)
+	fixture.MergeClient(t, db, absorbed.ID, survivor.ID)
+
+	standing := `SELECT standing::text || ' ' || given_name FROM clients WHERE id = $1`
+	if got := testdb.Scalar[string](t, db.Admin, standing, erased.ID); got != "erased Erased Client" {
+		t.Fatalf("erased client = %q, want erased and redacted", got)
+	}
+	if got := testdb.Scalar[string](t, db.Admin, standing, absorbed.ID); got != "merged Test Client" {
+		t.Fatalf("absorbed client = %q, want merged and untouched", got)
+	}
+}
+
 func TestEngagement_DefaultsToAnIntakeBirthForANewClient(t *testing.T) {
 	db := testdb.New(t)
 	p := fixture.Practice(t, db)

@@ -47,6 +47,7 @@
 	import ReauthPrompt from '#lib/components/molecules/ReauthPrompt.svelte';
 	import SecondFactorNeeded from '#lib/components/molecules/SecondFactorNeeded.svelte';
 	import FormPage from '#lib/components/templates/FormPage.svelte';
+	import { LOADED_PAGE, PageRead } from '#lib/pageRead.svelte.js';
 	import type { PracticeSession } from '../../../+layout.js';
 
 	const session = $derived((page.data as { session: PracticeSession }).session);
@@ -62,8 +63,10 @@
 	// The Owner's own address -- the whole point of the screen, so it is
 	// read and shown rather than described in the abstract.
 	let ownAddress = $state('');
-	let isLoaded = $state(false);
-	let loadError = $state('');
+	// Both reads below, as one. A non-Owner asks for neither, so her page
+	// is loaded as it is.
+	const recoveryRead = new PageRead();
+	const isLoaded = $derived(!isOwner || recoveryRead.isLoaded);
 
 	/*
 	 * Every sentence on this screen names the Staff member rather than
@@ -80,12 +83,9 @@
 		// Owner-only, both endpoints below and the vouch itself, so a
 		// non-Owner is never asked for either -- she meets the notice this
 		// screen renders instead, not three 403s in a row.
-		if (!isOwner) {
-			isLoaded = true;
-			return;
-		}
+		if (!isOwner) return;
 
-		try {
+		await recoveryRead.load(async () => {
 			/*
 			 * Two independent facts -- who this screen is about, and the
 			 * address the code will actually arrive at -- so they are asked
@@ -98,21 +98,12 @@
 			]);
 
 			member = roster.members.find((entry) => entry.staffId === staffId);
-			if (!member) {
-				loadError = 'That Staff member is not on this Practice roster.';
-				return;
-			}
+			if (!member) throw new Error('That Staff member is not on this Practice roster.');
 
-			if (!response.ok) {
-				loadError = await apiErrorMessage(response);
-				return;
-			}
+			if (!response.ok) throw new Error(await apiErrorMessage(response));
 			const own: SessionInfo = await response.json();
 			ownAddress = own.email;
-			isLoaded = true;
-		} catch (error_) {
-			loadError = error_ instanceof Error ? error_.message : 'Failed to load this Staff member';
-		}
+		}, 'Failed to load this Staff member');
 	});
 
 	/*
@@ -211,6 +202,5 @@
 	fieldsets={isLoaded ? [{ content: body }] : []}
 	errorSummary={submission.errors.length > 0 ? errorSummary : undefined}
 	{actions}
-	loading={isLoaded || loadError ? undefined : 'Loading this Staff member'}
-	{loadError}
+	read={isOwner ? recoveryRead.frame('Loading this Staff member') : LOADED_PAGE}
 />

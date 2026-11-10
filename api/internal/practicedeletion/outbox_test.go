@@ -45,12 +45,7 @@ func seedOutboxRow(t *testing.T, db *testdb.DB, practiceID, act string, nextAtte
 // the worker in isolation from the request that enqueues its rows.
 func markPendingDeletion(t *testing.T, db *testdb.DB, practiceID string, finalizeAt time.Time) {
 	t.Helper()
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = $2 WHERE id = $1`,
-		practiceID, finalizeAt,
-	); err != nil {
-		t.Fatalf("mark pending deletion: %v", err)
-	}
+	testdb.SeedPracticeDeletion(t, db, practiceID, finalizeAt.Add(-practicedeletion.RestoreWindow), finalizeAt, nil)
 }
 
 func runWorker(t *testing.T, db *testdb.DB, w practicedeletion.Worker) {
@@ -69,10 +64,19 @@ func seedOwnerEmail(t *testing.T, db *testdb.DB, staffID, email string) {
 // requires the row to be settled as sent, whether or not it acted.
 func runAct(t *testing.T, db *testdb.DB, practiceID, act string, sender mail.Sender) {
 	t.Helper()
+	runActTo(t, db, practiceID, act, sender, statusSent)
+}
+
+// runActTo is runAct for an act that must leave its row in want: sent,
+// or for a Practice restored before the act came due, "skipped:<reason>".
+func runActTo(t *testing.T, db *testdb.DB, practiceID, act string, sender mail.Sender, want string) {
+	t.Helper()
 	rowID := seedOutboxRow(t, db, practiceID, act, time.Now().Add(-time.Minute))
 	runWorker(t, db, newTestWorker(sender))
-	if status := testdb.Scalar[string](t, db.Admin, `SELECT status FROM practice_deletion_outbox WHERE id = $1`, rowID); status != statusSent {
-		t.Fatalf("status = %s, want sent", status)
+	got := testdb.Scalar[string](t, db.Admin,
+		`SELECT status::text || COALESCE(':' || skip_reason::text, '') FROM practice_deletion_outbox WHERE id = $1`, rowID)
+	if got != want {
+		t.Fatalf("status = %s, want %s", got, want)
 	}
 }
 
@@ -126,7 +130,29 @@ func TestWorker_ReminderSkipsWhenNoLongerPending(t *testing.T) {
 	// pending), so deletion_requested_at is null -- the skip-at-send
 	// recheck's own condition.
 	sender := &mail.FakeSender{}
-	runAct(t, db, practiceID, "reminder", sender)
+	runActTo(t, db, practiceID, "reminder", sender, restoredSkip)
+
+	if len(sender.Sent()) != 0 {
+		t.Fatalf("mails sent = %d, want 0", len(sender.Sent()))
+	}
+}
+
+// restoredSkip is the row an act for a restored Practice leaves: skipped,
+// and saying why.
+const restoredSkip = "skipped:practice_restored"
+
+// A reminder claimed after the Practice was already finalized has nothing
+// left to remind anyone of, and says so rather than reading as restored.
+func TestWorker_ReminderSkipsAnAlreadyFinalizedPractice(t *testing.T) {
+	db := testdb.New(t)
+	practiceID, staffID := newOwnedPractice(t, db, "owner-reminder-finalized")
+	seedOwnerEmail(t, db, staffID, "owner@example.test")
+	markPendingDeletion(t, db, practiceID, time.Now())
+	if _, err := db.Admin.ExecContext(t.Context(), `UPDATE practices SET deleted_at = now() WHERE id = $1`, practiceID); err != nil {
+		t.Fatalf("finalize: %v", err)
+	}
+	sender := &mail.FakeSender{}
+	runActTo(t, db, practiceID, "reminder", sender, "skipped:already_resolved")
 
 	if len(sender.Sent()) != 0 {
 		t.Fatalf("mails sent = %d, want 0", len(sender.Sent()))
@@ -154,6 +180,14 @@ func TestWorker_FinalizeErasesClientsForfeitsCreditsAndStampsDeletedAt(t *testin
 	}
 	if balance := testdb.Scalar[int](t, db.Admin, `SELECT COALESCE(SUM(quantity), 0) FROM credit_ledger WHERE practice_id = $1`, practiceID); balance != 0 {
 		t.Fatalf("balance after forfeiture = %d, want 0", balance)
+	}
+	// One forfeit row per lot, naming it, stamped at the instant the
+	// Practice was deleted (billing.Forfeit, 00176).
+	if n := testdb.Scalar[int](t, db.Admin,
+		`SELECT count(*) FROM credit_ledger f JOIN practices p ON p.id = f.practice_id
+		  WHERE f.practice_id = $1 AND f.origin = 'forfeit' AND f.drawn_lot_id IS NOT NULL AND f.created_at = p.deleted_at`,
+		practiceID); n != 1 {
+		t.Fatalf("forfeit rows naming their lot at the deletion's instant = %d, want 1", n)
 	}
 	if actorKind := finalizedActivity(t, db, "actor_kind::text", practiceID); actorKind != "system" {
 		t.Fatalf("actor_kind = %s, want system", actorKind)
@@ -217,7 +251,7 @@ func TestWorker_FinalizeSkipsWhenNoLongerPending(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-restored")
 	// No markPendingDeletion call: restored before finalization ran.
-	runAct(t, db, practiceID, "finalize", &mail.FakeSender{})
+	runActTo(t, db, practiceID, "finalize", &mail.FakeSender{}, restoredSkip)
 
 	if practiceDeletedAt(t, db, practiceID) != nil {
 		t.Fatal("deleted_at set despite the Practice no longer being pending")
@@ -229,7 +263,7 @@ func TestWorker_FinalizeDoesNotDoubleEraseAnAlreadyErasedClient(t *testing.T) {
 	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-already-erased")
 	markPendingDeletion(t, db, practiceID, time.Now())
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, erased_at) VALUES ($1, 'Erased Client', now())`, practiceID,
+		`INSERT INTO clients (practice_id, given_name, erased_at, erased_by_kind) VALUES ($1, 'Erased Client', now(), 'system')`, practiceID,
 	); err != nil {
 		t.Fatalf("seed already-erased client: %v", err)
 	}

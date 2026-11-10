@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -31,13 +33,25 @@ type refundWebhookFixture struct {
 
 func newRefundWebhookFixture(t *testing.T, name string) refundWebhookFixture {
 	t.Helper()
+	return seedRefundWebhookFixture(t, name, true)
+}
+
+// seedRefundWebhookFixture seeds a Connected Practice's open Invoice and
+// the card Payment that paid it, carrying its PaymentIntent as its
+// reference only when referenced.
+func seedRefundWebhookFixture(t *testing.T, name string, referenced bool) refundWebhookFixture {
+	t.Helper()
 	db := testdb.New(t)
 	f := refundWebhookFixture{db: db, accountID: "acct_" + name, stripeInv: "in_" + name, pi: "pi_" + name}
 	practiceID := seedConnectedPractice(t, db, name, f.accountID)
 	_, f.engagementID = testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedSignedContract(t, db, f.engagementID)
 	f.invoiceID = seedInvoice(t, db, practiceID, contractID, f.stripeInv, invoiceStatusOpen, 50000, time.Now())
-	f.paymentID = seedStripePayment(t, db, f.invoiceID, 50000, f.pi)
+	reference := ""
+	if referenced {
+		reference = f.pi
+	}
+	f.paymentID = seedStripePayment(t, db, f.invoiceID, 50000, reference)
 	return f
 }
 
@@ -67,14 +81,24 @@ func refundPayload(t *testing.T, eventID, accountID, refundID, paymentIntent, st
 	})
 }
 
+// deliver posts payload to the Connect webhook and wants it acknowledged.
+// Stripe lists no Invoice for any PaymentIntent it is asked about, so a
+// refund.created whose PaymentIntent matches no Payment is dropped.
 func deliver(t *testing.T, f refundWebhookFixture, payload []byte) {
 	t.Helper()
-	srv := newConnectWebhookServer(f.db)
+	deliverThrough(t, f, newProcessingClient(payments.InvoicePaymentIntent{}, nil), payload, http.StatusOK)
+}
+
+// deliverThrough is deliver with the Client, and the status wanted,
+// chosen by the caller.
+func deliverThrough(t *testing.T, f refundWebhookFixture, client payments.Client, payload []byte, want int) {
+	t.Helper()
+	srv := newConnectWebhookServerWith(f.db, client)
 	defer srv.Close()
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if resp.StatusCode != want {
+		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, want)
 	}
 }
 
@@ -130,7 +154,7 @@ func TestConnectWebhook_DashboardCreditNoteIsRecordedAsRefund(t *testing.T) {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 	diffs := refundActivityDiffs(t, f.db, f.engagementID)
-	if len(diffs) != 1 || diffs[0]["_actorKind"] != "system" || diffs[0]["origin"] != "stripe_dashboard" {
+	if len(diffs) != 1 || diffs[0]["_actorKind"] != string(activity.ActorSystem) || diffs[0]["origin"] != activity.OriginStripeDashboard {
 		t.Fatalf("activity = %v, want one system entry with origin stripe_dashboard", diffs)
 	}
 }

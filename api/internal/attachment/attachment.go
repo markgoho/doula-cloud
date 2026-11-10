@@ -21,6 +21,8 @@ import (
 	"fmt"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/attachmentstate"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffnotice"
 )
@@ -155,7 +157,7 @@ func ReadMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string)
 }
 
 // Grant puts doulaStaffID on engagementID: a granted Attachment through
-// staffauth.Grant, and the activity row that answers "who attached the
+// attachmentstate.Grant, and the activity row that answers "who attached the
 // Doula, and when" on the Engagement's own ledger. No fee rides it,
 // because a fee is only ever copied from an Offer.
 //
@@ -172,7 +174,7 @@ func ReadMembership(ctx context.Context, tx *sql.Tx, practiceID, staffID string)
 // The caller has already asked WhyNotAttachable. Grant does not ask
 // again, so that each caller refuses in its own words.
 func Grant(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, attachedBy string) error {
-	if err := staffauth.Grant(ctx, tx, engagementID, doulaStaffID, attachedBy, nil, nil); err != nil {
+	if err := attachmentstate.Grant(ctx, tx, engagementID, doulaStaffID, attachedBy, nil, nil, clock.Now(ctx)); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("attachment: grant: %w", err)
 	}
@@ -221,7 +223,7 @@ func Grant(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaff
 // no mail, so a repeated press changes nothing. Whether the caller may
 // take anyone off is the mount's question, not this one's.
 func TakeOff(ctx context.Context, tx *sql.Tx, practiceID, engagementID, doulaStaffID, endedBy string) (bool, error) {
-	wasOn, err := staffauth.EndGranted(ctx, tx, engagementID, doulaStaffID, endedBy)
+	wasOn, err := attachmentstate.TakeOff(ctx, tx, engagementID, doulaStaffID, endedBy)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("attachment: take off: %w", err)

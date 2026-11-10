@@ -16,16 +16,11 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageReadPending from '#lib/components/molecules/PageReadPending.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import { LOADED_PAGE, type PageReadState, type PageTitling } from '#lib/pageRead.svelte.js';
 
-	interface Properties {
-		title: string;
-		/**
-		 * The Staff side leaves this unset and gets the product name; the
-		 * Client portal passes its Practice's name (#431, #487).
-		 */
-		serviceName?: string;
+	interface Properties extends PageTitling {
 		primary: Snippet;
 		/**
 		 * #486's Recent-activity feed: low-prominence and low on the page,
@@ -44,16 +39,14 @@
 		isEmpty: boolean;
 		empty: Snippet;
 		/**
-		 * Presence, not a paired boolean: the value is also the Skeleton's
-		 * accessible label, so a caller cannot supply "loading" without
-		 * saying what is loading. The title is drawn while loading (#2248);
+		 * The hub's own read (#480, `pageRead.svelte.ts`): one value, not a
+		 * pair of flags. Loading carries the Skeleton's accessible label,
+		 * so a caller cannot ask for loading without saying what is
+		 * loading; failed carries the Notice's message; loaded is also what
+		 * leaving it out means. The title is drawn while loading (#2248);
 		 * bars hold the rest of the hub's space.
 		 */
-		loading?: string;
-		/**
-		Same shape as `loading`: presence is the state, value is the message.
-		*/
-		loadError?: string;
+		read?: PageReadState;
 		/**
 		 * What the act that led here did (#1710): `takeOutcome`'s message.
 		 * A status `Notice` before the <h1>, focused on arrival, and only
@@ -72,25 +65,23 @@
 		feed,
 		isEmpty,
 		empty,
-		loading,
-		loadError,
+		read = LOADED_PAGE,
 		outcome
 	}: Properties = $props();
 </script>
 
-<PageTitle page={title} {serviceName} isPending={Boolean(loading) && !loadError} />
+<PageTitle page={title} {serviceName} isPending={read.status === 'loading'} />
 
 <container-l name="overview-hub">
 	<!-- No cap: a hub is cards and tables rather than prose, and
 	     past the ramp's plateau more room buys more content (#531, #541).
 	     Anything inside that needs a measure asks for one itself. -->
 	<center-l max="none" gutters="var(--page-gutter)">
-		{#if loadError}
-			<Notice variant="error" message={loadError} />
-		{:else if loading}
+		{#if read.status === 'failed'}
+			<Notice variant="error" message={read.message} />
+		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-section)">
-				<Heading level={1} variant="page" text={title} />
-				<Skeleton variant="text" lines={6} label={loading} />
+				<PageReadPending {title} {read} skeleton="text" />
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-section)">

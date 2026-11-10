@@ -103,10 +103,16 @@ export interface ConnectStatusPollHandle {
 }
 
 interface ConnectStatusPollCallbacks {
-	/** Called with each successful re-read, replacing the caller's status
-	 * wholesale -- the badge, the explanation, the requirement count and
+	/** Called as each re-read goes out, before its answer is known. A
+	 * caller that also reads on its own (`ConnectStatusCheck`'s on-demand
+	 * check) orders the two by when each started, so a slower answer to an
+	 * older read never replaces a newer one. */
+	onRead?: () => void;
+	/** Called with each successful re-read, for the caller's one writer of
+	 * the status -- the badge, the explanation, the requirement count and
 	 * the banner are one derived view of a single value, so there is
-	 * never a moment where two of them disagree. */
+	 * never a moment where two of them disagree. A caller may `stop()` the
+	 * poll from here, and nothing is scheduled after it. */
 	onResult: (result: ConnectStatusResult) => void;
 	/** Called when a re-read fails. The poll stops after this -- see
 	 * `pollConnectStatus`'s doc comment -- so the caller's own status is
@@ -176,6 +182,7 @@ export function pollConnectStatus(
 			waiting = undefined;
 			let next: ConnectStatusResult | undefined;
 			let hasErrored = false;
+			callbacks.onRead?.();
 			try {
 				next = await loadConnectStatus(fetcher, practiceId);
 			} catch {
@@ -193,6 +200,9 @@ export function pollConnectStatus(
 				return;
 			}
 			callbacks.onResult(next!);
+			// The caller stopped it from `onResult`, so nothing is
+			// scheduled and `onStopped` is not called.
+			if (isStopped) return;
 			scheduleNext(attempt + 1, next!);
 		}, delaysMs[attempt]);
 	}

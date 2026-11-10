@@ -1,51 +1,26 @@
 <script lang="ts">
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount } from 'svelte';
-	import type { FormError } from '../authRefusal.ts';
 	import { dormantFacts, readDormantPractices, type DormantPractice } from '../dormantPractices.ts';
+	import { PagedList } from '../pagedList.svelte.ts';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import SummaryList from '$ui/molecules/SummaryList.svelte';
 
 	let { onsignedout, fetcher = fetch }: { onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
-	let practices = $state<DormantPractice[]>([]);
-	let nextCursor = $state<string | undefined>();
-	let hasLoaded = $state(false);
-	let isLoading = $state(false);
-	let errors = $state<FormError[]>([]);
+	const practices = new PagedList<DormantPractice>((cursor) => readDormantPractices(cursor, fetcher), () => onsignedout());
 
-	async function load(cursor?: string) {
-		isLoading = true;
-		try {
-			const outcome = await readDormantPractices(cursor, fetcher);
-			if (outcome.kind === 'signed-out') return onsignedout();
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			/* v8 ignore next -- a read asks no fresh code, so 'step-up' never arrives */
-			if (outcome.kind === 'ok') {
-				errors = [];
-				practices = [...practices, ...outcome.value.items];
-				nextCursor = outcome.value.hasMore ? outcome.value.nextCursor : undefined;
-				hasLoaded = true;
-			}
-		} finally {
-			isLoading = false;
-		}
-	}
-
-	onMount(() => load());
+	onMount(() => practices.load());
 </script>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={practices.errors} />
 
-{#if hasLoaded}
-	{#if practices.length === 0}
+{#if practices.state.status === 'loaded'}
+	{#if practices.state.items.length === 0}
 		<p>No Practice holds Credits that nobody has used in two years.</p>
 	{:else}
 		<ul class="practices" role="list">
-			{#each practices as practice (practice.id)}
+			{#each practices.state.items as practice (practice.id)}
 				<li>
 					<stack-l>
 						<h2>{practice.name}</h2>
@@ -54,8 +29,8 @@
 				</li>
 			{/each}
 		</ul>
-		{#if nextCursor}
-			<Button label="Show more Practices" loading={isLoading} onClick={() => load(nextCursor)} />
+		{#if practices.state.nextCursor}
+			<Button label="Show more Practices" loading={practices.isLoadingMore} onClick={() => practices.more()} />
 		{/if}
 	{/if}
 {/if}

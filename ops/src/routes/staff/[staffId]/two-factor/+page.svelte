@@ -1,14 +1,13 @@
 <script lang="ts">
-	import { actKey } from '#lib/act.js';
 	import Button from '$ui/atoms/Button.svelte';
 	import { onMount, tick } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/state';
-	import type { FormError } from '#lib/authRefusal.js';
+	import { CheckAct } from '#lib/checkAct.svelte.js';
+	import { CheckRead } from '#lib/checkRead.svelte.js';
 	import { freshIdToken } from '#lib/firebase.js';
 	import { type Operator } from '#lib/session.js';
-	import { stepUp } from '#lib/stepUp.js';
 	import {
 		practiceList,
 		readSecondFactorCheck,
@@ -22,47 +21,22 @@
 	const staffId = $derived(page.params.staffId ?? '');
 
 	const operator = $derived(page.data.operator as Operator);
-	let check = $state<SecondFactorStaff | undefined>();
-	let result = $state<SecondFactorStaff | undefined>();
-	let errors = $state<FormError[]>([]);
-	let isSending = $state(false);
-	let password = $state('');
-	let code = $state('');
-	const requestKey = actKey();
 
 	async function signedOut() {
 		await goto(resolve('/sign-in'));
 	}
 
-	onMount(async () => {
-		const outcome = await readSecondFactorCheck(staffId);
-		if (outcome.kind === 'signed-out') return signedOut();
-		if (outcome.kind === 'ok') check = outcome.value;
-		else if (outcome.kind === 'refused') errors = outcome.errors;
-	});
+	const read = new CheckRead<SecondFactorStaff>(signedOut);
+	const act = new CheckAct<SecondFactorStaff>({ onsignedout: signedOut, stepUp: { email: () => operator.email, freshIdToken } });
+	const errors = $derived(read.state.status === 'failed' ? read.errors : act.errors);
+
+	onMount(() => read.load(() => readSecondFactorCheck(staffId)));
 
 	async function reset(event: SubmitEvent) {
 		event.preventDefault();
-		isSending = true;
-		try {
-			errors = await stepUp({ email: operator!.email, password, code }, { freshIdToken });
-			if (errors.length > 0) return;
-			const outcome = await sendSecondFactorClear(staffId, requestKey);
-			if (outcome.kind === 'signed-out') return signedOut();
-			if (outcome.kind === 'step-up') {
-				errors = [{ message: 'Enter the code your authenticator app shows now to do this.', targetId: 'step-up-code' }];
-				return;
-			}
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			result = outcome.value;
-			await tick();
-			document.querySelector('h1')?.focus();
-		} finally {
-			isSending = false;
-		}
+		if (!(await act.run((key) => sendSecondFactorClear(staffId, key)))) return;
+		await tick();
+		document.querySelector('h1')?.focus();
 	}
 </script>
 
@@ -70,7 +44,8 @@
 
 <ErrorSummary {errors} />
 
-{#if result}
+{#if act.state.status === 'done'}
+	{@const result = act.state.value}
 	<stack-l role="status">
 		<h1 tabindex="-1">Two-factor authentication reset</h1>
 		<p>
@@ -82,7 +57,11 @@
 		{/if}
 	</stack-l>
 	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
-{:else if check}
+{:else if read.state.status === 'failed'}
+	<h1 tabindex="-1">Reset two-factor authentication</h1>
+	<p><a href={resolve('/')}>Back to DoulaCloud operations</a></p>
+{:else if read.state.status === 'loaded'}
+	{@const check = read.state.value}
 	<p class="caption">{check.staffName}</p>
 	<h1 tabindex="-1">Check before you reset two-factor authentication</h1>
 	<SummaryList
@@ -107,12 +86,12 @@
 	</stack-l>
 	<form novalidate onsubmit={reset}>
 		<stack-l>
-			<StepUpFields {errors} bind:password bind:code />
+			<StepUpFields {errors} bind:password={act.password} bind:code={act.code} />
 			<p>
 				Every authenticator app on this sign-in is removed, every device is signed out, and an email says so at once. A
 				reset cannot be undone.
 			</p>
-			<Button label="Reset two-factor authentication" type="submit" loading={isSending} />
+			<Button label="Reset two-factor authentication" type="submit" loading={act.isSending} />
 		</stack-l>
 	</form>
 {/if}

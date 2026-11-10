@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { resolve } from '$app/paths';
-	import type { FormError } from '../authRefusal.ts';
+	import { PagedList } from '../pagedList.svelte.ts';
 	import { practiceFacts, readPractices, type PracticeList, type PracticeRow } from '../practices.ts';
 	import ErrorSummary from '$ui/molecules/ErrorSummary.svelte';
 	import DataTable from '$ui/organisms/DataTable.svelte';
@@ -12,32 +12,7 @@
 		fetcher = fetch
 	}: { list: PracticeList; onsignedout: () => void; fetcher?: typeof fetch } = $props();
 
-	let practices = $state<PracticeRow[]>([]);
-	let nextCursor = $state<string | undefined>();
-	let hasLoaded = $state(false);
-	let isLoading = $state(false);
-	let errors = $state<FormError[]>([]);
-
-	async function load(cursor?: string) {
-		isLoading = true;
-		try {
-			const outcome = await readPractices(list, cursor, fetcher);
-			if (outcome.kind === 'signed-out') return onsignedout();
-			if (outcome.kind === 'refused') {
-				errors = outcome.errors;
-				return;
-			}
-			/* v8 ignore next -- a read asks no fresh code, so 'step-up' never arrives */
-			if (outcome.kind === 'ok') {
-				errors = [];
-				practices = [...practices, ...outcome.value.items];
-				nextCursor = outcome.value.hasMore ? outcome.value.nextCursor : undefined;
-				hasLoaded = true;
-			}
-		} finally {
-			isLoading = false;
-		}
-	}
+	const practices = new PagedList<PracticeRow>((cursor) => readPractices(list, cursor, fetcher), () => onsignedout());
 
 	// The facts a Practice states, in the order practiceFacts gives them. Source is not a column:
 	// twelve columns do not fit 1440px without a word breaking (#2615), and Source reads "Not
@@ -61,10 +36,10 @@
 
 	const columns = [{ label: 'Practice', accessor: (practice: PracticeRow) => practice.name }, ...factColumns];
 
-	onMount(() => load());
+	onMount(() => practices.load());
 </script>
 
-<ErrorSummary {errors} />
+<ErrorSummary errors={practices.errors} />
 
 {#snippet acts(practice: PracticeRow)}
 	<!-- v8 ignore start: Svelte's compiled attribute-diffing branches for the two hrefs; a Practice's id never changes in place -->
@@ -85,15 +60,15 @@
 	<!-- v8 ignore stop -->
 {/snippet}
 
-{#if hasLoaded}
+{#if practices.state.status === 'loaded'}
 	<div class="practice-table">
 		<DataTable
 			{columns}
-			rows={practices}
+			rows={practices.state.items}
 			rowActions={list === 'live' ? { label: 'Acts', content: acts } : undefined}
-			hasMore={nextCursor !== undefined}
-			onLoadMore={() => load(nextCursor)}
-			isLoadingMore={isLoading}
+			hasMore={practices.state.nextCursor !== undefined}
+			onLoadMore={() => practices.more()}
+			isLoadingMore={practices.isLoadingMore}
 			emptyMessage={list === 'deleted' ? 'No Practice has been deleted.' : 'No Practice has signed up yet.'}
 		/>
 	</div>

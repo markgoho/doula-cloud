@@ -61,7 +61,7 @@ func readAttachedDoulas(ctx context.Context, tx *sql.Tx, engagementID string) ([
 		          WHERE v.engagement_id = ea.engagement_id AND v.staff_id = ea.staff_id AND (v.scheduled_at IS NULL OR v.scheduled_at > $3))
 		   FROM engagement_attachments ea
 		   LEFT JOIN staff s ON s.id = ea.staff_id
-		  WHERE ea.engagement_id = $1 AND ea.origin = 'granted' AND ea.ended_at IS NULL
+		  WHERE ea.engagement_id = $1 AND ea.state = 'granted'
 		  ORDER BY ea.attached_at, ea.staff_id`,
 		engagementID, activity.DepartedStaffName, clock.Now(ctx))
 	if err != nil {

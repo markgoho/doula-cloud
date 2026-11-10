@@ -20,6 +20,7 @@ import type { Fetcher } from './fetcher.js';
 import { loadTemplate, type Field } from './clientFieldTemplate.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { intakeSections, intakeStepList, type IntakeSection, type IntakeStep } from './intakeJourney.js';
+import { PageRead } from './pageRead.svelte.js';
 
 async function loadPracticeName(fetcher: Fetcher, practiceId: string): Promise<string> {
 	const response = await fetcher(`/api/practices/${practiceId}/session`);
@@ -30,12 +31,19 @@ async function loadPracticeName(fetcher: Fetcher, practiceId: string): Promise<s
 	return body.practiceName;
 }
 
+interface PracticeShape {
+	practiceName: string;
+	fields: Field[];
+}
+
 export class IntakeFlow {
 	practiceId = $state('');
-	status = $state<'idle' | 'loading' | 'ready' | 'error'>('idle');
-	loadError = $state('');
-	practiceName = $state('');
-	fields = $state<Field[]>([]);
+	/**
+	The Practice's name and template, read as one: loading, loaded or failed.
+	*/
+	readonly read = new PageRead<PracticeShape>();
+	practiceName = $derived(this.read.value?.practiceName ?? '');
+	fields = $derived<Field[]>(this.read.value?.fields ?? []);
 
 	sections = $derived<IntakeSection[]>(intakeSections(this.fields, this.practiceName));
 	steps = $derived<IntakeStep[]>(intakeStepList(this.sections));
@@ -43,29 +51,21 @@ export class IntakeFlow {
 	/**
 	 * Reads the Practice's name and its Client Field Template.
 	 *
-	 * A second call for the same Practice is a no-op once it is ready, so
-	 * a layout effect that re-runs on every step navigation costs one
-	 * comparison rather than a round trip.
+	 * A second call for the same Practice is a no-op once it is under way
+	 * or loaded, so a layout effect that re-runs on every step navigation
+	 * costs one comparison rather than a round trip. A read for a Practice
+	 * that answers after another's was asked for is dropped (`PageRead`).
 	 */
 	async load(fetcher: Fetcher, practiceId: string): Promise<void> {
-		if (this.practiceId === practiceId && this.status !== 'idle' && this.status !== 'error') {
-			return;
-		}
+		if (this.practiceId === practiceId && this.read.state.status !== 'failed') return;
 		this.practiceId = practiceId;
-		this.status = 'loading';
-		this.loadError = '';
-		try {
+		await this.read.load(async () => {
 			const [practiceName, template] = await Promise.all([
 				loadPracticeName(fetcher, practiceId),
 				loadTemplate(fetcher, practiceId)
 			]);
-			this.practiceName = practiceName;
-			this.fields = template.fields;
-			this.status = 'ready';
-		} catch (error) {
-			this.loadError = error instanceof Error && error.message ? error.message : 'Failed to load';
-			this.status = 'error';
-		}
+			return { practiceName, fields: template.fields };
+		}, 'Failed to load');
 	}
 }
 

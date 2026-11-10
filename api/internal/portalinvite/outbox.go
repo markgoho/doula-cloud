@@ -27,11 +27,20 @@ func inviteText(link string) string {
 // only its table, claim query, row shape and Compose below.
 type Worker = outbox.MailWorker[pendingRow]
 
+// table is portal_invite_outbox, the one table every move of an invite's
+// row names: the worker's, RevokePending's and the bounce webhook's.
+const table = "portal_invite_outbox"
+
+// inviteOutbox moves a portal_invite_outbox row outside the worker --
+// RevokePending's dead-letter and the bounce webhook's report -- through
+// the same declared transitions the worker's own Mark* calls use.
+var inviteOutbox = outbox.Worker{Table: table}
+
 // NewWorker builds the Client portal invite outbox worker around mailer.
 func NewWorker(mailer outbox.Mailer) Worker {
 	return Worker{
 		Mailer:     mailer,
-		Table:      "portal_invite_outbox",
+		Table:      table,
 		ClaimQuery: claimQuery,
 		Scan:       scanRow,
 		Compose:    compose(mailer),
@@ -50,15 +59,12 @@ const claimQuery = `SELECT o.id, o.attempt_count, pu.invite_token, pu.identity_u
 	 FROM portal_invite_outbox o
 	 JOIN client_portal_users pu ON pu.id = o.client_portal_user_id
 	 JOIN clients c ON c.id = pu.client_id
-	 WHERE o.status = 'pending' AND o.next_attempt_at <= now()
-	 ORDER BY o.next_attempt_at
-	 LIMIT $1
-	 FOR UPDATE OF o SKIP LOCKED`
+	 ` + outbox.ClaimNextAliasO
 
 func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
-	var meta outbox.RowMeta
 	var r pendingRow
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.inviteToken, &r.identityUID, &r.email); err != nil {
+	meta, err := outbox.ScanMeta(rows, &r.inviteToken, &r.identityUID, &r.email)
+	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, r, fmt.Errorf("portalinvite: scan outbox row: %w", err)
 	}

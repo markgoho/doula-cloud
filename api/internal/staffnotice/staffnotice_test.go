@@ -174,7 +174,7 @@ func TestWorker_MailsNothingOnceTheOfferIsNoLongerOpen(t *testing.T) {
 	cases := map[string]func(t *testing.T, f fixture) time.Time{
 		"declined": func(t *testing.T, f fixture) time.Time {
 			if _, err := f.db.Admin.ExecContext(t.Context(),
-				`UPDATE engagement_offers SET state = 'declined', decided_at = now(), decided_by = staff_id WHERE id = $1`, f.offerID,
+				`UPDATE engagement_offers SET state = 'declined', decided_at = now(), decided_by = staff_id, decided_by_kind = 'staff' WHERE id = $1`, f.offerID,
 			); err != nil {
 				t.Fatalf("decline: %v", err)
 			}
@@ -199,8 +199,8 @@ func TestWorker_MailsNothingOnceTheOfferIsNoLongerOpen(t *testing.T) {
 			now := prepare(t, f)
 
 			requireMails(t, f.run(t, now), 0)
-			if r := f.read(t); r.status != statusSent || r.address != nil {
-				t.Fatalf("row = (%s, %v), want sent with no address", r.status, r.address)
+			if r := f.read(t); r.status != statusSkipped || r.address != nil {
+				t.Fatalf("row = (%s, %v), want skipped with no address", r.status, r.address)
 			}
 		})
 	}

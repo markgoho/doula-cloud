@@ -110,6 +110,18 @@ func TestEntryDetail_WrittenOffSaysWhereItWasDone(t *testing.T) {
 	}
 }
 
+// TestEntryDetail_VoidedSaysWhereItWasDone is the same sentence for an
+// Invoice the Practice voided in her Stripe Dashboard (invoice.voided).
+func TestEntryDetail_VoidedSaysWhereItWasDone(t *testing.T) {
+	none := sql.NullString{}
+	if got := entryDetail("invoice_voided", []byte(`{"origin":"stripe_dashboard"}`), none, none); got != "Voided in the Practice's Stripe account" {
+		t.Fatalf("detail = %q, want the Stripe account sentence", got)
+	}
+	if got := entryDetail("invoice_voided", nil, none, none); got != "" {
+		t.Fatalf("detail = %q, want none for one voided here", got)
+	}
+}
+
 // TestEntryDetail_OtherActionsFallThrough proves the dispatch leaves
 // every other action to reassignmentDetail, which returns nothing for an
 // action it does not own.

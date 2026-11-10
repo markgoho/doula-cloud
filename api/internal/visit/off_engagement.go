@@ -8,15 +8,13 @@ package visit
 // ended and has none open. Taking a Doula off leaves her Visits with her
 // until someone reassigns them, so this is how they stay in view.
 //
-// The predicate is a pair of constants around the placeholder that carries
-// clock.Now, so the caller keeps its query a constant expression. It reads
-// the aliases v (visits) and e (engagements).
+// "The holder has left" is engagement_holder_left (00173), the one
+// definition the Client portal's door calls too. The predicate is a pair
+// of constants around the placeholder that carries clock.Now, so the
+// caller keeps its query a constant expression. It reads the aliases v
+// (visits) and e (engagements).
 const (
 	offEngagementBefore = `((v.scheduled_at IS NULL OR v.scheduled_at > `
 	offEngagementAfter  = `) AND e.status <> 'completed'
-	        AND NOT EXISTS (SELECT 1 FROM engagement_attachments ea
-	                         WHERE ea.engagement_id = v.engagement_id AND ea.staff_id = v.staff_id AND ea.ended_at IS NULL)
-	        AND EXISTS (SELECT 1 FROM engagement_attachments ea
-	                     WHERE ea.engagement_id = v.engagement_id AND ea.staff_id = v.staff_id
-	                       AND ea.origin = 'granted' AND ea.ended_at IS NOT NULL))`
+	        AND engagement_holder_left(v.engagement_id, v.staff_id))`
 )

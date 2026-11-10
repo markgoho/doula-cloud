@@ -21,6 +21,7 @@ const (
 
 	testPayoutStatusPending = "pending"
 	testPayoutStatusSent    = "sent"
+	testOutboxStatusSkipped = "skipped"
 	testPayoutAppBaseURL    = "https://app.example.test" //nolint:gosec // test fixture URL, not a credential
 	// testRequirementDOB is a real Stripe requirement path, standing in
 	// across this package's payout-outbox tests for "something is
@@ -218,8 +219,8 @@ func TestPayoutWorker_ProcessPending_Outcomes(t *testing.T) {
 		wantAttempts int
 	}{
 		{name: "a row not yet due is skipped", due: time.Hour, requirements: []string{testRequirementDOB}, wantStatus: testPayoutStatusPending},
-		{name: "a Practice with no Owner is marked sent with no mail", noOwner: true, requirements: []string{testRequirementDOB}, due: -time.Minute, wantStatus: testPayoutStatusSent},
-		{name: "requirements already cleared skip the mail", requirements: []string{}, due: -time.Minute, wantStatus: testPayoutStatusSent},
+		{name: "a Practice with no Owner is marked skipped with no mail", noOwner: true, requirements: []string{testRequirementDOB}, due: -time.Minute, wantStatus: testOutboxStatusSkipped},
+		{name: "requirements already cleared skip the mail", requirements: []string{}, due: -time.Minute, wantStatus: testOutboxStatusSkipped},
 		{name: "a send failure retries", requirements: []string{testRequirementDOB}, due: -time.Minute, sendErr: errMailgun, wantStatus: testPayoutStatusPending, wantAttempts: 1},
 		// One attempt short of the schedule's length -- this failure is the
 		// last one before dead-letter.

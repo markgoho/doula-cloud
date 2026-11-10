@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"doula-cloud/api/internal/mail"
@@ -36,8 +37,8 @@ func (m Mailer) Worker(table string, clearOnTerminal ...string) Worker {
 // ErrAlreadyDone is what a MailWorker's Compose returns instead of a
 // message when the row's own event already resolved through some other
 // path -- an invitation already accepted, a code already verified. Nothing
-// to deliver, but not a failure: ProcessPending marks the row sent with no
-// send attempted, so it never retries.
+// to deliver, but not a failure: ProcessPending marks the row skipped
+// (SkipAlreadyResolved) with no send attempted, so it never retries.
 var ErrAlreadyDone = errors.New("outbox: nothing to send, row already resolved")
 
 // DeadLetterError is what a MailWorker's Compose returns instead of a
@@ -67,6 +68,17 @@ type RowMeta struct {
 	AttemptCount int
 }
 
+// ScanMeta scans a claimed row whose first two columns are its id and
+// attempt_count into a RowMeta, and the rest of its columns into dest.
+func ScanMeta(rows *sql.Rows, dest ...any) (RowMeta, error) {
+	var meta RowMeta
+	if err := rows.Scan(append([]any{&meta.ID, &meta.AttemptCount}, dest...)...); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, fmt.Errorf("outbox: scan claimed row: %w", err)
+	}
+	return meta, nil
+}
+
 // claimedRow pairs a claimed row's RowMeta with the kind-specific data
 // Compose reads -- the single value outbox.Worker.HandlePending's existing
 // claim-scan-handle loop is instantiated over. Unexported: nothing outside
@@ -86,7 +98,7 @@ type claimedRow[R any] struct {
 //
 // Compose decides what happens to one claimed row: return a message to
 // send; ErrAlreadyDone if the row's own event already resolved elsewhere
-// (marked sent, nothing mailed); a *DeadLetterError if no retry could help
+// (marked skipped, nothing mailed); a *DeadLetterError if no retry could help
 // (dead-lettered on the spot); or any other error to retry per
 // BackoffSchedule -- the same three outcomes a hand-written send() used to
 // reach by calling inner.MarkSent, inner.MarkDeadLetteredNow and
@@ -123,7 +135,7 @@ func (w MailWorker[R]) ProcessPending(ctx context.Context, tx *sql.Tx) error {
 func (w MailWorker[R]) handle(ctx context.Context, tx *sql.Tx, inner Worker, c claimedRow[R], now time.Time) error {
 	to, subject, text, err := w.Compose(ctx, tx, c.row, now)
 	if errors.Is(err, ErrAlreadyDone) {
-		return inner.MarkSent(ctx, tx, c.meta.ID, now)
+		return inner.MarkSkipped(ctx, tx, c.meta.ID, SkipAlreadyResolved, now)
 	}
 	if err != nil {
 		if dl, ok := errors.AsType[*DeadLetterError](err); ok {

@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/attachment"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/tasknudge"
 )
@@ -74,11 +75,16 @@ func ApproveHandler(db *sql.DB, enq tasknudge.Enqueuer) http.Handler {
 // Engagement row approve() already inserted before ConsumeCredit failed.
 func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tasknudge.Enqueuer, tx *sql.Tx, practiceID string, err error) {
 	var refusal doulaNotAttachableError
+	var notLive clientstanding.RefusalError
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		apierr.WriteError(w, "engagement request not found", http.StatusNotFound)
 	case errors.Is(err, errNotPending):
 		apierr.WriteError(w, "that request is no longer pending", http.StatusConflict)
+	case errors.As(err, &notLive):
+		// approve refuses before it writes, so the Request stays pending
+		// and can still be refused or withdrawn.
+		apierr.WriteError(w, notLive.Message, http.StatusConflict)
 	case errors.As(err, &refusal):
 		// The Doula the Request names can no longer be attached (#1596).
 		// The reason names no control, because the approver amends nothing
@@ -132,10 +138,11 @@ func writeApproveErr(w http.ResponseWriter, r *http.Request, db *sql.DB, enq tas
 //
 // Returns sql.ErrNoRows when requestID does not exist at this Practice,
 // errNotPending when it exists but is no longer pending,
+// clientstanding.RefusalError when the Client record is no longer live and
 // doulaNotAttachableError when the Doula it names can no longer be
-// attached (nothing has been written at that point), and
+// attached (nothing has been written at either point), and
 // billing.ErrNoCreditsRemaining unchanged when the Practice's balance is
-// empty -- callers branch on all four.
+// empty -- callers branch on all five.
 func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverStaffID string) (engagementID string, warning bool, err error) {
 	var clientID, kind, state string
 	var dueDate, doula sql.NullString
@@ -153,6 +160,13 @@ func approve(ctx context.Context, tx *sql.Tx, practiceID, requestID, approverSta
 	}
 	if state != statePending {
 		return "", false, errNotPending
+	}
+	// Asked here and not only at the ask: erasure leaves a pending
+	// Request pending (it touches no engagement_requests row), so without
+	// this an Engagement -- and a spent Credit -- could be made for a
+	// Client whose details are already gone.
+	if err := clientstanding.ActApproveRequest.RequireErr(ctx, tx, clientID); err != nil {
+		return "", false, err //nolint:wrapcheck // clientstanding.RefusalError is what writeApproveErr errors.As against
 	}
 	// Asked again here, and before any write: days can pass between the
 	// ask and the decision, and the named Doula's Membership can end or

@@ -26,7 +26,7 @@ type CountResponse struct {
 // rows with their joins. TestCountClientsQueryPlanAtScale prices it.
 const countClientsQuery = `SELECT count(*)
 	  FROM clients c
-	 WHERE c.practice_id = $1 AND c.merged_into IS NULL`
+	 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased')`
 
 // countAttachedClientsQuery is countClientsQuery narrowed the way
 // listAttachedClients narrows the list (ADR-0008's contractor column): a
@@ -34,11 +34,11 @@ const countClientsQuery = `SELECT count(*)
 // attachment to, never how many the Practice has.
 const countAttachedClientsQuery = `SELECT count(*)
 	  FROM clients c
-	 WHERE c.practice_id = $1 AND c.merged_into IS NULL
+	 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased')
 	   AND c.id IN (
 	       SELECT e.client_id FROM engagements e
 	         JOIN engagement_attachments ea ON ea.engagement_id = e.id
-	        WHERE ea.staff_id = $2 AND ea.origin = 'granted' AND ea.ended_at IS NULL)`
+	        WHERE ea.staff_id = $2 AND ea.state = 'granted')`
 
 // CountHandler serves CountResponse. Any Staff member, as the list is:
 // the contractor narrowing happens inside, through staffauth.Reader, the

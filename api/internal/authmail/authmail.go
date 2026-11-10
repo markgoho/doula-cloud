@@ -57,17 +57,39 @@ const (
 // per this package's own doc comment.
 type TokenMailWorker = outbox.MailWorker[tokenMailRow]
 
+// tokenMailOutbox is staff_token_mail_outbox and the exit duty its rows
+// carry: the plaintext token is cleared whichever way a row leaves
+// pending. Named once so the worker and SkipPendingTokenMail cannot
+// disagree about it.
+var tokenMailOutbox = outbox.Worker{Table: "staff_token_mail_outbox", ClearOnTerminal: []string{"token"}}
+
 // NewTokenMailWorker builds the Staff verification/reset outbox worker
 // around mailer and accounts.
 func NewTokenMailWorker(mailer outbox.Mailer, accounts authn.AccountManager) TokenMailWorker {
 	return TokenMailWorker{
 		Mailer:          mailer,
-		Table:           "staff_token_mail_outbox",
-		ClearOnTerminal: []string{"token"},
+		Table:           tokenMailOutbox.Table,
+		ClearOnTerminal: tokenMailOutbox.ClearOnTerminal,
 		ClaimQuery:      tokenMailClaimQuery,
 		Scan:            scanTokenMailRow,
 		Compose:         composeTokenMail(mailer, accounts),
 	}
+}
+
+// SkipPendingTokenMail marks every pending row addressed to identityUID
+// skipped, for reason, through the same transition a worker's skip
+// takes -- so its token is cleared exactly as a send would clear it.
+// It is for an act that makes the mail moot before it goes out: a
+// person deleting her own login (staffauth's resolveQueuedMail).
+func SkipPendingTokenMail(ctx context.Context, tx *sql.Tx, identityUID string, reason outbox.SkipReason, now time.Time) error {
+	if err := tokenMailOutbox.SkipPending(ctx, tx,
+		`SELECT id FROM staff_token_mail_outbox WHERE identity_uid = $1 AND status = 'pending' FOR UPDATE`,
+		reason, now, identityUID,
+	); err != nil {
+		// coverage:ignore reason: DB failure inside the outbox package, not exercised by unit tests
+		return fmt.Errorf("authmail: skip pending token mail: %w", err)
+	}
+	return nil
 }
 
 type tokenMailRow struct {
@@ -79,7 +101,7 @@ type tokenMailRow struct {
 //nolint:gosec // G101 flags the "token" column name; this is SQL query text, not a credential
 const tokenMailClaimQuery = `SELECT id, attempt_count, identity_uid, kind, token
 	 FROM staff_token_mail_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -264,7 +286,7 @@ type emailChangeRow struct {
 
 const emailChangeClaimQuery = `SELECT id, attempt_count, old_email
 	 FROM staff_email_change_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`

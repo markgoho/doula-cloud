@@ -92,7 +92,7 @@ type pendingRow struct {
 
 const claimQuery = `SELECT id, practice_id, act::text, attempt_count
 	 FROM practice_deletion_outbox
-	 WHERE status = 'pending' AND next_attempt_at <= now()
+	 WHERE ` + outbox.ClaimDue + `
 	 ORDER BY next_attempt_at
 	 LIMIT $1
 	 FOR UPDATE SKIP LOCKED`
@@ -129,20 +129,19 @@ func (w Worker) perform(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r 
 	return markErr(fmt.Errorf("practicedeletion: unknown act %q", r.act))
 }
 
-// performReminder mails every current Owner, unless the Practice's own
-// deletion_requested_at has gone null (restored) or deleted_at is
-// already set (already finalized) by the time this row was claimed --
-// the skip-at-send recheck the package doc describes. A skip marks sent
-// with nothing mailed, the same "nothing left to do" shape SendAll
-// already gives a Practice with zero current Owners.
+// performReminder mails every current Owner, unless the Practice's
+// standing is no longer pending deletion (restored, or already
+// finalized) by the time this row was claimed --
+// the skip-at-send recheck the package doc describes. A skip marks the
+// row skipped with nothing mailed, and says which of the two it was.
 func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Worker, r pendingRow, now time.Time) error {
 	state, err := readDeletionState(ctx, tx, r.practiceID, false)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if !state.requestedAt.Valid || state.deletedAt.Valid {
-		return markErr(inner.MarkSent(ctx, tx, r.id, now))
+	if reason, moot := state.skip(); moot {
+		return markErr(inner.MarkSkipped(ctx, tx, r.id, reason, now))
 	}
 
 	_, emails, err := outbox.OwnerRecipients(ctx, tx, r.practiceID)
@@ -152,6 +151,20 @@ func (w Worker) performReminder(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 	}
 	link := w.AppBaseURL + "/practices/" + r.practiceID + "/settings/delete"
 	return markErr(inner.SendAll(ctx, tx, r.id, r.attemptCount, now, emails, reminderSubject, reminderText(link, state.finalizeAt.Time)))
+}
+
+// skip is the recheck both acts make: a Practice restored since the row
+// was queued, or one already finalized, leaves nothing to do. It asks
+// TransitionFinalize, the one declaration of "still pending deletion",
+// and names the reason from the standing the Practice is actually in.
+func (s deletionState) skip() (outbox.SkipReason, bool) {
+	if ok, _ := TransitionFinalize.Check(s.standing); ok {
+		return "", false
+	}
+	if s.standing == StandingDeleted {
+		return outbox.SkipAlreadyResolved, true
+	}
+	return outbox.SkipPracticeRestored, true
 }
 
 // performFinalize runs the act itself, unless the same recheck finds the
@@ -165,8 +178,8 @@ func (w Worker) performFinalize(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-	if !state.requestedAt.Valid || state.deletedAt.Valid {
-		return markErr(inner.MarkSent(ctx, tx, r.id, now))
+	if reason, moot := state.skip(); moot {
+		return markErr(inner.MarkSkipped(ctx, tx, r.id, reason, now))
 	}
 
 	if err := finalize(ctx, tx, r.practiceID, now); err != nil {
@@ -178,8 +191,8 @@ func (w Worker) performFinalize(ctx context.Context, tx *sql.Tx, inner outbox.Wo
 
 // finalize is the act itself: every Client still on file is erased
 // through the same client.Erase ADR-0027 already runs for a single
-// Owner-run erasure, any unspent Credit balance is forfeited as one
-// credit_ledger row, and practices.deleted_at is stamped -- in that
+// Owner-run erasure, any unspent Credit balance is forfeited lot by lot
+// (billing.Forfeit), and practices.deleted_at is stamped -- in that
 // order, so the Activity row below can name real counts.
 func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time) error {
 	// client.Erase writes through the same practice-scoped RLS policies
@@ -204,15 +217,23 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 		}
 	}
 
-	forfeited, err := forfeitBalance(ctx, tx, practiceID)
+	forfeited, err := billing.Forfeit(ctx, tx, practiceID, now)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("practicedeletion: forfeit balance: %w", err)
+	}
+
+	ok, err := moved(tx.ExecContext(ctx,
+		`UPDATE practices SET deleted_at = $1 WHERE id = $2 AND standing = $3`,
+		now, practiceID, TransitionFinalize.Requires,
+	))
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
-
-	if _, err := tx.ExecContext(ctx, `UPDATE practices SET deleted_at = $1 WHERE id = $2`, now, practiceID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("practicedeletion: stamp deleted_at: %w", err)
+	if !ok {
+		// coverage:ignore reason: the row cannot leave TransitionFinalize.Requires under performFinalize's own FOR UPDATE lock, which nothing else can write through
+		return fmt.Errorf("practicedeletion: practice %s is no longer %s", practiceID, TransitionFinalize.Requires)
 	}
 
 	diff, err := json.Marshal(finalizedScope{ClientsErased: len(clientIDs), CreditsForfeited: forfeited})
@@ -220,14 +241,7 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 		// coverage:ignore reason: a struct of two ints always marshals cleanly, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: marshal finalized scope: %w", err)
 	}
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
-		Action:      actionFinalized,
-		Diff:        diff,
-		Actor:       activity.SystemActor(),
-	}); err != nil {
+	if err := recordPracticeAct(ctx, tx, practiceID, actionFinalized, diff, activity.SystemActor()); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: record finalization: %w", err)
 	}
@@ -249,7 +263,7 @@ func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]st
 		// clients_update's own USING clause (merged_into IS NULL, 00080)
 		// matches zero rows for, and the key would then be destroyed with
 		// her name still standing in the row.
-		`SELECT id FROM clients WHERE practice_id = $1 AND erased_at IS NULL AND merged_into IS NULL FOR UPDATE`,
+		`SELECT id FROM clients WHERE practice_id = $1 AND standing = 'live' FOR UPDATE`,
 		practiceID,
 	)
 	if err != nil {
@@ -272,30 +286,6 @@ func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]st
 		return nil, fmt.Errorf("practicedeletion: iterate clients: %w", err)
 	}
 	return ids, nil
-}
-
-// forfeitBalance writes one 'forfeit' credit_ledger row zeroing out
-// practiceID's current balance, and returns how many Credits it
-// forfeited. A zero or negative balance writes nothing: there is
-// nothing to forfeit, and an append-only ledger should not carry a
-// zero-quantity row that answers no question.
-func forfeitBalance(ctx context.Context, tx *sql.Tx, practiceID string) (int, error) {
-	balance, err := billing.Balance(ctx, tx, practiceID)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("practicedeletion: read balance: %w", err)
-	}
-	if balance <= 0 {
-		return 0, nil
-	}
-	if _, err := tx.ExecContext(ctx,
-		`INSERT INTO credit_ledger (practice_id, origin, quantity) VALUES ($1, 'forfeit', $2)`,
-		practiceID, -balance,
-	); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return 0, fmt.Errorf("practicedeletion: forfeit balance: %w", err)
-	}
-	return balance, nil
 }
 
 // markErr gives an error from the outbox package -- a sibling package,
