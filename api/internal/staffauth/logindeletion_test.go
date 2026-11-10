@@ -27,6 +27,17 @@ func newDeleter(t *testing.T, staff ...fixture.StaffOption) *env {
 	return e
 }
 
+// contractAtSecondPractice gives her a contractor Membership, holding
+// roles, at a second Practice with an Owner of its own.
+func (e *env) contractAtSecondPractice(roles string) fixture.PracticeRecord {
+	e.T.Helper()
+	second := fixture.Practice(e.T, e.DB, fixture.PracticeName("Second Practice"))
+	fixture.Staff(e.T, e.DB, second, fixture.Owner())
+	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
+		 VALUES ($1, $2, $3, 'contractor')`, second.ID, e.Staff.ID, roles)
+	return second
+}
+
 // newSoleStaffEnv is newDeleter with nobody to stay behind: she is the
 // Practice's only Staff member, with an Identity Platform account.
 func newSoleStaffEnv(t *testing.T, staff ...fixture.StaffOption) *env {
@@ -123,10 +134,7 @@ func TestDeleteLoginHandler_RedactsRowAndDestroysAccount(t *testing.T) {
 // log carries the 'removed' event naming what the Membership held.
 func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
-	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
-	fixture.Staff(t, e.DB, second, fixture.Owner())
-	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, '{doula,admin}', 'contractor')`, second.ID, e.Staff.ID)
+	second := e.contractAtSecondPractice("{doula,admin}")
 
 	e.erase()
 
@@ -152,10 +160,7 @@ func TestDeleteLoginHandler_EndsEveryMembershipWithItsOwnEvent(t *testing.T) {
 // at each Practice, with her as the one who ended them.
 func TestDeleteLoginHandler_EndsHerAttachmentsAtEveryPractice(t *testing.T) {
 	e := newDeleter(t, fixture.Doula(), fixture.Contractor())
-	second := fixture.Practice(t, e.DB, fixture.PracticeName("Second Practice"))
-	fixture.Staff(t, e.DB, second, fixture.Owner())
-	e.Exec(`INSERT INTO practice_memberships (practice_id, staff_id, roles, employment_type)
-		 VALUES ($1, $2, '{doula}', 'contractor')`, second.ID, e.Staff.ID)
+	second := e.contractAtSecondPractice("{doula}")
 	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, e.Practice).ID, e.Staff.ID)
 	testdb.SeedGrantedAttachment(t, e.DB, fixture.Engagement(t, e.DB, second).ID, e.Staff.ID)
 

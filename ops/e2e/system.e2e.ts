@@ -27,7 +27,7 @@ for (const width of [320, 1440]) {
 		const events = page.getByRole('table', { name: /each event type DoulaCloud handles/ });
 		await expect(events.getByRole('row', { name: /^invoice\.paid Stripe Connect .* (EST|EDT)$/ })).toBeVisible();
 		await expect(events.getByRole('row', { name: /^refund\.created Stripe Connect Not seen yet$/ })).toBeVisible();
-		await expect(page.getByRole('table', { name: /Rows waiting to be sent/ }).getByRole('row', { name: /^Portal invite / })).toBeVisible();
+		await expect(page.getByRole('table', { name: /Rows waiting, sent, skipped/ }).getByRole('row', { name: /^Portal invite / })).toBeVisible();
 
 		expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
 		await page.screenshot({ path: testInfo.outputPath(`system-${width}.png`), fullPage: true });

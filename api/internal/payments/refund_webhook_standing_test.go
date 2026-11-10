@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"slices"
 	"testing"
-	"time"
 
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
@@ -17,14 +16,7 @@ import (
 // Payment whose reference is empty.
 func newUnreferencedRefundFixture(t *testing.T, name string) refundWebhookFixture {
 	t.Helper()
-	db := testdb.New(t)
-	f := refundWebhookFixture{db: db, accountID: "acct_" + name, stripeInv: "in_" + name, pi: "pi_" + name}
-	practiceID := seedConnectedPractice(t, db, name, f.accountID)
-	_, f.engagementID = testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
-	contractID := seedSignedContract(t, db, f.engagementID)
-	f.invoiceID = seedInvoice(t, db, practiceID, contractID, f.stripeInv, invoiceStatusOpen, 50000, time.Now())
-	f.paymentID = seedStripePayment(t, db, f.invoiceID, 50000, "")
-	return f
+	return seedRefundWebhookFixture(t, name, false)
 }
 
 // TestConnectWebhook_RefundFindsAPaymentWhoseReferenceWasNeverLearned is

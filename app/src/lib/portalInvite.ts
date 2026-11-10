@@ -20,7 +20,12 @@ export type PortalAccessState = 'invited' | 'refused' | 'accepted' | 'expired' |
 /** What the latest send of a live invitation did -- portal_invite_outbox's
  * own status, present only while the state is `invited`. A separate
  * field because it is a separate table's vocabulary. */
-export type PortalInviteDelivery = 'pending' | 'sent' | 'bounced' | 'dead_lettered' | 'complained';
+export type PortalInviteDelivery = 'pending' | 'sent' | 'skipped' | 'bounced' | 'dead_lettered' | 'complained';
+
+/**
+The two deliveries that failed: a re-invite, or an unblock, is the answer to each.
+*/
+type FailedDelivery = Extract<PortalInviteDelivery, 'bounced' | 'dead_lettered'>;
 
 export interface PortalInviteSubject {
 	portalInviteStatus?: PortalAccessState;
@@ -30,10 +35,13 @@ export interface PortalInviteSubject {
 
 /** #346: labels for a live invitation, by its delivery. "complained"
  * reads as informational -- the mail arrived, re-inviting will not
- * help -- unlike "bounced"/"dead_lettered", which ask for one. */
+ * help -- unlike "bounced"/"dead_lettered", which ask for one.
+ * "skipped" is a send the worker found it did not need: she had
+ * accepted before it went out, so nothing was mailed. */
 export const portalInviteDeliveryLabel: Record<PortalInviteDelivery, string> = {
 	pending: 'Invite pending',
 	sent: 'Invite sent',
+	skipped: 'Not sent — already accepted',
 	bounced: 'Bounced — needs re-invite',
 	dead_lettered: 'Dead-lettered — needs re-invite',
 	complained: 'Marked as spam (no action needed)'
@@ -73,18 +81,25 @@ export function isRefusedInvite(subject: PortalInviteSubject): boolean {
  * than folded into the map above because the delivery does not change
  * when Staff clear one: the row stays 'bounced'/'dead_lettered'
  * afterwards, and re-invite becomes the right answer again. */
-export const suppressedPortalInviteStatusLabel: Partial<Record<PortalInviteDelivery, string>> = {
+export const suppressedPortalInviteStatusLabel: Record<FailedDelivery, string> = {
 	bounced: 'Bounced — unblock the address to invite again',
 	dead_lettered: 'Not sent — unblock the address to invite again'
 };
 
-/** Whether a live invitation's send failed -- the two deliveries a
- * re-invite (or an unblock) is the answer to. */
+/**
+A live invitation's failed delivery, if its send failed.
+*/
+function failedDelivery(subject: PortalInviteSubject): FailedDelivery | undefined {
+	if (subject.portalInviteStatus !== 'invited') return undefined;
+	const delivery = subject.portalInviteDelivery;
+	return delivery === 'bounced' || delivery === 'dead_lettered' ? delivery : undefined;
+}
+
+/**
+Whether a live invitation's send failed.
+*/
 function hasFailedDelivery(subject: PortalInviteSubject): boolean {
-	return (
-		subject.portalInviteStatus === 'invited' &&
-		(subject.portalInviteDelivery === 'bounced' || subject.portalInviteDelivery === 'dead_lettered')
-	);
+	return failedDelivery(subject) !== undefined;
 }
 
 /** True when subject's words are the suppressed pair above -- the invite
@@ -101,9 +116,9 @@ export function portalInviteStatusText(subject: PortalInviteSubject): string {
 	const status = subject.portalInviteStatus;
 	if (!status) return 'Never invited';
 	if (status === 'invited') {
-		const delivery = subject.portalInviteDelivery ?? 'sent';
-		if (isBlockedInvite(subject)) return suppressedPortalInviteStatusLabel[delivery] ?? portalInviteDeliveryLabel[delivery];
-		return portalInviteDeliveryLabel[delivery] ?? portalInviteDeliveryLabel.sent;
+		const failed = failedDelivery(subject);
+		if (failed && subject.emailSuppressed) return suppressedPortalInviteStatusLabel[failed];
+		return portalInviteDeliveryLabel[subject.portalInviteDelivery ?? 'sent'];
 	}
 	return portalInviteStatusLabel[status] ?? 'Never invited';
 }

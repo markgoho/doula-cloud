@@ -27,6 +27,7 @@ package practicedeletion
 import (
 	"context"
 	"database/sql"
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"fmt"
 	"net/http"
@@ -204,15 +205,8 @@ func InitiateHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
-		state, err := readDeletionState(r.Context(), tx, practiceID, true)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		// coverage:ignore reason: unreachable through the real mount -- staffauth.Middleware refuses a deleted Practice to everyone and a pending one to every route but GET/DELETE, so a second initiate reaches here only by racing a first one onto this row's FOR UPDATE lock; TestTransition_CheckSpeaksToThePerson proves the refusal it writes
-		if ok, refusal := TransitionRequest.Check(state.standing); !ok {
-			apierr.Write(w, http.StatusConflict, apierr.CodeConflict, refusal, nil)
+		// coverage:ignore reason: unreachable through the real mount -- staffauth.Middleware refuses a deleted Practice to everyone and a pending one to every route but GET/DELETE, so a second initiate is refused only by racing a first one onto this row's FOR UPDATE lock; TestTransition_CheckSpeaksToThePerson proves the refusal it writes
+		if !standingAllows(w, r, tx, practiceID, TransitionRequest, apierr.CodeConflict) {
 			return
 		}
 
@@ -259,14 +253,7 @@ func InitiateHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectPractice,
-			SubjectID:   practiceID,
-			Action:      actionRequested,
-			Diff:        diff,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordPracticeAct(r.Context(), tx, practiceID, actionRequested, diff, activity.StaffActor(staffID)); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -296,14 +283,7 @@ func RestoreHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, staffID := c.Tx, c.PracticeID, c.StaffID
 
-		state, err := readDeletionState(r.Context(), tx, practiceID, true)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if ok, refusal := TransitionRestore.Check(state.standing); !ok {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal, nil)
+		if !standingAllows(w, r, tx, practiceID, TransitionRestore, apierr.CodeFailedPrecondition) {
 			return
 		}
 
@@ -318,13 +298,7 @@ func RestoreHandler() http.Handler {
 			return
 		}
 
-		if err := activity.Record(r.Context(), tx, activity.Entry{
-			PracticeID:  practiceID,
-			SubjectKind: activity.SubjectPractice,
-			SubjectID:   practiceID,
-			Action:      actionRestored,
-			Actor:       activity.StaffActor(staffID),
-		}); err != nil {
+		if err := recordPracticeAct(r.Context(), tx, practiceID, actionRestored, nil, activity.StaffActor(staffID)); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -332,4 +306,37 @@ func RestoreHandler() http.Handler {
 
 		w.WriteHeader(http.StatusNoContent)
 	})
+}
+
+// standingAllows reads practiceID's deletion state under its row lock
+// and asks t whether the Practice may make that move. When it may not,
+// or the read fails, it writes the response and answers false.
+func standingAllows(w http.ResponseWriter, r *http.Request, tx *sql.Tx, practiceID string, t Transition, refused apierr.Code) bool {
+	state, err := readDeletionState(r.Context(), tx, practiceID, true)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	if ok, refusal := t.Check(state.standing); !ok {
+		apierr.Write(w, http.StatusConflict, refused, refusal, nil)
+		return false
+	}
+	return true
+}
+
+// recordPracticeAct records action, by actor, on the Practice itself.
+func recordPracticeAct(ctx context.Context, tx *sql.Tx, practiceID, action string, diff jsontext.Value, actor activity.Actor) error {
+	if err := activity.Record(ctx, tx, activity.Entry{
+		PracticeID:  practiceID,
+		SubjectKind: activity.SubjectPractice,
+		SubjectID:   practiceID,
+		Action:      action,
+		Diff:        diff,
+		Actor:       actor,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("practicedeletion: record %s: %w", action, err)
+	}
+	return nil
 }

@@ -12,26 +12,10 @@ import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
 import { DOULA_RADIOS_MAX, type RequestDoulas } from '#lib/engagementRequest.js';
 import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../../../routeFixture.js';
+import { persephone } from '../../client.fixture.js';
 import Page from './+page.svelte';
 
-export const detail: ClientDetail = {
-	id: 'client-1',
-	standing: 'live',
-	givenName: 'Persephone',
-	familyName: 'Ochieng-Whitfield',
-	preferredName: '',
-	email: 'persephone@example.test',
-	phone: '585-555-0101',
-	addressLine1: '100 Highland Ave',
-	addressLine2: '',
-	addressLocality: 'Rochester',
-	addressRegion: 'NY',
-	addressPostalCode: '14620',
-	dateOfBirth: '1994-03-01',
-	resolvedFields: [],
-	engagements: [],
-	history: []
-};
+export const detail: ClientDetail = { ...persephone, resolvedFields: [], engagements: [], history: [] };
 
 const DOULAS_PATH = '/engagement-request-doulas';
 

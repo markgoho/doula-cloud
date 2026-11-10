@@ -20,6 +20,7 @@ describe('IntakeFlow', () => {
 
 		expect(flow.read.state).toEqual({ status: 'loading' });
 		expect(flow.practiceName).toBe('');
+		expect(flow.fields).toEqual([]);
 	});
 
 	it('reads the Practice name and its Client Field Template', async () => {

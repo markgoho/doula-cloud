@@ -1,15 +1,13 @@
 package paymentstanding_test
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
+	"maps"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/paymentstanding"
 )
 
@@ -39,42 +37,12 @@ func TestStanding_Stands(t *testing.T) {
 	}
 }
 
-// internalDir is api/internal, the tree the scans below walk.
-const internalDir = ".."
-
 // sources is every non-test Go file under api/internal outside this
 // package, keyed by its path relative to api/internal.
 func sources(t *testing.T) map[string]string {
 	t.Helper()
-	out := map[string]string{}
-	err := filepath.WalkDir(internalDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// coverage:ignore reason: api/internal is always walkable while its tests run
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(internalDir, path)
-		if err != nil {
-			// coverage:ignore reason: path came from walking internalDir itself
-			return fmt.Errorf("rel %s: %w", path, err)
-		}
-		rel = filepath.ToSlash(rel)
-		if strings.HasPrefix(rel, "paymentstanding/") {
-			return nil
-		}
-		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this repo's own api/internal tree, never from input
-		if err != nil {
-			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		out[rel] = string(src)
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk api/internal: %v", err)
-	}
+	out := lifecycletest.Sources(t, "..", ".")
+	maps.DeleteFunc(out, func(file, _ string) bool { return strings.HasPrefix(file, "paymentstanding/") })
 	return out
 }
 

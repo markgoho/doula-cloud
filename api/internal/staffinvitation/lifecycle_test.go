@@ -1,15 +1,13 @@
 package staffinvitation_test
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
+	"path"
 	"strings"
 	"testing"
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/staffinvitation"
 )
 
@@ -84,23 +82,13 @@ func TestTransition_CheckSpeaksToThePerson(t *testing.T) {
 	if ok, refusal := staffinvitation.TransitionRevoke.Check(staffinvitation.StateExpired); !ok || refusal != "" {
 		t.Fatalf("Revoke.Check(expired) = (%v, %q), want (true, \"\") -- a lapsed Invitation can still be withdrawn", ok, refusal)
 	}
-	cases := []struct {
-		transition staffinvitation.Transition
-		current    staffinvitation.State
-		want       string
-	}{
-		{staffinvitation.TransitionRevoke, staffinvitation.StateAccepted, "This invitation has been accepted, so you cannot revoke it."},
-		{staffinvitation.TransitionRevoke, staffinvitation.StateRevoked, "This invitation has been revoked, so you cannot revoke it."},
-		{staffinvitation.TransitionAccept, staffinvitation.StateExpired, "This invitation has expired, so you cannot accept it."},
-		{staffinvitation.TransitionInvite, staffinvitation.StatePending, "This invitation is still waiting for an answer, so you cannot invite this address."},
-		{staffinvitation.TransitionAccept, staffinvitation.State("archived"), "This invitation is archived, so you cannot accept it."},
-	}
-	for _, c := range cases {
-		ok, refusal := c.transition.Check(c.current)
-		if ok || refusal != c.want {
-			t.Errorf("%q.Check(%q) = (%v, %q), want (false, %q)", c.transition.Act, c.current, ok, refusal, c.want)
-		}
-	}
+	lifecycletest.RequireRefusals(t, []lifecycletest.Refusal[staffinvitation.Transition, staffinvitation.State]{
+		{Transition: staffinvitation.TransitionRevoke, Current: staffinvitation.StateAccepted, Want: "This invitation has been accepted, so you cannot revoke it."},
+		{Transition: staffinvitation.TransitionRevoke, Current: staffinvitation.StateRevoked, Want: "This invitation has been revoked, so you cannot revoke it."},
+		{Transition: staffinvitation.TransitionAccept, Current: staffinvitation.StateExpired, Want: "This invitation has expired, so you cannot accept it."},
+		{Transition: staffinvitation.TransitionInvite, Current: staffinvitation.StatePending, Want: "This invitation is still waiting for an answer, so you cannot invite this address."},
+		{Transition: staffinvitation.TransitionAccept, Current: staffinvitation.State("archived"), Want: "This invitation is archived, so you cannot accept it."},
+	})
 }
 
 // TestEveryInvitationWriterNamesItsTransition is the source-scan
@@ -116,38 +104,25 @@ func TestEveryInvitationWriterNamesItsTransition(t *testing.T) {
 	ownExpiry := []string{"status = 'expired'", "expires_at <=", "expires_at >"}
 	// The readers that judge expiry, each of which must ask StateOf.
 	judges := map[string]bool{
-		filepath.Join("..", "staffauth", "accept.go"):       false,
-		filepath.Join("..", "staffauth", "invitelookup.go"): false,
-		filepath.Join("..", "staffauth", "staff.go"):        false,
-		filepath.Join("..", "staffinvite", "outbox.go"):     false,
+		"staffauth/accept.go":       false,
+		"staffauth/invitelookup.go": false,
+		"staffauth/staff.go":        false,
+		"staffinvite/outbox.go":     false,
 	}
 
 	writers := 0
-	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// coverage:ignore reason: internal/ is always readable while its tests run
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this module's own internal/ directory, never from input
-		if err != nil {
-			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		text := string(src)
-		if _, ok := judges[path]; ok {
-			judges[path] = strings.Contains(text, "staffinvitation.StateOf(")
+	for file, text := range lifecycletest.Sources(t, "..", ".") {
+		if _, ok := judges[file]; ok {
+			judges[file] = strings.Contains(text, "staffinvitation.StateOf(")
 		}
 		if !strings.Contains(text, "practice_invitations") {
-			return nil
+			continue
 		}
 		for _, w := range writes {
 			if strings.Contains(text, w) {
 				writers++
 				if !strings.Contains(text, "staffinvitation.Transition") {
-					t.Errorf("%s writes %q but names no staffinvitation Transition -- a write to an Invitation must go through the declared lifecycle", path, w)
+					t.Errorf("%s writes %q but names no staffinvitation Transition -- a write to an Invitation must go through the declared lifecycle", file, w)
 				}
 				break
 			}
@@ -156,20 +131,14 @@ func TestEveryInvitationWriterNamesItsTransition(t *testing.T) {
 		// Invitation itself: offer's queries join practice_invitations
 		// for an address and compare an Offer's own expires_at, which is
 		// not this one.
-		dir := filepath.Base(filepath.Dir(path))
-		if dir != "staffauth" && dir != "staffinvite" {
-			return nil
+		if dir := path.Dir(file); dir != "staffauth" && dir != "staffinvite" {
+			continue
 		}
 		for _, e := range ownExpiry {
 			if strings.Contains(text, e) {
-				t.Errorf("%s reads practice_invitations and spells its own expiry (%q) -- ask staffinvitation.StateOf instead", path, e)
+				t.Errorf("%s reads practice_invitations and spells its own expiry (%q) -- ask staffinvitation.StateOf instead", file, e)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		// coverage:ignore reason: internal/ is always readable while its tests run
-		t.Fatalf("walk internal/: %v", err)
 	}
 	if writers == 0 {
 		t.Fatal("no file under internal/ writes practice_invitations -- did invite.go/accept.go move?")

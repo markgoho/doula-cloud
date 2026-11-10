@@ -1,15 +1,12 @@
 package clientstanding_test
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/clientstanding"
+	"doula-cloud/api/internal/lifecycletest"
 )
 
 // internalDir is api/internal, the tree every scan below walks.
@@ -146,34 +143,12 @@ func TestReaders_AskTheStanding(t *testing.T) {
 // by its path relative to it.
 func walkSources(t *testing.T, fn func(file, src string)) {
 	t.Helper()
-	err := filepath.WalkDir(internalDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// coverage:ignore reason: api/internal is always readable while its tests run
-			return fmt.Errorf("walk %s: %w", path, err)
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, err := filepath.Rel(internalDir, path)
-		if err != nil {
-			// coverage:ignore reason: path came from walking internalDir itself
-			return fmt.Errorf("relative path of %s: %w", path, err)
-		}
-		fn(filepath.ToSlash(rel), readSource(t, rel))
-		return nil
-	})
-	if err != nil {
-		// coverage:ignore reason: api/internal is always readable while its tests run
-		t.Fatalf("walk %s: %v", internalDir, err)
+	for file, src := range lifecycletest.Sources(t, internalDir, ".") {
+		fn(file, src)
 	}
 }
 
 func readSource(t *testing.T, file string) string {
 	t.Helper()
-	// #nosec G304 -- file is a path under this repository's own api/internal, not anything a caller supplies
-	src, err := os.ReadFile(filepath.Join(internalDir, filepath.FromSlash(file)))
-	if err != nil {
-		t.Fatalf("read %s: %v -- did it move? Update the map that names it.", file, err)
-	}
-	return string(src)
+	return lifecycletest.Read(t, internalDir, file)
 }

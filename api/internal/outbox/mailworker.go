@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	"doula-cloud/api/internal/mail"
@@ -65,6 +66,17 @@ func (e *DeadLetterError) Error() string { return e.Reason }
 type RowMeta struct {
 	ID           string
 	AttemptCount int
+}
+
+// ScanMeta scans a claimed row whose first two columns are its id and
+// attempt_count into a RowMeta, and the rest of its columns into dest.
+func ScanMeta(rows *sql.Rows, dest ...any) (RowMeta, error) {
+	var meta RowMeta
+	if err := rows.Scan(append([]any{&meta.ID, &meta.AttemptCount}, dest...)...); err != nil {
+		// coverage:ignore reason: DB scan failure, not exercised by unit tests
+		return meta, fmt.Errorf("outbox: scan claimed row: %w", err)
+	}
+	return meta, nil
 }
 
 // claimedRow pairs a claimed row's RowMeta with the kind-specific data

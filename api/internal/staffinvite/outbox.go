@@ -104,15 +104,12 @@ type pendingRow struct {
 const claimQuery = `SELECT o.id, o.attempt_count, o.invite_token, pi.address, pi.status, pi.expires_at
 	 FROM staff_invite_outbox o
 	 JOIN practice_invitations pi ON pi.id = o.invitation_id
-	 WHERE ` + outbox.ClaimDueAliasO + `
-	 ORDER BY o.next_attempt_at
-	 LIMIT $1
-	 FOR UPDATE OF o SKIP LOCKED`
+	 ` + outbox.ClaimNextAliasO
 
 func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
-	var meta outbox.RowMeta
 	var r pendingRow
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &r.inviteToken, &r.address, &r.status, &r.expiresAt); err != nil {
+	meta, err := outbox.ScanMeta(rows, &r.inviteToken, &r.address, &r.status, &r.expiresAt)
+	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, r, fmt.Errorf("staffinvite: scan outbox row: %w", err)
 	}

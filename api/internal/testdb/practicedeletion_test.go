@@ -18,8 +18,10 @@ func TestSeedPracticeDeletion(t *testing.T) {
 	testdb.SeedPracticeDeletion(t, db, pending, requested, finalize, nil)
 	deleted := testdb.SeedPractice(t, db, "Deleted")
 	testdb.SeedPracticeDeletion(t, db, deleted, requested, finalize, &finalize)
+	windowed := testdb.SeedPractice(t, db, "In Its Window")
+	testdb.SeedPendingDeletion(t, db, windowed)
 
-	for id, want := range map[string]string{pending: "pending_deletion", deleted: "deleted"} {
+	for id, want := range map[string]string{pending: "pending_deletion", deleted: "deleted", windowed: "pending_deletion"} {
 		if got := testdb.Scalar[string](t, db.Admin, `SELECT standing::text FROM practices WHERE id = $1`, id); got != want {
 			t.Errorf("standing = %s, want %s", got, want)
 		}

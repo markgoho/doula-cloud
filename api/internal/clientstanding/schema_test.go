@@ -17,42 +17,30 @@ func TestSchema_RefusesTheIllegalCombinations(t *testing.T) {
 	c := fixture.Client(t, db, p)
 	other := fixture.Client(t, db, p)
 
-	refused := map[string]struct {
-		query string
-		args  []any
-	}{
+	testdb.RequireRefused(t, db, "", map[string]testdb.Write{
 		"an erasure with no author": {
-			`UPDATE clients SET erased_at = now() WHERE id = $1`, []any{c.ID}},
+			Query: `UPDATE clients SET erased_at = now() WHERE id = $1`, Args: []any{c.ID}},
 		"a staff erasure naming no Staff member": {
-			`UPDATE clients SET erased_at = now(), erased_by_kind = 'staff' WHERE id = $1`, []any{c.ID}},
+			Query: `UPDATE clients SET erased_at = now(), erased_by_kind = 'staff' WHERE id = $1`, Args: []any{c.ID}},
 		"a system erasure naming a Staff member": {
-			`UPDATE clients SET erased_at = now(), erased_by_kind = 'system', erased_by_staff_id = $2 WHERE id = $1`, []any{c.ID, owner.ID}},
+			Query: `UPDATE clients SET erased_at = now(), erased_by_kind = 'system', erased_by_staff_id = $2 WHERE id = $1`, Args: []any{c.ID, owner.ID}},
 		"an erasure by the Client herself": {
-			`UPDATE clients SET erased_at = now(), erased_by_kind = 'client' WHERE id = $1`, []any{c.ID}},
+			Query: `UPDATE clients SET erased_at = now(), erased_by_kind = 'client' WHERE id = $1`, Args: []any{c.ID}},
 		"an author on a record that is not erased": {
-			`UPDATE clients SET erased_by_kind = 'system' WHERE id = $1`, []any{c.ID}},
+			Query: `UPDATE clients SET erased_by_kind = 'system' WHERE id = $1`, Args: []any{c.ID}},
 		"a merge author with no merge": {
-			`UPDATE clients SET merged_by_staff_id = $2 WHERE id = $1`, []any{c.ID, owner.ID}},
+			Query: `UPDATE clients SET merged_by_staff_id = $2 WHERE id = $1`, Args: []any{c.ID, owner.ID}},
 		"a record merged into itself": {
-			`UPDATE clients SET merged_into = id, merged_at = now() WHERE id = $1`, []any{c.ID}},
+			Query: `UPDATE clients SET merged_into = id, merged_at = now() WHERE id = $1`, Args: []any{c.ID}},
 		"a standing written by hand": {
-			`UPDATE clients SET standing = 'erased' WHERE id = $1`, []any{c.ID}},
-	}
-	for name, tc := range refused {
-		if _, err := db.Admin.ExecContext(t.Context(), tc.query, tc.args...); err == nil {
-			t.Errorf("%s: the write succeeded, want the schema to refuse it", name)
-		}
-	}
+			Query: `UPDATE clients SET standing = 'erased' WHERE id = $1`, Args: []any{c.ID}},
+	})
 
 	// And the legal ones still pass: an Owner's erasure and a dated merge.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET erased_at = now(), erased_by_kind = 'staff', erased_by_staff_id = $2 WHERE id = $1`, c.ID, owner.ID); err != nil {
-		t.Errorf("an attributed erasure was refused: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET merged_into = $2, merged_at = now(), merged_by_staff_id = $3 WHERE id = $1`, other.ID, c.ID, owner.ID); err != nil {
-		t.Errorf("a dated, attributed merge was refused: %v", err)
-	}
+	testdb.RequireAccepted(t, db, map[string]testdb.Write{
+		"an attributed erasure":     {Query: `UPDATE clients SET erased_at = now(), erased_by_kind = 'staff', erased_by_staff_id = $2 WHERE id = $1`, Args: []any{c.ID, owner.ID}},
+		"a dated, attributed merge": {Query: `UPDATE clients SET merged_into = $2, merged_at = now(), merged_by_staff_id = $3 WHERE id = $1`, Args: []any{other.ID, c.ID, owner.ID}},
+	})
 }
 
 // TestSchema_OnlyALiveRecordIsWritten proves clients_update (00171):

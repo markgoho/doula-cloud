@@ -1,10 +1,8 @@
 package practicedeletion_test
 
 import (
-	"fmt"
-	"io/fs"
 	"net/http"
-	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -13,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/mail"
 	"doula-cloud/api/internal/practicedeletion"
 	"doula-cloud/api/internal/reqtest"
@@ -50,22 +49,13 @@ func TestTransition_CheckSpeaksToThePerson(t *testing.T) {
 	if ok, refusal := practicedeletion.TransitionRestore.Check(practicedeletion.StandingPendingDeletion); !ok || refusal != "" {
 		t.Fatalf("Check(pending) = (%v, %q), want (true, \"\")", ok, refusal)
 	}
-	cases := []struct {
-		transition practicedeletion.Transition
-		current    practicedeletion.Standing
-		want       string
-	}{
-		{practicedeletion.TransitionRestore, practicedeletion.StandingActive, "This Practice is not set to be deleted, so you cannot restore it."},
-		{practicedeletion.TransitionRequest, practicedeletion.StandingPendingDeletion, "This Practice is set to be deleted, so you cannot delete it."},
-		{practicedeletion.TransitionRequest, practicedeletion.StandingFinalizeOverdue, "This Practice is set to be deleted, so you cannot delete it."},
-		{practicedeletion.TransitionRestore, practicedeletion.StandingDeleted, "This Practice has been deleted, so you cannot restore it."},
-		{practicedeletion.TransitionFinalize, practicedeletion.Standing("archived"), "This Practice is archived, so you cannot finalize its deletion."},
-	}
-	for _, tc := range cases {
-		if _, refusal := tc.transition.Check(tc.current); refusal != tc.want {
-			t.Errorf("Check(%q) = %q, want %q", tc.current, refusal, tc.want)
-		}
-	}
+	lifecycletest.RequireRefusals(t, []lifecycletest.Refusal[practicedeletion.Transition, practicedeletion.Standing]{
+		{Transition: practicedeletion.TransitionRestore, Current: practicedeletion.StandingActive, Want: "This Practice is not set to be deleted, so you cannot restore it."},
+		{Transition: practicedeletion.TransitionRequest, Current: practicedeletion.StandingPendingDeletion, Want: "This Practice is set to be deleted, so you cannot delete it."},
+		{Transition: practicedeletion.TransitionRequest, Current: practicedeletion.StandingFinalizeOverdue, Want: "This Practice is set to be deleted, so you cannot delete it."},
+		{Transition: practicedeletion.TransitionRestore, Current: practicedeletion.StandingDeleted, Want: "This Practice has been deleted, so you cannot restore it."},
+		{Transition: practicedeletion.TransitionFinalize, Current: practicedeletion.Standing("archived"), Want: "This Practice is archived, so you cannot finalize its deletion."},
+	})
 }
 
 // writesPractice is a statement in this package that changes the
@@ -79,31 +69,16 @@ var writesPractice = regexp.MustCompile("UPDATE practices SET[^`]*")
 // writer that stops asking which standing the row is in is caught the
 // moment it stops, not when two requests race.
 func TestTransitions_EveryWriterIsGuarded(t *testing.T) {
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		// coverage:ignore reason: this package's own directory is always readable while its tests run
-		t.Fatalf("read package directory: %v", err)
-	}
 	writers := 0
-	for _, entry := range entries {
-		name := entry.Name()
-		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		// #nosec G304 -- name comes from ReadDir on this package's own directory
-		src, err := os.ReadFile(name)
-		if err != nil {
-			// coverage:ignore reason: a file ReadDir listed a moment ago
-			t.Fatalf("read %s: %v", name, err)
-		}
-		statements := writesPractice.FindAllString(string(src), -1)
+	for name, src := range lifecycletest.Sources(t, ".", ".") {
+		statements := writesPractice.FindAllString(src, -1)
 		for _, statement := range statements {
 			writers++
 			if !strings.Contains(statement, "AND standing = $") {
 				t.Errorf("%s writes practices without a standing guard: %q", name, statement)
 			}
 		}
-		if len(statements) > 0 && !strings.Contains(string(src), "Transition") {
+		if len(statements) > 0 && !strings.Contains(src, "Transition") {
 			t.Errorf("%s writes practices but never names a Transition", name)
 		}
 	}
@@ -127,47 +102,17 @@ var writesDeletionFacts = regexp.MustCompile(`UPDATE practices\b[^` + "`" + `]*\
 // but for testdb's fixture, which seeds a standing for other packages'
 // tests the way every fixture there bypasses the handler it stands in for.
 func TestStanding_IsTheOneDerivation(t *testing.T) {
-	mayWrite := map[string]bool{}
-	for _, dir := range []string{".", filepath.Join("..", "testdb")} {
-		abs, err := filepath.Abs(dir)
-		if err != nil {
-			// coverage:ignore reason: a path inside this module always resolves while tests run
-			t.Fatalf("resolve %s: %v", dir, err)
+	mayWrite := map[string]bool{"internal/practicedeletion": true, "internal/testdb": true}
+	sources := lifecycletest.Sources(t, filepath.Join("..", ".."), "internal", "cmd")
+	for path, src := range sources {
+		if m := derivesStanding.FindString(src); m != "" {
+			t.Errorf("%s derives a Practice's standing (%q) -- read practices.standing instead", path, m)
 		}
-		mayWrite[abs] = true
-	}
-	scanned := 0
-	for _, root := range []string{"..", filepath.Join("..", "..", "cmd")} {
-		tree := os.DirFS(root)
-		err := fs.WalkDir(tree, ".", func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				// coverage:ignore reason: a directory WalkDir just listed
-				return fmt.Errorf("walk %s: %w", path, err)
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			src, err := fs.ReadFile(tree, path)
-			if err != nil {
-				// coverage:ignore reason: a file WalkDir listed a moment ago
-				return fmt.Errorf("read %s: %w", path, err)
-			}
-			scanned++
-			if m := derivesStanding.FindString(string(src)); m != "" {
-				t.Errorf("%s derives a Practice's standing (%q) -- read practices.standing instead", path, m)
-			}
-			abs, _ := filepath.Abs(filepath.Join(root, filepath.Dir(path)))
-			if m := writesDeletionFacts.FindString(string(src)); m != "" && !mayWrite[abs] {
-				t.Errorf("%s writes a Practice's deletion facts (%q) -- only practicedeletion's Transitions may", path, m)
-			}
-			return nil
-		})
-		if err != nil {
-			// coverage:ignore reason: the source tree is readable while tests run
-			t.Fatalf("walk %s: %v", root, err)
+		if m := writesDeletionFacts.FindString(src); m != "" && !mayWrite[pathpkg.Dir(path)] {
+			t.Errorf("%s writes a Practice's deletion facts (%q) -- only practicedeletion's Transitions may", path, m)
 		}
 	}
-	if scanned < 100 {
+	if scanned := len(sources); scanned < 100 {
 		t.Fatalf("scanned %d files, want the whole of api/internal and api/cmd", scanned)
 	}
 }
@@ -178,19 +123,15 @@ func TestStanding_IsTheOneDerivation(t *testing.T) {
 func TestStanding_SchemaRefusesWhatNoTransitionWrites(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, staffID := newOwnedPractice(t, db, "owner-schema-refusals")
-	for name, statement := range map[string]string{
-		"a request with no requester":     `UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() WHERE id = $1 AND $2::uuid IS NOT NULL`,
-		"a request with no finalize date": `UPDATE practices SET deletion_requested_at = now(), deletion_requested_by = $2 WHERE id = $1`,
-		"a requester with no request":     `UPDATE practices SET deletion_requested_by = $2 WHERE id = $1`,
-		"a deletion with no request":      `UPDATE practices SET deleted_at = now() WHERE id = $1 AND $2::uuid IS NOT NULL`,
-	} {
-		t.Run(name, func(t *testing.T) {
-			_, err := db.Admin.ExecContext(t.Context(), statement, practiceID, staffID)
-			if err == nil || !strings.Contains(err.Error(), "practices_deletion") && !strings.Contains(err.Error(), "practices_deleted_after_request") {
-				t.Fatalf("update = %v, want a CHECK refusal", err)
-			}
-		})
-	}
+	args := []any{practiceID, staffID}
+	testdb.RequireRefused(t, db, "practices_deletion", map[string]testdb.Write{
+		"a request with no requester":     {Query: `UPDATE practices SET deletion_requested_at = now(), deletion_finalize_at = now() WHERE id = $1 AND $2::uuid IS NOT NULL`, Args: args},
+		"a request with no finalize date": {Query: `UPDATE practices SET deletion_requested_at = now(), deletion_requested_by = $2 WHERE id = $1`, Args: args},
+		"a requester with no request":     {Query: `UPDATE practices SET deletion_requested_by = $2 WHERE id = $1`, Args: args},
+	})
+	testdb.RequireRefused(t, db, "practices_deleted_after_request", map[string]testdb.Write{
+		"a deletion with no request": {Query: `UPDATE practices SET deleted_at = now() WHERE id = $1 AND $2::uuid IS NOT NULL`, Args: args},
+	})
 }
 
 // standingAt reads practice_standing_at for practiceID at at -- the one

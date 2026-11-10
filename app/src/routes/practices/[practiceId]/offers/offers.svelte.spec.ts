@@ -10,13 +10,11 @@ import { jsonResponse } from '#lib/testResponse.js';
 import Page from './+page.svelte';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
 import { fixture } from './page.fixture.js';
-import { pageState } from '#testing/routePage.js';
+import { apiFetchWithSession, pageState } from '#testing/routePage.js';
 
 vi.mock('$app/state', () => import('#testing/routePage.js'));
+vi.mock('#lib/api.js', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
-
-const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const accept = () => testPage.getByRole('button', { name: 'Accept' }).first();
 

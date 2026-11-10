@@ -139,6 +139,10 @@ const (
 	// ClaimDueAliasO is the same predicate over a claim that joins and
 	// aliases its outbox table as o.
 	ClaimDueAliasO = "o.status = 'pending' AND o.next_attempt_at <= now()"
+	// ClaimNextAliasO is the whole tail of such a claim, after its joins:
+	// the due rows, oldest first, at most MaxBatch, each locked against
+	// every other claim.
+	ClaimNextAliasO = "WHERE " + ClaimDueAliasO + " ORDER BY o.next_attempt_at LIMIT $1 FOR UPDATE OF o SKIP LOCKED"
 )
 
 // SiteBuildStatus is site_build_outbox's own lifecycle state. It is a

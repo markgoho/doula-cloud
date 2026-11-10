@@ -29,6 +29,16 @@ async function setup(overrides: SetupOptions = {}) {
 // "Exactly one h1" is a fact about the whole rendered tree, not about any
 // one heading -- the named `querySelector` exception for a document fact
 // (.claude/rules/svelte-tests.md, case 3).
+// The frame a document stands in before it has content: capped, with its
+// way back and its one title, and none of the content.
+async function expectFramedWithoutContent(container: HTMLElement) {
+	expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
+	await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
+	await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+	await expect.element(page.getByText('The agreed scope of service')).not.toBeInTheDocument();
+	expect(h1Count(container)).toBe(1);
+}
+
 function h1Count(container: HTMLElement) {
 	return container.querySelectorAll('h1').length;
 }
@@ -75,38 +85,26 @@ describe('DocumentPage.svelte', () => {
 	it('renders the title, the back link and a skeleton while loading, instead of the content', async () => {
 		const { container } = await setup({ read: { status: 'loading', label: 'Loading Contract' } });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
-		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		await expectFramedWithoutContent(container);
 		await expect.element(page.getByRole('status', { name: 'Loading Contract' })).toBeVisible();
-		await expect.element(page.getByText('The agreed scope of service')).not.toBeInTheDocument();
-		expect(h1Count(container)).toBe(1);
 	});
 
 	it('renders the title, the back link and a Notice on a load failure, instead of the content', async () => {
 		const { container } = await setup({ read: { status: 'failed', message: 'Failed to load Contract' } });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
-		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		await expectFramedWithoutContent(container);
 		await expect.element(page.getByText('Failed to load Contract')).toBeVisible();
-		await expect.element(page.getByText('The agreed scope of service')).not.toBeInTheDocument();
 		// `data-load-error` has no accessible signal by design -- it is the
 		// fact accessibility.e2e.ts reads to refuse scanning this branch.
 		expect(container.querySelector('[data-load-error]')).not.toBeNull();
-		expect(h1Count(container)).toBe(1);
 	});
 
 	it('renders the title, the back link and the "none yet" sentence when the document does not exist yet', async () => {
 		const { container } = await setup({ empty: 'No contract has been sent for your care yet.' });
 
-		expect(container.querySelector('center-l')).toHaveAttribute('max', 'var(--measure)');
-		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
-		await expect.element(page.getByRole('heading', { level: 1, name: 'Contract' })).toBeVisible();
+		await expectFramedWithoutContent(container);
 		await expect.element(page.getByText('No contract has been sent for your care yet.')).toBeVisible();
-		await expect.element(page.getByText('The agreed scope of service')).not.toBeInTheDocument();
 		expect(container.querySelector('[data-load-error]')).toBeNull();
-		expect(h1Count(container)).toBe(1);
 	});
 
 	it('offers the one action that makes the document beside its "none yet" sentence', async () => {

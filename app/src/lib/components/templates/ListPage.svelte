@@ -33,17 +33,11 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import PageReadPending from '#lib/components/molecules/PageReadPending.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
-	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
-	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
+	import { LOADED_PAGE, type PageReadState, type PageTitling } from '#lib/pageRead.svelte.js';
 
-	interface Properties {
-		title: string;
-		/**
-		 * The Staff side leaves this unset and gets the product name; the
-		 * Client portal passes its Practice's name (#431, #487).
-		 */
-		serviceName?: string;
+	interface Properties extends PageTitling {
 		intro?: Snippet;
 		/**
 		 * The one primary action a list screen carries -- "Invite a Staff
@@ -79,13 +73,11 @@
 			<!-- data-load-error: see FormPage.svelte's own comment on this
 			     attribute (#1258) -- the same fact, the same reason. -->
 			<stack-l space="var(--space-section)" data-load-error>
-				<Heading level={1} variant="page" text={title} />
-				<Notice variant="error" message={read.message} />
+				<PageReadPending {title} {read} skeleton="row" />
 			</stack-l>
 		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-section)">
-				<Heading level={1} variant="page" text={title} />
-				<Skeleton variant="row" lines={6} label={read.label} />
+				<PageReadPending {title} {read} skeleton="row" />
 			</stack-l>
 		{:else}
 			<stack-l space="var(--space-group)">

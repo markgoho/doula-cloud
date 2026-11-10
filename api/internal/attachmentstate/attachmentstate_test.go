@@ -111,6 +111,14 @@ type row struct {
 }
 
 // rows reads every Attachment staffID holds on engagementID, oldest first.
+// accrue opens her own accrued Attachment on the scene's Engagement.
+func (s scene) accrue(t *testing.T) {
+	t.Helper()
+	if err := attachmentstate.Accrue(s.ctx, s.tx, s.engagement, s.doula.ID); err != nil {
+		t.Fatalf("Accrue: %v", err)
+	}
+}
+
 func (s scene) rows(t *testing.T, engagementID, staffID string) []row {
 	t.Helper()
 	rs, err := s.tx.QueryContext(t.Context(),
@@ -140,9 +148,7 @@ func (s scene) rows(t *testing.T, engagementID, staffID string) []row {
 // the Offer's fee copied on -- rather than opening a second.
 func TestAccrueThenGrant_UpgradesInPlace(t *testing.T) {
 	s := newScene(t)
-	if err := attachmentstate.Accrue(s.ctx, s.tx, s.engagement, s.doula.ID); err != nil {
-		t.Fatalf("Accrue: %v", err)
-	}
+	s.accrue(t)
 	got := s.rows(t, s.engagement, s.doula.ID)
 	if len(got) != 1 || got[0].state != string(attachmentstate.Accrued) || got[0].attachedBy != s.doula.ID {
 		t.Fatalf("after Accrue = %+v, want one accrued row by her", got)
@@ -159,9 +165,7 @@ func TestAccrueThenGrant_UpgradesInPlace(t *testing.T) {
 
 	// A second Accrue, and a grant carrying no fee, leave the granted row
 	// exactly as it is.
-	if err := attachmentstate.Accrue(s.ctx, s.tx, s.engagement, s.doula.ID); err != nil {
-		t.Fatalf("Accrue again: %v", err)
-	}
+	s.accrue(t)
 	if err := attachmentstate.Grant(s.ctx, s.tx, s.engagement, s.doula.ID, s.doula.ID, nil, nil, clock.Now(s.ctx)); err != nil {
 		t.Fatalf("Grant again: %v", err)
 	}
@@ -176,9 +180,7 @@ func TestAccrueThenGrant_UpgradesInPlace(t *testing.T) {
 // ended one.
 func TestTakeOff_EndsOnlyAGrantedAttachment(t *testing.T) {
 	s := newScene(t)
-	if err := attachmentstate.Accrue(s.ctx, s.tx, s.engagement, s.doula.ID); err != nil {
-		t.Fatalf("Accrue: %v", err)
-	}
+	s.accrue(t)
 	if ended, err := attachmentstate.TakeOff(s.ctx, s.tx, s.engagement, s.doula.ID, s.owner.ID); err != nil || ended {
 		t.Fatalf("TakeOff on an accrued attachment = %v, %v, want false", ended, err)
 	}
@@ -200,9 +202,7 @@ func TestEndForCompletion_EndsEveryOpenAttachment(t *testing.T) {
 	s := newScene(t)
 	other := fixture.Staff(t, s.db, s.practice, fixture.Doula())
 	earlier := fixture.Staff(t, s.db, s.practice, fixture.Doula())
-	if err := attachmentstate.Accrue(s.ctx, s.tx, s.engagement, s.doula.ID); err != nil {
-		t.Fatalf("Accrue: %v", err)
-	}
+	s.accrue(t)
 	if err := attachmentstate.Grant(s.ctx, s.tx, s.engagement, other.ID, s.owner.ID, nil, nil, clock.Now(s.ctx)); err != nil {
 		t.Fatalf("Grant: %v", err)
 	}

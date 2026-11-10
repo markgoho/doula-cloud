@@ -21,6 +21,9 @@ describe('portalInviteStatusText', () => {
 		expect(portalInviteStatusText({ portalInviteStatus: 'invited', portalInviteDelivery: 'sent' })).toBe(
 			'Invite sent'
 		);
+		expect(portalInviteStatusText({ portalInviteStatus: 'invited', portalInviteDelivery: 'skipped' })).toBe(
+			'Not sent — already accepted'
+		);
 	});
 
 	it('reads a live invitation with nothing queued as sent', () => {

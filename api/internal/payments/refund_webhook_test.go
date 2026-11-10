@@ -33,13 +33,25 @@ type refundWebhookFixture struct {
 
 func newRefundWebhookFixture(t *testing.T, name string) refundWebhookFixture {
 	t.Helper()
+	return seedRefundWebhookFixture(t, name, true)
+}
+
+// seedRefundWebhookFixture seeds a Connected Practice's open Invoice and
+// the card Payment that paid it, carrying its PaymentIntent as its
+// reference only when referenced.
+func seedRefundWebhookFixture(t *testing.T, name string, referenced bool) refundWebhookFixture {
+	t.Helper()
 	db := testdb.New(t)
 	f := refundWebhookFixture{db: db, accountID: "acct_" + name, stripeInv: "in_" + name, pi: "pi_" + name}
 	practiceID := seedConnectedPractice(t, db, name, f.accountID)
 	_, f.engagementID = testdb.SeedNamedEngagement(t, db, practiceID, "Jane Client", "jane@example.com")
 	contractID := seedSignedContract(t, db, f.engagementID)
 	f.invoiceID = seedInvoice(t, db, practiceID, contractID, f.stripeInv, invoiceStatusOpen, 50000, time.Now())
-	f.paymentID = seedStripePayment(t, db, f.invoiceID, 50000, f.pi)
+	reference := ""
+	if referenced {
+		reference = f.pi
+	}
+	f.paymentID = seedStripePayment(t, db, f.invoiceID, 50000, reference)
 	return f
 }
 

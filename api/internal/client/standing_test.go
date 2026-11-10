@@ -16,6 +16,16 @@ import (
 // keptRecord is the survivor's name in every merge below.
 const keptRecord = "Kept Record"
 
+// mergedPair seeds a survivor the Staff member is on and a full record,
+// then merges the record into it.
+func (e *env) mergedPair() (survivorID, absorbedID string) {
+	e.T.Helper()
+	survivorID = e.attachedClient(keptRecord, "kept@example.com")
+	absorbedID = seedFullClient(e.T, e.DB, e.Practice.ID, e.Staff.ID)
+	e.merge(absorbedID, client.MergeRequest{GivenName: keptRecord, OtherClientID: survivorID}, http.StatusOK)
+	return survivorID, absorbedID
+}
+
 // TestErase_SurvivorAndAbsorbedRecordShareOneErasure is the duplicated
 // transition the audit found: redactRecord stamped the survivor with the
 // clock's instant and redact_absorbed_client stamped the record merged
@@ -25,9 +35,7 @@ const keptRecord = "Kept Record"
 func TestErase_SurvivorAndAbsorbedRecordShareOneErasure(t *testing.T) {
 	moved := time.Date(2031, time.March, 4, 10, 30, 0, 0, time.UTC)
 	e := newEnv(t, signedInAs(fixture.Owner()), fixture.At(moved))
-	survivorID := e.attachedClient(keptRecord, "kept@example.com")
-	absorbedID := seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)
-	e.merge(absorbedID, client.MergeRequest{GivenName: keptRecord, OtherClientID: survivorID}, http.StatusOK)
+	survivorID, absorbedID := e.mergedPair()
 
 	e.erasure(survivorID)
 
@@ -49,9 +57,7 @@ func TestErase_SurvivorAndAbsorbedRecordShareOneErasure(t *testing.T) {
 // tombstone was answered by the lock's empty read.
 func TestEraseHandler_RefusesATombstone(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	survivorID := e.attachedClient(keptRecord, "kept@example.com")
-	absorbedID := seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)
-	e.merge(absorbedID, client.MergeRequest{GivenName: keptRecord, OtherClientID: survivorID}, http.StatusOK)
+	_, absorbedID := e.mergedPair()
 
 	got := apierrtest.Expect(t, http.MethodPost, e.clientURL(absorbedID, "/erasure"), http.StatusConflict, e.SignedIn)
 
@@ -68,9 +74,7 @@ func TestEraseHandler_RefusesATombstone(t *testing.T) {
 // answer as on the full one.
 func TestDetailHandler_CarriesTheStanding(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	survivorID := e.attachedClient(keptRecord, "kept@example.com")
-	absorbedID := seedFullClient(t, e.DB, e.Practice.ID, e.Staff.ID)
-	e.merge(absorbedID, client.MergeRequest{GivenName: keptRecord, OtherClientID: survivorID}, http.StatusOK)
+	survivorID, absorbedID := e.mergedPair()
 
 	read := func(id string) client.DetailResponse {
 		return reqtest.Expect[client.DetailResponse](t, http.MethodGet, e.clientURL(id, ""), http.StatusOK, e.SignedIn)

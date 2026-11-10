@@ -187,7 +187,7 @@ func TestWorker_SkipsWithNothingMailed(t *testing.T) {
 			reason: "practice_deleting",
 			arrange: func(t *testing.T, db *testdb.DB, practiceID string) {
 				t.Helper()
-				testdb.SeedPracticeDeletion(t, db, practiceID, time.Now(), time.Now().AddDate(0, 0, 30), nil)
+				testdb.SeedPendingDeletion(t, db, practiceID)
 			},
 		},
 		{

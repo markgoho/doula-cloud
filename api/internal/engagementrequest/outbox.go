@@ -98,15 +98,12 @@ const claimQuery = `SELECT o.id, o.attempt_count, r.practice_id, r.state::text, 
 	   FROM engagement_request_outbox o
 	   JOIN engagement_requests r ON r.id = o.request_id
 	   JOIN staff s ON s.id = o.staff_id
-	  WHERE ` + outbox.ClaimDueAliasO + `
-	  ORDER BY o.next_attempt_at
-	  LIMIT $1
-	  FOR UPDATE OF o SKIP LOCKED`
+	  ` + outbox.ClaimNextAliasO
 
 func scanRow(rows *sql.Rows) (outbox.RowMeta, pendingRow, error) {
-	var meta outbox.RowMeta
 	var p pendingRow
-	if err := rows.Scan(&meta.ID, &meta.AttemptCount, &p.practiceID, &p.state, &p.address); err != nil {
+	meta, err := outbox.ScanMeta(rows, &p.practiceID, &p.state, &p.address)
+	if err != nil {
 		// coverage:ignore reason: DB scan failure, not exercised by unit tests
 		return meta, p, fmt.Errorf("engagementrequest: scan outbox row: %w", err)
 	}

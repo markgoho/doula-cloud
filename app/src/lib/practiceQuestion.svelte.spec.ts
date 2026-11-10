@@ -191,12 +191,6 @@ describe('PracticeQuestion', () => {
 		expect(question.waiting.read).toEqual({ status: 'failed', message: 'Not on the list any more.' });
 	});
 
-	it('says why the list could not be read', async () => {
-		const { question } = await setup({ load: () => Promise.reject(new Error('The list is down.')) });
-
-		expect(question.waiting.read).toEqual({ status: 'failed', message: 'The list is down.' });
-	});
-
 	it('falls back to the caller words for a rejection that carries none', async () => {
 		const { question } = await setup({ load: () => Promise.reject('down') });
 

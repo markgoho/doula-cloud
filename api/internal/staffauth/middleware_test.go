@@ -473,11 +473,6 @@ func TestMiddleware_RecordsThatThePracticeWasHere(t *testing.T) {
 	}
 }
 
-func markPracticePendingDeletion(t *testing.T, db *testdb.DB, practiceID string) {
-	t.Helper()
-	testdb.SeedPracticeDeletion(t, db, practiceID, time.Now(), time.Now().AddDate(0, 0, 30), nil)
-}
-
 // TestMiddleware_PendingDeletionLockout_Refuses covers what a Practice
 // that has asked to be deleted turns away: every ordinary route, for an
 // Owner and a non-Owner alike, and a POST to the one path the lockout
@@ -500,7 +495,7 @@ func TestMiddleware_PendingDeletionLockout_Refuses(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newPingEnv(t, fixture.SignedInAs(tc.staff))
-			markPracticePendingDeletion(t, e.DB, e.Practice.ID)
+			testdb.SeedPendingDeletion(t, e.DB, e.Practice.ID)
 
 			if got := refusalCode(t, tc.method, e.at(e.Practice.ID, tc.path), e.SignedIn); got != apierr.CodePracticePendingDeletion {
 				t.Fatalf("code = %q, want %s", got, apierr.CodePracticePendingDeletion)
@@ -511,7 +506,7 @@ func TestMiddleware_PendingDeletionLockout_Refuses(t *testing.T) {
 
 func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testing.T) {
 	e := newPingEnv(t, fixture.SignedInAs(fixture.Owner()))
-	markPracticePendingDeletion(t, e.DB, e.Practice.ID)
+	testdb.SeedPendingDeletion(t, e.DB, e.Practice.ID)
 
 	reqtest.ExpectStatus(t, http.MethodGet, e.at(e.Practice.ID, "/deletion"), http.StatusOK, e.SignedIn)
 	reqtest.ExpectStatus(t, http.MethodDelete, e.at(e.Practice.ID, "/deletion"), http.StatusOK, e.SignedIn)
@@ -525,7 +520,7 @@ func TestMiddleware_PendingDeletionLockout_ExemptsOwnerOnDeletionRoutes(t *testi
 // way -- unlike GET/DELETE .../deletion, which stays Owner-only.
 func TestMiddleware_PendingDeletionLockout_ExemptsSessionForEveryRole(t *testing.T) {
 	e := newPingEnv(t)
-	markPracticePendingDeletion(t, e.DB, e.Practice.ID)
+	testdb.SeedPendingDeletion(t, e.DB, e.Practice.ID)
 
 	body := reqtest.Expect[staffauth.PracticeSessionResponse](t, http.MethodGet, e.at(e.Practice.ID, "/session"), http.StatusOK, e.SignedIn)
 	if !body.PendingDeletion {

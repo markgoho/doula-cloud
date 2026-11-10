@@ -4,7 +4,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"doula-cloud/api/internal/portalaccount"
 	"doula-cloud/api/internal/reqtest"
@@ -173,7 +172,7 @@ func TestMiddleware_PendingDeletionLockout(t *testing.T) {
 	_, engagementID := seedClientWithEngagement(t, db, identityUID)
 
 	practiceID := testdb.Scalar[string](t, db.Admin, `SELECT practice_id FROM engagements WHERE id = $1`, engagementID)
-	testdb.SeedPracticeDeletion(t, db, practiceID, time.Now(), time.Now().AddDate(0, 0, 30), nil)
+	testdb.SeedPendingDeletion(t, db, practiceID)
 
 	srv, session := newServer(t, db, identityUID)
 	defer srv.Close()

@@ -315,6 +315,12 @@ func (e invoiceEvent) rollbackUnlessCommitted() {
 	rollbackUnlessCommitted(e.tx, e.committed)
 }
 
+// beginInvoiceObjectEvent is beginInvoiceEvent for an event whose object
+// is the Invoice itself.
+func beginInvoiceObjectEvent(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent) (invoiceEventObject, invoiceEvent, bool) {
+	return beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
+}
+
 // beginInvoiceEvent is the prologue of every handler for an event about
 // one Invoice: decode the payload, claim the event, and resolve the
 // Invoice it names (stripeInvoiceID reads that id off the decoded
@@ -541,7 +547,7 @@ func recordPaymentAttempt(w http.ResponseWriter, r *http.Request, tx *sql.Tx, pr
 // redirect method waits on her (requires_action), which is no failure
 // and records nothing (#2225).
 func handleInvoicePaymentFailed(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent) {
-	inv, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
+	inv, ev, ok := beginInvoiceObjectEvent(w, r, db, event)
 	if !ok {
 		return
 	}
@@ -609,18 +615,17 @@ func handleInvoiceVoided(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 // it -- clearing any payment on its way, which only an open Invoice can
 // carry -- and action records it, by DoulaCloud, from the Dashboard.
 func handleDashboardMove(w http.ResponseWriter, r *http.Request, db *sql.DB, event WebhookEvent, t InvoiceTransition, action activity.EngagementAction) {
-	_, ev, ok := beginInvoiceEvent(w, r, db, event, func(o invoiceEventObject) string { return o.ID })
+	_, ev, ok := beginInvoiceObjectEvent(w, r, db, event)
 	if !ok {
 		return
 	}
 	defer ev.rollbackUnlessCommitted()
-	tx, committed, invoiceID, practiceID := ev.tx, ev.committed, ev.invoiceID, ev.practiceID
 
 	if !takeStripeMove(w, r, ev, event, t) {
 		return
 	}
 
-	if err := moveInvoice(r.Context(), tx, invoiceID, t, `, payment_processing_since = NULL`); err != nil {
+	if err := moveInvoice(r.Context(), ev.tx, ev.invoiceID, t, `, payment_processing_since = NULL`); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -631,13 +636,13 @@ func handleDashboardMove(w http.ResponseWriter, r *http.Request, db *sql.DB, eve
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
-	if err := recordInvoiceEvent(r.Context(), tx, practiceID, invoiceID, action, diff, false); err != nil {
+	if err := recordInvoiceEvent(r.Context(), ev.tx, ev.practiceID, ev.invoiceID, action, diff, false); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
 	}
 
-	commitAndAck(w, tx, committed)
+	commitAndAck(w, ev.tx, ev.committed)
 }
 
 // paymentIntentEventObject is the subset of a payment_intent.* event's

@@ -1,15 +1,12 @@
 package payments_test
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/invoicestatus"
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/payments"
 )
 
@@ -162,52 +159,26 @@ func TestInvoiceTransition_Reached(t *testing.T) {
 //     its Transition for a literal, fails.
 func TestInvoiceMoves_GoThroughTheTable(t *testing.T) {
 	const writesStatus = "UPDATE invoices SET status"
+	sources := lifecycletest.Sources(t, "..", ".")
 	var writers []string
-	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// coverage:ignore reason: api/internal is always walkable while its tests run
-			return err
+	for file, src := range sources {
+		if strings.Contains(src, writesStatus) {
+			writers = append(writers, file)
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this repo's own api/internal tree, never from input
-		if err != nil {
-			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		if strings.Contains(string(src), writesStatus) {
-			writers = append(writers, filepath.ToSlash(path))
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatalf("walk api/internal: %v", err)
 	}
-	if !slices.Equal(writers, []string{"../payments/lifecycle.go"}) {
-		t.Errorf("files writing %q = %v, want only ../payments/lifecycle.go -- an Invoice's status moves through moveInvoice and a declared Transition", writesStatus, writers)
+	if !slices.Equal(writers, []string{"payments/lifecycle.go"}) {
+		t.Errorf("files writing %q = %v, want only payments/lifecycle.go -- an Invoice's status moves through moveInvoice and a declared Transition", writesStatus, writers)
 	}
 
 	read := func(name string) string {
 		t.Helper()
-		// #nosec G304 -- name is one of this package's own file names, fixed in this test
-		src, err := os.ReadFile(name)
-		if err != nil {
-			t.Fatalf("read %s: %v", name, err)
-		}
-		return string(src)
+		return lifecycletest.Read(t, ".", name)
 	}
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		// coverage:ignore reason: this package's own directory is always readable while its tests run
-		t.Fatalf("read package directory: %v", err)
-	}
-	for _, entry := range entries {
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") || name == "lifecycle.go" {
+	for file, src := range sources {
+		name, inPackage := strings.CutPrefix(file, "payments/")
+		if !inPackage || name == "lifecycle.go" {
 			continue
 		}
-		src := read(name)
 		if strings.Contains(src, "moveInvoice(") && !strings.Contains(src, ".Check(") && !strings.Contains(src, "takeStripeMove(") {
 			t.Errorf("%s moves an Invoice but never asks a Transition's Check", name)
 		}

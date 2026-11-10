@@ -131,10 +131,6 @@
 		read = LOADED_PAGE
 	}: Properties = $props();
 
-	// The snippets below draw only while loading, but a snippet does not
-	// carry the `{#if}` that renders it, so the label is read out here.
-	const loadingLabel = $derived(read.status === 'loading' ? read.label : undefined);
-
 	// The `#each` below is already keyed on the heading, so two sections
 	// sharing one is a pre-existing error rather than a new one this
 	// introduces -- the anchor simply inherits that same uniqueness.
@@ -271,7 +267,7 @@
 		<!-- The sections a route already names while its record loads, each
 		     heading with bars under it (#2248); one load, so only the first
 		     announces. A route that names none yet gets one block of bars. -->
-		{#snippet loadingSections()}
+		{#snippet loadingSections(label: string)}
 			<div class="sections">
 				<stack-l space="var(--space-section)">
 					{#each sections as section, index (section.heading)}
@@ -279,12 +275,12 @@
 							<stack-l space="var(--space-4)">
 								<Heading level={2} variant="section" text={section.heading} />
 								<div class="loading-bars">
-									<Skeleton variant="text" lines={3} label={index === 0 ? loadingLabel : undefined} />
+									<Skeleton variant="text" lines={3} label={index === 0 ? label : undefined} />
 								</div>
 							</stack-l>
 						</section>
 					{:else}
-						<div class="loading-bars"><Skeleton variant="text" lines={6} label={loadingLabel} /></div>
+						<div class="loading-bars"><Skeleton variant="text" lines={6} {label} /></div>
 					{/each}
 				</stack-l>
 			</div>
@@ -330,7 +326,7 @@
 		{:else if read.status === 'loading'}
 			<stack-l space="var(--space-section)">
 				{@render loadingHeader()}
-				{@render loadingSections()}
+				{@render loadingSections(read.label)}
 			</stack-l>
 		{:else}
 			{@render recordContent()}

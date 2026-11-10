@@ -3,6 +3,8 @@ package testdb
 import (
 	"testing"
 	"time"
+
+	"doula-cloud/api/internal/clock"
 )
 
 // SeedPracticeDeletion writes practiceID's deletion facts straight onto
@@ -27,4 +29,12 @@ func SeedPracticeDeletion(t *testing.T, db *DB, practiceID string, requestedAt, 
 		// coverage:ignore reason: fixture update failure, not exercised by the happy-path test
 		t.Fatalf("testdb: seed practice deletion %q: %v", practiceID, err)
 	}
+}
+
+// SeedPendingDeletion puts practiceID in its restore window: deletion
+// requested now, due to finalize in 30 days.
+func SeedPendingDeletion(t *testing.T, db *DB, practiceID string) {
+	t.Helper()
+	now := clock.Now(t.Context())
+	SeedPracticeDeletion(t, db, practiceID, now, now.AddDate(0, 0, 30), nil)
 }

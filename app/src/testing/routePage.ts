@@ -15,3 +15,8 @@ export const pageState: {
 export { pageState as page };
 
 export const goto = vi.fn();
+
+/**
+`#lib/api.js`'s one signed-in fetch, for a route spec that mocks that module with this one.
+*/
+export const apiFetchWithSession = vi.fn();

@@ -55,6 +55,21 @@ draws when it is given no `read` at all.
 export const LOADED_PAGE: PageReadState = { status: 'loaded' };
 
 /**
+The props a page Template takes for its `<h1>` and its tab title.
+*/
+export interface PageTitling {
+	/**
+	The one `<h1>` and the tab title, in every state of the read.
+	*/
+	title: string;
+	/**
+	 * The Staff side leaves this unset and gets the product name; the
+	 * Client portal passes its Practice's name (#431, #487).
+	 */
+	serviceName?: string;
+}
+
+/**
  * How a read's failure is worded: a sentence, used when what was thrown
  * has no message of its own (`readFailure`), or a function of what was
  * thrown, for a screen that words every failure itself.

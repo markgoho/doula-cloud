@@ -2,9 +2,8 @@ package billing_test
 
 import (
 	"errors"
-	"fmt"
-	"io/fs"
 	"os"
+	pathpkg "path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -14,6 +13,7 @@ import (
 
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -185,27 +185,15 @@ func TestDraws_SchemaRefusesWhatNoActWrites(t *testing.T) {
 	drawID := testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO credit_ledger (practice_id, origin, quantity, drawn_lot_id) VALUES ($1, 'forfeit', -1, $2) RETURNING id`, practiceID, lotID)
 
-	const withinLot = "credit_ledger_draw_within_lot"
-	for name, c := range map[string]struct {
-		lot, constraint string
-	}{
-		"a draw past what the lot holds":    {lotID, withinLot},
-		"a draw on another Practice's lot":  {otherLotID, withinLot},
-		"a draw on a row that is not a lot": {drawID, withinLot},
-		"a forfeit that names no lot":       {"", "credit_ledger_lot_or_draw"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			var lot any
-			if c.lot != "" {
-				lot = c.lot
-			}
-			_, err := db.Admin.ExecContext(t.Context(),
-				`INSERT INTO credit_ledger (practice_id, origin, quantity, drawn_lot_id) VALUES ($1, 'forfeit', -1, $2)`, practiceID, lot)
-			if err == nil || !strings.Contains(err.Error(), c.constraint) {
-				t.Fatalf("insert = %v, want a %s refusal", err, c.constraint)
-			}
-		})
-	}
+	const draw = `INSERT INTO credit_ledger (practice_id, origin, quantity, drawn_lot_id) VALUES ($1, 'forfeit', -1, $2)`
+	testdb.RequireRefused(t, db, "credit_ledger_draw_within_lot", map[string]testdb.Write{
+		"a draw past what the lot holds":    {Query: draw, Args: []any{practiceID, lotID}},
+		"a draw on another Practice's lot":  {Query: draw, Args: []any{practiceID, otherLotID}},
+		"a draw on a row that is not a lot": {Query: draw, Args: []any{practiceID, drawID}},
+	})
+	testdb.RequireRefused(t, db, "credit_ledger_lot_or_draw", map[string]testdb.Write{
+		"a forfeit that names no lot": {Query: draw, Args: []any{practiceID, nil}},
+	})
 }
 
 // TestRecordRefund_RefusesALotOutsideTheWindow: ops_record_refund decides
@@ -278,57 +266,29 @@ var derivesRemaining = regexp.MustCompile(`drawn_lot_id\s*=\s*\w+\.id`)
 // act, the refund (whose row ops_record_refund writes) takes its lot from
 // ActRefund, and nothing outside SQL derives a lot's remainder.
 func TestLotActs_EveryDrawGoesThroughAnAct(t *testing.T) {
-	billingDir, err := filepath.Abs(".")
-	if err != nil {
-		// coverage:ignore reason: a path inside this module always resolves while tests run
-		t.Fatalf("resolve package directory: %v", err)
-	}
 	writers := 0
-	scanned := 0
-	for _, root := range []string{"..", filepath.Join("..", "..", "cmd")} {
-		tree := os.DirFS(root)
-		err := fs.WalkDir(tree, ".", func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				// coverage:ignore reason: a directory WalkDir just listed
-				return fmt.Errorf("walk %s: %w", path, err)
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			raw, err := fs.ReadFile(tree, path)
-			if err != nil {
-				// coverage:ignore reason: a file WalkDir listed a moment ago
-				return fmt.Errorf("read %s: %w", path, err)
-			}
-			src := string(raw)
-			scanned++
-			if m := writesDrawOrigin.FindString(src); m != "" {
-				t.Errorf("%s writes a draw origin as a literal (%q) -- take it from a billing.LotAct", path, m)
-			}
-			if m := derivesRemaining.FindString(src); m != "" {
-				t.Errorf("%s sums a lot's draws (%q) -- read credit_lots instead", path, m)
-			}
-			draws := writesDraw.FindAllString(src, -1)
-			if len(draws) == 0 {
-				return nil
-			}
-			abs, _ := filepath.Abs(filepath.Join(root, filepath.Dir(path)))
-			if abs != billingDir {
-				t.Errorf("%s writes a draw -- only billing's LotActs may", path)
-				return nil
-			}
-			writers += len(draws)
-			if !strings.Contains(src, ".from(") || !regexp.MustCompile(`Act\w+\.Origin`).MatchString(src) {
-				t.Errorf("%s writes a draw without taking its lots and origin from a LotAct", path)
-			}
-			return nil
-		})
-		if err != nil {
-			// coverage:ignore reason: the source tree is readable while tests run
-			t.Fatalf("walk %s: %v", root, err)
+	sources := lifecycletest.Sources(t, filepath.Join("..", ".."), "internal", "cmd")
+	for path, src := range sources {
+		if m := writesDrawOrigin.FindString(src); m != "" {
+			t.Errorf("%s writes a draw origin as a literal (%q) -- take it from a billing.LotAct", path, m)
+		}
+		if m := derivesRemaining.FindString(src); m != "" {
+			t.Errorf("%s sums a lot's draws (%q) -- read credit_lots instead", path, m)
+		}
+		draws := writesDraw.FindAllString(src, -1)
+		if len(draws) == 0 {
+			continue
+		}
+		if pathpkg.Dir(path) != "internal/billing" {
+			t.Errorf("%s writes a draw -- only billing's LotActs may", path)
+			continue
+		}
+		writers += len(draws)
+		if !strings.Contains(src, ".from(") || !regexp.MustCompile(`Act\w+\.Origin`).MatchString(src) {
+			t.Errorf("%s writes a draw without taking its lots and origin from a LotAct", path)
 		}
 	}
-	if scanned < 100 {
+	if scanned := len(sources); scanned < 100 {
 		t.Fatalf("scanned %d files, want the whole of api/internal and api/cmd", scanned)
 	}
 	// ConsumeCredit and Forfeit

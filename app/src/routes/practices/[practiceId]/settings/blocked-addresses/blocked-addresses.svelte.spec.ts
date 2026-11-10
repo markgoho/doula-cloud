@@ -83,6 +83,14 @@ function describedByText(button: ReturnType<typeof testPage.getByRole>): string 
 	return document.querySelector(`#${CSS.escape(describedBy)}`)?.textContent?.trim() ?? '';
 }
 
+async function unblockFirst() {
+	await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
+	await testPage
+		.getByRole('dialog', { name: 'Unblock this address' })
+		.getByRole('button', { name: 'Unblock this address' })
+		.click();
+}
+
 describe('the blocked email addresses screen', () => {
 	it('lists every blocked address with why the mail stopped and when', async () => {
 		await setup();
@@ -132,11 +140,7 @@ describe('the blocked email addresses screen', () => {
 	it('takes an unblocked address off the list and says it can receive email again', async () => {
 		await setup();
 
-		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
-		await testPage
-			.getByRole('dialog', { name: 'Unblock this address' })
-			.getByRole('button', { name: 'Unblock this address' })
-			.click();
+		await unblockFirst();
 
 		await expect
 			.element(testPage.getByText(`${bounced!.address} can receive email again.`))
@@ -165,11 +169,7 @@ describe('the blocked email addresses screen', () => {
 		});
 		await render(Page, {});
 
-		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
-		await testPage
-			.getByRole('dialog', { name: 'Unblock this address' })
-			.getByRole('button', { name: 'Unblock this address' })
-			.click();
+		await unblockFirst();
 
 		await expect.element(testPage.getByText(`${bounced!.address} can receive email again.`)).toBeVisible();
 		await expect.element(testPage.getByText('Down')).toBeVisible();
@@ -190,11 +190,7 @@ describe('the blocked email addresses screen', () => {
 			)
 		});
 
-		await testPage.getByRole('button', { name: 'Unblock', exact: true }).click();
-		await testPage
-			.getByRole('dialog', { name: 'Unblock this address' })
-			.getByRole('button', { name: 'Unblock this address' })
-			.click();
+		await unblockFirst();
 
 		await expect
 			.element(

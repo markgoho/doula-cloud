@@ -382,14 +382,7 @@ func TestRevokeInvitationHandler_Success(t *testing.T) {
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
 	invitationID := seedInvitation(t, db, practiceID, ownerID, "revoke-me@example.com", "{doula}", employeeType, time.Now().Add(time.Hour))
 
-	srv, session, _ := newInviteServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := doInviteRequest(t, srv, session,
-		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
-	defer resp.Body.Close()
-
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+	revokeAsOwner(t, db, ownerUID, practiceID, invitationID)
 
 	var status, revokedBy string
 	var revokedAt time.Time
@@ -476,13 +469,7 @@ func TestRevokeInvitationHandler_WithdrawsALapsedInvitation(t *testing.T) {
 	ownerID, practiceID := seedOwnerMembership(t, db, ownerUID)
 	invitationID := seedInvitation(t, db, practiceID, ownerID, "lapsed@example.com", "{doula}", employeeType, time.Now().Add(-time.Hour))
 
-	srv, session, _ := newInviteServer(t, db, ownerUID)
-	defer srv.Close()
-
-	resp := doInviteRequest(t, srv, session,
-		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
-	defer resp.Body.Close()
-	reqtest.RequireStatus(t, resp, http.StatusNoContent)
+	revokeAsOwner(t, db, ownerUID, practiceID, invitationID)
 
 	if status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID); status != statusRevoked {
 		t.Fatalf("status = %q, want revoked", status)
@@ -553,4 +540,16 @@ func TestRevokeInvitationHandler_NonOwnerForbidden(t *testing.T) {
 	defer resp.Body.Close()
 
 	reqtest.RequireStatus(t, resp, http.StatusForbidden)
+}
+
+// revokeAsOwner withdraws invitationID as the Owner signed in as
+// ownerUID, and requires it to succeed.
+func revokeAsOwner(t *testing.T, db *testdb.DB, ownerUID, practiceID, invitationID string) {
+	t.Helper()
+	srv, session, _ := newInviteServer(t, db, ownerUID)
+	defer srv.Close()
+	resp := doInviteRequest(t, srv, session,
+		"/api/practices/"+practiceID+"/staff/invitations/"+invitationID+"/revoke", nil)
+	defer resp.Body.Close()
+	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 }

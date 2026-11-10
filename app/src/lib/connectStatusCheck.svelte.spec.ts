@@ -49,6 +49,15 @@ function setup(replies: Reply[]) {
 	return { check, ...script };
 }
 
+// Settled on active, saying so, and reading no more than reads times.
+async function expectFinishedAfter({ check, fetcher }: Pick<ReturnType<typeof setup>, 'check' | 'fetcher'>, reads: number) {
+	expect(check.status).toEqual(statusResult('active'));
+	expect(check.phase).toEqual({ phase: 'settled' });
+	expect(check.banner).toBe('finished');
+	await vi.advanceTimersByTimeAsync(1000);
+	expect(fetcher).toHaveBeenCalledTimes(reads);
+}
+
 afterEach(() => {
 	vi.useRealTimers();
 });
@@ -158,12 +167,7 @@ describe('ConnectStatusCheck: the poll', () => {
 		expect(check.phase).toEqual({ phase: 'polling' });
 
 		await vi.advanceTimersByTimeAsync(20);
-		expect(check.status).toEqual(statusResult('active'));
-		expect(check.phase).toEqual({ phase: 'settled' });
-		expect(check.banner).toBe('finished');
-
-		await vi.advanceTimersByTimeAsync(1000);
-		expect(fetcher).toHaveBeenCalledTimes(3);
+		await expectFinishedAfter({ check, fetcher }, 3);
 	});
 
 	it('believes an outstanding requirement once the schedule runs out', async () => {
@@ -227,11 +231,7 @@ describe('ConnectStatusCheck: the on-demand check beside the poll', () => {
 
 		await check.recheck();
 
-		expect(check.status).toEqual(statusResult('active'));
-		expect(check.phase).toEqual({ phase: 'settled' });
-		expect(check.banner).toBe('finished');
-		await vi.advanceTimersByTimeAsync(1000);
-		expect(fetcher).toHaveBeenCalledTimes(2);
+		await expectFinishedAfter({ check, fetcher }, 2);
 	});
 
 	it('never lets a slower, older read overwrite a newer one', async () => {
@@ -250,6 +250,23 @@ describe('ConnectStatusCheck: the on-demand check beside the poll', () => {
 
 		expect(check.status).toEqual(statusResult('payouts_restricted'));
 		expect(check.isRechecking).toBe(false);
+		check.stop();
+	});
+
+	it('drops a poll read that answers after a newer check has landed', async () => {
+		vi.useFakeTimers();
+		// The first read, the poll's re-read (held), then the check.
+		const { check, release } = setup([statusResult('pending'), 'held', statusResult('payouts_restricted')]);
+		await check.first('return');
+		check.startPolling();
+		await vi.advanceTimersByTimeAsync(10);
+		await check.recheck();
+		expect(check.status).toEqual(statusResult('payouts_restricted'));
+
+		release(1, statusResult('pending'));
+		await vi.advanceTimersByTimeAsync(0);
+
+		expect(check.status).toEqual(statusResult('payouts_restricted'));
 		check.stop();
 	});
 

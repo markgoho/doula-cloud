@@ -21,49 +21,37 @@ func TestSchema_RefusesTheIllegalCombinations(t *testing.T) {
 	testdb.SeedAttachment(t, db, ended, doula.ID, "granted", true)
 	fresh := fixture.Engagement(t, db, p).ID
 
-	refused := map[string]struct {
-		query string
-		args  []any
-	}{
+	testdb.RequireRefused(t, db, "", map[string]testdb.Write{
 		"an ending naming nobody": {
-			`UPDATE engagement_attachments SET ended_at = now(), ended_reason = 'taken_off' WHERE engagement_id = $1`, []any{open}},
+			Query: `UPDATE engagement_attachments SET ended_at = now(), ended_reason = 'taken_off' WHERE engagement_id = $1`, Args: []any{open}},
 		"an ending with no reason": {
-			`UPDATE engagement_attachments SET ended_at = now(), ended_by = $2 WHERE engagement_id = $1`, []any{open, owner.ID}},
+			Query: `UPDATE engagement_attachments SET ended_at = now(), ended_by = $2 WHERE engagement_id = $1`, Args: []any{open, owner.ID}},
 		"a reason on an open attachment": {
-			`UPDATE engagement_attachments SET ended_reason = 'taken_off' WHERE engagement_id = $1`, []any{open}},
+			Query: `UPDATE engagement_attachments SET ended_reason = 'taken_off' WHERE engagement_id = $1`, Args: []any{open}},
 		"an accrual someone else wrote": {
-			`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'accrued', $3)`, []any{fresh, doula.ID, owner.ID}},
+			Query: `INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'accrued', $3)`, Args: []any{fresh, doula.ID, owner.ID}},
 		"a fee on an accrued attachment": {
-			`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents) VALUES ($1, $2, 'accrued', $2, 100)`, []any{fresh, doula.ID}},
+			Query: `INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents) VALUES ($1, $2, 'accrued', $2, 100)`, Args: []any{fresh, doula.ID}},
 		"a granted attachment going back to accrued": {
-			`UPDATE engagement_attachments SET origin = 'accrued' WHERE engagement_id = $1`, []any{open}},
+			Query: `UPDATE engagement_attachments SET origin = 'accrued' WHERE engagement_id = $1`, Args: []any{open}},
 		"an ended attachment reopened": {
-			`UPDATE engagement_attachments SET ended_at = NULL, ended_by = NULL, ended_reason = NULL WHERE engagement_id = $1`, []any{ended}},
+			Query: `UPDATE engagement_attachments SET ended_at = NULL, ended_by = NULL, ended_reason = NULL WHERE engagement_id = $1`, Args: []any{ended}},
 		"an ended attachment ended again": {
-			`UPDATE engagement_attachments SET ended_at = now() + interval '1 day', ended_reason = 'membership_ended' WHERE engagement_id = $1`, []any{ended}},
+			Query: `UPDATE engagement_attachments SET ended_at = now() + interval '1 day', ended_reason = 'membership_ended' WHERE engagement_id = $1`, Args: []any{ended}},
 		"an attachment moved to another Doula": {
-			`UPDATE engagement_attachments SET staff_id = $2 WHERE engagement_id = $1`, []any{open, owner.ID}},
+			Query: `UPDATE engagement_attachments SET staff_id = $2 WHERE engagement_id = $1`, Args: []any{open, owner.ID}},
 		"a second open attachment for the pair": {
-			`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'accrued', $2)`, []any{open, doula.ID}},
+			Query: `INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'accrued', $2)`, Args: []any{open, doula.ID}},
 		"a state written by hand": {
-			`UPDATE engagement_attachments SET state = 'ended' WHERE engagement_id = $1`, []any{open}},
-	}
-	for name, tc := range refused {
-		if _, err := db.Admin.ExecContext(t.Context(), tc.query, tc.args...); err == nil {
-			t.Errorf("%s: the write succeeded, want the schema to refuse it", name)
-		}
-	}
+			Query: `UPDATE engagement_attachments SET state = 'ended' WHERE engagement_id = $1`, Args: []any{open}},
+	})
 
 	// And the legal ones still pass: an attributed, explained ending, and
 	// a new attachment for a pair whose last one ended.
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE engagement_attachments SET ended_at = now(), ended_by = $2, ended_reason = 'taken_off' WHERE engagement_id = $1`, open, owner.ID); err != nil {
-		t.Errorf("an attributed ending was refused: %v", err)
-	}
-	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`, ended, doula.ID, owner.ID); err != nil {
-		t.Errorf("a new attachment after an ended one was refused: %v", err)
-	}
+	testdb.RequireAccepted(t, db, map[string]testdb.Write{
+		"an attributed ending":                {Query: `UPDATE engagement_attachments SET ended_at = now(), ended_by = $2, ended_reason = 'taken_off' WHERE engagement_id = $1`, Args: []any{open, owner.ID}},
+		"a new attachment after an ended one": {Query: `INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by) VALUES ($1, $2, 'granted', $3)`, Args: []any{ended, doula.ID, owner.ID}},
+	})
 }
 
 // TestHolderLeft_IsTheOneDefinition proves engagement_holder_left (00173):

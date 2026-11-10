@@ -241,14 +241,7 @@ func finalize(ctx context.Context, tx *sql.Tx, practiceID string, now time.Time)
 		// coverage:ignore reason: a struct of two ints always marshals cleanly, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: marshal finalized scope: %w", err)
 	}
-	if err := activity.Record(ctx, tx, activity.Entry{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectPractice,
-		SubjectID:   practiceID,
-		Action:      actionFinalized,
-		Diff:        diff,
-		Actor:       activity.SystemActor(),
-	}); err != nil {
+	if err := recordPracticeAct(ctx, tx, practiceID, actionFinalized, diff, activity.SystemActor()); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("practicedeletion: record finalization: %w", err)
 	}

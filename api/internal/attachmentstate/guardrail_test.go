@@ -1,13 +1,11 @@
 package attachmentstate_test
 
 import (
-	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
+
+	"doula-cloud/api/internal/lifecycletest"
 )
 
 // apiDir is api/, whose internal and cmd trees every scan below walks.
@@ -91,37 +89,7 @@ func TestWrites_GoThroughTheDeclaredTransitions(t *testing.T) {
 // its slash path relative to api/.
 func walkSources(t *testing.T, fn func(file, src string)) {
 	t.Helper()
-	for _, tree := range scannedTrees {
-		err := filepath.WalkDir(filepath.Join(apiDir, tree), func(path string, d fs.DirEntry, err error) error {
-			if err != nil {
-				// coverage:ignore reason: api/ is always readable while its tests run
-				return fmt.Errorf("walk %s: %w", path, err)
-			}
-			if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-				return nil
-			}
-			rel, err := filepath.Rel(apiDir, path)
-			if err != nil {
-				// coverage:ignore reason: path came from walking apiDir itself
-				return fmt.Errorf("relative path of %s: %w", path, err)
-			}
-			fn(filepath.ToSlash(rel), readSource(t, rel))
-			return nil
-		})
-		if err != nil {
-			// coverage:ignore reason: api/ is always readable while its tests run
-			t.Fatalf("walk %s: %v", tree, err)
-		}
+	for file, src := range lifecycletest.Sources(t, apiDir, scannedTrees...) {
+		fn(file, src)
 	}
-}
-
-// readSource reads file, a slash path relative to api/.
-func readSource(t *testing.T, file string) string {
-	t.Helper()
-	// #nosec G304 -- file is a path under this repository's own api/, not anything a caller supplies
-	src, err := os.ReadFile(filepath.Join(apiDir, filepath.FromSlash(file)))
-	if err != nil {
-		t.Fatalf("read %s: %v", file, err)
-	}
-	return string(src)
 }

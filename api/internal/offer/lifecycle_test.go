@@ -2,14 +2,12 @@ package offer_test
 
 import (
 	"fmt"
-	"io/fs"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/lifecycletest"
 	"doula-cloud/api/internal/offer"
 	"doula-cloud/api/internal/testdb"
 )
@@ -77,25 +75,15 @@ func TestTransition_CheckSpeaksToThePerson(t *testing.T) {
 	if ok, refusal := offer.TransitionAccept.Check(offer.StateOffered); !ok || refusal != "" {
 		t.Fatalf("Accept.Check(offered) = (%v, %q), want (true, \"\")", ok, refusal)
 	}
-	cases := []struct {
-		transition offer.Transition
-		current    offer.State
-		want       string
-	}{
-		{offer.TransitionAccept, offer.StateExpired, "This Offer has expired, so you cannot accept it."},
-		{offer.TransitionAccept, offer.StateSuperseded, "This work has gone to someone else, so you cannot accept it."},
-		{offer.TransitionDecline, offer.StateAccepted, "This Offer has been accepted, so you cannot decline it."},
-		{offer.TransitionDeclineByToken, offer.StateWithdrawn, "This Offer has been withdrawn, so you cannot decline it."},
-		{offer.TransitionWithdraw, offer.StateDeclined, "This Offer has been declined, so you cannot withdraw it."},
-		{offer.TransitionLapse, offer.StateOffered, "This Offer is still open, so you cannot let it lapse."},
-		{offer.TransitionAccept, offer.State("archived"), "This Offer is archived, so you cannot accept it."},
-	}
-	for _, c := range cases {
-		ok, refusal := c.transition.Check(c.current)
-		if ok || refusal != c.want {
-			t.Errorf("%q.Check(%q) = (%v, %q), want (false, %q)", c.transition.Act, c.current, ok, refusal, c.want)
-		}
-	}
+	lifecycletest.RequireRefusals(t, []lifecycletest.Refusal[offer.Transition, offer.State]{
+		{Transition: offer.TransitionAccept, Current: offer.StateExpired, Want: "This Offer has expired, so you cannot accept it."},
+		{Transition: offer.TransitionAccept, Current: offer.StateSuperseded, Want: "This work has gone to someone else, so you cannot accept it."},
+		{Transition: offer.TransitionDecline, Current: offer.StateAccepted, Want: "This Offer has been accepted, so you cannot decline it."},
+		{Transition: offer.TransitionDeclineByToken, Current: offer.StateWithdrawn, Want: "This Offer has been withdrawn, so you cannot decline it."},
+		{Transition: offer.TransitionWithdraw, Current: offer.StateDeclined, Want: "This Offer has been declined, so you cannot withdraw it."},
+		{Transition: offer.TransitionLapse, Current: offer.StateOffered, Want: "This Offer is still open, so you cannot let it lapse."},
+		{Transition: offer.TransitionAccept, Current: offer.State("archived"), Want: "This Offer is archived, so you cannot accept it."},
+	})
 }
 
 // TestEveryOfferReaderAsksTheOneDerivation is the source-scan guardrail
@@ -120,29 +108,15 @@ func TestEveryOfferReaderAsksTheOneDerivation(t *testing.T) {
 	judges := map[string]bool{
 		"create.go": false, "decide.go": false, "withdraw.go": false, "preaccount.go": false,
 		"list.go": false, "nodoula.go": false, "target.go": false, "outbox.go": false,
-		filepath.Join("..", "staffnotice", "staffnotice.go"): false,
+		"staffnotice/staffnotice.go": false,
 	}
-	lifecycle := filepath.Join("..", "offer", "lifecycle.go")
 
 	scanned := 0
-	err := filepath.WalkDir("..", func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			// coverage:ignore reason: internal/ is always readable while its tests run
-			return err
+	for file, text := range lifecycletest.Sources(t, "..", ".") {
+		if file == "offer/lifecycle.go" {
+			continue
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") || path == lifecycle {
-			return nil
-		}
-		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this module's own internal/ directory, never from input
-		if err != nil {
-			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		text := string(src)
-		key := path
-		if filepath.Dir(path) == filepath.Join("..", "offer") {
-			key = filepath.Base(path)
-		}
+		key := strings.TrimPrefix(file, "offer/")
 		if _, ok := judges[key]; ok {
 			for _, a := range asks {
 				if strings.Contains(text, a) {
@@ -151,19 +125,14 @@ func TestEveryOfferReaderAsksTheOneDerivation(t *testing.T) {
 			}
 		}
 		if !strings.Contains(text, "engagement_offers") {
-			return nil
+			continue
 		}
 		scanned++
 		for _, own := range ownDefinition {
 			if strings.Contains(text, own) {
-				t.Errorf("%s touches engagement_offers and spells %q itself -- ask offer_open_at / offer_state_at (or offer.StateAt), and move the state through an offer Transition", path, own)
+				t.Errorf("%s touches engagement_offers and spells %q itself -- ask offer_open_at / offer_state_at (or offer.StateAt), and move the state through an offer Transition", file, own)
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		// coverage:ignore reason: internal/ is always readable while its tests run
-		t.Fatalf("walk internal/: %v", err)
 	}
 	if scanned == 0 {
 		t.Fatal("no file under internal/ touches engagement_offers -- did the walk move?")
@@ -245,11 +214,7 @@ func TestCloseOnCompletion_ALapsedOfferExpiresRatherThanBeingWithdrawn(t *testin
 	expireOffer(t, f.db, lapsed)
 	open := f.makeOffer(t, offerBody(f.doulaID, 45000))
 
-	testdb.SeedBirthOutcome(t, f.db, f.engagementID)
-	expectStatus(t, do(t, http.MethodPatch,
-		f.srv+"/api/practices/"+f.practiceID+"/engagements/"+f.engagementID+"/status", f.ownerSession,
-		completeStatusBody),
-		http.StatusOK)
+	completeEngagement(t, f)
 
 	wantLapsed(t, readDecision(t, f.db, lapsed))
 	d := readDecision(t, f.db, open)

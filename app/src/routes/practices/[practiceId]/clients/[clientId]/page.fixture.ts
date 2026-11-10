@@ -28,22 +28,11 @@ import type { ClientDetail } from '#lib/clientDetail.js';
 import type { EraseEligibility } from '#lib/clientErasure.js';
 import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS, TYPICAL_STAFF } from '../../../../typicalPilot.js';
+import { persephone } from './client.fixture.js';
 import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
-	id: 'client-1',
-	standing: 'live',
-	givenName: 'Persephone',
-	familyName: 'Ochieng-Whitfield',
-	preferredName: '',
-	email: 'persephone@example.test',
-	phone: '585-555-0101',
-	addressLine1: '100 Highland Ave',
-	addressLine2: '',
-	addressLocality: 'Rochester',
-	addressRegion: 'NY',
-	addressPostalCode: '14620',
-	dateOfBirth: '1994-03-01',
+	...persephone,
 	// #2022: the longest invite words there are, and the one branch that
 	// draws a link beside them (#785).
 	portalInviteStatus: 'invited',
