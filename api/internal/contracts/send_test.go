@@ -115,7 +115,7 @@ func TestPostSendContractHandler_AnInviteThatCannotBringHerHoldsTheSendBack(t *t
 	}{
 		{"expired", `UPDATE client_portal_users SET invite_token_expires_at = now() - interval '1 day' WHERE client_id = $1`, "This Client's portal invite has expired, so you cannot send this Contract yet. Send a new portal invite first."},
 		{"withdrawn", `UPDATE client_portal_users SET state = 'revoked', invite_token = NULL, invite_token_expires_at = NULL, revoked_at = now(), revoke_reason = 'email_changed' WHERE client_id = $1`, "This Client's portal invite was withdrawn, so you cannot send this Contract yet. Send a new portal invite first."},
-		{"bounced", `UPDATE portal_invite_outbox SET status = 'bounced' WHERE client_portal_user_id IN (SELECT id FROM client_portal_users WHERE client_id = $1)`, "This Client's portal invite did not arrive, so you cannot send this Contract yet. Send a new portal invite first."},
+		{"bounced", `UPDATE portal_invite_outbox SET status = 'bounced', sent_at = now() WHERE client_portal_user_id IN (SELECT id FROM client_portal_users WHERE client_id = $1)`, "This Client's portal invite did not arrive, so you cannot send this Contract yet. Send a new portal invite first."},
 		{"unlinked", `UPDATE client_portal_users SET state = 'unlinked', invite_token = NULL, invite_token_expires_at = NULL, unlinked_at = now() WHERE client_id = $1`, "This Client no longer has portal access, so you cannot send this Contract."},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

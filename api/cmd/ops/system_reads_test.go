@@ -123,8 +123,8 @@ func TestSystem_ListsEveryHandledStripeEventTypeAndMarksOnesNeverSeen(t *testing
 			t.Errorf("%+v listed, want only handled Stripe event types", e)
 		}
 	}
-	if got["stripe_platform"] != 1 || got["stripe_connect"] != 6 || got["stripe_account"] != 1 {
-		t.Errorf("event types per route = %v, want 1, 6 and 1", got)
+	if got["stripe_platform"] != 1 || got["stripe_connect"] != 7 || got["stripe_account"] != 1 {
+		t.Errorf("event types per route = %v, want 1, 7 and 1", got)
 	}
 }
 

@@ -116,9 +116,8 @@ func TestWrites_EveryWriterConsultsTheGate(t *testing.T) {
 var columnStanding = regexp.MustCompile(`\b(erased_at|merged_into)\s+IS\s+(NOT\s+)?NULL\b`)
 
 // askedOfTheColumns are files allowed to ask the columns, each with why.
-var askedOfTheColumns = map[string]string{
-	"practicedeletion/outbox.go": "the Practice-deletion lifecycle owns this read (its own unit of work is reshaping it); it asks the live question and should read standing = 'live'",
-}
+// It is empty: every reader asks the standing.
+var askedOfTheColumns = map[string]string{}
 
 // TestReaders_AskTheStanding fails a reader that goes back to the two
 // columns instead of the one derivation, so a difference between two

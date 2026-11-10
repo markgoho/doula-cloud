@@ -270,7 +270,7 @@ func unerasedClientIDs(ctx context.Context, tx *sql.Tx, practiceID string) ([]st
 		// clients_update's own USING clause (merged_into IS NULL, 00080)
 		// matches zero rows for, and the key would then be destroyed with
 		// her name still standing in the row.
-		`SELECT id FROM clients WHERE practice_id = $1 AND erased_at IS NULL AND merged_into IS NULL FOR UPDATE`,
+		`SELECT id FROM clients WHERE practice_id = $1 AND standing = 'live' FOR UPDATE`,
 		practiceID,
 	)
 	if err != nil {

@@ -4,27 +4,31 @@
 -- are the schema's half: what each stage carries, so a row no declared
 -- move could leave is refused by the database rather than stored.
 --
+-- Each is added NOT VALID: every new or changed row is held to it, and
+-- rows already in trunk's database, which nothing here can prove pass,
+-- are left as they are (the migration-safety guardrail's rule).
+--
 -- A paid Invoice has the instant it was paid, and nothing else does: every
 -- move into 'paid' writes paid_at, and the one move out of it (a reversal)
 -- clears it. A refunded Invoice stays 'paid' with its paid_at (00115).
 ALTER TABLE invoices ADD CONSTRAINT invoices_paid_at_only_while_paid
-    CHECK ((status = 'paid') = (paid_at IS NOT NULL));
+    CHECK ((status = 'paid') = (paid_at IS NOT NULL)) NOT VALID;
 
 -- A payment on its way (00135) is a fact about an open Invoice only. Every
 -- move out of 'open' that Stripe reports clears it, and nothing sets it on
 -- an Invoice that is not open.
 ALTER TABLE invoices ADD CONSTRAINT invoices_processing_only_while_open
-    CHECK (payment_processing_since IS NULL OR status = 'open');
+    CHECK (payment_processing_since IS NULL OR status = 'open') NOT VALID;
 
 -- Only Stripe reports a payment on its way, so a by-hand Invoice
 -- (stripe_invoice_id IS NULL, 00095's rail flag) never carries one.
 ALTER TABLE invoices ADD CONSTRAINT invoices_processing_only_on_stripe
-    CHECK (payment_processing_since IS NULL OR stripe_invoice_id IS NOT NULL);
+    CHECK (payment_processing_since IS NULL OR stripe_invoice_id IS NOT NULL) NOT VALID;
 
 -- A by-hand Invoice is born open; only a Stripe-backed one is ever a draft
 -- (Stripe creates it before it finalizes it).
 ALTER TABLE invoices ADD CONSTRAINT invoices_draft_only_on_stripe
-    CHECK (status <> 'draft' OR stripe_invoice_id IS NOT NULL);
+    CHECK (status <> 'draft' OR stripe_invoice_id IS NOT NULL) NOT VALID;
 
 -- Who voided or wrote off an Invoice, and when, is its activity row
 -- (invoice_voided, invoice_written_off, invoice_not_sent: a Staff actor
