@@ -20,6 +20,8 @@
 			dueOn: '2027-10-14',
 			reference: 'DC-0014',
 			refundedCents: 0,
+			refundableCents: 0,
+			reversible: false,
 			daysOverdue: 0,
 			billingMode: 'stripe'
 		},
@@ -34,6 +36,8 @@
 			dueOn: '2027-12-30',
 			reference: 'INV-0002',
 			refundedCents: 0,
+			refundableCents: 0,
+			reversible: false,
 			// #2122: past its due day, so the Owner's row reads Overdue, as
 			// the contractor's rows below do for theirs.
 			daysOverdue: 12,
@@ -60,9 +64,10 @@
 			activePaymentMethod: 'bank_transfer',
 			activePaymentNote:
 				"Zelle from the Client's partner, confirmation 8F2K9QXW7LMN3P, seen on the statement Dec 28 after two reminders.",
-			refundedCents: 387_550
+			refundedCents: 387_550,
+			refundableCents: 37_450
 		},
-		{ ...invoices[0], id: 'in_4', activePaymentId: 'pay_4', activePaymentKind: 'stripe' }
+		{ ...invoices[0], id: 'in_4', activePaymentId: 'pay_4', activePaymentKind: 'stripe', refundableCents: 425_000 }
 	];
 
 	/*

@@ -13,17 +13,17 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/staffauth"
 )
 
-// The payments.kind values a PaymentView reports, named once so the
-// handlers that build one never spell the enum literal differently from
-// the schema (00095, 00103, 00115).
+// The payments.kind values a PaymentView reports, paymentstanding's names
+// for the schema's enum (00095, 00103, 00115).
 const (
-	paymentKindManual   = "manual"
-	paymentKindStripe   = "stripe"
-	paymentKindReversal = "reversal"
-	paymentKindRefund   = "refund"
+	paymentKindManual   = paymentstanding.KindManual
+	paymentKindStripe   = paymentstanding.KindStripe
+	paymentKindReversal = paymentstanding.KindReversal
+	paymentKindRefund   = paymentstanding.KindRefund
 )
 
 // MsgInvoiceNotPaidForRefund refuses a Refund against an Invoice that is
@@ -69,57 +69,19 @@ type RefundPaymentRequest struct {
 	Note string `json:"note,omitempty"`
 }
 
-var (
-	errPaymentReversedForRefund = errors.New("payments: payment was reversed")
-	errRefundExceedsPayment     = errors.New("payments: refund exceeds what the payment still covers")
-)
-
-// refundTarget is the Payment a Refund returns, as read under its row
-// lock: its kind (which decides the method rule and which Stripe amount
-// a credit note carries) and how much of it is left to return.
-type refundTarget struct {
-	kind      string
-	remaining int64
-}
-
-// resolveRefundTarget locks :paymentId's row FOR UPDATE, scoped to
-// :invoiceId and to the two kinds that record money arriving -- a
-// reversal or a Refund row never matches, so either reaches the same
-// sql.ErrNoRows a nonexistent id would. It then reads what the Payment
-// still covers, in the same transaction and under the same lock, so two
-// concurrent Refunds against one Payment serialize here and the second
-// sees the first's row: the bound is a SUM across rows, which no CHECK
-// can express (00115's comment).
-func resolveRefundTarget(ctx context.Context, tx *sql.Tx, invoiceID, paymentID string, amountCents int64) (refundTarget, error) {
-	var target refundTarget
-	var covered int64
-	err := tx.QueryRowContext(ctx,
-		`SELECT kind::text, amount_cents FROM payments
-		  WHERE id = $1 AND invoice_id = $2 AND kind IN ('manual', 'stripe')
-		  FOR UPDATE`,
-		paymentID, invoiceID,
-	).Scan(&target.kind, &covered)
-	// coverage:ignore reason: the sql.ErrNoRows branch is exercised by unit tests; a non-ErrNoRows DB failure here is not
+// resolveRefundTarget is lockPaymentFor for ActRefundPayment, plus the
+// act's amount bound: a Refund of more than is left to return on the
+// Payment is refused with MsgRefundExceedsPayment. Under the Payment's
+// row lock, so two concurrent Refunds against one Payment serialize and
+// the second reads the first's row; 00175's trigger holds the same bound
+// in the database.
+func resolveRefundTarget(ctx context.Context, tx *sql.Tx, invoiceID, paymentID string, amountCents int64) (lockedPayment, error) {
+	target, err := lockPaymentFor(ctx, tx, ActRefundPayment, invoiceID, paymentID)
 	if err != nil {
-		return refundTarget{}, fmt.Errorf("payments: resolve refund target: %w", err)
+		return lockedPayment{}, err
 	}
-
-	var reversed bool
-	var refundedSoFar int64
-	if err := tx.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM payments WHERE target_payment_id = $1 AND kind = 'reversal'),
-		        COALESCE((SELECT -SUM(amount_cents) FROM payments WHERE target_payment_id = $1 AND kind = 'refund'), 0)`,
-		paymentID,
-	).Scan(&reversed, &refundedSoFar); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return refundTarget{}, fmt.Errorf("payments: read refund target coverage: %w", err)
-	}
-	if reversed {
-		return refundTarget{}, errPaymentReversedForRefund
-	}
-	target.remaining = covered - refundedSoFar
-	if amountCents > target.remaining {
-		return refundTarget{}, errRefundExceedsPayment
+	if amountCents > target.refundable() {
+		return lockedPayment{}, paymentActRefusedError{message: MsgRefundExceedsPayment}
 	}
 	return target, nil
 }
@@ -205,15 +167,13 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 		}
 
 		target, err := resolveRefundTarget(r.Context(), tx, invoiceID, paymentID, req.AmountCents)
+		var refused paymentActRefusedError
 		switch {
 		case errors.Is(err, sql.ErrNoRows):
 			apierr.WriteError(w, MsgPaymentNotRefundable, http.StatusNotFound)
 			return
-		case errors.Is(err, errPaymentReversedForRefund):
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgReversedPaymentCannotBeRefunded, nil)
-			return
-		case errors.Is(err, errRefundExceedsPayment):
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, MsgRefundExceedsPayment, nil)
+		case errors.As(err, &refused):
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refused.message, nil)
 			return
 		case err != nil:
 			// coverage:ignore reason: DB query failure, not exercised by unit tests

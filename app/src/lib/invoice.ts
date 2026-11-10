@@ -63,6 +63,15 @@ export interface Invoice {
 	 * after a Refund, exactly as Stripe's own does, so this is the only
 	 * field that says money went back. */
 	refundedCents: number;
+	/** How much may still be returned against activePaymentId, and 0 when
+	 * nothing may: the BFF asks the same Invoice transition and Payment act
+	 * its refund route asks, so "Return money" is offered exactly when the
+	 * route would take it, and the form caps the amount here. */
+	refundableCents: number;
+	/** Whether activePaymentId may be reversed, by the same declarations
+	 * its reverse route asks (a by-hand Payment on a by-hand Invoice that
+	 * no money has gone back against). */
+	reversible: boolean;
 	/** How many whole days in the Practice's own timezone this Invoice is
 	 * past `dueOn` (#1965, #2122), and 0 when it is not overdue or not
 	 * open. The BFF counts it once, by one rule, for every Staff list that
@@ -115,8 +124,10 @@ export type BillingMode = 'stripe' | 'by_hand';
  *
  * Less refundedCents (#1009): the Practice-wide list sends no per-row
  * Refund total -- the book's own RefundedCents on the page is what that
- * screen shows -- so the type does not claim one it will never receive. */
-export interface PracticeInvoice extends Omit<Invoice, 'refundedCents'> {
+ * screen shows -- so the type does not claim one it will never receive.
+ * Less refundableCents and reversible too: that list offers no act on a
+ * Payment. */
+export interface PracticeInvoice extends Omit<Invoice, 'refundedCents' | 'refundableCents' | 'reversible'> {
 	engagementId: string;
 	clientName: string;
 }

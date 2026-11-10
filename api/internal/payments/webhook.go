@@ -166,8 +166,8 @@ var connectEventHandlers = map[string]connectEventHandler{
 	eventTypeCreditNoteCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
 		handleCreditNoteCreated(w, r, db, event)
 	},
-	eventTypeRefundCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, _ Client, event WebhookEvent, _ tasknudge.Enqueuer) {
-		handleRefundCreated(w, r, db, event)
+	eventTypeRefundCreated: func(w http.ResponseWriter, r *http.Request, db *sql.DB, client Client, event WebhookEvent, _ tasknudge.Enqueuer) {
+		handleRefundCreated(w, r, db, client, event)
 	},
 }
 
@@ -416,7 +416,9 @@ func handleInvoicePaid(w http.ResponseWriter, r *http.Request, db *sql.DB, clien
 	// The reference is what makes a payments row traceable back to Stripe,
 	// and it is not in the event. A failure to fetch it must not lose the
 	// payment: log it and store an empty reference rather than 500 and
-	// have Stripe redeliver an event whose money already moved.
+	// have Stripe redeliver an event whose money already moved. A later
+	// refund.created still finds such a Payment, through the Invoice its
+	// PaymentIntent pays (refundedStripePayment).
 	reference, err := client.RetrieveInvoicePaymentReference(r.Context(), event.Account, inv.ID)
 	if err != nil {
 		log.Printf("payments: connect webhook: invoice.paid %s recorded without a Stripe payment reference: %v", inv.ID, err)

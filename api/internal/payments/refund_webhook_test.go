@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -68,14 +69,24 @@ func refundPayload(t *testing.T, eventID, accountID, refundID, paymentIntent, st
 	})
 }
 
+// deliver posts payload to the Connect webhook and wants it acknowledged.
+// Stripe lists no Invoice for any PaymentIntent it is asked about, so a
+// refund.created whose PaymentIntent matches no Payment is dropped.
 func deliver(t *testing.T, f refundWebhookFixture, payload []byte) {
 	t.Helper()
-	srv := newConnectWebhookServer(f.db)
+	deliverThrough(t, f, newProcessingClient(payments.InvoicePaymentIntent{}, nil), payload, http.StatusOK)
+}
+
+// deliverThrough is deliver with the Client, and the status wanted,
+// chosen by the caller.
+func deliverThrough(t *testing.T, f refundWebhookFixture, client payments.Client, payload []byte, want int) {
+	t.Helper()
+	srv := newConnectWebhookServerWith(f.db, client)
 	defer srv.Close()
 	resp := postConnectWebhook(t, srv, payload, stripeConnectWebhookSecret)
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, http.StatusOK)
+	if resp.StatusCode != want {
+		t.Fatalf("webhook status = %d, want %d", resp.StatusCode, want)
 	}
 }
 

@@ -433,10 +433,6 @@
 		}
 	];
 
-	function hasMoneyLeftToReturn(invoice: Invoice): boolean {
-		return invoice.amountCents > invoice.refundedCents;
-	}
-
 	// Void and write-off (#271) need no confirm step of their own -- #271
 	// carries no AC for one, unlike recording a Payment -- but do share one
 	// busy/error pair, since only one is ever in flight per row.
@@ -515,9 +511,13 @@
 			/>
 		{/if}
 	{/if}
-	{#if invoice.status === 'paid' && isOwnerOrAdmin && invoice.activePaymentId}
+	<!-- What may still be done with the Payment is the BFF's answer
+	     (refundableCents, reversible), asked of the same declarations its
+	     refund and reverse routes ask, so no button is offered that would
+	     only earn a refusal. -->
+	{#if isOwnerOrAdmin && invoice.activePaymentId}
 		{@const activePaymentId = invoice.activePaymentId}
-		{#if hasMoneyLeftToReturn(invoice)}
+		{#if invoice.refundableCents > 0}
 			<Button
 				label="Return money"
 				variant="secondary"
@@ -526,11 +526,7 @@
 				onClick={() => startRefundingPayment(invoice.id, activePaymentId)}
 			/>
 		{/if}
-		<!-- Reverse is by-hand only (#945), and never once money has
-		     gone back: the BFF refuses a refunded Payment
-		     (MsgRefundedPaymentCannotBeReversed), so the button that
-		     would only earn that refusal is not offered. -->
-		{#if invoice.billingMode === 'by_hand' && invoice.refundedCents === 0}
+		{#if invoice.reversible}
 			<Button
 				label="Reverse payment"
 				variant="secondary"

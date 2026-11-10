@@ -17,13 +17,15 @@ const byHand: Invoice = {
 	dueOn: '2026-01-31',
 	reference: 'INV-0001',
 	refundedCents: 20_000,
+	refundableCents: 30_000,
+	reversible: false,
 	daysOverdue: 0,
 	billingMode: 'by_hand',
 	activePaymentId: 'payment-1',
 	activePaymentKind: 'manual'
 };
 
-const byCard: Invoice = { ...byHand, billingMode: 'stripe', activePaymentKind: 'stripe', refundedCents: 0 };
+const byCard: Invoice = { ...byHand, billingMode: 'stripe', activePaymentKind: 'stripe', refundedCents: 0, refundableCents: 50_000 };
 
 async function setup(invoice: Invoice, onConfirm = vi.fn<(input: RefundPaymentInput) => Promise<void>>().mockResolvedValue()) {
 	const onCancel = vi.fn();

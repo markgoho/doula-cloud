@@ -55,6 +55,8 @@ const invoiceOpen: Invoice = {
 	dueOn: '2026-01-31',
 	reference: 'STRIPE-in_1',
 	refundedCents: 0,
+	refundableCents: 0,
+	reversible: false,
 	daysOverdue: 0,
 	billingMode: 'stripe'
 };
@@ -71,6 +73,8 @@ const invoicePaid: Invoice = {
 	dueOn: '2026-02-01',
 	reference: 'STRIPE-in_2',
 	refundedCents: 0,
+	refundableCents: 0,
+	reversible: false,
 	daysOverdue: 0,
 	billingMode: 'stripe'
 };
@@ -81,7 +85,8 @@ const invoicePaidByCard: Invoice = {
 	...invoicePaid,
 	id: 'inv-4',
 	activePaymentId: 'payment-card',
-	activePaymentKind: 'stripe'
+	activePaymentKind: 'stripe',
+	refundableCents: 20_000
 };
 
 // A paid by-hand Invoice with an active Payment (#945) -- the one state
@@ -100,6 +105,8 @@ const invoicePaidByHand: Invoice = {
 	dueOn: '2026-02-02',
 	reference: 'INV-0003',
 	refundedCents: 0,
+	refundableCents: 25_000,
+	reversible: true,
 	daysOverdue: 0,
 	billingMode: 'by_hand',
 	activePaymentId: 'payment-1',
@@ -1231,7 +1238,12 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('says how much went back on a partly refunded Invoice, keeps it Paid, and stops offering Reverse payment', async () => {
-			const partlyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: 10_000 };
+			const partlyRefunded: Invoice = {
+				...invoicePaidByHand,
+				refundedCents: 10_000,
+				refundableCents: 15_000,
+				reversible: false
+			};
 			await setup({ invoices: [partlyRefunded], isOwnerOrAdmin: true });
 
 			await expect.element(invoiceFact('$100.00')).toBeVisible();
@@ -1241,7 +1253,12 @@ describe('InvoiceSection.svelte', () => {
 		});
 
 		it('stops offering Return money once everything has gone back', async () => {
-			const fullyRefunded: Invoice = { ...invoicePaidByHand, refundedCents: invoicePaidByHand.amountCents };
+			const fullyRefunded: Invoice = {
+				...invoicePaidByHand,
+				refundedCents: invoicePaidByHand.amountCents,
+				refundableCents: 0,
+				reversible: false
+			};
 			await setup({ invoices: [fullyRefunded], isOwnerOrAdmin: true });
 
 			await expect.element(invoiceTitle(fullyRefunded.reference)).toBeVisible();

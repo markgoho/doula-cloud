@@ -608,6 +608,8 @@ const typicalInvoices: Invoice[] = [
 		reference: '4F2C9A1B-0002',
 		billingMode: 'stripe',
 		refundedCents: 0,
+		refundableCents: 0,
+		reversible: false,
 		daysOverdue: 0
 	},
 	{
@@ -625,6 +627,8 @@ const typicalInvoices: Invoice[] = [
 		activePaymentId: 'payment-deposit',
 		activePaymentKind: 'stripe',
 		refundedCents: 15_000,
+		refundableCents: 45_000,
+		reversible: false,
 		daysOverdue: 0
 	},
 	// #2241: a by-hand Payment reads its method and its recorder's note.
@@ -645,6 +649,8 @@ const typicalInvoices: Invoice[] = [
 		activePaymentMethod: 'bank_transfer',
 		activePaymentNote: 'Zelle from her partner, reference 0806, seen on the statement Aug 6.',
 		refundedCents: 0,
+		refundableCents: 25_000,
+		reversible: true,
 		daysOverdue: 0
 	}
 ];

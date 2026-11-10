@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -129,8 +130,7 @@ func InboxHandler() http.Handler {
 			   LEFT JOIN LATERAL (
 			        SELECT f.amount_cents, f.method::text AS method, f.paid_on
 			          FROM attachment_fee_payments f
-			         WHERE f.attachment_id = att.id AND f.kind = 'recorded'
-			           AND NOT EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
+			         WHERE f.attachment_id = att.id AND `+paymentstanding.FeeStandsExpr+`
 			         ORDER BY f.recorded_at DESC
 			         LIMIT 1
 			   ) fp ON true

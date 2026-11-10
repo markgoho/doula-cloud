@@ -65,6 +65,8 @@ var declaredMoves = map[string]declaredMove{
 		[]invoicestatus.Status{invoicestatus.Draft, invoicestatus.Open, invoicestatus.Uncollectible}, invoicestatus.Void, stripeOnly, payments.MovedByStripe},
 	"payment_intent.processing": {"TransitionPaymentOnItsWay", webhookFile,
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Open, stripeOnly, payments.MovedByStripe},
+	"money returned on Stripe": {"TransitionStripeRefunded", "refund_webhook.go",
+		[]invoicestatus.Status{invoicestatus.Paid}, invoicestatus.Paid, stripeOnly, payments.MovedByStripe},
 }
 
 // TestInvoiceTransitions_TableIsComplete holds payments.InvoiceTransitions

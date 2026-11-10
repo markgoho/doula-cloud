@@ -64,9 +64,9 @@
 	} = $props();
 
 	const isCardPayment = $derived(invoice.activePaymentKind === 'stripe');
-	/** A Payment always covers its Invoice in full (#271), so what is left
-	 * to return is the Invoice's amount less every Refund against it. */
-	const remainingCents = $derived(invoice.amountCents - invoice.refundedCents);
+	/** What is left to return on the Payment, as the BFF's refund route
+	 * bounds it (Invoice.refundableCents). */
+	const remainingCents = $derived(invoice.refundableCents);
 
 	let step = $state<'form' | 'review'>('form');
 	let amountDollars = $state('');

@@ -25,6 +25,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/payments"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -114,28 +115,31 @@ func ListHandler() http.Handler {
 	}, staffauth.EngagementID())
 }
 
+// listFeesQuery reads each contractor fee on an Engagement with the Fee
+// Payment standing on it (paymentstanding.FeeStandsExpr).
+const listFeesQuery = `SELECT ea.id, s.name, ea.fee_amount_cents,
+	        (ea.attached_at AT TIME ZONE p.timezone)::date::text,
+	        (ea.ended_at AT TIME ZONE p.timezone)::date::text,
+	        fp.id, fp.amount_cents, fp.method::text, fp.note, fp.paid_on::text, rs.name, fp.recorded_at
+	   FROM engagement_attachments ea
+	   JOIN engagements e ON e.id = ea.engagement_id
+	   JOIN practices p ON p.id = e.practice_id
+	   JOIN staff s ON s.id = ea.staff_id
+	   LEFT JOIN LATERAL (
+	        SELECT f.id, f.amount_cents, f.method, f.note, f.paid_on, f.recorded_by, f.recorded_at
+	          FROM attachment_fee_payments f
+	         WHERE f.attachment_id = ea.id AND ` + paymentstanding.FeeStandsExpr + `
+	         ORDER BY f.recorded_at DESC
+	         LIMIT 1
+	   ) fp ON true
+	   LEFT JOIN staff rs ON rs.id = fp.recorded_by
+	  WHERE ea.engagement_id = $1 AND e.practice_id = $2
+	    AND ea.origin = 'granted' AND ea.fee_amount_cents IS NOT NULL
+	  ORDER BY ea.attached_at, ea.id`
+
 func listFees(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) ([]DoulaFee, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT ea.id, s.name, ea.fee_amount_cents,
-		        (ea.attached_at AT TIME ZONE p.timezone)::date::text,
-		        (ea.ended_at AT TIME ZONE p.timezone)::date::text,
-		        fp.id, fp.amount_cents, fp.method::text, fp.note, fp.paid_on::text, rs.name, fp.recorded_at
-		   FROM engagement_attachments ea
-		   JOIN engagements e ON e.id = ea.engagement_id
-		   JOIN practices p ON p.id = e.practice_id
-		   JOIN staff s ON s.id = ea.staff_id
-		   LEFT JOIN LATERAL (
-		        SELECT f.id, f.amount_cents, f.method, f.note, f.paid_on, f.recorded_by, f.recorded_at
-		          FROM attachment_fee_payments f
-		         WHERE f.attachment_id = ea.id AND f.kind = 'recorded'
-		           AND NOT EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
-		         ORDER BY f.recorded_at DESC
-		         LIMIT 1
-		   ) fp ON true
-		   LEFT JOIN staff rs ON rs.id = fp.recorded_by
-		  WHERE ea.engagement_id = $1 AND e.practice_id = $2
-		    AND ea.origin = 'granted' AND ea.fee_amount_cents IS NOT NULL
-		  ORDER BY ea.attached_at, ea.id`,
+		listFeesQuery,
 		engagementID, practiceID,
 	)
 	if err != nil {
@@ -268,8 +272,7 @@ func RecordHandler() http.Handler {
 		if err := c.Tx.QueryRowContext(r.Context(),
 			`SELECT EXISTS (
 			     SELECT 1 FROM attachment_fee_payments f
-			      WHERE f.attachment_id = $1 AND f.kind = 'recorded'
-			        AND NOT EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id))`,
+			      WHERE f.attachment_id = $1 AND `+paymentstanding.FeeStandsExpr+`)`,
 			attachmentID,
 		).Scan(&alreadyPaid); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -335,8 +338,7 @@ func ReverseHandler() http.Handler {
 		var amountCents int64
 		var alreadyReversed bool
 		err := c.Tx.QueryRowContext(r.Context(),
-			`SELECT f.amount_cents,
-			        EXISTS (SELECT 1 FROM attachment_fee_payments rv WHERE rv.target_id = f.id)
+			`SELECT f.amount_cents, `+paymentstanding.FeeReversedExpr+`
 			   FROM attachment_fee_payments f
 			  WHERE f.id = $1 AND f.attachment_id = $2 AND f.kind = 'recorded'`,
 			paymentID, attachmentID,

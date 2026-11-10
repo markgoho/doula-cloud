@@ -12,6 +12,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
@@ -370,9 +371,9 @@ var practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'paid'), 0),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE ` + overdue.Expr("$2") + `), 0),
 		COUNT(*) FILTER (WHERE ` + overdue.Expr("$2") + `),
-		(SELECT COALESCE(-SUM(p.amount_cents), 0) FROM payments p
-		   JOIN invoices ri ON ri.id = p.invoice_id
-		  WHERE ri.practice_id = $1 AND p.kind = 'refund'),
+		(SELECT ` + paymentstanding.RefundedSumExpr + ` FROM payments pt
+		   JOIN invoices ri ON ri.id = pt.invoice_id
+		  WHERE ri.practice_id = $1 AND ` + paymentstanding.IsRefundExpr + `),
 		(SELECT ` + cardpayments.ClientsCanPayExpr + ` FROM practices WHERE id = $1)
 	FROM invoices i WHERE i.practice_id = $1`
 

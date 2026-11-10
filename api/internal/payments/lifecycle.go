@@ -171,6 +171,21 @@ var TransitionStripeVoided = InvoiceTransition{
 	Rails: stripeRail, By: MovedByStripe,
 }
 
+// TransitionStripeRefunded is credit_note.created and refund.created
+// (#1009): the Practice returned money from her own Stripe account. As
+// TransitionRefund, only a paid Invoice has money to return, and it stays
+// paid. An Invoice that is not paid has no standing Payment
+// (paymentstanding) for the Refund to be recorded against, so the two
+// records already disagree; the event is refused, logged, acknowledged
+// and counted as refused on the Platform's webhook screen for a person to
+// reconcile -- takeStripeMove's rule -- rather than recorded against a
+// Payment the Invoice no longer counts. Before this, the webhook path
+// asked nothing of the Invoice while the Staff path refused it.
+var TransitionStripeRefunded = InvoiceTransition{
+	Name: "money returned on Stripe", From: []invoicestatus.Status{invoicestatus.Paid}, To: invoicestatus.Paid,
+	Rails: stripeRail, By: MovedByStripe,
+}
+
 // TransitionPaymentOnItsWay is payment_intent.processing (#2225): a
 // payment is on its way, which only an open Invoice can have. The status
 // stays open, as Stripe keeps it.
@@ -185,6 +200,7 @@ var InvoiceTransitions = []InvoiceTransition{
 	TransitionFinalize, TransitionAbandonDraft, TransitionRecordPayment, TransitionVoid, TransitionWriteOff,
 	TransitionReversePayment, TransitionRefund, TransitionClientPay,
 	TransitionStripePaid, TransitionStripeUncollectible, TransitionStripeVoided, TransitionPaymentOnItsWay,
+	TransitionStripeRefunded,
 }
 
 // Check reports whether an Invoice at current, raised on rail, may take t
