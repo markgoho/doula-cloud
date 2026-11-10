@@ -12,6 +12,7 @@ import (
 	"database/sql"
 	"encoding/json/v2"
 	"fmt"
+	"slices"
 	"time"
 
 	"doula-cloud/api/internal/activity"
@@ -122,10 +123,8 @@ var Transitions = []Transition{TransitionInvite, TransitionReinvite, TransitionA
 // what the Invitation is and what that stops ("This invitation has been
 // accepted, so you cannot revoke it.").
 func (t Transition) Check(current State) (ok bool, refusal string) {
-	for _, s := range t.Requires {
-		if s == current {
-			return true, ""
-		}
+	if slices.Contains(t.Requires, current) {
+		return true, ""
 	}
 	return false, fmt.Sprintf("%s, so you cannot %s.", stateClause(current), t.Act)
 }

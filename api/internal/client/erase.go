@@ -704,6 +704,15 @@ type UnsettledInvoiceSummary struct {
 	stripeInvoiceID string
 }
 
+// unsettledInvoicesQuery is unsettledInvoiceSummaries' read: every invoice
+// of her Engagements that invoicestatus.UnsettledExpr calls unsettled,
+// oldest first.
+const unsettledInvoicesQuery = `SELECT i.id, i.stripe_invoice_id, i.status, i.amount_cents, i.currency, i.created_at FROM invoices i
+	  JOIN contracts ct ON ct.id = i.contract_id
+	  JOIN engagements e ON e.id = ct.engagement_id
+	 WHERE e.client_id = $1 AND ` + invoicestatus.UnsettledExpr + `
+	 ORDER BY i.created_at`
+
 // unsettledInvoiceSummaries names every invoice of hers that is neither
 // paid, void nor uncollectible. Stripe cannot redact a transaction that
 // is not in a terminal state, and the Practice cannot collect on one
@@ -713,14 +722,7 @@ type UnsettledInvoiceSummary struct {
 // read below, so the fact named ahead of time is exactly the fact the
 // endpoint itself checks.
 func unsettledInvoiceSummaries(ctx context.Context, tx *sql.Tx, clientID string) ([]UnsettledInvoiceSummary, error) {
-	rows, err := tx.QueryContext(ctx,
-		`SELECT i.id, i.stripe_invoice_id, i.status, i.amount_cents, i.currency, i.created_at FROM invoices i
-		  JOIN contracts ct ON ct.id = i.contract_id
-		  JOIN engagements e ON e.id = ct.engagement_id
-		 WHERE e.client_id = $1 AND `+invoicestatus.UnsettledExpr+`
-		 ORDER BY i.created_at`,
-		clientID,
-	)
+	rows, err := tx.QueryContext(ctx, unsettledInvoicesQuery, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("client: list unsettled invoices: %w", err)

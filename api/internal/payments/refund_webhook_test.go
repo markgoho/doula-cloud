@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -130,7 +131,7 @@ func TestConnectWebhook_DashboardCreditNoteIsRecordedAsRefund(t *testing.T) {
 		t.Fatalf("invoice status = %q, want %q", status, invoiceStatusPaid)
 	}
 	diffs := refundActivityDiffs(t, f.db, f.engagementID)
-	if len(diffs) != 1 || diffs[0]["_actorKind"] != "system" || diffs[0]["origin"] != "stripe_dashboard" {
+	if len(diffs) != 1 || diffs[0]["_actorKind"] != string(activity.ActorSystem) || diffs[0]["origin"] != activity.OriginStripeDashboard {
 		t.Fatalf("activity = %v, want one system entry with origin stripe_dashboard", diffs)
 	}
 }

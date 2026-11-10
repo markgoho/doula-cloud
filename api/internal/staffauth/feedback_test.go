@@ -165,7 +165,7 @@ func TestFeedback_QueuesTheIssueOutboxRow(t *testing.T) {
 	out := e.sendFeedback(`{"kind":"idea_or_request"}`)
 
 	status := testdb.Scalar[string](t, e.DB.Admin, `SELECT status::text FROM feedback_issue_outbox WHERE feedback_id = $1`, out.ID)
-	if status != "pending" {
+	if status != statusPending {
 		t.Errorf("outbox status = %q, want pending", status)
 	}
 }

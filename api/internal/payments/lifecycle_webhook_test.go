@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/testdb"
 	"doula-cloud/api/internal/webhookarrival"
 )
@@ -98,7 +99,7 @@ func TestPostConnectWebhookHandler_VoidedVoidsAnOpenInvoice(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("invoice_voided rows = %d, want 1 after a replay", len(got))
 	}
-	if got[0].actorKind != "system" || got[0].diff["origin"] != "stripe_dashboard" {
+	if got[0].actorKind != string(activity.ActorSystem) || got[0].diff["origin"] != activity.OriginStripeDashboard {
 		t.Fatalf("row = %+v, want DoulaCloud's, from the Stripe Dashboard", got[0])
 	}
 }

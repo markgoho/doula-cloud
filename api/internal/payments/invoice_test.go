@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
@@ -539,7 +540,7 @@ func TestPostInvoiceHandler_StripeFailureLeavesTheRightRows(t *testing.T) {
 				t.Fatalf("persisted invoice status = %q, want %q", status, tc.wantStatus)
 			}
 			notSent := activityRows(t, e.DB, "invoice_not_sent", engagementID)
-			if len(notSent) != 1 || notSent[0].actorKind != "system" {
+			if len(notSent) != 1 || notSent[0].actorKind != string(activity.ActorSystem) {
 				t.Fatalf("invoice_not_sent rows = %+v, want one by DoulaCloud", notSent)
 			}
 		})

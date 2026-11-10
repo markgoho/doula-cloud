@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -91,12 +92,7 @@ func (t Transition) FromStates() []string {
 
 // Allows reports whether a row in stored state s may make this move.
 func (t Transition) Allows(s State) bool {
-	for _, from := range t.From {
-		if from == s {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(t.From, s)
 }
 
 // Access is what a Staff-facing read says about one Client's portal
@@ -168,6 +164,8 @@ func (a *Access) CanReachPortal() bool {
 		return true
 	case StateInvited:
 		return a.Delivery != "bounced" && a.Delivery != "dead_lettered"
+	case StateRefused, StateRevoked, StateUnlinked, StateExpired:
+		// No live invitation she can accept, and no login: she cannot.
 	}
 	return false
 }

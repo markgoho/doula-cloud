@@ -13,6 +13,7 @@ import (
 
 	"github.com/stripe/stripe-go/v86"
 
+	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/stripemode"
@@ -1131,10 +1132,10 @@ func TestPostConnectWebhookHandler_MarkedUncollectibleWritesOffAnOpenInvoice(t *
 	if len(got) != 1 {
 		t.Fatalf("invoice_written_off rows = %d, want 1 after a replay", len(got))
 	}
-	if got[0].actorKind != "system" {
+	if got[0].actorKind != string(activity.ActorSystem) {
 		t.Fatalf("actor_kind = %q, want system -- no Staff member of this system wrote it off", got[0].actorKind)
 	}
-	if got[0].diff["origin"] != "stripe_dashboard" {
+	if got[0].diff["origin"] != activity.OriginStripeDashboard {
 		t.Fatalf("diff = %v, want origin stripe_dashboard", got[0].diff)
 	}
 }

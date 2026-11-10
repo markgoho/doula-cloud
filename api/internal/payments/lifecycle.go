@@ -225,10 +225,9 @@ func refusalOr(declared, fallback string) string {
 // already, with the refusal it writes. lifecycle_test.go holds this as
 // the only "UPDATE invoices SET status" outside tests.
 func moveInvoice(ctx context.Context, tx *sql.Tx, invoiceID string, t InvoiceTransition, set string, args ...any) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE invoices SET status = $2`+set+` WHERE id = $1`,
-		append([]any{invoiceID, string(t.To)}, args...)...,
-	); err != nil {
+	//nolint:gosec // set is a fixed fragment written by this package's own callers, never request text; every value rides args as a bind parameter
+	query := `UPDATE invoices SET status = $2` + set + ` WHERE id = $1`
+	if _, err := tx.ExecContext(ctx, query, append([]any{invoiceID, string(t.To)}, args...)...); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("payments: %s: %w", t.Name, err)
 	}

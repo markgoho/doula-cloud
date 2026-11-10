@@ -110,7 +110,7 @@ func TestDerive(t *testing.T) {
 	now := time.Date(2026, 11, 10, 12, 0, 0, 0, time.UTC)
 	stored := func(s portalinvite.State) sql.NullString { return sql.NullString{String: string(s), Valid: true} }
 	at := func(d time.Duration) sql.NullTime { return sql.NullTime{Time: now.Add(d), Valid: true} }
-	sent := sql.NullString{String: "sent", Valid: true}
+	sent := sql.NullString{String: testOutboxStatusSent, Valid: true}
 
 	if got := portalinvite.Derive(sql.NullString{}, sql.NullTime{}, sql.NullString{}, now); got != nil {
 		t.Fatalf("Derive(no row) = %+v, want nil", got)
@@ -122,7 +122,7 @@ func TestDerive(t *testing.T) {
 		want     portalinvite.State
 		delivery string
 	}{
-		{"a live invitation", portalinvite.StateInvited, at(time.Hour), portalinvite.StateInvited, "sent"},
+		{"a live invitation", portalinvite.StateInvited, at(time.Hour), portalinvite.StateInvited, testOutboxStatusSent},
 		{"an invitation at its expiry", portalinvite.StateInvited, at(0), portalinvite.StateExpired, ""},
 		{"an invitation past its expiry", portalinvite.StateInvited, at(-time.Hour), portalinvite.StateExpired, ""},
 		{"a refused invitation past its expiry", portalinvite.StateRefused, at(-time.Hour), portalinvite.StateRefused, ""},
@@ -147,7 +147,7 @@ func TestAccess_Fields(t *testing.T) {
 	if s, d := (&portalinvite.Access{State: portalinvite.StateAccepted}).Fields(); s == nil || *s != portalinvite.StateAccepted || d != nil {
 		t.Fatalf("accepted fields = %v, %v, want accepted, nil", s, d)
 	}
-	if s, d := (&portalinvite.Access{State: portalinvite.StateInvited, Delivery: "bounced"}).Fields(); s == nil || *s != portalinvite.StateInvited || d == nil || *d != "bounced" {
+	if s, d := (&portalinvite.Access{State: portalinvite.StateInvited, Delivery: statusBounced}).Fields(); s == nil || *s != portalinvite.StateInvited || d == nil || *d != statusBounced {
 		t.Fatalf("invited fields = %v, %v, want invited, bounced", s, d)
 	}
 }
@@ -166,10 +166,10 @@ func TestAccess_CanReachPortal(t *testing.T) {
 	}{
 		{portalinvite.Access{State: portalinvite.StateAccepted}, true},
 		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: "pending"}, true},
-		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: "sent"}, true},
+		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: testOutboxStatusSent}, true},
 		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: "complained"}, true},
 		{portalinvite.Access{State: portalinvite.StateInvited}, true},
-		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: "bounced"}, false},
+		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: statusBounced}, false},
 		{portalinvite.Access{State: portalinvite.StateInvited, Delivery: "dead_lettered"}, false},
 		{portalinvite.Access{State: portalinvite.StateExpired}, false},
 		{portalinvite.Access{State: portalinvite.StateRefused}, false},

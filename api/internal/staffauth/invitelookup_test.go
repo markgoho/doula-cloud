@@ -87,7 +87,7 @@ func TestLookupInvitation_Refusals(t *testing.T) {
 	}{
 		{"no token", "  ", http.StatusBadRequest, apierr.CodeInvalidArgument},
 		{"unknown", "no-such-token", http.StatusNotFound, apierr.CodeLinkUnusable},
-		{"revoked", revoked, http.StatusNotFound, apierr.CodeLinkUnusable},
+		{statusRevoked, revoked, http.StatusNotFound, apierr.CodeLinkUnusable},
 		{"expired", expired, http.StatusGone, apierr.CodeLinkUnusable},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

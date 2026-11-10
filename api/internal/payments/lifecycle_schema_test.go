@@ -61,9 +61,9 @@ func TestInvoicesRefuseWhatNoMoveLeaves(t *testing.T) {
 		processing any
 		constraint string
 	}{
-		{"paid with no paid_at", "in_ck_paid", "paid", nil, nil, "invoices_paid_at_only_while_paid"},
+		{"paid with no paid_at", "in_ck_paid", invoiceStatusPaid, nil, nil, "invoices_paid_at_only_while_paid"},
 		{"open with a paid_at", "in_ck_open", "open", time.Now(), nil, "invoices_paid_at_only_while_paid"},
-		{"a payment on its way on a void Invoice", "in_ck_void", "void", nil, time.Now(), "invoices_processing_only_while_open"},
+		{"a payment on its way on a void Invoice", "in_ck_void", invoiceStatusVoid, nil, time.Now(), "invoices_processing_only_while_open"},
 		{"a payment on its way on a by-hand Invoice", nil, "open", nil, time.Now(), "invoices_processing_only_on_stripe"},
 		{"a by-hand draft", nil, "draft", nil, nil, "invoices_draft_only_on_stripe"},
 	}

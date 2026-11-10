@@ -228,7 +228,7 @@ func MintInvitation(ctx context.Context, tx *sql.Tx, practiceID, invitedBy, addr
 		ExpiresAt:      expiresAt,
 	}); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return "", "", time.Time{}, false, err
+		return "", "", time.Time{}, false, fmt.Errorf("staffauth: record invitation: %w", err)
 	}
 	return invitationID, token, expiresAt, rotated, nil
 }

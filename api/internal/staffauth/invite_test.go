@@ -398,7 +398,7 @@ func TestRevokeInvitationHandler_Success(t *testing.T) {
 	).Scan(&status, &revokedBy, &revokedAt); err != nil {
 		t.Fatalf("read revoked invitation: %v", err)
 	}
-	if status != "revoked" || revokedBy != ownerID || revokedAt.IsZero() {
+	if status != statusRevoked || revokedBy != ownerID || revokedAt.IsZero() {
 		t.Fatalf("revoked row = %q/%q/%v, want the actor and moment recorded", status, revokedBy, revokedAt)
 	}
 
@@ -484,7 +484,7 @@ func TestRevokeInvitationHandler_WithdrawsALapsedInvitation(t *testing.T) {
 	defer resp.Body.Close()
 	reqtest.RequireStatus(t, resp, http.StatusNoContent)
 
-	if status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID); status != "revoked" {
+	if status := testdb.Scalar[string](t, db.Admin, `SELECT status::text FROM practice_invitations WHERE id = $1`, invitationID); status != statusRevoked {
 		t.Fatalf("status = %q, want revoked", status)
 	}
 }

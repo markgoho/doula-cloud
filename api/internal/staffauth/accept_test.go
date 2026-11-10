@@ -176,7 +176,7 @@ func TestAcceptInviteHandler_CreatesStaffAndMembership(t *testing.T) {
 	).Scan(&status, &acceptedStaffID, &acceptedAt); err != nil {
 		t.Fatalf("read invitation: %v", err)
 	}
-	if status != "accepted" || acceptedStaffID != accepted.StaffID || acceptedAt.IsZero() {
+	if status != statusAccepted || acceptedStaffID != accepted.StaffID || acceptedAt.IsZero() {
 		t.Fatalf("invitation = %q/%q/%v, want acceptance recorded", status, acceptedStaffID, acceptedAt)
 	}
 
@@ -265,14 +265,14 @@ func TestAcceptInviteHandler_Refuses(t *testing.T) {
 		{name: "the wrong address", email: "someone.else@example.com", expiresIn: time.Hour, want: http.StatusForbidden},
 		{name: "no verified address", expiresIn: time.Hour, want: http.StatusForbidden},
 		{name: "an Invitation that lapsed", email: invited, expiresIn: -time.Hour,
-			want: http.StatusGone, code: apierr.CodeLinkUnusable, wantStatus: "pending"},
+			want: http.StatusGone, code: apierr.CodeLinkUnusable, wantStatus: statusPending},
 		{name: "a token nobody holds", email: invited, unknown: true, want: http.StatusNotFound, code: apierr.CodeLinkUnusable},
 		{name: "a revoked Invitation", email: invited, expiresIn: time.Hour,
 			settle: `UPDATE practice_invitations SET status = 'revoked', revoked_by = $2, revoked_at = now() WHERE id = $1`,
-			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: "revoked"},
+			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: statusRevoked},
 		{name: "an accepted Invitation", email: invited, expiresIn: time.Hour,
 			settle: `UPDATE practice_invitations SET status = 'accepted', accepted_staff_id = $2, accepted_at = now() WHERE id = $1`,
-			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: "accepted"},
+			want:   http.StatusNotFound, code: apierr.CodeLinkUnusable, wantStatus: statusAccepted},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -348,7 +348,7 @@ func TestAcceptInviteHandler_LosesToAWithdrawalThatCommitsFirst(t *testing.T) {
 	).Scan(&rowStatus, &acceptedStaffID); err != nil {
 		t.Fatalf("read invitation: %v", err)
 	}
-	if rowStatus != "revoked" || acceptedStaffID != nil {
+	if rowStatus != statusRevoked || acceptedStaffID != nil {
 		t.Fatalf("invitation = %q accepted by %v, want it left revoked", rowStatus, acceptedStaffID)
 	}
 	members := testdb.Scalar[int](t, e.DB.Admin, `SELECT count(*) FROM staff WHERE lower(email) = 'racer@example.com'`)

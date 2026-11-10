@@ -1,6 +1,7 @@
 package staffinvitation_test
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -130,11 +131,10 @@ func TestEveryInvitationWriterNamesItsTransition(t *testing.T) {
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		// #nosec G304 -- path comes from walking this module's own internal/ directory
-		src, err := os.ReadFile(path)
+		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this module's own internal/ directory, never from input
 		if err != nil {
 			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return err
+			return fmt.Errorf("read %s: %w", path, err)
 		}
 		text := string(src)
 		if _, ok := judges[path]; ok {

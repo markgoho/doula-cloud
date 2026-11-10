@@ -55,7 +55,7 @@ func TestClientGetPayment_RefusesWhatCannotBePaid(t *testing.T) {
 		status int
 		text   string
 	}{
-		"paid":                     {paid, http.StatusConflict, textNotWaiting},
+		invoiceStatusPaid:          {paid, http.StatusConflict, textNotWaiting},
 		invoiceStatusVoid:          {voided, http.StatusConflict, textNotWaiting},
 		invoiceStatusUncollectible: {written, http.StatusConflict, textNotWaiting},
 		"by hand":                  {byHand, http.StatusConflict, "Your Practice collects this Invoice directly."},

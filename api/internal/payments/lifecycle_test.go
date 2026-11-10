@@ -1,6 +1,7 @@
 package payments_test
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -24,6 +25,12 @@ type declaredMove struct {
 	by      payments.Mover
 }
 
+// The two route files that make more than one declared move.
+const (
+	manualPaymentFile = "manual_payment.go"
+	webhookFile       = "webhook.go"
+)
+
 var (
 	stripeOnly = []payments.BillingMode{payments.BillingModeStripe}
 	byHandOnly = []payments.BillingMode{payments.BillingModeByHand}
@@ -38,25 +45,25 @@ var declaredMoves = map[string]declaredMove{
 		[]invoicestatus.Status{invoicestatus.Draft}, invoicestatus.Open, stripeOnly, payments.MovedByStaff},
 	"abandon a draft Stripe would not finalize": {"TransitionAbandonDraft", "invoice.go",
 		[]invoicestatus.Status{invoicestatus.Draft}, invoicestatus.Void, stripeOnly, payments.MovedByStaff},
-	"record a payment": {"TransitionRecordPayment", "manual_payment.go",
+	"record a payment": {"TransitionRecordPayment", manualPaymentFile,
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Paid, bothRails, payments.MovedByStaff},
-	"void": {"TransitionVoid", "manual_payment.go",
+	"void": {"TransitionVoid", manualPaymentFile,
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Void, byHandOnly, payments.MovedByStaff},
-	"write off": {"TransitionWriteOff", "manual_payment.go",
+	"write off": {"TransitionWriteOff", manualPaymentFile,
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Uncollectible, byHandOnly, payments.MovedByStaff},
-	"reverse a payment": {"TransitionReversePayment", "manual_payment.go",
+	"reverse a payment": {"TransitionReversePayment", manualPaymentFile,
 		[]invoicestatus.Status{invoicestatus.Paid}, invoicestatus.Open, byHandOnly, payments.MovedByStaff},
 	"refund a payment": {"TransitionRefund", "refund_payment.go",
 		[]invoicestatus.Status{invoicestatus.Paid}, invoicestatus.Paid, bothRails, payments.MovedByStaff},
 	"pay in the portal": {"TransitionClientPay", "client_pay.go",
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Open, stripeOnly, payments.MovedByClient},
-	"invoice.paid": {"TransitionStripePaid", "webhook.go",
+	"invoice.paid": {"TransitionStripePaid", webhookFile,
 		[]invoicestatus.Status{invoicestatus.Draft, invoicestatus.Open, invoicestatus.Uncollectible}, invoicestatus.Paid, stripeOnly, payments.MovedByStripe},
-	"invoice.marked_uncollectible": {"TransitionStripeUncollectible", "webhook.go",
+	"invoice.marked_uncollectible": {"TransitionStripeUncollectible", webhookFile,
 		[]invoicestatus.Status{invoicestatus.Draft, invoicestatus.Open}, invoicestatus.Uncollectible, stripeOnly, payments.MovedByStripe},
-	"invoice.voided": {"TransitionStripeVoided", "webhook.go",
+	"invoice.voided": {"TransitionStripeVoided", webhookFile,
 		[]invoicestatus.Status{invoicestatus.Draft, invoicestatus.Open, invoicestatus.Uncollectible}, invoicestatus.Void, stripeOnly, payments.MovedByStripe},
-	"payment_intent.processing": {"TransitionPaymentOnItsWay", "webhook.go",
+	"payment_intent.processing": {"TransitionPaymentOnItsWay", webhookFile,
 		[]invoicestatus.Status{invoicestatus.Open}, invoicestatus.Open, stripeOnly, payments.MovedByStripe},
 }
 
@@ -162,11 +169,10 @@ func TestInvoiceMoves_GoThroughTheTable(t *testing.T) {
 		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
 			return nil
 		}
-		// #nosec G304 -- path comes from walking this repo's own api/internal tree
-		src, err := os.ReadFile(path)
+		src, err := os.ReadFile(path) //nolint:gosec // path comes from WalkDir over this repo's own api/internal tree, never from input
 		if err != nil {
 			// coverage:ignore reason: a file WalkDir listed a moment ago
-			return err
+			return fmt.Errorf("read %s: %w", path, err)
 		}
 		if strings.Contains(string(src), writesStatus) {
 			writers = append(writers, filepath.ToSlash(path))
@@ -204,7 +210,7 @@ func TestInvoiceMoves_GoThroughTheTable(t *testing.T) {
 			t.Errorf("%s moves an Invoice but never asks a Transition's Check", name)
 		}
 	}
-	if !strings.Contains(read("webhook.go"), "t.Check(current, BillingModeStripe)") {
+	if !strings.Contains(read(webhookFile), "t.Check(current, BillingModeStripe)") {
 		t.Error("webhook.go's takeStripeMove no longer asks the Transition's Check")
 	}
 	for name, move := range declaredMoves {

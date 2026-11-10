@@ -186,6 +186,9 @@ func portalRefusal(access *portalinvite.Access) string {
 		return msgPortalInviteWithdrawn
 	case portalinvite.StateUnlinked:
 		return msgPortalAccessRemoved
+	case portalinvite.StateInvited, portalinvite.StateAccepted:
+		// An invitation she has not lost: the send was refused because it
+		// never arrived, which the sentence below says.
 	}
 	return msgPortalInviteNotDelivered
 }
