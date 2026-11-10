@@ -255,7 +255,7 @@ func TestWorker_FinalizeDoesNotDoubleEraseAnAlreadyErasedClient(t *testing.T) {
 	practiceID, _ := newOwnedPractice(t, db, "owner-finalize-already-erased")
 	markPendingDeletion(t, db, practiceID, time.Now())
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO clients (practice_id, given_name, erased_at) VALUES ($1, 'Erased Client', now())`, practiceID,
+		`INSERT INTO clients (practice_id, given_name, erased_at, erased_by_kind) VALUES ($1, 'Erased Client', now(), 'system')`, practiceID,
 	); err != nil {
 		t.Fatalf("seed already-erased client: %v", err)
 	}

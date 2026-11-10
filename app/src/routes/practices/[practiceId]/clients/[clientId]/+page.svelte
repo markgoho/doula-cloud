@@ -19,6 +19,7 @@
 		type ResolvedField
 	} from '#lib/clientDetail.js';
 	import { canAddDetails, fieldSectionIndexes } from '#lib/clientDetailsJourney.js';
+	import { isLive } from '#lib/clientStanding.js';
 	import { sectionSlug } from '#lib/intakeJourney.js';
 	import type { SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import { kindLabel, withdrawRequest } from '#lib/engagementRequest.js';
@@ -143,9 +144,9 @@
 
 	// The record's last section, and the one guard `eraseSection` relies on
 	// (#1711): Owner-only, absent until the eligibility read answers, and
-	// absent on a record already erased.
+	// absent on a record that is not live (clientStanding.js).
 	const eraseSections = $derived(
-		isOwner && eligibility && !detail?.erasedAt ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : []
+		isOwner && eligibility && isLive(detail) ? [{ heading: `Erase ${name}'s data`, content: eraseSection }] : []
 	);
 
 	/*
@@ -425,8 +426,8 @@
 		}
 		// Already-erased is unconditional and needs no precheck of its own
 		// -- there is nothing left to settle, and the control never renders
-		// once detail.erasedAt is set regardless of what this read answers.
-		if (isOwner && !detail?.erasedAt) {
+		// once the record is not live, regardless of what this read answers.
+		if (isOwner && isLive(detail)) {
 			void loadEligibility();
 		}
 	});

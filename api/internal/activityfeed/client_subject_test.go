@@ -73,7 +73,7 @@ func TestPracticeHandler_TellsTwoClientsWithOneFirstNameApart(t *testing.T) {
 	}
 	// The columns redactRecord empties, as it empties them.
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`UPDATE clients SET given_name = $2, family_name = NULL, preferred_name = NULL, erased_at = now() WHERE id = $1`,
+		`UPDATE clients SET given_name = $2, family_name = NULL, preferred_name = NULL, erased_at = now(), erased_by_kind = 'system' WHERE id = $1`,
 		erasedID, client.ErasedGivenName); err != nil {
 		t.Fatalf("redact: %v", err)
 	}

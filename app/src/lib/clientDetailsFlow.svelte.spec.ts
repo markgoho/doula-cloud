@@ -4,6 +4,7 @@ import { jsonResponse } from './testResponse.js';
 
 const onFile = {
 	id: 'client-1',
+	standing: 'live',
 	givenName: 'Anne-Marie',
 	familyName: 'Ochieng',
 	preferredName: '',
@@ -88,7 +89,7 @@ describe('ClientDetailsFlow', () => {
 	it('opens no draft for a merged record', async () => {
 		const flow = new ClientDetailsFlow();
 
-		await flow.load(fetcherFor({ id: 'client-1', mergedInto: 'client-2' }), 'p1', 'client-1');
+		await flow.load(fetcherFor({ id: 'client-1', standing: 'merged', mergedInto: 'client-2' }), 'p1', 'client-1');
 
 		expect(flow.read.isLoaded).toBe(true);
 		expect(flow.record?.mergedInto).toBe('client-2');

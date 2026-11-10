@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
@@ -77,34 +78,13 @@ func EditHandler() http.Handler {
 			return
 		}
 
-		// An erased Client is not editable (ADR-0027). Her key is gone,
-		// so recordEvent could not seal the edit's diff anyway -- but the
-		// refusal is here, at the top and in words, rather than being
-		// left to surface as a sealing failure further down.
-		erased, err := isErased(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if erased {
-			apierr.WriteError(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
-			return
-		}
-
-		// A tombstoned row is not editable either (ADR-0017's amendment).
-		// clients_update's own USING clause (00080) would silently match
-		// zero rows on the UPDATE below rather than error -- this refusal
-		// is what turns that into an honest response instead of a 200
-		// that wrote nothing.
-		mergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if mergedInto != nil {
-			apierr.WriteError(w, "this client record has been merged into another and cannot be edited", http.StatusConflict)
+		// Only a live record is editable. An erased one (ADR-0027) has no
+		// key, so recordEvent could not seal the edit's diff anyway, and a
+		// tombstone (ADR-0017's amendment) is refused by clients_update's
+		// USING clause (00171), which would match zero rows on the UPDATE
+		// below rather than error. The refusal is here, at the top and in
+		// words, rather than a sealing failure or a 200 that wrote nothing.
+		if !clientstanding.ActEdit.Require(w, r, c.Tx, c.ClientID) {
 			return
 		}
 

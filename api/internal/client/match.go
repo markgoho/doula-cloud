@@ -73,7 +73,7 @@ func FindMatches(ctx context.Context, tx *sql.Tx, practiceID, givenName, familyN
 		`SELECT `+recordColumns+`, created_at
 		 FROM clients
 		 WHERE practice_id = $1
-		   AND merged_into IS NULL
+		   AND standing IN ('live', 'erased')
 		   AND (NULLIF($7, '') IS NULL OR id <> NULLIF($7, '')::uuid)
 		   AND (
 		       ($2 <> '' AND (given_name ILIKE '%' || $2 || '%' OR family_name ILIKE '%' || $2 || '%' OR preferred_name ILIKE '%' || $2 || '%'))

@@ -8,6 +8,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { ClientStanding } from './clientStanding.js';
 import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -134,6 +135,10 @@ export interface ClientDetail extends ClientRecord {
 	resolvedFields: ResolvedField[];
 	engagements: EngagementSummary[];
 	history: HistoryEntry[];
+	/** The record's one named standing -- mirrors clientstanding.Standing.
+	 * What a screen asks (through `clientStanding.ts`) to decide whether
+	 * the record can take a write; present on every response. */
+	standing: ClientStanding;
 	/** When this Client's data was erased on her own request (ADR-0027),
 	 * absent for every Client who has not asked. A screen reads it to
 	 * explain why her record shows a placeholder instead of a name, and

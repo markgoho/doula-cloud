@@ -24,6 +24,7 @@
 import type { ClientEditFields } from './client.js';
 import type { ClientDetail, ClientRecord, ResolvedField } from './clientDetail.js';
 import { firstName } from './personName.js';
+import { isLive } from './clientStanding.js';
 import type { FieldValue, IntakeAnswers } from './intakeDraft.svelte.js';
 import { DETAILS_STEPS, type TextColumn } from './intakeJourney.js';
 
@@ -181,9 +182,10 @@ export function fieldSectionIndexes(fields: readonly ResolvedField[]): Map<strin
 	return indexes;
 }
 
-/** Whether the journey can be offered at all. An erased record has no
- * key to seal an edit under (ADR-0027), and a merged one is a tombstone
- * (ADR-0040); `edit.go` refuses both, so neither shows the link. */
+/** Whether the journey can be offered at all: only to a live record. An
+ * erased record has no key to seal an edit under (ADR-0027), and a merged
+ * one is a tombstone (ADR-0040); `edit.go` refuses both, so neither shows
+ * the link. */
 export function canAddDetails(record: ClientDetail): boolean {
-	return record.erasedAt === undefined && record.mergedInto === undefined;
+	return isLive(record);
 }

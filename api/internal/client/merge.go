@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
@@ -70,28 +71,11 @@ func MergeHandler() http.Handler {
 		if !ok {
 			return
 		}
-		sourceErased, err := isErased(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if sourceErased {
-			apierr.WriteError(w, "this client's data has been erased and cannot be edited", http.StatusConflict)
-			return
-		}
-		sourceMergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if sourceMergedInto != nil {
-			// The retry-safety case the route's idempotency exemption
-			// names: a second merge of the same source 409s here rather
-			// than setMergedInto's UPDATE silently matching zero rows
-			// under clients_update's USING clause.
-			apierr.WriteError(w, "this client record has already been merged into another", http.StatusConflict)
+		// A tombstone here is the retry-safety case the route's
+		// idempotency exemption names: a second merge of the same source
+		// 409s rather than setMergedInto's UPDATE silently matching zero
+		// rows under clients_update's USING clause.
+		if !clientstanding.ActMerge.Require(w, r, c.Tx, c.ClientID) {
 			return
 		}
 
@@ -119,24 +103,9 @@ func MergeHandler() http.Handler {
 		if !ok {
 			return
 		}
-		otherMergedInto, err := readMergedInto(r.Context(), c.Tx, otherClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if otherMergedInto != nil {
-			apierr.WriteError(w, "that client record has already been merged into another", http.StatusConflict)
-			return
-		}
-		otherErased, err := isErased(r.Context(), c.Tx, otherClientID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if otherErased {
-			apierr.WriteError(w, "an erased client cannot be a merge target", http.StatusConflict)
+		// Never a chain and never into an erased record (ADR-0017's
+		// amendment): the other record must be live too.
+		if !clientstanding.ActMergeInto.Require(w, r, c.Tx, otherClientID) {
 			return
 		}
 
@@ -354,7 +323,7 @@ func readMergedInto(ctx context.Context, tx *sql.Tx, clientID string) (*string, 
 // stamps the plaintext audit of the act alongside it -- who did it and
 // when, in columns that outlive the shredding of both data keys
 // (00112). The three are written in one statement because they must be:
-// clients_update's USING clause (00080) carries merged_into IS NULL, so
+// clients_update's USING clause (00171) admits only a live record, so
 // this is the last write app_runtime will ever make to this row, and
 // clients_merge_is_dated (00112) refuses a tombstone with no date.
 //

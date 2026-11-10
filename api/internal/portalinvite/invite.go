@@ -17,6 +17,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/mailsuppress"
 	"doula-cloud/api/internal/staffauth"
@@ -75,6 +76,12 @@ func InviteHandler(enq tasknudge.Enqueuer) http.Handler {
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		// An erased record has no address and no portal link left
+		// (ADR-0027), so an invitation would be a pending row nobody can
+		// receive.
+		if !clientstanding.ActInviteToPortal.Require(w, r, tx, clientID) {
 			return
 		}
 

@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/pgerr"
@@ -138,6 +139,9 @@ func (a Answers) nonEmpty() Answers {
 // be mounted behind staffauth.Middleware.
 func PostInstanceHandler() http.Handler {
 	return instanceHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, planType string) {
+		if !clientstanding.ActStartPlan.RequireForEngagement(w, r, c.Tx, c.EngagementID) {
+			return
+		}
 		if planType == birthPlanType && refuseBirthPlanStart(w, r, c.Tx, c.EngagementID) {
 			return
 		}

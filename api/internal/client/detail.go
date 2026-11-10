@@ -13,6 +13,7 @@ import (
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientkey"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -110,6 +111,11 @@ type DetailResponse struct {
 	ResolvedFields []ResolvedField     `json:"resolvedFields"`
 	Engagements    []EngagementSummary `json:"engagements"`
 	History        []HistoryEntry      `json:"history"`
+	// Standing is the record's one named standing (clients.standing,
+	// 00171): what a screen reads to decide whether the record can take a
+	// write, rather than testing ErasedAt and MergedInto itself. Present
+	// on every response, the tombstone's included.
+	Standing clientstanding.Standing `json:"standing"`
 	// ErasedAt is when this Client's data was erased on her own request
 	// (ADR-0027), absent for every Client who has not asked. It is what a
 	// screen reads to explain why her record shows a placeholder instead
@@ -158,6 +164,12 @@ func DetailHandler() http.Handler {
 			return
 		}
 
+		standing, err := clientstanding.Of(r.Context(), c.Tx, c.ClientID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests -- the row was already read by requireRecord
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		mergedInto, err := readMergedInto(r.Context(), c.Tx, c.ClientID)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -168,7 +180,7 @@ func DetailHandler() http.Handler {
 			// Absorbed: the screen redirects rather than renders, so
 			// nothing past this point (history, resolved fields, erasure
 			// state) is worth reading.
-			apierr.WriteJSON(w, http.StatusOK, DetailResponse{ID: c.ClientID, MergedInto: mergedInto})
+			apierr.WriteJSON(w, http.StatusOK, DetailResponse{ID: c.ClientID, Standing: standing, MergedInto: mergedInto})
 			return
 		}
 
@@ -224,6 +236,7 @@ func DetailHandler() http.Handler {
 			ResolvedFields:            resolvedFields,
 			Engagements:               engagements,
 			History:                   history,
+			Standing:                  standing,
 			MergedFrom:                mergedFrom,
 			ErasedAt:                  erasedAt,
 			StripeRedactionEligibleAt: redactionEligibleAt,

@@ -11,6 +11,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffinvite"
@@ -92,6 +93,12 @@ func CreateHandler(enq tasknudge.Enqueuer) http.Handler {
 
 		if err := requireOpenEngagement(r.Context(), tx, engagementID); err != nil {
 			writeEngagementErr(w, err)
+			return
+		}
+		// An Offer copies the Client's initial, area and due date to a
+		// Doula, which erasure redacts from every Offer it finds (ADR-0027's
+		// 2026-10-31 amendment); a new one after it would carry them again.
+		if !clientstanding.ActOfferWork.RequireForEngagement(w, r, tx, engagementID) {
 			return
 		}
 

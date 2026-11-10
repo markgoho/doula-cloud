@@ -16,6 +16,7 @@ import Page from './+page.svelte';
 
 export const detail: ClientDetail = {
 	id: 'client-1',
+	standing: 'live',
 	givenName: 'Persephone',
 	familyName: 'Ochieng-Whitfield',
 	preferredName: '',

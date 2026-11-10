@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
@@ -86,6 +87,13 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 	return contractHandler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call, ct contractRow) {
 		if ok, refusal := TransitionSend.Check(Status(ct.Status)); !ok {
 			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+		// Ahead of the portal-invite and merge-field refusals below,
+		// which an erased record would also meet (its link is removed and
+		// its Contracts' merge values are emptied) but for the wrong
+		// reason.
+		if !clientstanding.ActSendContract.RequireForEngagement(w, r, c.Tx, c.EngagementID) {
 			return
 		}
 

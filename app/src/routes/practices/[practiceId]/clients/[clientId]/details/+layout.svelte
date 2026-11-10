@@ -30,6 +30,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { fullName } from '#lib/personName.js';
 	import { clientDetails } from '#lib/clientDetailsFlow.svelte.js';
+	import { isErased, isLive } from '#lib/clientStanding.js';
 	import { intakeFlow } from '#lib/intakeFlow.svelte.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -46,12 +47,12 @@
 	// The journey's two reads as one: the first failure wins, and it is
 	// loaded only once both are.
 	const read = $derived(bothReads(clientDetails.read.state, intakeFlow.read.state));
-	const isErased = $derived(read.status === 'loaded' && Boolean(record?.erasedAt));
+	const isErasedRecord = $derived(read.status === 'loaded' && isErased(record));
 	// The frame, when the journey is not drawn: an erased record is a page
 	// of its own, and a merged one is loaded but on its way to the record
 	// it became, so it is held as loading until that navigation lands.
 	const frame = $derived(
-		isErased
+		isErasedRecord
 			? LOADED_PAGE
 			: pageReadState(read.status === 'loaded' ? { status: 'loading' } : read, 'Loading the questions to ask')
 	);
@@ -92,7 +93,7 @@
 	</stack-l>
 {/snippet}
 
-{#if read.status === 'loaded' && !isErased && !record?.mergedInto}
+{#if read.status === 'loaded' && isLive(record)}
 	{@render children()}
 {:else}
 	<FormPage

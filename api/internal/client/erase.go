@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/authn"
 	"doula-cloud/api/internal/clientkey"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/portalinvite"
@@ -155,13 +156,18 @@ type erasureScope struct {
 func EraseHandler(enq tasknudge.Enqueuer) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		clientID := c.ID("clientId")
-		erasedAt, ok := lookupErasedAt(w, r, c.Tx, clientID, c.PracticeID, true)
-		if !ok {
+		// Already erased is CONFLICT, the gate's own code. A tombstone is
+		// refused too: it is erased only by its survivor's erasure
+		// (eraseAbsorbedRecords), and erasing it on its own would leave
+		// the survivor holding the same woman's details. The gate reads
+		// before the lock because the lock cannot see either: FOR UPDATE
+		// applies clients_update's USING (00171), which admits only a
+		// live record, so on any other it matches no row and would
+		// answer 404.
+		if !clientstanding.ActErase.Require(w, r, c.Tx, clientID) {
 			return
 		}
-		if erasedAt != nil {
-			apierr.Write(w, http.StatusConflict, apierr.CodeConflict,
-				"this client's data has already been erased", nil)
+		if _, ok := lookupErasedAt(w, r, c.Tx, clientID, c.PracticeID, true); !ok {
 			return
 		}
 
@@ -279,7 +285,7 @@ func EraseEligibilityHandler() http.Handler {
 // than a Staff member's own id -- erase.go's caller (EraseHandler) is
 // the only place a request-scoped Staff actor exists.
 func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor activity.Actor, now time.Time) (ErasureResponse, error) {
-	if err := redactRecord(ctx, tx, clientID, now); err != nil {
+	if err := redactRecord(ctx, tx, clientID, actor, now); err != nil {
 		// coverage:ignore reason: every step below fails only on a DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
@@ -373,8 +379,8 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 // accepts it.
 //
 // The work goes through redact_absorbed_client (00112) rather than
-// redactRecord, because clients_update's USING clause (00080) carries
-// merged_into IS NULL: app_runtime cannot write to a tombstone at all.
+// redactRecord, because clients_update's USING clause (00171) admits
+// only a live record: app_runtime cannot write to a tombstone at all.
 // That function is preconditioned on the destination already being
 // erased, which redactRecord has done by the time Erase calls this.
 //
@@ -395,11 +401,13 @@ func eraseAbsorbedRecords(ctx context.Context, tx *sql.Tx, practiceID, survivorI
 		return 0, 0, nil, 0, err
 	}
 	for _, id := range ids {
-		// It takes the record and nothing else. The replacement name and
-		// the timestamp are the function's own, not this caller's: it is
-		// the one door that can write a tombstone at all, so letting a
-		// caller choose either value would be a door onto a write
-		// app_runtime is otherwise forbidden to make.
+		// It takes the record and nothing else. The replacement name is
+		// the function's own and the instant and author are the
+		// survivor's, read from the row redactRecord just wrote (00171),
+		// not this caller's: it is the one door that can write a
+		// tombstone at all, so letting a caller choose any of them would
+		// be a door onto a write app_runtime is otherwise forbidden to
+		// make.
 		if _, err := tx.ExecContext(ctx,
 			`SELECT redact_absorbed_client($1)`, id,
 		); err != nil {
@@ -530,33 +538,34 @@ func eraseIdempotencyKeys(ctx context.Context, tx *sql.Tx, clientID string) (int
 	return n, nil
 }
 
-// isErased reports whether clientID has already been erased -- the gate
-// every other write on a Client reads.
-func isErased(ctx context.Context, tx *sql.Tx, clientID string) (bool, error) {
-	var erasedAt sql.NullTime
-	if err := tx.QueryRowContext(ctx, `SELECT erased_at FROM clients WHERE id = $1`, clientID).Scan(&erasedAt); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- the row was already read by the caller
-		return false, fmt.Errorf("client: read erased_at: %w", err)
-	}
-	return erasedAt.Valid, nil
-}
-
 // redactRecord empties every identifying column on her clients row and
-// stamps erased_at. The row and its id survive untouched, so every
-// record that names her by client_id keeps resolving -- the whole point
-// of redacting in place rather than deleting (ADR-0027).
-func redactRecord(ctx context.Context, tx *sql.Tx, clientID string, now time.Time) error {
-	if _, err := tx.ExecContext(ctx,
-		`UPDATE clients SET
-			given_name = $2, family_name = NULL, preferred_name = NULL, email = NULL, phone = NULL,
-			address_line1 = NULL, address_line2 = NULL, address_locality = NULL,
-			address_region = NULL, address_postal_code = NULL, date_of_birth = NULL,
-			field_values = '{}'::jsonb, erased_at = $3
-		 WHERE id = $1`,
-		clientID, ErasedGivenName, now,
-	); err != nil {
+// stamps erased_at with now and the erasure's author with actor. The row
+// and its id survive untouched, so every record that names her by
+// client_id keeps resolving -- the whole point of redacting in place
+// rather than deleting (ADR-0027).
+//
+// The column list is redact_client_record (00171), the one definition
+// redact_absorbed_client also runs, which copies this row's instant and
+// author onto every record merged into it -- so a survivor and its
+// tombstones read one erasure, under a moved clock as under the real one.
+// The gate the caller consulted is the only reason this cannot match
+// zero rows, so a zero is refused rather than absorbed.
+func redactRecord(ctx context.Context, tx *sql.Tx, clientID string, actor activity.Actor, now time.Time) error {
+	var byStaff sql.NullString
+	if actor.Kind == activity.ActorStaff {
+		byStaff = sql.NullString{String: actor.StaffID, Valid: true}
+	}
+	var redacted int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT redact_client_record($1, $2, $3::activity_actor_kind, $4)`,
+		clientID, now, string(actor.Kind), byStaff,
+	).Scan(&redacted); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("client: redact record: %w", err)
+	}
+	if redacted != 1 {
+		// coverage:ignore reason: Erase's callers have already admitted only a live record of this Practice, so the function always redacts exactly one row
+		return fmt.Errorf("client: redact record: %d rows redacted, want 1", redacted)
 	}
 	return nil
 }

@@ -176,7 +176,7 @@ func TestMergeHandler_AttachedSourceSurvivesAndAbsorbsTheOther(t *testing.T) {
 func TestMergeHandler_Refusals(t *testing.T) {
 	erase := func(e *env, name string) string {
 		id := e.newClient(name)
-		e.Exec(`UPDATE clients SET erased_at = now() WHERE id = $1`, id)
+		e.Exec(`UPDATE clients SET erased_at = now(), erased_by_kind = 'system' WHERE id = $1`, id)
 		return id
 	}
 	for _, tc := range []struct {

@@ -99,7 +99,7 @@ type PracticeSessionResponse struct {
 // queries do; EXISTS stops at the first row. A merged-away record is a
 // pointer to a survivor that is still counted, so excluding it changes
 // nothing but keeps the read the same as the Client list's.
-const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND merged_into IS NULL)`
+const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id = $1 AND standing IN ('live', 'erased'))`
 
 const hasOtherDoulasQuery = `SELECT EXISTS (SELECT 1 FROM practice_memberships WHERE practice_id = $1 AND staff_id <> $2 AND 'doula' = ANY(roles))`
 

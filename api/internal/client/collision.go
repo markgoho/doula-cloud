@@ -34,8 +34,9 @@ type Collision struct {
 // date-of-birth collision between two unrelated names is a coincidence
 // and passes silently (ADR-0017's amendment).
 //
-// A row already merged into another, or already erased, is never a
-// candidate: the former is a tombstone excluded from the collision
+// Only a live record (clients.standing, 00171) is a candidate. A row
+// already merged into another, or already erased, is never one: the
+// former is a tombstone excluded from the collision
 // predicate by name (ADR-0017's amendment); the latter is never offered
 // as a merge target (ADR-0027), and excluding it here means it can never
 // reach that offer at all. excludeClientID, when non-empty, omits that
@@ -57,8 +58,7 @@ func FindCollisions(ctx context.Context, tx *sql.Tx, practiceID, givenName, fami
 		`SELECT `+recordColumns+`, created_at
 		 FROM clients
 		 WHERE practice_id = $1
-		   AND merged_into IS NULL
-		   AND erased_at IS NULL
+		   AND standing = 'live'
 		   AND (NULLIF($7, '') IS NULL OR id <> NULLIF($7, '')::uuid)
 		   AND (
 		       ($2 <> '' AND $3 <> '' AND lower(trim(given_name)) = lower($2) AND lower(trim(coalesce(family_name, ''))) = lower($3))

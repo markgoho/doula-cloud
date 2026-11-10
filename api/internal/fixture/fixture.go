@@ -258,6 +258,32 @@ func Client(t *testing.T, db *testdb.DB, p PracticeRecord, opts ...ClientOption)
 	return c
 }
 
+// EraseClient puts clientID in the erased standing, through the same
+// redact_client_record (00171) an erasure runs, authored by DoulaCloud
+// itself. It reaches nothing beneath the record -- no key, Stripe
+// Customer or portal link -- so it is for a test about what an erased
+// record refuses; a test about the erasure itself runs client.Erase.
+func EraseClient(t *testing.T, db *testdb.DB, clientID string) {
+	t.Helper()
+	var n int
+	must(t, "erase client", db.Admin.QueryRowContext(t.Context(),
+		`SELECT redact_client_record($1, now(), 'system', NULL)`, clientID).Scan(&n))
+	if n != 1 {
+		// coverage:ignore reason: a test helper's own failure path, only reached when the fixture itself is misused
+		t.Fatalf("fixture: erase client %s redacted %d rows, want 1", clientID, n)
+	}
+}
+
+// MergeClient puts absorbedID in the merged standing, a tombstone pointing
+// at survivorID, without moving anything that names it -- for a test
+// about what a tombstone refuses.
+func MergeClient(t *testing.T, db *testdb.DB, absorbedID, survivorID string) {
+	t.Helper()
+	_, err := db.Admin.ExecContext(t.Context(),
+		`UPDATE clients SET merged_into = $2, merged_at = now() WHERE id = $1`, absorbedID, survivorID)
+	must(t, "merge client", err)
+}
+
 // EngagementRecord is a seeded Engagement and the Client it is for.
 type EngagementRecord struct {
 	ID         string

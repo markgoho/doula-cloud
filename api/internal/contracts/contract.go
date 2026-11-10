@@ -14,6 +14,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
@@ -220,6 +221,11 @@ func (v MergeFieldValues) nonEmpty() MergeFieldValues {
 // through idempotency.Router.ExemptGated.
 func PostContractHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		// Before the merge fields are resolved: an erased record's
+		// would render as the placeholder name and nothing else.
+		if !clientstanding.ActCreateContract.RequireForEngagement(w, r, c.Tx, c.EngagementID) {
+			return
+		}
 		prose, ok := requireTemplateProse(w, r, c)
 		if !ok {
 			return

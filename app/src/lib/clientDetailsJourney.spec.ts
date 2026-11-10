@@ -30,6 +30,7 @@ function detail(partial: Partial<ClientDetail> = {}): ClientDetail {
 		resolvedFields: [],
 		engagements: [],
 		history: [],
+		standing: 'live',
 		...partial
 	};
 }
@@ -257,9 +258,9 @@ describe('canAddDetails', () => {
 		expect(canAddDetails(detail())).toBe(true);
 	});
 
-	it.each([
-		['an erased record', { erasedAt: '2026-09-01T00:00:00Z' }],
-		['a merged record', { mergedInto: 'client-2' }]
+	it.each<[string, Partial<ClientDetail>]>([
+		['an erased record', { standing: 'erased', erasedAt: '2026-09-01T00:00:00Z' }],
+		['a merged record', { standing: 'merged', mergedInto: 'client-2' }]
 	])('is false for %s', (_kind, partial) => {
 		expect(canAddDetails(detail(partial))).toBe(false);
 	});

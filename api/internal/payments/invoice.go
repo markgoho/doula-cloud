@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/invoicestatus"
@@ -259,6 +260,12 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 		if billable, refusal := contracts.TransitionBill.Check(contractStatus); !billable {
 			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+		// Stripe mode already refuses an erased record for its missing
+		// email (#430); a by-hand Invoice asks for none, so this is the
+		// only refusal it meets.
+		if !clientstanding.ActCreateInvoice.RequireForEngagement(w, r, tx, engagementID) {
 			return
 		}
 

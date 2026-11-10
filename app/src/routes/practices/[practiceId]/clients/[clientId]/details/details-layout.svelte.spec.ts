@@ -55,7 +55,7 @@ describe('the details layout', () => {
 	});
 
 	it('says why nothing can be added to an erased record', async () => {
-		await setup({ ...record, erasedAt: '2026-09-01T00:00:00Z' });
+		await setup({ ...record, standing: 'erased', erasedAt: '2026-09-01T00:00:00Z' });
 
 		await expect.element(testPage.getByText('no details can be added')).toBeVisible();
 		await expect.element(testPage.getByRole('heading', { level: 1, name: 'Client details' })).toBeVisible();
@@ -66,7 +66,7 @@ describe('the details layout', () => {
 	});
 
 	it('sends a merged record to the record it became', async () => {
-		await setup({ id: clientId, mergedInto: 'client-2' });
+		await setup({ id: clientId, standing: 'merged', mergedInto: 'client-2' });
 
 		await vi.waitFor(() =>
 			expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-2`)

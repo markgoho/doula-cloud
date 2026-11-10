@@ -520,7 +520,7 @@ func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
 		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
 		 FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + `
-		 WHERE c.practice_id = $1 AND c.merged_into IS NULL AND (NOT $2 OR ` + hasWorkExpr + `)
+		 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND (NOT $2 OR ` + hasWorkExpr + `)
 		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
 		   AND ` + narrow
 	args := append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
@@ -560,7 +560,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
 		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
-		     WHERE c.practice_id = $1 AND c.merged_into IS NULL AND ea.staff_id = $2
+		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
 		       AND ea.origin = 'granted' AND ea.ended_at IS NULL
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
 		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)

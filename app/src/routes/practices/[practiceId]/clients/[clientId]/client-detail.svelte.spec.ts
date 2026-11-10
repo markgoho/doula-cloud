@@ -465,6 +465,7 @@ describe('client detail hub', () => {
 	it('says an erased record was erased, and that Stripe is not done yet (ADR-0027)', async () => {
 		await setup({
 			overrides: {
+				standing: 'erased',
 				givenName: 'Erased Client',
 				familyName: '',
 				email: '',
@@ -488,7 +489,7 @@ describe('client detail hub', () => {
 	});
 
 	it('does not claim Stripe is outstanding once the redaction has run', async () => {
-		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+		await setup({ overrides: { standing: 'erased', erasedAt: '2026-03-01T00:00:00Z' } });
 
 		await expect.element(testPage.getByText(/was erased on request/)).toBeVisible();
 		await expect
@@ -753,7 +754,7 @@ describe('client detail hub', () => {
 	});
 
 	it('offers no Change on an erased record', async () => {
-		await setup({ overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+		await setup({ overrides: { standing: 'erased', erasedAt: '2026-03-01T00:00:00Z' } });
 
 		await expect.element(testPage.getByText(/This Client's data was erased on request/)).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Change' })).not.toBeInTheDocument();
@@ -782,7 +783,7 @@ describe('client detail hub', () => {
 	});
 
 	it('redirects to the survivor rather than rendering a tombstoned record (ADR-0017 amendment)', async () => {
-		await setup({ overrides: { mergedInto: 'client-9' } });
+		await setup({ overrides: { standing: 'merged', mergedInto: 'client-9' } });
 
 		await expect.poll(() => goto.mock.calls.length).toBeGreaterThan(0);
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients/client-9`);
@@ -1014,7 +1015,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 	});
 
 	it('runs no precheck for a Client already erased -- there is nothing left to settle', async () => {
-		await setup({ isOwner: true, overrides: { erasedAt: '2026-03-01T00:00:00Z' } });
+		await setup({ isOwner: true, overrides: { standing: 'erased', erasedAt: '2026-03-01T00:00:00Z' } });
 
 		expect(apiFetchWithSession).not.toHaveBeenCalledWith(
 			`/api/practices/${practiceId}/clients/${clientId}/erasure`
@@ -1080,7 +1081,7 @@ describe('erasing a Client (#691, ADR-0027)', () => {
 			return Promise.resolve(
 				jsonResponse(
 					isErased
-						? { ...baseDetail, givenName: 'Erased Client', familyName: '', email: '', erasedAt: '2026-04-01T00:00:00Z', stripeRedactionEligibleAt: '2026-07-01T00:00:00Z' }
+						? { ...baseDetail, standing: 'erased', givenName: 'Erased Client', familyName: '', email: '', erasedAt: '2026-04-01T00:00:00Z', stripeRedactionEligibleAt: '2026-07-01T00:00:00Z' }
 						: baseDetail
 				)
 			);
@@ -1173,7 +1174,7 @@ describe('a Client merged from two records (#813)', () => {
 		// The whole reason merged_at and merged_by_staff_id are plaintext
 		// columns rather than a sealed diff: this is the moment the sealed
 		// answer would be gone and the question would still be asked.
-		await setup({ overrides: { erasedAt: '2026-09-01T00:00:00Z' } });
+		await setup({ overrides: { standing: 'erased', erasedAt: '2026-09-01T00:00:00Z' } });
 
 		await expect
 			.element(testPage.getByText('This Client was combined with another record', { exact: false }))

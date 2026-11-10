@@ -95,6 +95,7 @@ export const clientId = 'client-1';
 
 export const record: ClientDetail = {
 	id: clientId,
+	standing: 'live',
 	givenName: 'Anne-Marie',
 	familyName: 'Ochieng-Whitfield',
 	preferredName: '',
