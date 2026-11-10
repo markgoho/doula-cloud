@@ -78,7 +78,7 @@ type pendingRow struct {
 	inviteToken  sql.NullString
 	accessCode   sql.NullString
 	address      string
-	state        string
+	state        State
 	expiresAt    time.Time
 }
 
@@ -126,7 +126,7 @@ func (w Worker) send(ctx context.Context, tx *sql.Tx, inner outbox.Worker, p pen
 	// Not (still) open, or past its own expires_at -- decided, withdrawn,
 	// or run out, whether or not something has gotten around to flipping
 	// the state column yet -- either way, nothing to deliver.
-	if p.state != stateOffered || !p.expiresAt.After(now) {
+	if !OpenAt(p.state, p.expiresAt, now) {
 		return wrapOutboxErr(inner.MarkSkipped(ctx, tx, p.id, outbox.SkipAlreadyResolved, now))
 	}
 

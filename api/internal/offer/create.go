@@ -240,14 +240,8 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 		return CreateResponse{}, status, apierr.CodeForStatus(status), msg, nil
 	}
 
-	// Anything already open for this target expires on the way past, so a
-	// stale row cannot trip one_open_per_staff and refuse a fresh Offer
-	// nobody would call a duplicate.
-	if err := expireOpen(ctx, tx, byEngagementID, engagementID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
-	}
-	open, err := hasOpenOffer(ctx, tx, engagementID, target)
+	now := clock.Now(ctx)
+	open, err := hasOpenOffer(ctx, tx, engagementID, target, now)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
@@ -255,17 +249,26 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 	if open {
 		return CreateResponse{}, http.StatusConflict, apierr.CodeConflict, "that person already has an open offer on this work", nil
 	}
+	// An Offer to this target that has lapsed is not a duplicate, but its
+	// row still holds the slot in one_open_per_staff until the lapse is
+	// written down, so it is written down before the fresh one goes in.
+	if err := recordLapses(ctx, tx, byEngagementID, engagementID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
+	}
 
-	expiresAt := clock.Now(ctx).Add(Lifetime)
+	// TransitionOffer: the row starts in the column's default, 'offered',
+	// sent and timed on the one clock its lapse is read on.
+	expiresAt := now.Add(Lifetime)
 	var offerID string
 	if err := tx.QueryRowContext(ctx,
 		`INSERT INTO engagement_offers
 		     (engagement_id, staff_id, invitation_id, employment_type, amount_cents, terms,
-		      client_first_initial, client_area, due_date, offered_by, expires_at, access_code_digest)
-		 VALUES ($1, $2, $3, $4::employment_type, $5, $6, $7, $8, $9, $10, $11, $12)
+		      client_first_initial, client_area, due_date, offered_by, offered_at, expires_at, access_code_digest)
+		 VALUES ($1, $2, $3, $4::employment_type, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		 RETURNING id`,
 		engagementID, target.staffID, target.invitationID, target.employmentType, req.AmountCents, f.terms,
-		f.clientFirstInitial, f.clientArea, f.dueDate, actorStaffID, expiresAt, target.accessCodeDigest,
+		f.clientFirstInitial, f.clientArea, f.dueDate, actorStaffID, now, expiresAt, target.accessCodeDigest,
 	).Scan(&offerID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return CreateResponse{}, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError, nil
@@ -312,20 +315,21 @@ func create(ctx context.Context, tx *sql.Tx, practiceID, engagementID, actorStaf
 	return CreateResponse{OfferID: offerID, ExpiresAt: expiresAt.UTC().Format(time.RFC3339)}, http.StatusCreated, "", "", nil
 }
 
-// hasOpenOffer reports whether target already holds an open Offer on
-// engagementID. 00030's two partial unique indexes enforce this, but a
-// constraint violation aborts the transaction rather than producing a
-// 409, so the readable answer is read first -- the same reasoning
-// checkFee gives.
-func hasOpenOffer(ctx context.Context, tx *sql.Tx, engagementID string, target offerTarget) (bool, error) {
+// hasOpenOffer reports whether target already holds an Offer on
+// engagementID that is open at now (offer_open_at). 00030's two partial
+// unique indexes enforce this, but a constraint violation aborts the
+// transaction rather than producing a 409, so the readable answer is read
+// first -- the same reasoning checkFee gives. A lapsed Offer is not open
+// whether or not its lapse has been written down yet.
+func hasOpenOffer(ctx context.Context, tx *sql.Tx, engagementID string, target offerTarget, now time.Time) (bool, error) {
 	var open bool
 	err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS(
 			SELECT 1 FROM engagement_offers
-			WHERE engagement_id = $1 AND state = 'offered'
+			WHERE engagement_id = $1 AND offer_open_at(state, expires_at, $4)
 			  AND (staff_id = $2 OR invitation_id = $3)
 		)`,
-		engagementID, target.staffID, target.invitationID,
+		engagementID, target.staffID, target.invitationID, now,
 	).Scan(&open)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {

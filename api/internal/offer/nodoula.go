@@ -91,7 +91,7 @@ const noDoulaSelect = `SELECT id, engagement_id, kind, given_name, preferred_nam
 	   AND NOT EXISTS (SELECT 1 FROM engagement_attachments ea
 	                    WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
 	   AND NOT EXISTS (SELECT 1 FROM engagement_offers open
-	                    WHERE open.engagement_id = e.id AND open.state = 'offered' AND open.expires_at > $2)
+	                    WHERE open.engagement_id = e.id AND offer_open_at(open.state, open.expires_at, $2))
 	UNION ALL
 	SELECT a.id, e.id, e.kind::text, c.given_name, c.preferred_name, c.family_name,
 	       'taken_off', COALESCE(s.name, ''), a.created_at
@@ -107,7 +107,7 @@ const noDoulaSelect = `SELECT id, engagement_id, kind, given_name, preferred_nam
 	   AND NOT EXISTS (SELECT 1 FROM engagement_attachments ea
 	                    WHERE ea.engagement_id = e.id AND ea.origin = 'granted' AND ea.ended_at IS NULL)
 	   AND NOT EXISTS (SELECT 1 FROM engagement_offers open
-	                    WHERE open.engagement_id = e.id AND open.state = 'offered' AND open.expires_at > $2)
+	                    WHERE open.engagement_id = e.id AND offer_open_at(open.state, open.expires_at, $2))
 ) x
 WHERE ($3::timestamptz IS NULL OR (at, id) < ($3::timestamptz, $4::uuid))
 ORDER BY at DESC, id DESC

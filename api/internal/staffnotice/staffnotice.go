@@ -204,13 +204,14 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 
 // openOffer reports whether the Offer is still open at now, and when it
 // expires. Read through 00041's engagement_offers notification-worker
-// policy.
+// policy. "Open" is offer_open_at (00174), the one definition offer's
+// lifecycle declares; this package cannot import offer, which imports it.
 func openOffer(ctx context.Context, tx *sql.Tx, offerID string, now time.Time) (time.Time, bool, error) {
-	var state string
+	var open bool
 	var expiresAt time.Time
 	err := tx.QueryRowContext(ctx,
-		`SELECT state::text, expires_at FROM engagement_offers WHERE id = $1`, offerID,
-	).Scan(&state, &expiresAt)
+		`SELECT offer_open_at(state, expires_at, $2), expires_at FROM engagement_offers WHERE id = $1`, offerID, now,
+	).Scan(&open, &expiresAt)
 	if err == sql.ErrNoRows {
 		return time.Time{}, false, nil
 	}
@@ -218,7 +219,7 @@ func openOffer(ctx context.Context, tx *sql.Tx, offerID string, now time.Time) (
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return time.Time{}, false, fmt.Errorf("staffnotice: read offer: %w", err)
 	}
-	return expiresAt, state == "offered" && expiresAt.After(now), nil
+	return expiresAt, open, nil
 }
 
 // stillOn reports whether staffID still holds an open, granted

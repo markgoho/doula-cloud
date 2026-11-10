@@ -52,61 +52,38 @@ func newAccessCode() (string, error) {
 	return fmt.Sprintf("%06d", n.Int64()), nil
 }
 
-// expireOpen flips every Offer matching the given engagement/staff/id
-// filter that has run past its own expires_at to 'expired', on the way
-// past. There is no sweep job: acceptInvite (staffauth) set the
-// precedent, and for the same reason -- the person looking at the row is
-// the one who found out it is stale, and every read and decision path in
-// this package calls this first so no path can act on an Offer that has
-// quietly outlived itself.
+// recordLapses writes down every lapse among the Offers whose column
+// equals value (TransitionLapse): each Offer still stored 'offered' whose
+// expires_at has passed on clock.Now(ctx) becomes 'expired', dated at its
+// own expires_at. No reader depends on it -- each derives the state
+// through StateAt or offer_state_at -- so it is there for the writes that
+// need the stored state to be the derived one: before a fresh Offer is
+// sent (00030's one-open-per-target indexes count stored 'offered' rows),
+// and before any move that closes an Engagement's other Offers, so a
+// lapsed Offer is recorded as 'expired' and never as 'withdrawn' or
+// 'superseded'. The lists run it as they read too, so the stored history
+// catches up with what they show.
 //
 // column is one of the three this package filters Offers by, never
 // caller input -- see the named constants below.
-//
-// The instant is clock.Now(ctx), not SQL now() (#1992): expires_at is
-// written from clock.Now(ctx) by create, so the lapse is read on the same
-// clock it was set on, and decided_at records that same instant.
-func expireOpen(ctx context.Context, tx *sql.Tx, column, value string) error {
+func recordLapses(ctx context.Context, tx *sql.Tx, column, value string) error {
 	if _, err := tx.ExecContext(ctx,
-		//nolint:gosec // column is one of three package-local constants, never request input
-		`UPDATE engagement_offers SET state = 'expired', decided_at = $2
-		  WHERE `+column+` = $1 AND state = 'offered' AND expires_at <= $2`,
-		value, clock.Now(ctx),
+		TransitionLapse.update(column+` = $3`, ""),
+		clock.Now(ctx), nil, value,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return fmt.Errorf("offer: expire open offers: %w", err)
+		return fmt.Errorf("offer: record lapsed offers: %w", err)
 	}
 	return nil
 }
 
-// The three columns expireOpen filters by, named so no call site can pass
-// a string that came from a request.
+// The three columns recordLapses filters by, named so no call site can
+// pass a string that came from a request.
 const (
 	byID           = "id"
 	byEngagementID = "engagement_id"
 	byStaffID      = "staff_id"
 )
-
-// The six offer_state values (00030), named so a typo is a compile error
-// rather than a condition that quietly never matches. The database is
-// still the authority on the set; these are how Go refers to it.
-const (
-	stateOffered    = "offered"
-	stateAccepted   = "accepted"
-	stateDeclined   = "declined"
-	stateWithdrawn  = "withdrawn"
-	stateSuperseded = "superseded"
-	stateExpired    = "expired"
-)
-
-// isTerminal reports whether an Offer has stopped being decidable.
-// #230 hangs a rule on this: the Client's own fields stop being served
-// the moment an Offer reaches any terminal state, so a stale link opens
-// a closed Offer rather than a stranger's due date. An accepted Offer on
-// her own inbox keeps only the due month (#2383, lapseClientFields).
-func isTerminal(state string) bool {
-	return state != stateOffered
-}
 
 // lapseClientFields blanks the three fields #230 calls the Client's own
 // -- first initial, general area, exact due date -- leaving the fact of
@@ -123,8 +100,11 @@ func isTerminal(state string) bool {
 // because a Client she worked for is not a stranger. That field is
 // selected by InboxHandler's query alone, so this function, the
 // Practice-side read and the pre-account read are unchanged.
-func lapseClientFields(state string, clientFirstInitial, clientArea, dueDate *string) {
-	if !isTerminal(state) {
+//
+// state is the derived state (StateAt, offer_state_at), so a lapsed
+// Offer the column has not caught up with is lapsed here too.
+func lapseClientFields(state State, clientFirstInitial, clientArea, dueDate *string) {
+	if !state.terminal() {
 		return
 	}
 	*clientFirstInitial = ""

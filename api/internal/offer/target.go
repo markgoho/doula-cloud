@@ -272,7 +272,7 @@ func isOwnAddress(ctx context.Context, tx *sql.Tx, actorStaffID, address string)
 func reissueOpenOffers(ctx context.Context, tx *sql.Tx, invitationID, token string) (int, string) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT id FROM engagement_offers
-		  WHERE invitation_id = $1 AND state = 'offered' AND expires_at > $2`,
+		  WHERE invitation_id = $1 AND offer_open_at(state, expires_at, $2)`,
 		invitationID, clock.Now(ctx),
 	)
 	if err != nil {

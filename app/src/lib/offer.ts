@@ -311,7 +311,12 @@ export function engagementLinkLabel(offer: { dueMonth?: string }): string {
 }
 
 /**
- * Reports whether an Offer is still open and so still decidable.
+ * Reports whether an Offer is still open and so still decidable. It reads
+ * the server's answer and derives nothing: every read serves `state` as
+ * the Offer is at the moment it was read (the API's offer_state_at), so an
+ * Offer past its `expiresAt` already arrives as `'expired'`. Comparing
+ * `expiresAt` with this device's clock here would be a second definition,
+ * on a clock the server does not share.
  */
 export function isOpen(offer: { state: OfferState }): boolean {
 	return offer.state === 'offered';

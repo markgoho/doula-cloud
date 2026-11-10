@@ -9,6 +9,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -28,7 +29,7 @@ func WithdrawHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, actorStaffID, offerID := c.Tx, c.PracticeID, c.StaffID, c.ID("offerId")
 
-		if err := expireOpen(r.Context(), tx, byID, offerID); err != nil {
+		if err := recordLapses(r.Context(), tx, byID, offerID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -36,11 +37,8 @@ func WithdrawHandler() http.Handler {
 
 		var engagementID string
 		err := tx.QueryRowContext(r.Context(),
-			`UPDATE engagement_offers
-			    SET state = 'withdrawn', decided_at = now(), decided_by = $1
-			  WHERE id = $2 AND state = 'offered'
-			 RETURNING engagement_id`,
-			actorStaffID, offerID,
+			TransitionWithdraw.update(`id = $3`, `engagement_id`),
+			clock.Now(r.Context()), actorStaffID, offerID,
 		).Scan(&engagementID)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, "no open offer found at this practice", http.StatusNotFound)
@@ -63,29 +61,33 @@ func WithdrawHandler() http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{OfferID: offerID, State: "withdrawn"})
+		apierr.WriteJSON(w, http.StatusOK, DecisionResponse{OfferID: offerID, State: string(StateWithdrawn)})
 	}, staffauth.PathID("offer", "offerId"))
 }
 
-// CloseOnCompletion is the Engagement-completes half of the lifecycle:
-// every Offer still open on engagementID goes 'withdrawn', and
-// decided_by stays NULL.
+// CloseOnCompletion is the Engagement-completes half of the lifecycle
+// (TransitionCloseOnCompletion): every Offer still open on engagementID
+// goes 'withdrawn', decided_by stays NULL, and decided_by_kind says it
+// was the completion. An Offer that had already lapsed is recorded as
+// expired first, so it is never withdrawn by a cascade that came after
+// it ran out.
 //
-// That NULL is deliberate and ADR-0008 is explicit about it: this is the
-// one terminal state with no human actor at the moment it fires, and a
-// build must not invent a system staff row to avoid the NULL, because
-// that would misrecord a human action that did not happen. The
-// Engagement's own completion, and who completed it, is the audit answer
-// -- it is recorded on the Engagement, not copied onto every Offer the
-// cascade touched.
+// That NULL is deliberate and ADR-0008 is explicit about it: there is no
+// human actor at the moment it fires, and a build must not invent a
+// system staff row to avoid the NULL, because that would misrecord a
+// human action that did not happen. The Engagement's own completion, and
+// who completed it, is the audit answer -- it is recorded on the
+// Engagement, not copied onto every Offer the cascade touched.
 //
 // Called by the Engagement completion handler, in its transaction.
 func CloseOnCompletion(ctx context.Context, tx *sql.Tx, engagementID string) error {
+	if err := recordLapses(ctx, tx, byEngagementID, engagementID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE engagement_offers
-		    SET state = 'withdrawn', decided_at = now(), decided_by = NULL
-		  WHERE engagement_id = $1 AND state = 'offered'`,
-		engagementID,
+		TransitionCloseOnCompletion.update(`engagement_id = $3`, ""),
+		clock.Now(ctx), nil, engagementID,
 	); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("offer: close offers on completion: %w", err)

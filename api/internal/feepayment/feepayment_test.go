@@ -91,9 +91,9 @@ func seedAcceptedOffer(t *testing.T, db *testdb.DB, engagementID, staffID string
 		`WITH accepted AS (
 		     INSERT INTO engagement_offers
 		         (engagement_id, staff_id, employment_type, amount_cents, client_first_initial, client_area,
-		          due_date, state, offered_by, expires_at, decided_at, decided_by)
+		          due_date, state, offered_by, expires_at, decided_at, decided_by, decided_by_kind)
 		     VALUES ($1, $2, 'contractor', $3, 'A', 'North side', '2027-02-14', 'accepted', $2,
-		             now() + interval '7 days', now(), $2))
+		             now() + interval '7 days', now(), $2, 'staff'))
 		 INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by, fee_amount_cents)
 		 VALUES ($1, $2, 'granted', $2, $3) RETURNING id`,
 		engagementID, staffID, cents,
