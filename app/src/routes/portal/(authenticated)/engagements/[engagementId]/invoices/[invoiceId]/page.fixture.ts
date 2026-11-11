@@ -29,6 +29,7 @@ export const invoice: ClientInvoice = {
 	billingMode: 'stripe',
 	createdAt: '2027-02-01T15:00:00Z',
 	raisedOn: '2027-02-01',
+	dueOn: '2027-05-10',
 	refundedCents: 0
 };
 
@@ -60,6 +61,7 @@ export const paidReturnedInvoice: ClientInvoice = {
 	...invoice,
 	status: 'paid',
 	billingMode: 'by_hand',
+	dueOn: undefined,
 	paidOn: '2027-02-04',
 	paidMethod: 'bank_transfer',
 	refundedCents: 25_000

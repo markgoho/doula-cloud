@@ -106,6 +106,21 @@ describe('Client-portal Invoice (#1564)', () => {
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/invoices/invoice-1');
 	});
 
+	it('states the day an unpaid Invoice is due, and nothing about it being late (#2836)', async () => {
+		await setupInvoice();
+
+		await expect.element(page.getByText('May 10, 2027')).toBeVisible();
+		await expect.element(page.getByText('Due', { exact: true })).toBeVisible();
+		expect(document.body.textContent).not.toMatch(/overdue|\blate\b/i);
+	});
+
+	it('states no due day where the server sent none, and says nothing in its place', async () => {
+		await setupInvoice(() => jsonResponse({ ...invoice, dueOn: undefined }));
+
+		await expect.element(page.getByText('Not yet paid')).toBeVisible();
+		expect(page.getByText('Due', { exact: true }).elements()).toHaveLength(0);
+	});
+
 	it('shows the Invoice-number sentence and nothing pay-like on the by-hand rail', async () => {
 		await setupInvoice(asByHand.respond);
 

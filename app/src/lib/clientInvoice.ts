@@ -13,6 +13,7 @@ import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import {
 	clientInvoiceStatusLabel,
+	DUE_LABEL,
 	clientPaymentMethodLabel,
 	paidAndReturnedLabel,
 	PAYMENT_ON_ITS_WAY_LABEL,
@@ -41,6 +42,13 @@ export interface ClientInvoice {
 	the day the Practice's screens print as Raised (#2205).
 	*/
 	raisedOn: string;
+	/**
+	The day an unpaid Invoice is due, `YYYY-MM-DD`, in the Practice's own
+	timezone (#2836). Absent on an Invoice that is not open, and on one
+	raised before a birth outcome was recorded: the server leaves it out,
+	so nothing here decides whether to show it.
+	*/
+	dueOn?: string;
 	/**
 	The day it was paid, `YYYY-MM-DD`, in the Practice's own timezone (#1965).
 	*/
@@ -137,9 +145,10 @@ export function invoiceFacts(invoice: ClientInvoice): { label: string; value: st
 	const facts = [
 		{ label: 'Amount', value: formatMoney(invoice.amountCents, invoice.currency) },
 		{ label: 'Invoice number', value: invoice.reference },
-		{ label: 'Status', value: invoiceStatusText(invoice) },
-		{ label: 'Sent', value: formatCalendarDay(invoice.raisedOn) }
+		{ label: 'Status', value: invoiceStatusText(invoice) }
 	];
+	if (invoice.dueOn) facts.push({ label: DUE_LABEL, value: formatCalendarDay(invoice.dueOn) });
+	facts.push({ label: 'Sent', value: formatCalendarDay(invoice.raisedOn) });
 	if (invoice.paidOn) {
 		facts.push({
 			label: 'Paid',
