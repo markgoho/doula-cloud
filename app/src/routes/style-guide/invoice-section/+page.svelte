@@ -1,3 +1,15 @@
+<script module lang="ts">
+	import type { DemoVariant } from '../drag-surface/dragSurface.js';
+
+	interface Properties {
+		isChangingDefaults?: boolean;
+	}
+
+	export const variants: readonly DemoVariant<Properties>[] = [
+		{ name: 'Invoice section, amount and due day opened', props: { isChangingDefaults: true } }
+	];
+</script>
+
 <script lang="ts">
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import type { ContractorInvoice, Invoice } from '#lib/invoice.js';
@@ -86,6 +98,8 @@
 	// already billed, and the same Contract with nothing left.
 	const billing = { priceCents: 450_000, billedCents: 175_000, unbilledCents: 275_000 };
 	const fullyBilled = { priceCents: 450_000, billedCents: 450_000, unbilledCents: 0 };
+
+	let { isChangingDefaults = false }: Properties = $props();
 
 	const paymentsSettingsHref ='https://example.test/practices/practice-1/settings/payments';
 	// #1280: any real IANA zone does -- this page's own todayIsoDate calls
@@ -368,6 +382,7 @@
 			billingMode={undefined}
 			isAskingBillingMode
 			{billing}
+			{isChangingDefaults}
 			{paymentsSettingsHref}
 			{practiceTimezone}
 			{paymentTermsDays}
@@ -463,8 +478,9 @@
 		/>
 	</section>
 
-	<!-- #2829: a later Invoice on the rail already chosen, with the Contract
-	     part billed -- the amount and the due questions, and nothing else. -->
+	<!-- #2832: a later Invoice on the rail already chosen, with the Contract
+	     part billed -- the amount and the due day stated on one line, and
+	     under Change, the two questions. -->
 	<section>
 		<h2>Owner or Admin: a balance still to bill</h2>
 		<InvoiceSection
@@ -476,6 +492,7 @@
 			isOwnerOrAdmin={true}
 			billingMode="by_hand"
 			{billing}
+			{isChangingDefaults}
 			{paymentsSettingsHref}
 			{practiceTimezone}
 			{paymentTermsDays}

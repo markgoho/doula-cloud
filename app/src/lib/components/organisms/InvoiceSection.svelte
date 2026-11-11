@@ -99,6 +99,7 @@
 		billing,
 		hasUnbilled = true,
 		isAskingBillingMode = $bindable(false),
+		isChangingDefaults = $bindable(false),
 		practiceTimezone,
 		paymentTermsDays,
 		engagementKind,
@@ -161,6 +162,9 @@
 		 * page only once Create Invoice has asked for it. Bindable, as
 		 * OfferSection's isFormOpen, so a demo can draw it open. */
 		isAskingBillingMode?: boolean;
+		/** Whether Change has opened the amount and due questions under the
+		 * line that states them (#2832). Bindable, so a demo can draw it open. */
+		isChangingDefaults?: boolean;
 		paymentsSettingsHref: string;
 		/** The Invoice a link named (#2240): its row takes focus, once,
 		 * when it arrives, so the Invoices list lands on it. */
@@ -236,8 +240,7 @@
 		chosenBillingMode = undefined;
 		billingModeError = '';
 		createError = undefined;
-		resetDueQuestion();
-		resetAmountQuestion();
+		resetDefaults();
 	}
 
 	// #2829: how much of the Contract this Invoice bills. What the Contract
@@ -254,6 +257,20 @@
 	function resetAmountQuestion() {
 		typedAmount = undefined;
 		amountError = '';
+	}
+
+	function resetDefaults() {
+		isChangingDefaults = false;
+		resetAmountQuestion();
+		resetDueQuestion();
+	}
+
+	function toggleDefaults() {
+		if (isChangingDefaults) {
+			resetDefaults();
+		} else {
+			isChangingDefaults = true;
+		}
 	}
 
 	/** The cents the form's amount names, or `undefined` for a contractor,
@@ -320,6 +337,16 @@
 		}
 		return `Week 40 is the due date, ${formatCalendarDay(engagementDueDate!)}.`;
 	});
+	const defaultsRows = $derived([
+		{
+			label: isAskingAmount ? 'Amount and due day' : 'Due day',
+			value: isAskingAmount
+				? `${formatAmount(unbilledCents)}, due ${formatCalendarDay(termsDay)}`
+				: `Due ${formatCalendarDay(termsDay)}`,
+			changes: isAskingAmount ? 'the amount and the due day' : 'the due day',
+			isDetailShown: isChangingDefaults
+		}
+	]);
 	const dueOptions = $derived([
 		{
 			value: 'terms' as const,
@@ -389,11 +416,13 @@
 			return;
 		}
 		if (error_ instanceof RefusalError && error_.details?.amountCents) {
+			isChangingDefaults = true;
 			amountError = error_.details.amountCents;
 			return;
 		}
 		if (error_ instanceof RefusalError && (error_.details?.dueOn || error_.details?.gestationalWeek)) {
 			const refused = error_.details.dueOn ?? error_.details.gestationalWeek!;
+			isChangingDefaults = true;
 			if (dueWay === 'week') {
 				dueWeekError = refused;
 			} else {
@@ -435,7 +464,7 @@
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
 		}
-		const amount = readAmount();
+		const amount = isChangingDefaults ? readAmount() : { ok: true as const };
 		const dueChoice = readDueChoice();
 		if (billingModeError || !amount.ok || !dueChoice.ok) {
 			return;
@@ -457,8 +486,7 @@
 		try {
 			await onCreate(billingMode === undefined ? chosenBillingMode : undefined, dueChoice.due, amount.cents);
 			isAskingBillingMode = false;
-			resetDueQuestion();
-			resetAmountQuestion();
+			resetDefaults();
 			hasCreated = true;
 		} catch (error_) {
 			applyCreateRefusal(error_);
@@ -903,6 +931,18 @@
 	{/if}
 {/snippet}
 
+{#snippet invoiceDefaults()}
+	<SummaryList rows={defaultsRows}>
+		{#snippet action(row, describedBy)}
+			<Button label="Change" variant="link" expanded={row.isDetailShown} {describedBy} onClick={toggleDefaults} />
+		{/snippet}
+		{#snippet detail()}
+			{@render amountQuestion()}
+			{@render dueQuestion()}
+		{/snippet}
+	</SummaryList>
+{/snippet}
+
 {#snippet dueQuestion()}
 	<RadioGroup
 		legend="When is this Invoice due?"
@@ -936,8 +976,7 @@
 			onChange={(value) => (chosenBillingMode = value)}
 			error={billingModeError || undefined}
 		/>
-		{@render amountQuestion()}
-		{@render dueQuestion()}
+		{@render invoiceDefaults()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 		<Button label="Cancel" variant="secondary" onClick={closeBillingModeQuestion} />
 	</StackedForm>
@@ -954,8 +993,7 @@
 		{#if createFormErrors.length > 0}
 			<ErrorSummary errors={createFormErrors} />
 		{/if}
-		{@render amountQuestion()}
-		{@render dueQuestion()}
+		{@render invoiceDefaults()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
 {/if}
