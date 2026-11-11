@@ -15,6 +15,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
 	import {
+		isHomeScreenRequiredForPush,
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
@@ -148,7 +149,10 @@
 		}
 	}
 
+	let isHomeScreenRequired = $state(false);
+
 	onMount(async () => {
+		isHomeScreenRequired = isHomeScreenRequiredForPush();
 		await landingRead.load(readLanding, 'Failed to load your Practice');
 
 		// Fire-and-forget: #61's "once per device after login" push
@@ -287,6 +291,12 @@
 		First in the column (#2571): the notice below it took the whole
 		first screen at 390x844, and at 320x640 its short form still did.
 	-->
+	{#if isHomeScreenRequired}
+		<Notice
+			variant="info"
+			message="To get notifications on this device, add DoulaCloud to your Home Screen: tap Share, then Add to Home Screen. Safari only sends notifications to apps on your Home Screen."
+		/>
+	{/if}
 	{#if isTonightBlockShown(landing!.tonight)}{@render tonightBlock(landing!.tonight)}{/if}
 	<!--
 		#1533: after who is free tonight, before the rest of her work. Only

@@ -44,6 +44,14 @@ DoulaCloud is not a payment service. When a practice invoices a client, the prac
 
 DoulaCloud is in a private pilot with a small number of practices, ahead of a public launch in January 2027.
 
+## Using DoulaCloud on your phone
+
+DoulaCloud has no App Store or Play Store app. It is a web app, and you add it to your phone's Home Screen.
+
+**iPhone and iPad:** open DoulaCloud in Safari, tap Share, then tap Add to Home Screen. On an iPhone, notifications arrive only after you have done this, and only if you open DoulaCloud from the Home Screen.
+
+**Android:** open DoulaCloud in Chrome, tap the menu, then tap Install app or Add to Home screen.
+
 ## What we sell
 
 Practices buy **Credits**. One Credit covers one client engagement — a single client relationship, from intake through the end of care.
