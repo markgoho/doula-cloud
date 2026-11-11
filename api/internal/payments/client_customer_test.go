@@ -43,7 +43,7 @@ func TestPostInvoiceHandler_SecondInvoiceBillsTheSameCustomer(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Doula()), connected())
 	engagementID, _ := e.signedContract()
 
-	first := e.raise(engagementID)
+	first := e.raiseFor(engagementID, 5000)
 	second := e.raise(engagementID)
 	if first.ID == second.ID {
 		t.Fatal("both posts returned the same Invoice, want two")

@@ -5,6 +5,7 @@ import InvoiceSection from './InvoiceSection.svelte';
 import {
 	paymentOnItsWayLine,
 	type BillingMode,
+	type ContractBilling,
 	type ContractorInvoice,
 	type Invoice,
 	type InvoiceDueChoice,
@@ -28,12 +29,14 @@ interface SetupOptions {
 	isOwnerOrAdmin?: boolean;
 	canReadInvoiceMoney?: boolean;
 	contractorInvoices?: ContractorInvoice[];
+	billing?: ContractBilling | 'unset';
+	hasUnbilled?: boolean;
 	practiceTimezone?: string;
 	landOnInvoiceId?: string;
 	paymentTermsDays?: number;
 	engagementKind?: string;
 	engagementDueDate?: string;
-	onCreate?: (billingMode?: BillingMode, due?: InvoiceDueChoice) => Promise<void>;
+	onCreate?: (billingMode?: BillingMode, due?: InvoiceDueChoice, amountCents?: number) => Promise<void>;
 	onRecordPayment?: (
 		invoiceId: string,
 		input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -127,6 +130,9 @@ async function setup({
 	isOwnerOrAdmin = false,
 	canReadInvoiceMoney = true,
 	contractorInvoices = [],
+	// The seeded Contract's whole price, none of it billed yet.
+	billing = { priceCents: 15_000, billedCents: 0, unbilledCents: 15_000 },
+	hasUnbilled = true,
 	// America/New_York, the same fixture zone the repo's other timezone
 	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
 	// future-date boundary tests below exercise.
@@ -152,6 +158,8 @@ async function setup({
 		isOwnerOrAdmin,
 		canReadInvoiceMoney,
 		contractorInvoices,
+		billing: billing === 'unset' ? undefined : billing,
+		hasUnbilled,
 		practiceTimezone,
 		paymentTermsDays,
 		engagementKind,
@@ -207,7 +215,7 @@ describe('InvoiceSection.svelte', () => {
 	// #2059: a row per Invoice, its status a Badge of its own.
 	// #2146: titled by its number, then the day it was raised, as drawn.
 	it('lists an Invoice by its number, with the day it was raised, its formatted amount and its status', async () => {
-		await setup({ invoices: [invoiceOpen] });
+		await setup({ invoices: [invoiceOpen], billing: 'unset' });
 
 		await expect.element(invoiceTitle('STRIPE-in_1')).toBeVisible();
 		await expect.element(invoiceFact('Jan 1, 2026')).toBeVisible();
@@ -217,7 +225,7 @@ describe('InvoiceSection.svelte', () => {
 
 	// The card's title is the Invoice column; its facts follow in order.
 	it('reads Raised, Amount and Status under the number, in that order', async () => {
-		await setup({ invoices: [invoiceOpen] });
+		await setup({ invoices: [invoiceOpen], billing: 'unset' });
 		await expect.element(page.getByRole('term').first()).toBeVisible();
 
 		const terms = page
@@ -284,7 +292,7 @@ describe('InvoiceSection.svelte', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined, 15_000);
 	});
 
 	// #1775: a refusal is an error summary, as the Record payment form's
@@ -540,7 +548,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined);
+			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined, 15_000);
 		});
 
 		it('submits Stripe when that option is chosen', async () => {
@@ -549,7 +557,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By card, through Stripe.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('stripe', undefined);
+			expect(onCreate).toHaveBeenCalledWith('stripe', undefined, 15_000);
 		});
 
 		it('refuses a submit with no option chosen, names the question, and sends no request (#1590)', async () => {
@@ -571,7 +579,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined);
+			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined, 15_000);
 			await expect.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' })).not.toBeInTheDocument();
 		});
 
@@ -1397,7 +1405,7 @@ describe('InvoiceSection.svelte for a contractor Doula (#2002, #2094)', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined, undefined);
 		const created = page.getByText('Invoice created.');
 		await expect.element(created).toBeVisible();
 		await expect.element(created).toHaveFocus();
@@ -1490,7 +1498,7 @@ describe('InvoiceSection.svelte when the Invoice is due (#2828)', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined, 15_000);
 	});
 
 	it('sends the date given', async () => {
@@ -1500,7 +1508,7 @@ describe('InvoiceSection.svelte when the Invoice is due (#2828)', () => {
 		await page.getByLabelText('Due on').fill('2026-11-20');
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(undefined, { dueOn: '2026-11-20' });
+		expect(onCreate).toHaveBeenCalledWith(undefined, { dueOn: '2026-11-20' }, 15_000);
 	});
 
 	it('refuses an empty date and a date before today without sending', async () => {
@@ -1525,7 +1533,7 @@ describe('InvoiceSection.svelte when the Invoice is due (#2828)', () => {
 		await expect.element(page.getByText('Week 37 is Nov 29, 2026.')).toBeVisible();
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith(undefined, { gestationalWeek: 37 });
+		expect(onCreate).toHaveBeenCalledWith(undefined, { gestationalWeek: 37 }, 15_000);
 	});
 
 	it('refuses a week out of range and a week that falls before today', async () => {
@@ -1583,6 +1591,112 @@ describe('InvoiceSection.svelte when the Invoice is due (#2828)', () => {
 		await page.getByLabelText('Due on').fill('2026-11-12');
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith('by_hand', { dueOn: '2026-11-12' });
+		expect(onCreate).toHaveBeenCalledWith('by_hand', { dueOn: '2026-11-12' }, 15_000);
+	});
+});
+
+describe('InvoiceSection.svelte when part of the Contract is billed (#2829)', () => {
+	const partBilled: ContractBilling = { priceCents: 450_000, billedCents: 150_000, unbilledCents: 300_000 };
+
+	it('says the Contract price, what is billed and what is not', async () => {
+		await setup({ invoices: [invoiceOpen], billing: partBilled });
+
+		await expect.element(page.getByText('Contract price')).toBeVisible();
+		await expect.element(page.getByText('$4,500.00')).toBeVisible();
+		await expect.element(page.getByText('Billed', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('$1,500.00', { exact: true })).toBeVisible();
+		await expect.element(page.getByText('Not yet billed')).toBeVisible();
+		await expect.element(page.getByText('$3,000.00', { exact: true })).toBeVisible();
+	});
+
+	it('asks the amount, filled in with what is not yet billed, and sends the figure typed', async () => {
+		const { onCreate } = await setup({ billing: partBilled });
+		const amount = page.getByLabelText('Amount to bill (USD)');
+
+		await expect.element(amount).toHaveValue(3000);
+		await expect.element(page.getByText('Up to $3,000.00 is left to bill on this Contract.')).toBeVisible();
+		await amount.fill('1250.50');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined, 125_050);
+	});
+
+	it('bills everything not yet billed when the amount is left as it is', async () => {
+		const { onCreate } = await setup({ billing: partBilled });
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined, 300_000);
+	});
+
+	it.each([
+		['', 'Enter an amount to bill greater than $0.00'],
+		['0', 'Enter an amount to bill greater than $0.00'],
+		['-5', 'Enter an amount to bill greater than $0.00'],
+		['3000.01', 'Amount to bill must be $3,000.00 or less']
+	])('refuses an amount of %j before sending anything', async (typed, message) => {
+		const { onCreate } = await setup({ billing: partBilled });
+
+		await page.getByLabelText('Amount to bill (USD)').fill(typed);
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(page.getByRole('link', { name: message })).toBeVisible();
+		expect(onCreate).not.toHaveBeenCalled();
+	});
+
+	it('puts the BFF refusal of the amount on the field', async () => {
+		const onCreate = vi
+			.fn()
+			.mockRejectedValue(new RefusalError('Refused.', { amountCents: 'Amount cannot be more than $10.00, what is left to bill' }));
+		await setup({ billing: partBilled, onCreate });
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect
+			.element(page.getByRole('link', { name: 'Amount cannot be more than $10.00, what is left to bill' }))
+			.toBeVisible();
+	});
+
+	it('asks the amount on the first raise too, beside the billing mode', async () => {
+		const { onCreate } = await setup({ billingMode: 'unset', billing: partBilled });
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await page.getByLabelText('By hand.').click();
+		await page.getByLabelText('Amount to bill (USD)').fill('500');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith('by_hand', undefined, 50_000);
+	});
+
+	it('asks a contractor no amount, and shows her no price', async () => {
+		await setup({ canReadInvoiceMoney: false, billing: 'unset' });
+
+		await expect.element(page.getByLabelText('Amount to bill (USD)')).not.toBeInTheDocument();
+		await expect.element(page.getByText('Contract price')).not.toBeInTheDocument();
+	});
+});
+
+describe('InvoiceSection.svelte when everything is billed (#2829)', () => {
+	const nothingLeft = 'All of this Contract is billed, so there is nothing left to invoice.';
+
+	it('says so and offers no Create Invoice', async () => {
+		await setup({ billing: { priceCents: 15_000, billedCents: 15_000, unbilledCents: 0 } });
+
+		await expect.element(page.getByText(nothingLeft)).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
+	});
+
+	it('says so to a contractor too, without a figure', async () => {
+		await setup({ canReadInvoiceMoney: false, hasUnbilled: false, billing: 'unset' });
+
+		await expect.element(page.getByText(nothingLeft)).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
+	});
+
+	it('offers Create Invoice, with no amount question, while the figures are still loading', async () => {
+		await setup({ billing: 'unset' });
+
+		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).toBeVisible();
+		await expect.element(page.getByLabelText('Amount to bill (USD)')).not.toBeInTheDocument();
 	});
 });

@@ -158,6 +158,10 @@ type ContractorInvoicesResponse struct {
 	Items      []ContractorInvoiceView `json:"items"`
 	NextCursor *string                 `json:"nextCursor,omitempty"`
 	HasMore    bool                    `json:"hasMore"`
+	// HasUnbilled says only whether any of the Contract's price is left to
+	// bill, never how much: she may raise an Invoice and may not read the
+	// price (ADR-0008).
+	HasUnbilled bool `json:"hasUnbilled"`
 }
 
 // contractorInvoiceRows is items with every money field left behind:
@@ -179,12 +183,14 @@ func contractorInvoiceRows(items []InvoiceView) []ContractorInvoiceView {
 }
 
 // CreateInvoiceRequest is the body of a POST to PostInvoiceHandler.
-// #947 removed the amountCents a caller used to supply: an Invoice's
-// amount now derives entirely from the Contract it bills
-// (contracts.amount_cents, #967), so no request body -- an Owner's
-// included -- can make an Invoice carry a figure that disagrees with the
-// signed Contract. There is no description/line-item field either --
-// every Invoice's line item and statement descriptor is
+// An Invoice bills part or all of the Contract it is raised against
+// (#2829): AmountCents names how much, and a request that names none
+// bills everything the Contract has not yet billed, so a first Invoice
+// raised that way is the Contract's whole price (#947). The amount is
+// bounded by the Contract (contracts.amount_cents, #967), so no request
+// body -- an Owner's included -- can make Invoices that together disagree
+// with the signed Contract. There is no description/line-item field
+// either -- every Invoice's line item and statement descriptor is
 // InvoiceLineItemDescription, unconditionally.
 //
 // BillingMode is read only the first time this Practice ever raises an
@@ -198,6 +204,7 @@ func contractorInvoiceRows(items []InvoiceView) []ContractorInvoiceView {
 // from a birth Engagement's due date: week 40 is the due date. At most one
 // may be sent.
 type CreateInvoiceRequest struct {
+	AmountCents     *int64  `json:"amountCents,omitempty"`
 	BillingMode     *string `json:"billingMode,omitempty"`
 	DueOn           *string `json:"dueOn,omitempty"`
 	GestationalWeek *int    `json:"gestationalWeek,omitempty"`
@@ -249,12 +256,16 @@ type ListInvoicesResponse struct {
 	Items      []InvoiceView `json:"items"`
 	NextCursor *string       `json:"nextCursor,omitempty"`
 	HasMore    bool          `json:"hasMore"`
+	// ContractBilling is the Engagement's current Contract's price, what
+	// its Invoices have billed and what is left (#2829); absent while the
+	// Engagement has no Contract.
+	ContractBilling *ContractBilling `json:"contractBilling,omitempty"`
 }
 
 // PostInvoiceHandler creates an Invoice against :engagementId's current
-// Contract, for the amount that Contract itself carries
-// (contracts.amount_cents, #967) -- no caller, Owner included, can make
-// it carry a different figure (#947). Raising stays open to any Staff
+// Contract, for the amount the request names or else everything the
+// Contract has not yet billed, never more than the Contract's price
+// (#947, #2829). Raising stays open to any Staff
 // with reach, no role gate (matching Contract's default, #68), mounted
 // with attaching=true so an unattached contractor 404s instead.
 //
@@ -274,7 +285,7 @@ type ListInvoicesResponse struct {
 func PostInvoiceHandler(client Client) http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID, engagementID, staffID := c.Tx, c.PracticeID, c.EngagementID, c.StaffID
-		contractID, contractStatus, amountCents, ok := resolveInvoiceContract(w, r, tx, engagementID)
+		contractID, contractStatus, priceCents, ok := resolveInvoiceContract(w, r, tx, engagementID)
 		if !ok {
 			return
 		}
@@ -291,6 +302,22 @@ func PostInvoiceHandler(client Client) http.Handler {
 
 		var req CreateInvoiceRequest
 		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+
+		if err := lockContractBilling(r.Context(), tx, contractID); err != nil {
+			// coverage:ignore reason: DB failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		billing, err := contractBilling(r.Context(), tx, contractID, priceCents)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		amountCents, ok := invoiceAmount(w, req, billing)
+		if !ok {
 			return
 		}
 
@@ -600,16 +627,30 @@ func GetInvoicesHandler() http.Handler {
 			return
 		}
 
+		var billing *ContractBilling
+		contractID, _, priceCents, err := fetchCurrentContract(r.Context(), c.Tx, c.EngagementID)
+		if err == nil {
+			read, readErr := contractBilling(r.Context(), c.Tx, contractID, priceCents)
+			err = readErr
+			billing = &read
+		}
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
 		hasMore := next != nil
 		if c.Reader.IsAmbientContractor() {
 			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
-				Items:      contractorInvoiceRows(items),
-				NextCursor: next,
-				HasMore:    hasMore,
+				Items:       contractorInvoiceRows(items),
+				NextCursor:  next,
+				HasMore:     hasMore,
+				HasUnbilled: billing != nil && billing.UnbilledCents > 0,
 			})
 			return
 		}
-		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore})
+		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore, ContractBilling: billing})
 	}, staffauth.EngagementReach("Engagement not found"))
 }
 
@@ -617,9 +658,9 @@ func GetInvoicesHandler() http.Handler {
 // status and amount (the most recently created row, mirroring
 // contracts.fetchContract's "most recent wins" rule) -- the shared
 // prologue for PostInvoiceHandler. amountCents is the Contract's own
-// amount_cents (#967): the only figure an Invoice is ever raised for
-// (#947). Writes the appropriate error response itself and returns
-// ok=false on any failure.
+// amount_cents (#967): its price, which the Invoices raised against it
+// may not together pass (#947, #2829). Writes the appropriate error
+// response itself and returns ok=false on any failure.
 func resolveInvoiceContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, engagementID string) (contractID string, contractStatus contracts.Status, amountCents int64, ok bool) {
 	contractID, contractStatus, amountCents, err := fetchCurrentContract(r.Context(), tx, engagementID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -641,8 +682,8 @@ func resolveInvoiceContract(w http.ResponseWriter, r *http.Request, tx *sql.Tx, 
 // (rather than a separate query) because resolveInvoiceEngagement's only
 // caller, PostInvoiceHandler, needs it immediately afterward to check
 // contracts.TransitionBill -- #275. amountCents (contracts.amount_cents,
-// #967) is the Contract's own real amount -- an Invoice is raised for
-// exactly this figure and no other (#947).
+// #967) is the Contract's own real amount, the price its Invoices may
+// not together pass (#947, #2829).
 func fetchCurrentContract(ctx context.Context, tx *sql.Tx, engagementID string) (id string, status contracts.Status, amountCents int64, err error) {
 	var rawStatus string
 	err = tx.QueryRowContext(ctx,

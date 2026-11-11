@@ -219,31 +219,59 @@ function invoicesPath(practiceId: string, engagementId: string): string {
  * with an empty items list for that case (a Contract isn't required to
  * list, only to create), so a 404 here always means a real error
  * (engagement not found) and is thrown like any other non-2xx response,
- * with the response body text. */
-export async function loadInvoices(fetcher: Fetcher, practiceId: string, engagementId: string): Promise<Invoice[]> {
+ * with the response body text.
+ *
+ * `billing` is the current Contract's price, what its Invoices have billed
+ * and what is left (#2829); absent while there is no Contract. */
+export async function loadInvoices(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<{ invoices: Invoice[]; billing?: ContractBilling }> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	const body: { items: Invoice[] } = await response.json();
-	return body.items;
+	const body: { items: Invoice[]; contractBilling?: ContractBilling } = await response.json();
+	return { invoices: body.items, billing: body.contractBilling };
+}
+
+/** How much of the current Contract's price its Invoices have billed
+ * (#2829): every Invoice that is not void counts, a written-off one
+ * included, and `unbilledCents` is what an Invoice raised now may bill. */
+export interface ContractBilling {
+	priceCents: number;
+	billedCents: number;
+	unbilledCents: number;
+}
+
+/** `billing` after an Invoice for `amountCents` is raised, so the section
+ * reads the new figures before the list is next read. */
+export function billingAfterRaising(billing: ContractBilling, amountCents: number): ContractBilling {
+	return {
+		priceCents: billing.priceCents,
+		billedCents: billing.billedCents + amountCents,
+		unbilledCents: Math.max(billing.unbilledCents - amountCents, 0)
+	};
 }
 
 /** Loads the same route as loadInvoices for a contractor Doula (#2094):
  * the BFF answers her with each Invoice's days and status and no money,
  * so the rows are typed as what she is sent. Only the first page, as
- * loadInvoices. */
+ * loadInvoices. `hasUnbilled` is whether any of the Contract's price is
+ * left to bill, and never how much: she may raise an Invoice and may not
+ * read the price (#2829). */
 export async function loadContractorInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string
-): Promise<ContractorInvoice[]> {
+): Promise<{ invoices: ContractorInvoice[]; hasUnbilled: boolean }> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	const body: { items: ContractorInvoice[] } = await response.json();
-	return body.items;
+	const body: { items: ContractorInvoice[]; hasUnbilled: boolean } = await response.json();
+	return { invoices: body.items, hasUnbilled: body.hasUnbilled };
 }
 
 /** The day an Invoice falls due when it is not the one the Practice's
@@ -283,11 +311,11 @@ export function weekOfPregnancyDay(dueDate: string, week: number): string {
 	return start.toISOString().slice(0, 10);
 }
 
-/** Creates an Invoice against engagementId's current Contract, for the
- * amount that Contract itself carries -- #947 removed the amountCents a
- * caller used to supply here; the BFF derives it from the Contract's own
- * amount_cents, so no request can make an Invoice disagree with the
- * signed Contract. Whether Clients can pay this Practice at all is a
+/** Creates an Invoice against engagementId's current Contract, for
+ * `amountCents` of it, or for everything not yet billed when none is
+ * given (#2829). The BFF holds the total billed to the Contract's own
+ * amount_cents, so no request can make Invoices disagree with the signed
+ * Contract (#947). Whether Clients can pay this Practice at all is a
  * standing fact the caller already has (EngagementDetail.clientsCanPay,
  * #270) and checks before ever showing the form that calls this -- so a
  * refusal here (409, e.g. Stripe still not connected) is always thrown
@@ -306,12 +334,13 @@ export async function createInvoice(
 	practiceId: string,
 	engagementId: string,
 	billingMode?: BillingMode,
-	due?: InvoiceDueChoice
+	due?: InvoiceDueChoice,
+	amountCents?: number
 ): Promise<Invoice> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ billingMode, ...due })
+		body: JSON.stringify({ billingMode, amountCents, ...due })
 	});
 	// refusalError, matching recordPayment below: InvoiceSection reads
 	// PostInvoiceHandler's `details.billingMode` (#1775) onto the
@@ -616,6 +645,10 @@ export function unbillableContractMessage(status: string): string {
 	}
 	return 'Invoicing is unavailable until the Client signs this Contract.';
 }
+
+/** What the section says in place of Create Invoice once every dollar of
+ * the Contract is billed (#2829). */
+export const nothingLeftToBillMessage = 'All of this Contract is billed, so there is nothing left to invoice.';
 
 /** What a contractor Doula reads under her Invoice rows (#2094):
  * information, not an error. ADR-0008 (amended 2026-10-26) gives her each
