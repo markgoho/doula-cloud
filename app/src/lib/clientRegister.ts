@@ -301,6 +301,16 @@ export function clientInvoiceStatusLabel(status: string): string {
 	return fixedWording(INVOICE_STATUS_LABELS, status, 'invoice status');
 }
 
+/** The day an unpaid Invoice is due (#2836): a fact beside the fixed
+ * status label, never a state of its own. No word for the day passing
+ * exists in the Client's register (ADR-0038). */
+export const DUE_LABEL = 'Due';
+
+/**
+The Invoice list's one line under the status: "Due Mar 10, 2027".
+*/
+export const dueLine = (day: string) => `${DUE_LABEL} ${day}`;
+
 /** The method of a manually recorded Payment, in plain words (#981). There
  * is no "Card": the model records no card-versus-bank fact about a Stripe
  * payment, so `paidMethod` is absent there and nothing here claims one. */

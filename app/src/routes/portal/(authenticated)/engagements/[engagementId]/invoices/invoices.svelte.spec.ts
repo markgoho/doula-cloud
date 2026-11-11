@@ -63,6 +63,32 @@ describe('Client-portal Invoices (#1564)', () => {
 		await expect.element(page.getByText('You no longer owe this', { exact: true }).last()).toBeVisible();
 	});
 
+	it('gives each unpaid Invoice its own due day beneath its status (#2836)', async () => {
+		await setupInvoices();
+
+		await expect.element(page.getByText('Due Feb 1, 2027').last()).toBeVisible();
+		await expect.element(page.getByText('Due May 10, 2027').last()).toBeVisible();
+	});
+
+	it('leaves the day out, and says nothing in its place, where the server sent none', async () => {
+		await setupInvoices(() =>
+			pageOf([{ ...openStripe, dueOn: undefined }], { totalToPayCents: openStripe.amountCents, totalToPayCount: 1 })
+		);
+
+		await expect.element(page.getByText('Not yet paid').last()).toBeVisible();
+		expect(document.body.textContent).not.toMatch(/\bdue\b/i);
+	});
+
+	it('reads the same when the day has long passed, and never says overdue or late', async () => {
+		await setupInvoices(() =>
+			pageOf([{ ...openStripe, dueOn: '2020-01-31' }], { totalToPayCents: openStripe.amountCents, totalToPayCount: 1 })
+		);
+
+		await expect.element(page.getByText('Due Jan 31, 2020').last()).toBeVisible();
+		await expect.element(page.getByText('Not yet paid').last()).toBeVisible();
+		expect(document.body.textContent).not.toMatch(/overdue|\blate\b/i);
+	});
+
 	it('links each row to its own page by Invoice number', async () => {
 		await setupInvoices();
 

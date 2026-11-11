@@ -37,10 +37,12 @@
 		NO_INVOICES_MESSAGE,
 		NO_LONGER_OWED_HEADING,
 		NO_PAYMENTS_MESSAGE,
+		dueLine,
 		OWED_HEADING,
 		PAID_HEADING,
 		returnedToYouSentence
 	} from '#lib/clientRegister.js';
+	import { formatCalendarDay } from '#lib/dates.js';
 	import { formatMoney } from '#lib/money.js';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -96,7 +98,7 @@
 			accessor: (row: ClientInvoice) => formatMoney(row.amountCents, row.currency),
 			numeric: true
 		},
-		{ label: 'Status', accessor: (row: ClientInvoice) => invoiceStatusText(row) }
+		{ label: 'Status', accessor: (row: ClientInvoice) => invoiceStatusText(row), content: statusCell }
 	];
 
 	function invoiceHref(row: ClientInvoice) {
@@ -106,6 +108,14 @@
 		});
 	}
 </script>
+
+<!-- The status, and under an unpaid Invoice its due day when the server sent
+     one (#2836). The row keeps its three columns, so the sections still
+     line up. -->
+{#snippet statusCell(row: ClientInvoice)}
+	{invoiceStatusText(row)}
+	{#if row.dueOn}<br />{dueLine(formatCalendarDay(row.dueOn))}{/if}
+{/snippet}
 
 <!-- `even` (#2038): the three sections are one set of columns read one
      under the next, so each column starts at the same place in each. -->

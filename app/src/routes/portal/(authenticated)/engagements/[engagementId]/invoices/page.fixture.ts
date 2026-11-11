@@ -2,8 +2,9 @@
  * The Client's Invoices, as the continuum check sees it (#1564).
  *
  * Every section renders, and each renders differently, so the row set
- * holds every state a field reads differently (ADR-0025): an open Stripe
- * Invoice with the busiest amount, a paid by-hand Invoice that was
+ * holds every state a field reads differently (ADR-0025): two open Stripe
+ * Invoices due on different days (#2836), the first with the busiest
+ * amount, a paid by-hand Invoice that was
  * partly returned to her and carries the longest reference a Practice
  * could type (#537's hostile value), a paid Stripe Invoice with nothing
  * returned, and a void one so the "What you no longer owe" section is swept too.
@@ -26,6 +27,20 @@ export const openStripe: ClientInvoice = {
 	billingMode: 'stripe',
 	createdAt: '2027-02-01T15:00:00Z',
 	raisedOn: '2027-02-01',
+	dueOn: '2027-02-01',
+	refundedCents: 0
+};
+
+export const openBalance: ClientInvoice = {
+	id: 'invoice-open-balance',
+	status: 'open',
+	amountCents: 300_000,
+	currency: 'usd',
+	reference: 'A4B2-0012',
+	billingMode: 'stripe',
+	createdAt: '2027-02-01T15:01:00Z',
+	raisedOn: '2027-02-01',
+	dueOn: '2027-05-10',
 	refundedCents: 0
 };
 
@@ -69,10 +84,10 @@ export const voided: ClientInvoice = {
 };
 
 export const data: ClientInvoicesPage = {
-	items: [openStripe, paidByHandReturned, paidStripe, voided],
+	items: [openStripe, openBalance, paidByHandReturned, paidStripe, voided],
 	hasMore: false,
-	totalToPayCents: openStripe.amountCents,
-	totalToPayCount: 1
+	totalToPayCents: openStripe.amountCents + openBalance.amountCents,
+	totalToPayCount: 2
 };
 
 export const fixture: RouteFixture = {

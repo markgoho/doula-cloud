@@ -12,6 +12,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/practicetimezone"
 )
@@ -46,6 +47,13 @@ type ClientInvoiceView struct {
 	// Practice's own screens print as Raised (#2146), whatever zone her
 	// browser is in.
 	RaisedOn string `json:"raisedOn"`
+	// DueOn (#2836) is the day an unpaid Invoice falls due, YYYY-MM-DD, in
+	// her Practice's zone. Absent on an Invoice that is not open, and on
+	// an open one raised before her Engagement's birth outcome was
+	// recorded (dueDayGate): the BFF leaves it out, the page never hides
+	// it. Never a count of days late; lateness stays the Practice's own
+	// fact (ADR-0038).
+	DueOn *string `json:"dueOn,omitempty"`
 	// PaidOn (#1965) is the day she paid, YYYY-MM-DD, in her Practice's
 	// zone -- the same day the Practice's own screens print
 	// (invoicePaidOn).
@@ -90,7 +98,7 @@ type ClientInvoicesResponse struct {
 // c.engagement_id = $1 and status <> 'draft' are the handler's own
 // filters on top of the RLS the Client session already carries.
 const clientInvoiceSelect = `SELECT i.id, i.status, i.amount_cents, i.currency, i.reference, i.stripe_invoice_id,
-		i.created_at, i.paid_at, CASE WHEN ap.kind = 'manual' AND i.status = 'paid' THEN ap.method END,
+		i.created_at, i.paid_at, i.due_at, CASE WHEN ap.kind = 'manual' AND i.status = 'paid' THEN ap.method END,
 		` + refundedCentsColumn + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
@@ -157,18 +165,92 @@ func clientPracticeZone(ctx context.Context, tx *sql.Tx, engagementID string) (*
 	return zone, nil
 }
 
+// clientPracticeView is what a Client's Invoice rows are read against:
+// her Practice's zone, and whether a due day may be shown on an Invoice
+// raised at a given instant.
+type clientPracticeView struct {
+	zone *time.Location
+	gate dueDayGate
+}
+
+// dueDayGate decides, at the BFF, whether an open Invoice carries its due
+// day (#2836, ADR-0038). With no birth outcome recorded every one does.
+// Once an outcome is recorded, only an Invoice raised after it was does:
+// raising one then is the Practice saying what is owed. An outcome with
+// no recording time on file withholds every day, presuming nothing. The
+// outcome itself, and which one it is, never leaves this type (ADR-0015).
+type dueDayGate struct {
+	outcomeRecorded bool
+	recordedAt      sql.NullTime
+}
+
+func (g dueDayGate) shows(raisedAt time.Time) bool {
+	if !g.outcomeRecorded {
+		return true
+	}
+	return g.recordedAt.Valid && raisedAt.After(g.recordedAt.Time)
+}
+
+// clientDueDayGateQuery reads whether an outcome stands and when it was
+// first recorded: the latest birth_outcome_recorded row that took the
+// outcome from none to one. A correction (one outcome for another) is not
+// a new recording, and an outcome cleared and entered again is.
+const clientDueDayGateQuery = `SELECT e.birth_outcome IS NOT NULL,
+	       (SELECT max(a.created_at) FROM activity a
+	         WHERE a.practice_id = e.practice_id AND a.subject_kind = 'engagement'
+	           AND a.subject_id = e.id AND a.action = 'birth_outcome_recorded'
+	           AND a.diff ->> 'birthOutcomeBefore' IS NULL AND a.diff ->> 'birthOutcomeAfter' IS NOT NULL)
+	  FROM engagements e WHERE e.id = $1`
+
+// clientPracticeViewOf reads the zone and the gate for engagementID on
+// the Client's own transaction. activity's policy compares against
+// app.current_practice_id, which a Client transaction never sets, so it
+// is set for this one read and cleared at once, the way
+// portal.ActivityHandler sets it for its own read.
+func clientPracticeViewOf(ctx context.Context, tx *sql.Tx, engagementID string) (clientPracticeView, error) {
+	zone, err := clientPracticeZone(ctx, tx, engagementID)
+	if err != nil {
+		return clientPracticeView{}, err
+	}
+	var practiceID string
+	if err := tx.QueryRowContext(ctx, `SELECT practice_id FROM engagements WHERE id = $1`, engagementID).Scan(&practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientPracticeZone just read this row
+		return clientPracticeView{}, fmt.Errorf("payments: read client engagement practice: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', $1, true)`, practiceID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return clientPracticeView{}, fmt.Errorf("payments: scope client due day read: %w", err)
+	}
+	var gate dueDayGate
+	if err := tx.QueryRowContext(ctx, clientDueDayGateQuery, engagementID).Scan(&gate.outcomeRecorded, &gate.recordedAt); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return clientPracticeView{}, fmt.Errorf("payments: read birth outcome recording: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT set_config('app.current_practice_id', '', true)`); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return clientPracticeView{}, fmt.Errorf("payments: clear client due day scope: %w", err)
+	}
+	return clientPracticeView{zone: zone, gate: gate}, nil
+}
+
 // scanClientInvoice reads one row of clientInvoiceSelect. A live manual
 // Payment's method is the sign paid_at holds the typed day rather than
 // Stripe's instant (invoicePaidOn).
-func scanClientInvoice(row interface{ Scan(dest ...any) error }, zone *time.Location) (ClientInvoiceView, error) {
+func scanClientInvoice(row interface{ Scan(dest ...any) error }, practice clientPracticeView) (ClientInvoiceView, error) {
+	zone := practice.zone
 	var it ClientInvoiceView
 	var paidAt sql.NullTime
+	var dueAt time.Time
 	var stripeInvoiceID, method sql.NullString
 	if err := row.Scan(&it.ID, &it.Status, &it.AmountCents, &it.Currency, &it.Reference, &stripeInvoiceID,
-		&it.CreatedAt, &paidAt, &method, &it.RefundedCents, &it.PaymentProcessing); err != nil {
+		&it.CreatedAt, &paidAt, &dueAt, &method, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 		return ClientInvoiceView{}, fmt.Errorf("payments: scan client invoice: %w", err)
 	}
 	it.RaisedOn = practiceDay(it.CreatedAt, zone)
+	if it.Status == string(invoicestatus.Open) && practice.gate.shows(it.CreatedAt) {
+		day := practiceDay(dueAt, zone)
+		it.DueOn = &day
+	}
 	it.PaidOn = invoicePaidOn(paidAt, method.Valid, zone)
 	if method.Valid {
 		it.PaidMethod = &method.String
@@ -188,12 +270,12 @@ func ClientListInvoicesHandler() http.Handler {
 			return
 		}
 
-		zone, err := clientPracticeZone(r.Context(), c.Tx, c.EngagementID)
+		practice, err := clientPracticeViewOf(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		items, next, err := listClientInvoices(r.Context(), c.Tx, c.EngagementID, after, zone)
+		items, next, err := listClientInvoices(r.Context(), c.Tx, c.EngagementID, after, practice)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -211,7 +293,7 @@ func ClientListInvoicesHandler() http.Handler {
 }
 
 // listClientInvoices fetches one page under engagementID.
-func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, zone *time.Location) ([]ClientInvoiceView, *string, error) {
+func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, after *invoiceCursor, practice clientPracticeView) ([]ClientInvoiceView, *string, error) {
 	var rows *sql.Rows
 	var err error
 	if after != nil {
@@ -227,7 +309,7 @@ func listClientInvoices(ctx context.Context, tx *sql.Tx, engagementID string, af
 
 	items := []ClientInvoiceView{}
 	for rows.Next() {
-		it, err := scanClientInvoice(rows, zone)
+		it, err := scanClientInvoice(rows, practice)
 		if err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("payments: scan client invoice row: %w", err)
@@ -267,12 +349,12 @@ func ClientGetInvoiceHandler() http.Handler {
 			return
 		}
 
-		zone, err := clientPracticeZone(r.Context(), c.Tx, c.EngagementID)
+		practice, err := clientPracticeViewOf(r.Context(), c.Tx, c.EngagementID)
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		it, err := scanClientInvoice(c.Tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, c.EngagementID, invoiceID), zone)
+		it, err := scanClientInvoice(c.Tx.QueryRowContext(r.Context(), clientInvoiceOneQuery, c.EngagementID, invoiceID), practice)
 		if errors.Is(err, sql.ErrNoRows) {
 			apierr.WriteError(w, msgClientInvoiceNotFound, http.StatusNotFound)
 			return
