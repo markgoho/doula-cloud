@@ -34,9 +34,11 @@ export interface Invoice {
 	 * independent of the Practice's current billingMode. */
 	billingMode: BillingMode;
 	/** The day this Invoice falls due (#768, #1965), `YYYY-MM-DD`, in the
-	 * Practice's own timezone. Fixed when the Invoice was raised from the
-	 * Practice's payment terms of that moment, so changing the terms later
-	 * never moves an Invoice already billed. */
+	 * Practice's own timezone. Fixed when the Invoice was raised: the day
+	 * the person raising it chose, or by default the one the Practice's
+	 * payment terms of that moment gave (#2828), so changing the terms or
+	 * the Engagement's due date later never moves an Invoice already
+	 * billed. */
 	dueOn: string;
 	/** The day this Invoice was raised (#2146), `YYYY-MM-DD`, in the
 	 * Practice's own timezone: the same day a contractor's row carries as
@@ -244,6 +246,43 @@ export async function loadContractorInvoices(
 	return body.items;
 }
 
+/** The day an Invoice falls due when it is not the one the Practice's
+ * payment terms give (#2828): a date, `YYYY-MM-DD`, or a week of
+ * pregnancy, which the BFF resolves from the Engagement's due date. */
+export type InvoiceDueChoice = { dueOn: string } | { gestationalWeek: number };
+
+/** The weeks of pregnancy an Invoice may fall due at, the bounds the
+ * BFF's `minInvoiceWeek` and `maxInvoiceWeek` hold. */
+export const MIN_INVOICE_WEEK = 20;
+export const MAX_INVOICE_WEEK = 42;
+
+const FULL_TERM_WEEKS = 40;
+
+/**
+ * The calendar day `at` falls on in `timeZone`, `YYYY-MM-DD`.
+ */
+export function calendarDayIn(timeZone: string, at: Date): string {
+	return new Intl.DateTimeFormat('en-CA', { timeZone }).format(at);
+}
+
+/** The day an Invoice raised at `now` falls due on `netDays` of payment
+ * terms: a day is 24 hours counted from the instant it is raised, read as
+ * a day in the Practice's zone, as the BFF's `DueAfterTerms` and
+ * `practiceDay` read it. */
+export function termsDueDay(timeZone: string, now: Date, netDays: number): string {
+	return calendarDayIn(timeZone, new Date(now.getTime() + netDays * 24 * 60 * 60 * 1000));
+}
+
+/** The day gestational week `week` begins on, from an Engagement's due
+ * date: week 40 is the due date itself and week N is 40 - N weeks before
+ * it, the rule the BFF's `oncall.WeekStart` counts with. Calendar-day
+ * arithmetic, so no zone can move it. */
+export function weekOfPregnancyDay(dueDate: string, week: number): string {
+	const [year, month, day] = dueDate.split('-').map(Number);
+	const start = new Date(Date.UTC(year!, month! - 1, day! - 7 * (FULL_TERM_WEEKS - week)));
+	return start.toISOString().slice(0, 10);
+}
+
 /** Creates an Invoice against engagementId's current Contract, for the
  * amount that Contract itself carries -- #947 removed the amountCents a
  * caller used to supply here; the BFF derives it from the Contract's own
@@ -258,17 +297,21 @@ export async function loadContractorInvoices(
  * billingMode (#271) is read only the first time this Practice ever
  * raises an Invoice -- the backend ignores it once a mode is already
  * set, so callers pass it only from the inline "how does this Practice
- * bill?" ask InvoiceSection shows exactly then. */
+ * bill?" ask InvoiceSection shows exactly then.
+ *
+ * due (#2828) names the day the Invoice falls due when it is not the one
+ * the Practice's payment terms give; omitted, the terms decide. */
 export async function createInvoice(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string,
-	billingMode?: BillingMode
+	billingMode?: BillingMode,
+	due?: InvoiceDueChoice
 ): Promise<Invoice> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId), {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ billingMode })
+		body: JSON.stringify({ billingMode, ...due })
 	});
 	// refusalError, matching recordPayment below: InvoiceSection reads
 	// PostInvoiceHandler's `details.billingMode` (#1775) onto the

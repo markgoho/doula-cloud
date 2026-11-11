@@ -45,6 +45,12 @@
 		paymentRecordedMessage,
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
+		calendarDayIn,
+		termsDueDay,
+		weekOfPregnancyDay,
+		MIN_INVOICE_WEEK,
+		MAX_INVOICE_WEEK,
+		type InvoiceDueChoice,
 		paymentMethodLabels,
 		paymentOnItsWayLine,
 		unbillableContractMessage,
@@ -66,7 +72,9 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -83,6 +91,9 @@
 		contractorInvoices = [],
 		isAskingBillingMode = $bindable(false),
 		practiceTimezone,
+		paymentTermsDays,
+		engagementKind,
+		engagementDueDate,
 		paymentsSettingsHref,
 		landOnInvoiceId,
 		onCreate,
@@ -107,6 +118,14 @@
 		 * UTC's calendar day. The caller fetches it the same way the
 		 * timezone settings screen does (`loadPracticeTimezone`). */
 		practiceTimezone: string;
+		/** The Practice's payment terms (#768): the day Create Invoice's
+		 * due question already has chosen (#2828). */
+		paymentTermsDays: number;
+		/** The Engagement's kind and due date, which decide whether a week
+		 * of pregnancy can be offered as the Invoice's due day: only a birth
+		 * Engagement that has a due date can (#2828). */
+		engagementKind: string;
+		engagementDueDate?: string;
 		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. Also who is linked
 		 * to Getting paid while Stripe cannot take a card (#2200): its
@@ -129,7 +148,7 @@
 		/** The Invoice a link named (#2240): its row takes focus, once,
 		 * when it arrives, so the Invoices list lands on it. */
 		landOnInvoiceId?: string;
-		onCreate: (billingMode?: BillingMode) => Promise<void>;
+		onCreate: (billingMode?: BillingMode, due?: InvoiceDueChoice) => Promise<void>;
 		onRecordPayment: (
 			invoiceId: string,
 			input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -199,6 +218,93 @@
 		chosenBillingMode = undefined;
 		billingModeError = '';
 		createError = undefined;
+		resetDueQuestion();
+	}
+
+	// #2828: when the Invoice is due. The Practice's payment terms are
+	// chosen when the form opens, a recorded departure from "nothing
+	// pre-filled" (ADR-0038's 2026-11-10 amendment, govuk-alignment.md): it
+	// is the answer every Invoice has had, so a press that never reads the
+	// question raises exactly what it raised before.
+	type DueWay = 'terms' | 'date' | 'week';
+	let dueWay = $state<DueWay>('terms');
+	let dueDate = $state('');
+	let dueWeek = $state('');
+	let dueDateError = $state('');
+	let dueWeekError = $state('');
+
+	function resetDueQuestion() {
+		dueWay = 'terms';
+		dueDate = '';
+		dueWeek = '';
+		dueDateError = '';
+		dueWeekError = '';
+	}
+
+	const dueWayName = 'invoice-due-way';
+	const dueDateFieldId = 'invoice-due-date';
+	const dueWeekFieldId = 'invoice-due-week';
+	const canOfferWeek = $derived(engagementKind === 'birth' && !!engagementDueDate);
+	// Read once when the form is drawn: the terms' day is today's date
+	// plus the terms, and a form left open across midnight is refused by
+	// the BFF, not silently moved.
+	const termsDay = $derived(termsDueDay(practiceTimezone, new Date(), paymentTermsDays));
+	const todayDay = $derived(calendarDayIn(practiceTimezone, new Date()));
+	const chosenWeek = $derived.by(() => {
+		const week = Number(dueWeek);
+		const isUsable = dueWeek.trim() !== '' && Number.isSafeInteger(week) && week >= MIN_INVOICE_WEEK && week <= MAX_INVOICE_WEEK;
+		return isUsable ? week : undefined;
+	});
+	const weekDay = $derived(
+		chosenWeek !== undefined && !!engagementDueDate
+			? weekOfPregnancyDay(engagementDueDate, chosenWeek)
+			: undefined
+	);
+	const weekHint = $derived.by(() => {
+		if (weekDay !== undefined) {
+			return `Week ${chosenWeek} is ${formatCalendarDay(weekDay)}.`;
+		}
+		return `Week 40 is the due date, ${formatCalendarDay(engagementDueDate!)}.`;
+	});
+	const dueOptions = $derived([
+		{
+			value: 'terms' as const,
+			label: "After this Practice's payment terms.",
+			description: `${paymentTermsDays} ${paymentTermsDays === 1 ? 'day' : 'days'} from today: ${formatCalendarDay(termsDay)}.`
+		},
+		{ value: 'date' as const, label: 'On a date.', conditional: dueDateField },
+		...(canOfferWeek
+			? [{ value: 'week' as const, label: 'At a week of pregnancy.', conditional: dueWeekField }]
+			: [])
+	]);
+
+	/** The due day the form's answer names, for onCreate; `undefined` for
+	 * the terms, which the BFF counts itself. Sets the field's refusal and
+	 * returns `false` when the answer cannot be used. */
+	function readDueChoice(): { ok: true; due?: InvoiceDueChoice } | { ok: false } {
+		if (dueWay === 'date') {
+			if (dueDate.trim() === '') {
+				dueDateError = 'Enter the day this Invoice is due';
+				return { ok: false };
+			}
+			if (dueDate < todayDay) {
+				dueDateError = 'The due day cannot be before today';
+				return { ok: false };
+			}
+			return { ok: true, due: { dueOn: dueDate } };
+		}
+		if (dueWay === 'week') {
+			if (chosenWeek === undefined || weekDay === undefined) {
+				dueWeekError = `Enter a week of pregnancy from ${MIN_INVOICE_WEEK} to ${MAX_INVOICE_WEEK}`;
+				return { ok: false };
+			}
+			if (weekDay < todayDay) {
+				dueWeekError = `Week ${chosenWeek} is before today. Enter a later week or choose a date`;
+				return { ok: false };
+			}
+			return { ok: true, due: { gestationalWeek: chosenWeek } };
+		}
+		return { ok: true };
 	}
 
 	const billingModeName = 'invoice-billing-mode';
@@ -211,6 +317,8 @@
 	const createFormErrors = $derived<FormError[]>(
 		[
 			billingModeError ? { message: billingModeError, targetId: billingModeFieldId } : undefined,
+			dueDateError ? { message: dueDateError, targetId: dueDateFieldId } : undefined,
+			dueWeekError ? { message: dueWeekError, targetId: dueWeekFieldId } : undefined,
 			createError
 		].filter((entry) => entry !== undefined)
 	);
@@ -223,6 +331,15 @@
 	function applyCreateRefusal(error_: unknown) {
 		if (billingMode === undefined && error_ instanceof RefusalError && error_.details?.billingMode) {
 			billingModeError = error_.details.billingMode;
+			return;
+		}
+		if (error_ instanceof RefusalError && (error_.details?.dueOn || error_.details?.gestationalWeek)) {
+			const refused = error_.details.dueOn ?? error_.details.gestationalWeek!;
+			if (dueWay === 'week') {
+				dueWeekError = refused;
+			} else {
+				dueDateError = refused;
+			}
 			return;
 		}
 		createError = { message: error_ instanceof Error ? error_.message : 'Failed to create invoice' };
@@ -253,11 +370,16 @@
 		event.preventDefault();
 		createError = undefined;
 		billingModeError = '';
+		dueDateError = '';
+		dueWeekError = '';
 		hasCreated = false;
 		paymentRecorded = '';
 
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
+		}
+		const dueChoice = readDueChoice();
+		if (billingModeError || !dueChoice.ok) {
 			return;
 		}
 
@@ -275,12 +397,9 @@
 
 		isCreating = true;
 		try {
-			if (billingMode === undefined) {
-				await onCreate(chosenBillingMode);
-			} else {
-				await onCreate();
-			}
+			await onCreate(billingMode === undefined ? chosenBillingMode : undefined, dueChoice.due);
 			isAskingBillingMode = false;
+			resetDueQuestion();
 			hasCreated = true;
 		} catch (error_) {
 			applyCreateRefusal(error_);
@@ -657,6 +776,48 @@
 	<!-- v8 ignore stop -->
 {/if}
 
+{#snippet dueDateField()}
+	<LabeledField id={dueDateFieldId} label="Due on" error={dueDateError || undefined}>
+		{#snippet children({ id, describedBy, invalid })}
+			<TextInput {id} {describedBy} {invalid} type="date" value={dueDate} onInput={(value) => (dueDate = value)} required />
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
+{#snippet dueWeekField()}
+	<LabeledField
+		id={dueWeekFieldId}
+		label="Week of pregnancy"
+		hint={weekHint}
+		error={dueWeekError || undefined}
+		width={2}
+	>
+		{#snippet children({ id, describedBy, invalid, width })}
+			<TextInput
+				{id}
+				{describedBy}
+				{invalid}
+				{width}
+				type="number"
+				min={MIN_INVOICE_WEEK}
+				value={dueWeek}
+				onInput={(value) => (dueWeek = value)}
+				required
+			/>
+		{/snippet}
+	</LabeledField>
+{/snippet}
+
+{#snippet dueQuestion()}
+	<RadioGroup
+		legend="When is this Invoice due?"
+		name={dueWayName}
+		options={dueOptions}
+		value={dueWay}
+		onChange={(value) => (dueWay = value)}
+	/>
+{/snippet}
+
 {#if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if billingMode === undefined && !isAskingBillingMode}
@@ -678,6 +839,7 @@
 			onChange={(value) => (chosenBillingMode = value)}
 			error={billingModeError || undefined}
 		/>
+		{@render dueQuestion()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 		<Button label="Cancel" variant="secondary" onClick={closeBillingModeQuestion} />
 	</StackedForm>
@@ -694,6 +856,7 @@
 		{#if createFormErrors.length > 0}
 			<ErrorSummary errors={createFormErrors} />
 		{/if}
+		{@render dueQuestion()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>
 {/if}

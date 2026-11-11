@@ -190,8 +190,17 @@ func contractorInvoiceRows(items []InvoiceView) []ContractorInvoiceView {
 // BillingMode is read only the first time this Practice ever raises an
 // Invoice -- resolveBillingMode ignores it once a Practice's billing_mode
 // is already set (#271).
+//
+// DueOn and GestationalWeek are #2828's two ways to name the day the
+// Invoice falls due, in place of the Practice's payment terms, which
+// decide it when neither is sent. DueOn is a calendar day, YYYY-MM-DD, in
+// the Practice's zone. GestationalWeek is a week of pregnancy, resolved
+// from a birth Engagement's due date: week 40 is the due date. At most one
+// may be sent.
 type CreateInvoiceRequest struct {
-	BillingMode *string `json:"billingMode,omitempty"`
+	BillingMode     *string `json:"billingMode,omitempty"`
+	DueOn           *string `json:"dueOn,omitempty"`
+	GestationalWeek *int    `json:"gestationalWeek,omitempty"`
 }
 
 // billingModeOf reports the billing rail a row belongs to, straight off
@@ -321,6 +330,21 @@ func PostInvoiceHandler(client Client) http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		// #2828: a due day the request names replaces the one the terms
+		// gave, refused before either rail runs for the same reason.
+		chosenDay, refusal, err := requestedDueDay(r.Context(), tx, engagementID, req, raisedAt, zone)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if refusal != nil {
+			refusal.write(w)
+			return
+		}
+		if chosenDay != nil {
+			dueAt = dueAtOnDay(*chosenDay, raisedAt, zone)
+		}
 
 		var view InvoiceView
 		if mode == BillingModeByHand {
@@ -342,9 +366,9 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 		view.DueOn = practiceDay(dueAt, zone)
 		view.RaisedOn = practiceDay(raisedAt, zone)
-		// view.DaysOverdue stays 0: an Invoice raised now falls due at
-		// least a whole day of payment terms from now (ADR-0038), so it
-		// cannot be late yet.
+		// view.DaysOverdue stays 0: an Invoice raised now falls due on a
+		// day that is not before today (ADR-0038), so it cannot be late
+		// yet.
 
 		// Only persist a first-time billing mode once the Invoice it was
 		// requested for has actually been created -- see
@@ -358,7 +382,7 @@ func PostInvoiceHandler(client Client) http.Handler {
 		}
 
 		if !recordEngagementActivity(w, r, c, engagementID, activity.ActionInvoiceRaised,
-			map[string]any{diffKeyAmountCents: amountCents}) {
+			map[string]any{diffKeyAmountCents: amountCents, diffKeyDueOn: view.DueOn}) {
 			// coverage:ignore reason: the helper already wrote the failure response; reached only on a DB failure, not exercised by unit tests
 			return
 		}
