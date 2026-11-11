@@ -121,6 +121,8 @@
 		writeOffInvoice,
 		loadPaymentTerms,
 		type BillingMode,
+		billingAfterRaising,
+		type ContractBilling,
 		type ContractorInvoice,
 		type Invoice,
 		type InvoiceDueChoice,
@@ -866,6 +868,10 @@
 	// #2094: a contractor's rows, dates and status with no money, read
 	// from the same route in a shape of their own.
 	const contractorInvoicesState = new SectionState<ContractorInvoice[]>([]);
+	// #2829: what the Contract has billed, read with the list. A money
+	// reader gets the figures; a contractor only whether any is left.
+	let contractBilling = $state<ContractBilling | undefined>();
+	let hasUnbilledForContractor = $state(true);
 	const invoicesError = $derived(invoicesState.error || contractorInvoicesState.error);
 
 	// #271: undefined until this Practice has chosen a billing rail --
@@ -1537,15 +1543,21 @@
 		// its money (ADR-0008, amended 2026-10-26), so the BFF answers her
 		// with rows of their own; everyone else reads the list with money.
 		if (canReadContractMoney) {
-			await invoicesState.load(
-				() => loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-				'Failed to load invoices'
-			);
+			await invoicesState.load(async () => {
+				const read = await loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+				contractBilling = read.billing;
+				return read.invoices;
+			}, 'Failed to load invoices');
 		} else {
-			await contractorInvoicesState.load(
-				() => loadContractorInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-				'Failed to load invoices'
-			);
+			await contractorInvoicesState.load(async () => {
+				const read = await loadContractorInvoices(
+					apiFetchWithSession,
+					page.params.practiceId!,
+					page.params.engagementId!
+				);
+				hasUnbilledForContractor = read.hasUnbilled;
+				return read.invoices;
+			}, 'Failed to load invoices');
 		}
 		// #271: read alongside the Invoice list itself -- InvoiceSection
 		// needs to know the current mode (or its absence) before it can
@@ -1581,15 +1593,16 @@
 	// gate this used to route on -- InvoiceSection now decides whether to
 	// show the form at all from canClientsPay, a standing fact read up
 	// front, so a create attempt reaching this function is always the
-	// happy path or a genuine error. #947 removed the amount this used to
-	// pass on: an Invoice is raised for whatever the Contract carries.
-	async function handleCreateInvoice(chosenBillingMode?: BillingMode, due?: InvoiceDueChoice) {
+	// happy path or a genuine error. #2829: amountCents is what the form
+	// asked, and absent for a contractor, whose Invoice bills what is left.
+	async function handleCreateInvoice(chosenBillingMode?: BillingMode, due?: InvoiceDueChoice, amountCents?: number) {
 		const invoice = await createInvoice(
 			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
 			chosenBillingMode,
-			due
+			due,
+			amountCents
 		);
 		// #2002: a contractor's 201 names no amount (RaisedInvoice), so her
 		// new row is read back in her own shape (#2094) rather than spliced.
@@ -1597,6 +1610,9 @@
 		void loadActivity();
 		if (canReadContractMoney) {
 			invoicesState.value = [invoice, ...invoicesState.value];
+			if (contractBilling) {
+				contractBilling = billingAfterRaising(contractBilling, invoice.amountCents);
+			}
 		} else {
 			await loadInvoicesSection();
 		}
@@ -3137,6 +3153,8 @@
 			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
 			canReadInvoiceMoney={canReadContractMoney}
 			contractorInvoices={contractorInvoicesState.value}
+			billing={contractBilling}
+			hasUnbilled={hasUnbilledForContractor}
 			{practiceTimezone}
 			{paymentTermsDays}
 			engagementKind={detail.kind}

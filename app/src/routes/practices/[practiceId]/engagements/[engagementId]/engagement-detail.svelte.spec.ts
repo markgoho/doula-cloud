@@ -3781,6 +3781,49 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		expect(invoiceListReads()).toHaveLength(2);
 	});
 
+	it('shows an Owner what the Contract has billed, and sends the amount typed for a balance (#2829)', async () => {
+		const contractBilling = { priceCents: 450_000, billedCents: 175_000, unbilledCents: 275_000 };
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path, init) => {
+			if (path.endsWith('/contract/invoices') && init?.method !== 'POST') {
+				return jsonResponse({ items: [], hasMore: false, contractBilling });
+			}
+			return path.endsWith('/contract/invoices')
+				? jsonResponse(
+						{
+							id: 'invoice-new',
+							contractId: 'contract-1',
+							status: 'open',
+							amountCents: 123_456,
+							currency: 'usd',
+							createdAt: '2026-11-10T15:00:00Z',
+							raisedOn: '2026-11-10',
+							dueOn: '2026-12-10',
+							reference: 'INV-0004',
+							billingMode: 'stripe',
+							refundedCents: 0,
+							refundableCents: 0,
+							reversible: false,
+							daysOverdue: 0
+						},
+						201
+					)
+				: undefined;
+		});
+
+		await expect.element(testPage.getByText('Not yet billed')).toBeVisible();
+		await expect.element(testPage.getByText('$2,750.00', { exact: true })).toBeVisible();
+		const amount = testPage.getByLabelText('Amount to bill (USD)');
+		await expect.element(amount).toHaveValue(2750);
+		await amount.fill('1234.56');
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
+		const post = apiFetchWithSession.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
+		expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ amountCents: 123_456 });
+		await expect.element(testPage.getByText('$2,984.56', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('$1,515.44', { exact: true })).toBeVisible();
+	});
+
 	it('reads and lists the Invoices for an Owner, with no contractor line', async () => {
 		await setupMoney(sessionFor(['owner']));
 

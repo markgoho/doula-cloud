@@ -10,6 +10,11 @@
 	 * component only reports what was entered and displays whatever error
 	 * the call throws.
 	 *
+	 * An Invoice bills part or all of the Contract (#2829): the form asks the
+	 * amount, with what the Contract has not yet billed already in it, and
+	 * once every dollar is billed the section says so and offers no Create
+	 * Invoice.
+	 *
 	 * Three preconditions gate the Create Invoice form (#270, following
 	 * #255's own three-separate-fields rule), each with its own fixer:
 	 *
@@ -18,9 +23,7 @@
 	 *   Applies whichever rail the Practice bills on.
 	 * - billingMode is undefined -- #271's "ask once, inline": the very first
 	 *   Invoice raise asks which rail this Practice bills on, before either
-	 *   check below applies. There is no amount to ask alongside it any
-	 *   more (#947) -- the Invoice is raised for whatever the Contract
-	 *   itself carries. Since #2106 the question is asked only when the
+	 *   check below applies. Since #2106 the question is asked only when the
 	 *   first raise is: the section shows its facts and one Create Invoice
 	 *   that opens the question, never the question unasked (the record-page
 	 *   pattern, govuk-alignment.md, "Sections of a record page").
@@ -42,6 +45,8 @@
 		contractorInvoicesMessage,
 		formatAmount,
 		invoiceCreatedMessage,
+		nothingLeftToBillMessage,
+		type ContractBilling,
 		paymentRecordedMessage,
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
@@ -63,6 +68,7 @@
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { centsToDollars, dollarsToCents } from '#lib/rates.js';
 	import RecordPaymentForm from '#lib/components/organisms/RecordPaymentForm.svelte';
 	import RefundPaymentForm from '#lib/components/organisms/RefundPaymentForm.svelte';
 	import ReversePaymentForm from '#lib/components/organisms/ReversePaymentForm.svelte';
@@ -77,6 +83,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
+	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 
 	let {
@@ -89,6 +96,8 @@
 		isOwnerOrAdmin,
 		canReadInvoiceMoney = true,
 		contractorInvoices = [],
+		billing,
+		hasUnbilled = true,
 		isAskingBillingMode = $bindable(false),
 		practiceTimezone,
 		paymentTermsDays,
@@ -140,6 +149,14 @@
 		/** A contractor's rows (#2094), as the BFF sends her them: days and
 		 * status, no money. Read only when canReadInvoiceMoney is false. */
 		contractorInvoices?: ContractorInvoice[];
+		/** The Contract's price, what its Invoices have billed and what is
+		 * left (#2829). Absent for a contractor Doula, who reads no money,
+		 * and while it loads; the amount question is asked only with it. */
+		billing?: ContractBilling;
+		/** Whether any of the Contract's price is left to bill, as a
+		 * contractor Doula is told it (#2829): a fact, never a figure. Read
+		 * only when canReadInvoiceMoney is false. */
+		hasUnbilled?: boolean;
 		/** Whether the billing-mode question is open (#2106): it is on the
 		 * page only once Create Invoice has asked for it. Bindable, as
 		 * OfferSection's isFormOpen, so a demo can draw it open. */
@@ -148,7 +165,7 @@
 		/** The Invoice a link named (#2240): its row takes focus, once,
 		 * when it arrives, so the Invoices list lands on it. */
 		landOnInvoiceId?: string;
-		onCreate: (billingMode?: BillingMode, due?: InvoiceDueChoice) => Promise<void>;
+		onCreate: (billingMode?: BillingMode, due?: InvoiceDueChoice, amountCents?: number) => Promise<void>;
 		onRecordPayment: (
 			invoiceId: string,
 			input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -163,6 +180,7 @@
 	} = $props();
 
 	const isBillable = $derived(contractStatus === billableContractStatus);
+	const isNothingLeftToBill = $derived(canReadInvoiceMoney ? billing?.unbilledCents === 0 : !hasUnbilled);
 
 	function invoiceRowId(invoice: { id: string }, view: DataTableView): string {
 		return `invoice-row-${view}-${invoice.id}`;
@@ -219,6 +237,42 @@
 		billingModeError = '';
 		createError = undefined;
 		resetDueQuestion();
+		resetAmountQuestion();
+	}
+
+	// #2829: how much of the Contract this Invoice bills. What the Contract
+	// has not yet billed is in the field until a person types over it, so
+	// a press that never reads the question bills what it billed before
+	// this question was asked (the whole price, on a first Invoice).
+	let typedAmount = $state<string | undefined>();
+	let amountError = $state('');
+	const amountFieldId = 'invoice-amount';
+	const unbilledCents = $derived(billing!.unbilledCents);
+	const amountDollars = $derived(typedAmount ?? centsToDollars(unbilledCents));
+	const isAskingAmount = $derived(canReadInvoiceMoney && billing !== undefined);
+
+	function resetAmountQuestion() {
+		typedAmount = undefined;
+		amountError = '';
+	}
+
+	/** The cents the form's amount names, or `undefined` for a contractor,
+	 * who is not asked and bills what is left. Sets the field's refusal and
+	 * returns `false` when the answer cannot be used. */
+	function readAmount(): { ok: true; cents?: number } | { ok: false } {
+		if (!isAskingAmount) {
+			return { ok: true };
+		}
+		const cents = dollarsToCents(amountDollars);
+		if (cents === undefined) {
+			amountError = 'Enter an amount to bill greater than $0.00';
+			return { ok: false };
+		}
+		if (cents > unbilledCents) {
+			amountError = `Amount to bill must be ${formatAmount(unbilledCents)} or less`;
+			return { ok: false };
+		}
+		return { ok: true, cents };
 	}
 
 	// #2828: when the Invoice is due. The Practice's payment terms are
@@ -317,6 +371,7 @@
 	const createFormErrors = $derived<FormError[]>(
 		[
 			billingModeError ? { message: billingModeError, targetId: billingModeFieldId } : undefined,
+			amountError ? { message: amountError, targetId: amountFieldId } : undefined,
 			dueDateError ? { message: dueDateError, targetId: dueDateFieldId } : undefined,
 			dueWeekError ? { message: dueWeekError, targetId: dueWeekFieldId } : undefined,
 			createError
@@ -331,6 +386,10 @@
 	function applyCreateRefusal(error_: unknown) {
 		if (billingMode === undefined && error_ instanceof RefusalError && error_.details?.billingMode) {
 			billingModeError = error_.details.billingMode;
+			return;
+		}
+		if (error_ instanceof RefusalError && error_.details?.amountCents) {
+			amountError = error_.details.amountCents;
 			return;
 		}
 		if (error_ instanceof RefusalError && (error_.details?.dueOn || error_.details?.gestationalWeek)) {
@@ -363,13 +422,11 @@
 		}
 	]);
 
-	// #947: the amount an Invoice is raised for is the Contract's own
-	// price, never a figure typed here -- there is nothing left to
-	// validate before calling onCreate.
 	async function handleCreate(event: SubmitEvent) {
 		event.preventDefault();
 		createError = undefined;
 		billingModeError = '';
+		amountError = '';
 		dueDateError = '';
 		dueWeekError = '';
 		hasCreated = false;
@@ -378,8 +435,9 @@
 		if (billingMode === undefined && chosenBillingMode === undefined) {
 			billingModeError = 'Select how this Practice bills Clients';
 		}
+		const amount = readAmount();
 		const dueChoice = readDueChoice();
-		if (billingModeError || !dueChoice.ok) {
+		if (billingModeError || !amount.ok || !dueChoice.ok) {
 			return;
 		}
 
@@ -397,9 +455,10 @@
 
 		isCreating = true;
 		try {
-			await onCreate(billingMode === undefined ? chosenBillingMode : undefined, dueChoice.due);
+			await onCreate(billingMode === undefined ? chosenBillingMode : undefined, dueChoice.due, amount.cents);
 			isAskingBillingMode = false;
 			resetDueQuestion();
+			resetAmountQuestion();
 			hasCreated = true;
 		} catch (error_) {
 			applyCreateRefusal(error_);
@@ -701,6 +760,15 @@
 		(#2017: no list item holds a control). At a narrow width DataTable
 		draws each Invoice as a card with its actions at the foot.
 	-->
+	{#if billing}
+		<SummaryList
+			rows={[
+				{ label: 'Contract price', value: formatAmount(billing.priceCents) },
+				{ label: 'Billed', value: formatAmount(billing.billedCents) },
+				{ label: 'Not yet billed', value: formatAmount(billing.unbilledCents) }
+			]}
+		/>
+	{/if}
 	<div class="invoice-table">
 		<DataTable
 			columns={invoiceColumns}
@@ -808,6 +876,33 @@
 	</LabeledField>
 {/snippet}
 
+{#snippet amountQuestion()}
+	{#if isAskingAmount}
+		<LabeledField
+			id={amountFieldId}
+			label="Amount to bill (USD)"
+			hint="Up to {formatAmount(unbilledCents)} is left to bill on this Contract."
+			error={amountError || undefined}
+			width={10}
+		>
+			{#snippet children({ id, describedBy, invalid, width })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					{width}
+					prefix="$"
+					type="number"
+					step={0.01}
+					inputmode="decimal"
+					value={amountDollars}
+					onInput={(value) => (typedAmount = value)}
+				/>
+			{/snippet}
+		</LabeledField>
+	{/if}
+{/snippet}
+
 {#snippet dueQuestion()}
 	<RadioGroup
 		legend="When is this Invoice due?"
@@ -820,6 +915,8 @@
 
 {#if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
+{:else if isNothingLeftToBill}
+	<Notice variant="info" message={nothingLeftToBillMessage} />
 {:else if billingMode === undefined && !isAskingBillingMode}
 	<!-- #2106: the first raise is where the billing mode is asked (#271), so
 	     the question waits for this press rather than standing on the page. -->
@@ -839,6 +936,7 @@
 			onChange={(value) => (chosenBillingMode = value)}
 			error={billingModeError || undefined}
 		/>
+		{@render amountQuestion()}
 		{@render dueQuestion()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 		<Button label="Cancel" variant="secondary" onClick={closeBillingModeQuestion} />
@@ -856,6 +954,7 @@
 		{#if createFormErrors.length > 0}
 			<ErrorSummary errors={createFormErrors} />
 		{/if}
+		{@render amountQuestion()}
 		{@render dueQuestion()}
 		<Button label="Create Invoice" type="submit" loading={isCreating} />
 	</StackedForm>

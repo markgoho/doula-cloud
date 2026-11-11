@@ -3,6 +3,7 @@ import {
 	billableContractStatus,
 	cardPaymentsRefusal,
 	cardPaymentsWait,
+	billingAfterRaising,
 	createInvoice,
 	formatAmount,
 	invoiceRowStatusLabel,
@@ -42,7 +43,7 @@ describe('loadInvoices', () => {
 		const result = await loadInvoices(fetcher, 'practice-1', 'eng-1');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices');
-		expect(result).toEqual([invoice]);
+		expect(result).toEqual({ invoices: [invoice], billing: undefined });
 	});
 
 	it('returns an empty list when the response has none yet (no Contract required to list)', async () => {
@@ -50,7 +51,16 @@ describe('loadInvoices', () => {
 
 		const result = await loadInvoices(fetcher, 'practice-1', 'eng-1');
 
-		expect(result).toEqual([]);
+		expect(result).toEqual({ invoices: [], billing: undefined });
+	});
+
+	it('returns what the Contract has billed and what is left (#2829)', async () => {
+		const contractBilling = { priceCents: 150_000, billedCents: 50_000, unbilledCents: 100_000 };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false, contractBilling }));
+
+		const result = await loadInvoices(fetcher, 'practice-1', 'eng-1');
+
+		expect(result.billing).toEqual(contractBilling);
 	});
 
 	it('throws with the response body text on a 404 (unlike loadContract, this always means a real error)', async () => {
@@ -69,12 +79,12 @@ describe('loadInvoices', () => {
 describe('loadContractorInvoices (#2094)', () => {
 	it('reads the same path and returns her money-free rows', async () => {
 		const row = { id: 'inv-1', status: 'open', raisedOn: '2026-10-01', dueOn: '2026-10-31', daysOverdue: 0 };
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false, hasUnbilled: true }));
 
 		const result = await loadContractorInvoices(fetcher, 'practice-1', 'eng-1');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices');
-		expect(result).toEqual([row]);
+		expect(result).toEqual({ invoices: [row], hasUnbilled: true });
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {
@@ -200,12 +210,38 @@ describe('createInvoice', () => {
 		});
 	});
 
+	it('sends the amount a person chose, in cents (#2829)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await createInvoice(fetcher, 'practice-1', 'eng-1', undefined, undefined, 50_000);
+
+		expect(fetcher.mock.calls[0]![1].body).toBe(JSON.stringify({ amountCents: 50_000 }));
+	});
+
 	it('sends the due day a person chose beside the rest (#2828)', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
 
 		await createInvoice(fetcher, 'practice-1', 'eng-1', undefined, { gestationalWeek: 37 });
 
 		expect(fetcher.mock.calls[0]![1].body).toBe(JSON.stringify({ gestationalWeek: 37 }));
+	});
+});
+
+describe('billingAfterRaising (#2829)', () => {
+	it('moves the amount from what is left to what is billed', () => {
+		const billing = { priceCents: 150_000, billedCents: 0, unbilledCents: 150_000 };
+
+		expect(billingAfterRaising(billing, 50_000)).toEqual({
+			priceCents: 150_000,
+			billedCents: 50_000,
+			unbilledCents: 100_000
+		});
+	});
+
+	it('never reads less than nothing left', () => {
+		const billing = { priceCents: 100, billedCents: 90, unbilledCents: 10 };
+
+		expect(billingAfterRaising(billing, 20).unbilledCents).toBe(0);
 	});
 });
 

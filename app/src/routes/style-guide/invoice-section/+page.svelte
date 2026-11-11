@@ -82,6 +82,11 @@
 		{ id: 'in_8', status: 'open', raisedOn: '2028-01-04', dueOn: '2028-02-03', daysOverdue: 0, paymentProcessing: true }
 	];
 
+	// #2829: the longest figures, a four-figure Contract with a retainer
+	// already billed, and the same Contract with nothing left.
+	const billing = { priceCents: 450_000, billedCents: 175_000, unbilledCents: 275_000 };
+	const fullyBilled = { priceCents: 450_000, billedCents: 450_000, unbilledCents: 0 };
+
 	const paymentsSettingsHref ='https://example.test/practices/practice-1/settings/payments';
 	// #1280: any real IANA zone does -- this page's own todayIsoDate calls
 	// don't depend on which one, only that a real name is there.
@@ -362,6 +367,7 @@
 			isOwnerOrAdmin={false}
 			billingMode={undefined}
 			isAskingBillingMode
+			{billing}
 			{paymentsSettingsHref}
 			{practiceTimezone}
 			{paymentTermsDays}
@@ -415,6 +421,61 @@
 			isOwner={true}
 			isOwnerOrAdmin={true}
 			billingMode="by_hand"
+			{billing}
+			{paymentsSettingsHref}
+			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
+	<!-- #2829: every dollar of the Contract is billed, so the section says
+	     so and offers no Create Invoice. -->
+	<section>
+		<h2>Owner or Admin: everything billed</h2>
+		<InvoiceSection
+			{invoices}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="by_hand"
+			billing={fullyBilled}
+			{paymentsSettingsHref}
+			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
+			onCreate={async () => {}}
+			onRecordPayment={async () => {}}
+			onVoidInvoice={async () => {}}
+			onWriteOffInvoice={async () => {}}
+			onReversePayment={async () => {}}
+			onRefundPayment={async () => {}}
+		/>
+	</section>
+
+	<!-- #2829: a later Invoice on the rail already chosen, with the Contract
+	     part billed -- the amount and the due questions, and nothing else. -->
+	<section>
+		<h2>Owner or Admin: a balance still to bill</h2>
+		<InvoiceSection
+			{invoices}
+			contractStatus="signed"
+			clientsCanPay={true}
+			hasClientEmail={true}
+			isOwner={true}
+			isOwnerOrAdmin={true}
+			billingMode="by_hand"
+			{billing}
 			{paymentsSettingsHref}
 			{practiceTimezone}
 			{paymentTermsDays}

@@ -166,6 +166,21 @@ func (e *env) raise(engagementID string) payments.InvoiceView {
 		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{}))
 }
 
+// raiseFor raises an Invoice for amountCents of the Contract and returns
+// the 201 view.
+func (e *env) raiseFor(engagementID string, amountCents int64) payments.InvoiceView {
+	e.T.Helper()
+	return reqtest.Expect[payments.InvoiceView](e.T, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{AmountCents: &amountCents}))
+}
+
+// refuseRaiseFor raises an Invoice for amountCents, requires the status
+// want, and returns the error envelope it carries.
+func (e *env) refuseRaiseFor(engagementID string, amountCents int64, want int) apierr.APIError {
+	e.T.Helper()
+	return e.postRefused(invoicesPath(engagementID), want, reqtest.JSON(payments.CreateInvoiceRequest{AmountCents: &amountCents}))
+}
+
 // raiseWithMode is raise with the billing-mode answer (#271) on the request.
 func (e *env) raiseWithMode(engagementID, billingMode string) payments.InvoiceView {
 	e.T.Helper()
@@ -455,41 +470,6 @@ func TestPostInvoiceHandler_ContractorWithGrantedAttachmentSucceeds(t *testing.T
 	}
 	if raised.ID == "" || raised.BillingMode != byHand {
 		t.Fatalf("raised = %+v, want an id and billingMode %q", raised, byHand)
-	}
-}
-
-// TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody proves
-// #947's core AC: the amount an Invoice is raised for is the signed
-// Contract's own amount_cents, never a caller-supplied figure, even when
-// a request body tries to name one -- CreateInvoiceRequest carries no
-// such field any more, so an old caller's amountCents is simply ignored
-// as an unknown key. The seeded Contract carries 15000
-// (seedSignedContract -> seedContractWithStatus); the attempted 999 must
-// never reach the created Invoice, Stripe's own CreateInvoice call, or
-// the invoice_raised activity entry.
-func TestPostInvoiceHandler_AmountDerivesFromContractIgnoringBody(t *testing.T) {
-	e := newEnv(t, signedInAs(fixture.Doula()), connected())
-	engagementID, _ := e.signedContract()
-
-	out := reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
-		e.SignedIn, reqtest.RawJSON([]byte(`{"amountCents": 999}`)))
-
-	if out.AmountCents != 15000 {
-		t.Fatalf("invoice.amountCents = %d, want 15000 (the Contract's, not the attempted 999)", out.AmountCents)
-	}
-	if calls := e.Stripe.CreateInvoiceCalls; len(calls) != 1 || calls[0].AmountCents != 15000 {
-		t.Fatalf("CreateInvoice calls = %v, want one call at 15000", calls)
-	}
-
-	diff := testdb.Scalar[[]byte](t, e.DB.Admin, `SELECT diff FROM activity WHERE subject_id = $1 AND action = 'invoice_raised'`, engagementID)
-	var decoded struct {
-		AmountCents int64 `json:"amountCents"`
-	}
-	if err := json.Unmarshal(diff, &decoded); err != nil {
-		t.Fatalf("decode activity diff: %v", err)
-	}
-	if decoded.AmountCents != 15000 {
-		t.Fatalf("activity diff amountCents = %d, want 15000", decoded.AmountCents)
 	}
 }
 
@@ -803,7 +783,9 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 	e := newEnv(t, signedInAs(fixture.Doula()))
 	engagementID, _ := e.signedContract()
 
-	first := e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
+	retainer := int64(5000)
+	first := reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{AmountCents: &retainer, BillingMode: new(string(payments.BillingModeByHand))}))
 	// The mode is already set now, so the second request need not (and,
 	// per #271, must not have its own value honored) repeat billingMode.
 	second := e.raise(engagementID)
@@ -824,7 +806,9 @@ func TestPostInvoiceHandler_ByHandInvoiceSequenceIncrementsAcrossInvoices(t *tes
 func TestPostInvoiceHandler_ByHandInvoiceIgnoresLaterBillingModeRequest(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Doula()))
 	engagementID, _ := e.signedContract()
-	e.raiseWithMode(engagementID, string(payments.BillingModeByHand))
+	retainer := int64(5000)
+	reqtest.Expect[payments.InvoiceView](t, http.MethodPost, e.PracticeURL(invoicesPath(engagementID)), http.StatusCreated,
+		e.SignedIn, reqtest.JSON(payments.CreateInvoiceRequest{AmountCents: &retainer, BillingMode: new(string(payments.BillingModeByHand))}))
 
 	// This request names "stripe", but the Practice already chose
 	// by_hand -- it must be ignored, and this Invoice raised by hand too.

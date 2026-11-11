@@ -540,7 +540,7 @@ export const asContractor: RouteVariant<RouteParameters> = {
 		}
 	},
 	respond: (path) => {
-		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: contractorInvoices, hasMore: false });
+		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: contractorInvoices, hasMore: false, hasUnbilled: true });
 		return fixture.respond!(path);
 	}
 };
@@ -745,7 +745,15 @@ export const typical: RouteVariant<RouteParameters> = {
 		// #2146: the ledger's "Invoice raised", and the deposit before it,
 		// paid: the Invoices table this screen measures, with every column
 		// an Owner reads filled on the paid row.
-		if (path.endsWith('/contract/invoices')) return jsonResponse({ items: typicalInvoices, hasMore: false });
+		// #2829: the Contract's $4,500.00, billed in three Invoices so far,
+		// with the rest still to bill.
+		if (path.endsWith('/contract/invoices')) {
+			return jsonResponse({
+				items: typicalInvoices,
+				hasMore: false,
+				contractBilling: { priceCents: 450_000, billedCents: 175_000, unbilledCents: 275_000 }
+			});
+		}
 		if (path.includes('/activity')) {
 			return jsonResponse({
 				items: ['visit_logged', 'invoice_raised', 'contract_sent', 'visit_logged', 'visit_scheduled'].map(
