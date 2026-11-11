@@ -3812,7 +3812,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 
 		await expect.element(testPage.getByText('Not yet billed')).toBeVisible();
 		await expect.element(testPage.getByText('$2,750.00', { exact: true })).toBeVisible();
-		await testPage.getByRole('button', { name: 'Change' }).last().click();
+		await testPage.getByRole('region', { name: 'Invoices', exact: true }).getByRole('button', { name: 'Change' }).click();
 		const amount = testPage.getByLabelText('Amount to bill (USD)');
 		await expect.element(amount).toHaveValue(2750);
 		await amount.fill('1234.56');
