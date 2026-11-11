@@ -18,7 +18,9 @@ import {
 	refundPayment,
 	reversePayment,
 	setBillingMode,
+	termsDueDay,
 	unbillableContractMessage,
+	weekOfPregnancyDay,
 	voidInvoice,
 	writeOffInvoice
 } from './invoice.js';
@@ -196,6 +198,29 @@ describe('createInvoice', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ billingMode: 'by_hand' })
 		});
+	});
+
+	it('sends the due day a person chose beside the rest (#2828)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({}));
+
+		await createInvoice(fetcher, 'practice-1', 'eng-1', undefined, { gestationalWeek: 37 });
+
+		expect(fetcher.mock.calls[0]![1].body).toBe(JSON.stringify({ gestationalWeek: 37 }));
+	});
+});
+
+describe('the days an Invoice can fall due on (#2828)', () => {
+	it('counts payment terms as 24-hour days read in the Practice zone', () => {
+		const now = new Date('2026-11-10T03:00:00Z');
+
+		expect(termsDueDay('America/New_York', now, 30)).toBe('2026-12-09');
+		expect(termsDueDay('UTC', now, 30)).toBe('2026-12-10');
+	});
+
+	it('counts a week of pregnancy back from the due date, week 40 being the due date', () => {
+		expect(weekOfPregnancyDay('2026-12-20', 40)).toBe('2026-12-20');
+		expect(weekOfPregnancyDay('2026-12-20', 37)).toBe('2026-11-29');
+		expect(weekOfPregnancyDay('2026-12-20', 42)).toBe('2027-01-03');
 	});
 });
 

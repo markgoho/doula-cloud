@@ -26,6 +26,18 @@ Before this decision an Invoice had nothing to be late against. The Stripe rail 
 
 **A known gap: Stripe's hosted invoice.** Stripe prints its `due_date` in a zone of its own choice. Near midnight, the day on the Client's hosted invoice and the Practice's `dueOn` can be a day apart. "One date rather than two" above still holds for the instant, but not always for the printed day. Nothing here changes the instant to close that gap.
 
+## Amended 2026-11-10: payment terms are the default for the due day, not its only source
+
+[#2828](https://github.com/markgoho/doula-cloud/issues/2828) changes where an Invoice's due day comes from and keeps everything else above. A birth Contract commonly makes its fee due by a week of pregnancy, before the Doula goes on call, and a Practice could not say that: the only way to that day was to raise the Invoice on exactly the right day.
+
+**Payment terms are the default, and the person raising the Invoice may give the day.** `CreateInvoiceRequest` takes `dueOn` (a calendar day, `YYYY-MM-DD`) or `gestationalWeek` (20 to 42), never both. A request that names neither behaves exactly as before: the terms count 24 hours a day from the instant the Invoice is raised. A week resolves from a birth Engagement's due date through `oncall.WeekStart`, the rule the on-call window counts with: week 40 is the due date and week N is 40 - N weeks before it. A week on an Engagement that is not a birth or has no due date is refused, as is a day before today in the Practice's zone, each as a 400 with `details` on the field.
+
+**How the day becomes `due_at`.** The stored instant is noon on the chosen day in the Practice's zone. Any instant that day reads as that day through `practiceDay` and is overdue from the start of the next day through `overdue.From`; noon also keeps the printed day the same in nearly any zone Stripe prints it in, which narrows the known gap below for a chosen day. An Invoice raised on its own due day after noon falls due at 23:59:59 that day, so the instant is still after the raise and still a whole second. Stripe is sent that exact instant, as before.
+
+**The day is fixed at raising.** A later change to the Engagement's due date does not move it: the Client has been told a day, Stripe's hosted invoice prints it, and a date is a trigger only when a person set it ([ADR-0043](0043-a-date-is-a-trigger-only-when-someone-set-it.md)). The Activity row for raising the Invoice records `dueOn` beside `amountCents`, for every raise, so "how did this Invoice come to be due then?" has an answer.
+
+**The question.** Create Invoice asks *When is this Invoice due?* with the terms answer chosen and its day shown, a recorded departure from "nothing chosen" (`docs/design/govuk-alignment.md`).
+
 ## This decision merged as ADR-0033
 
 It was renumbered on [#1053](https://github.com/markgoho/doula-cloud/issues/1053), because [#1025](https://github.com/markgoho/doula-cloud/pull/1025) took 0033 twenty-three minutes earlier for `0033-staff-login-deletion-is-immediate-and-redacts-the-person.md` and one number cannot name two decisions. Every citation was repointed here except one: `api/db/migrations/00109_connect_nudge_outbox.sql` says "nothing in this repo fires on a clock (ADR-0033)" and means this decision, but that migration has already run and `api/db/migrations/guardrail_test.go` records why an applied migration must not change. `app/src/lib/adrNumbers.usage.spec.ts` now fails the build on a repeated ADR number, so the next one is caught in CI rather than by a reader.

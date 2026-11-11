@@ -40,6 +40,10 @@ const InvoiceLineItemDescription = "Professional services"
 // deliberate constant instead of a repeated literal.
 const diffKeyAmountCents = "amountCents"
 
+// diffKeyDueOn is the diff key raising an Invoice records its due day
+// under, YYYY-MM-DD in the Practice's zone (#2828).
+const diffKeyDueOn = "dueOn"
+
 // CapabilityStatus is cardpayments.Status, under the name this package's
 // Stripe port uses for it. Restricted's outstanding items are
 // AccountStatus.RequirementsDue.

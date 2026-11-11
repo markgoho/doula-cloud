@@ -119,9 +119,11 @@
 		refundPayment,
 		voidInvoice,
 		writeOffInvoice,
+		loadPaymentTerms,
 		type BillingMode,
 		type ContractorInvoice,
 		type Invoice,
+		type InvoiceDueChoice,
 		type PaymentMethod,
 		type RecordPaymentInput,
 		type RefundPaymentInput
@@ -881,6 +883,10 @@
 	// would fall back to UTC's own day.
 	const practiceTimezoneState = new SectionState('');
 	const practiceTimezone = $derived(practiceTimezoneState.value);
+	// #2828: the Practice's payment terms, the answer Create Invoice's due
+	// question has chosen. 0 until read; real terms are at least a day.
+	const paymentTermsState = new SectionState(0);
+	const paymentTermsDays = $derived(paymentTermsState.value);
 
 	// Offers on this Engagement (#317). Owner/Admin only at the BFF, so a
 	// Doula's load simply fails and the section stays hidden -- the read
@@ -1562,6 +1568,13 @@
 		}, 'Failed to load Practice timezone');
 	}
 
+	async function loadPaymentTermsSection() {
+		await paymentTermsState.load(async () => {
+			const terms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
+			return terms.netDays;
+		}, 'Failed to load payment terms');
+	}
+
 	// Reported by InvoiceSection's onCreate prop. No catch here, same as
 	// the original: a refused create is left to the component the same way
 	// Void Contract is (see above). #270 removed the old connectRequired
@@ -1570,12 +1583,13 @@
 	// front, so a create attempt reaching this function is always the
 	// happy path or a genuine error. #947 removed the amount this used to
 	// pass on: an Invoice is raised for whatever the Contract carries.
-	async function handleCreateInvoice(chosenBillingMode?: BillingMode) {
+	async function handleCreateInvoice(chosenBillingMode?: BillingMode, due?: InvoiceDueChoice) {
 		const invoice = await createInvoice(
 			apiFetchWithSession,
 			page.params.practiceId!,
 			page.params.engagementId!,
-			chosenBillingMode
+			chosenBillingMode,
+			due
 		);
 		// #2002: a contractor's 201 names no amount (RaisedInvoice), so her
 		// new row is read back in her own shape (#2094) rather than spliced.
@@ -1975,6 +1989,7 @@
 			loadContractSection(),
 			loadInvoicesSection(),
 			loadPracticeTimezoneSection(),
+			loadPaymentTermsSection(),
 			loadRosterThenOffers(),
 			loadOnCall(),
 			loadDoulaFeesSection(),
@@ -3101,6 +3116,9 @@
 	{#if practiceTimezoneState.error}
 		<Notice variant="error" message={practiceTimezoneState.error} />
 	{/if}
+	{#if paymentTermsState.error}
+		<Notice variant="error" message={paymentTermsState.error} />
+	{/if}
 
 	<!-- #1280: InvoiceSection's own todayIsoDate reads "today" in
 	     practiceTimezone with no UTC fallback (ADR-0036's own rule for a
@@ -3108,7 +3126,7 @@
 	     rather than mounting with '' and throwing on its own first date
 	     computation. A still-loading or failed read leaves this gap
 	     blank; the Notice above already says why. -->
-	{#if practiceTimezone}
+	{#if practiceTimezone && paymentTermsDays > 0}
 		<InvoiceSection
 			{invoices}
 			{contractStatus}
@@ -3120,6 +3138,9 @@
 			canReadInvoiceMoney={canReadContractMoney}
 			contractorInvoices={contractorInvoicesState.value}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind={detail.kind}
+			engagementDueDate={displayDueDate}
 			{paymentsSettingsHref}
 			{landOnInvoiceId}
 			onCreate={handleCreateInvoice}
@@ -3129,7 +3150,7 @@
 			onVoidInvoice={handleVoidInvoice}
 			onWriteOffInvoice={handleWriteOffInvoice}
 		/>
-	{:else if !practiceTimezoneState.error}
+	{:else if !practiceTimezoneState.error && !paymentTermsState.error}
 		<Skeleton label="Loading the Invoices" />
 	{/if}
 {/snippet}

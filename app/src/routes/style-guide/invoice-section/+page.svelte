@@ -86,6 +86,8 @@
 	// #1280: any real IANA zone does -- this page's own todayIsoDate calls
 	// don't depend on which one, only that a real name is there.
 	const practiceTimezone = 'America/New_York';
+	const paymentTermsDays = 30;
+	const engagementDueDate = '2027-03-14';
 </script>
 
 <stack-l space="var(--space-6)">
@@ -103,6 +105,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -124,6 +129,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -147,6 +155,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -168,6 +179,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -193,6 +207,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -214,6 +231,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -235,6 +255,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -258,6 +281,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -279,6 +305,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -305,6 +334,9 @@
 			billingMode="stripe"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -332,6 +364,9 @@
 			isAskingBillingMode
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -355,6 +390,9 @@
 			billingMode={undefined}
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}
@@ -379,6 +417,9 @@
 			billingMode="by_hand"
 			{paymentsSettingsHref}
 			{practiceTimezone}
+			{paymentTermsDays}
+			engagementKind="birth"
+			{engagementDueDate}
 			onCreate={async () => {}}
 			onRecordPayment={async () => {}}
 			onVoidInvoice={async () => {}}

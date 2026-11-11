@@ -7,6 +7,7 @@ import {
 	type BillingMode,
 	type ContractorInvoice,
 	type Invoice,
+	type InvoiceDueChoice,
 	type PaymentMethod,
 	type RefundPaymentInput
 } from '#lib/invoice.js';
@@ -29,7 +30,10 @@ interface SetupOptions {
 	contractorInvoices?: ContractorInvoice[];
 	practiceTimezone?: string;
 	landOnInvoiceId?: string;
-	onCreate?: (billingMode?: BillingMode) => Promise<void>;
+	paymentTermsDays?: number;
+	engagementKind?: string;
+	engagementDueDate?: string;
+	onCreate?: (billingMode?: BillingMode, due?: InvoiceDueChoice) => Promise<void>;
 	onRecordPayment?: (
 		invoiceId: string,
 		input: { method: PaymentMethod; note?: string; paidOn: string }
@@ -127,6 +131,9 @@ async function setup({
 	// tests use (ADR-0036) -- a zone behind UTC, which is the case the
 	// future-date boundary tests below exercise.
 	practiceTimezone = 'America/New_York',
+	paymentTermsDays = 30,
+	engagementKind = 'birth',
+	engagementDueDate = '2027-03-14',
 	landOnInvoiceId,
 	onCreate = vi.fn().mockResolvedValue(undefined),
 	onRecordPayment = vi.fn().mockResolvedValue(undefined),
@@ -146,6 +153,9 @@ async function setup({
 		canReadInvoiceMoney,
 		contractorInvoices,
 		practiceTimezone,
+		paymentTermsDays,
+		engagementKind,
+		engagementDueDate,
 		paymentsSettingsHref,
 		landOnInvoiceId,
 		onCreate,
@@ -274,7 +284,7 @@ describe('InvoiceSection.svelte', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith();
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
 	});
 
 	// #1775: a refusal is an error summary, as the Record payment form's
@@ -530,7 +540,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('by_hand');
+			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined);
 		});
 
 		it('submits Stripe when that option is chosen', async () => {
@@ -539,7 +549,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By card, through Stripe.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('stripe');
+			expect(onCreate).toHaveBeenCalledWith('stripe', undefined);
 		});
 
 		it('refuses a submit with no option chosen, names the question, and sends no request (#1590)', async () => {
@@ -561,7 +571,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('By hand.').click();
 			await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-			expect(onCreate).toHaveBeenCalledWith('by_hand');
+			expect(onCreate).toHaveBeenCalledWith('by_hand', undefined);
 			await expect.element(page.getByRole('link', { name: 'Select how this Practice bills Clients' })).not.toBeInTheDocument();
 		});
 
@@ -1387,7 +1397,7 @@ describe('InvoiceSection.svelte for a contractor Doula (#2002, #2094)', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		expect(onCreate).toHaveBeenCalledWith();
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
 		const created = page.getByText('Invoice created.');
 		await expect.element(created).toBeVisible();
 		await expect.element(created).toHaveFocus();
@@ -1458,5 +1468,121 @@ describe('InvoiceSection.svelte landing on a linked Invoice (#2240)', () => {
 		});
 
 		await expect.poll(() => isFocusOn('Jul 1, 2026')).toBe(true);
+	});
+});
+
+async function setupDue(options: SetupOptions = {}) {
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-11-10T15:00:00Z'));
+	return setup({ engagementDueDate: '2026-12-20', ...options });
+}
+
+describe('InvoiceSection.svelte when the Invoice is due (#2828)', () => {
+	it('chooses the Practice payment terms and shows the day they give', async () => {
+		await setupDue();
+
+		await expect.element(page.getByLabelText("After this Practice's payment terms.")).toBeChecked();
+		await expect.element(page.getByText('30 days from today: Dec 10, 2026.')).toBeVisible();
+	});
+
+	it('raises with no due day when the terms stay chosen', async () => {
+		const { onCreate } = await setupDue();
+
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(undefined, undefined);
+	});
+
+	it('sends the date given', async () => {
+		const { onCreate } = await setupDue();
+
+		await page.getByLabelText('On a date.').click();
+		await page.getByLabelText('Due on').fill('2026-11-20');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(undefined, { dueOn: '2026-11-20' });
+	});
+
+	it('refuses an empty date and a date before today without sending', async () => {
+		const { onCreate } = await setupDue();
+
+		await page.getByLabelText('On a date.').click();
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: 'Enter the day this Invoice is due' })).toBeVisible();
+
+		await page.getByLabelText('Due on').fill('2026-11-09');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: 'The due day cannot be before today' })).toBeVisible();
+		expect(onCreate).not.toHaveBeenCalled();
+	});
+
+	it('shows the day a week of pregnancy gives before raising, and sends the week', async () => {
+		const { onCreate } = await setupDue();
+
+		await page.getByLabelText('At a week of pregnancy.').click();
+		await expect.element(page.getByText('Week 40 is the due date, Dec 20, 2026.')).toBeVisible();
+		await page.getByRole('spinbutton', { name: 'Week of pregnancy' }).fill('37');
+		await expect.element(page.getByText('Week 37 is Nov 29, 2026.')).toBeVisible();
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith(undefined, { gestationalWeek: 37 });
+	});
+
+	it('refuses a week out of range and a week that falls before today', async () => {
+		const { onCreate } = await setupDue();
+
+		await page.getByLabelText('At a week of pregnancy.').click();
+		await page.getByRole('spinbutton', { name: 'Week of pregnancy' }).fill('12');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: 'Enter a week of pregnancy from 20 to 42' })).toBeVisible();
+
+		await page.getByRole('spinbutton', { name: 'Week of pregnancy' }).fill('20');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: /Week 20 is before today/ })).toBeVisible();
+		expect(onCreate).not.toHaveBeenCalled();
+	});
+
+	it('offers no week on a postpartum Engagement', async () => {
+		await setupDue({ engagementKind: 'postpartum' });
+
+		await expect.element(page.getByLabelText('On a date.')).toBeVisible();
+		await expect.element(page.getByLabelText('At a week of pregnancy.')).not.toBeInTheDocument();
+	});
+
+	it('offers no week without a due date', async () => {
+		await setupDue({ engagementDueDate: '' });
+
+		await expect.element(page.getByLabelText('At a week of pregnancy.')).not.toBeInTheDocument();
+	});
+
+	it('puts the BFF refusal of a date and of a week on its own field', async () => {
+		const onCreate = vi
+			.fn()
+			.mockRejectedValueOnce(new RefusalError('Refused.', { dueOn: 'Due day cannot be before today' }))
+			.mockRejectedValueOnce(new RefusalError('Refused.', { gestationalWeek: 'Week of pregnancy needs a due date' }));
+		await setupDue({ onCreate });
+
+		await page.getByLabelText('On a date.').click();
+		await page.getByLabelText('Due on').fill('2026-11-20');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: 'Due day cannot be before today' })).toBeVisible();
+
+		await page.getByLabelText('At a week of pregnancy.').click();
+		await page.getByRole('spinbutton', { name: 'Week of pregnancy' }).fill('37');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+		await expect.element(page.getByRole('link', { name: 'Week of pregnancy needs a due date' })).toBeVisible();
+	});
+
+	it('asks the due question on the first raise too', async () => {
+		const { onCreate } = await setupDue({ billingMode: 'unset', paymentTermsDays: 1 });
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(page.getByText('1 day from today: Nov 11, 2026.')).toBeVisible();
+		await page.getByLabelText('By hand.').click();
+		await page.getByLabelText('On a date.').click();
+		await page.getByLabelText('Due on').fill('2026-11-12');
+		await page.getByRole('button', { name: 'Create Invoice' }).click();
+
+		expect(onCreate).toHaveBeenCalledWith('by_hand', { dueOn: '2026-11-12' });
 	});
 });

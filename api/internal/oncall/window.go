@@ -143,7 +143,7 @@ func DeriveWindow(in WindowInput) (*Window, NoWindowReason) {
 		if !hasDue {
 			return nil, NoWindowNoDueDate
 		}
-		start = due.AddDate(0, 0, -7*(fullTermWeeks-in.Rule.Week))
+		start = WeekStart(due, in.Rule.Week)
 	}
 
 	var end time.Time
@@ -160,6 +160,13 @@ func DeriveWindow(in WindowInput) (*Window, NoWindowReason) {
 		return nil, NoWindowEndedBeforeStart
 	}
 	return &Window{Start: start.Format(dateLayout), End: end.Format(dateLayout)}, ""
+}
+
+// WeekStart is the calendar day gestational week week begins on, counted
+// back from due: week 40 is the due date itself, and week N is 40 - N
+// weeks before it.
+func WeekStart(due time.Time, week int) time.Time {
+	return due.AddDate(0, 0, -7*(fullTermWeeks-week))
 }
 
 // Effective is the part of w one Doula is on call for, given her
