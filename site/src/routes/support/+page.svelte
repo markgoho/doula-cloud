@@ -44,6 +44,22 @@ password, no cookie and no JavaScript.
 		</p>
 	</PageSection>
 
+	<PageSection heading="Using {PRODUCT_NAME} on your phone">
+		<p>
+			{PRODUCT_NAME} has no App Store or Play Store app. It is a web app, and you add it to your phone's
+			Home Screen.
+		</p>
+		<p>
+			<strong>iPhone and iPad:</strong> open {PRODUCT_NAME} in Safari, tap Share, then tap Add to Home
+			Screen. On an iPhone, notifications arrive only after you have done this, and only if you open
+			{PRODUCT_NAME} from the Home Screen.
+		</p>
+		<p>
+			<strong>Android:</strong> open {PRODUCT_NAME} in Chrome, tap the menu, then tap Install app or Add
+			to Home screen.
+		</p>
+	</PageSection>
+
 	<PageSection heading="What we sell">
 		<p>
 			Practices buy <strong>Credits</strong>. One Credit covers one client engagement — a single client

@@ -22,6 +22,36 @@ export function vapidPublicKey(): string {
 	return (import.meta.env.VITE_VAPID_PUBLIC_KEY as string | undefined) ?? '';
 }
 
+export interface HomeScreenInputs {
+	userAgent: string;
+	maxTouchPoints: number;
+	isStandalone: boolean;
+	hasPushManager: boolean;
+}
+
+export function requiresHomeScreenForPush({
+	userAgent,
+	maxTouchPoints,
+	isStandalone,
+	hasPushManager
+}: HomeScreenInputs): boolean {
+	if (hasPushManager || isStandalone) return false;
+	const isIPadAsMac = maxTouchPoints > 1 && /Macintosh/.test(userAgent);
+	if (!isIPadAsMac && !/iPhone|iPad|iPod/.test(userAgent)) return false;
+	return !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);
+}
+
+export function isHomeScreenRequiredForPush(): boolean {
+	return requiresHomeScreenForPush({
+		userAgent: navigator.userAgent,
+		maxTouchPoints: navigator.maxTouchPoints,
+		isStandalone:
+			matchMedia('(display-mode: standalone)').matches ||
+			(navigator as Navigator & { standalone?: boolean }).standalone === true,
+		hasPushManager: 'PushManager' in globalThis
+	});
+}
+
 /**
  * Where this device's push subscription lives for a Practice -- the one
  * endpoint both Staff call sites use: the landing page registers against

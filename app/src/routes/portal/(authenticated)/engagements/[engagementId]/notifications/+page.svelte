@@ -22,6 +22,7 @@
 	import { RefusalError, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { PageRead } from '#lib/pageRead.svelte.js';
 	import {
+		isHomeScreenRequiredForPush,
 		isPushPermissionGranted,
 		portalNotificationPreferencePath,
 		portalPushSubscriptionsPath,
@@ -74,9 +75,14 @@
 		}
 	}
 
-	onMount(() =>
-		preference.load(loadPreference, (error) => (error instanceof RefusalError ? error.message : SERVICE_PROBLEM))
-	);
+	let isHomeScreenRequired = $state(false);
+
+	onMount(() => {
+		isHomeScreenRequired = isHomeScreenRequiredForPush();
+		return preference.load(loadPreference, (error) =>
+			error instanceof RefusalError ? error.message : SERVICE_PROBLEM
+		);
+	});
 
 	/*
 	 * The durable preference is written before the device is
@@ -123,6 +129,12 @@
 </script>
 
 {#snippet intro()}
+	{#if isHomeScreenRequired}
+		<Notice
+			variant="info"
+			message="To hear when a message is waiting, add DoulaCloud to your Home Screen: tap Share, then Add to Home Screen. Safari only sends notifications to apps on your Home Screen."
+		/>
+	{/if}
 	<Text
 		text="This device can tell you when a message is waiting. Do not rely on it for anything urgent."
 		tone="variant"

@@ -32,7 +32,9 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 const registerPushSubscription = vi.hoisted(() => vi.fn(() => Promise.resolve(true)));
 const unregisterPushSubscription = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 const isPushPermissionGranted = vi.hoisted(() => vi.fn(() => true));
+const isHomeScreenRequiredForPush = vi.hoisted(() => vi.fn(() => false));
 vi.mock('#lib/pushRegistration.js', () => ({
+	isHomeScreenRequiredForPush,
 	registerPushSubscription,
 	unregisterPushSubscription,
 	isPushPermissionGranted,
@@ -89,9 +91,22 @@ beforeEach(() => {
 	unregisterPushSubscription.mockClear();
 	isPushPermissionGranted.mockClear();
 	isPushPermissionGranted.mockReturnValue(true);
+	isHomeScreenRequiredForPush.mockReturnValue(false);
 });
 
 describe('the Client portal Notifications settings screen', () => {
+	it('says how to add DoulaCloud to the Home Screen where an iPhone in Safari needs it', async () => {
+		isHomeScreenRequiredForPush.mockReturnValue(true);
+		await setup({ respond: toApiResponder(fixture) });
+		await expect.element(page.getByText('add DoulaCloud to your Home Screen', { exact: false })).toBeVisible();
+	});
+
+	it('says nothing about the Home Screen where push already works', async () => {
+		await setup({ respond: toApiResponder(fixture) });
+		await expect.element(page.getByText('What a notification shows')).toBeVisible();
+		expect(page.getByText('Home Screen', { exact: false }).elements()).toHaveLength(0);
+	});
+
 	it('explains what a notification is and is not, before any action', async () => {
 		// This screen's happy path (GET only, no toggle clicked) is exactly
 		// the fixture's own response.

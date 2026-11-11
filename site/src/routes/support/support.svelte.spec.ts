@@ -38,6 +38,16 @@ describe('/support', () => {
 		await expect.element(testPage.getByText('To ask for a refund, email us. We do not need a reason.')).toBeVisible();
 	});
 
+	it('says there is no store app, and how to add DoulaCloud to an iPhone and an Android phone', async () => {
+		await render(Page);
+		await expect
+			.element(testPage.getByRole('heading', { level: 2, name: 'Using DoulaCloud on your phone' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('no App Store or Play Store app', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('tap Share, then tap Add to Home Screen', { exact: false })).toBeVisible();
+		await expect.element(testPage.getByText('tap Install app or Add to Home screen', { exact: false })).toBeVisible();
+	});
+
 	it('gives a contact that reaches a person', async () => {
 		await render(Page);
 		await expect.element(testPage.getByText('hello@doula.cloud')).toBeVisible();

@@ -59,8 +59,10 @@ vi.mock('#lib/api.js', () => ({
 }));
 
 const registerPushSubscription = vi.hoisted(() => vi.fn());
+const isHomeScreenRequiredForPush = vi.hoisted(() => vi.fn(() => false));
 vi.mock('#lib/pushRegistration.js', () => ({
 	registerPushSubscription,
+	isHomeScreenRequiredForPush,
 	practicePushSubscriptionsPath: (practiceId: string) =>
 		`/api/practices/${practiceId}/push-subscriptions`
 }));
@@ -151,6 +153,7 @@ beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	registerPushSubscription.mockReset();
 	registerPushSubscription.mockResolvedValue(undefined);
+	isHomeScreenRequiredForPush.mockReturnValue(false);
 	// setup() overwrites pageState.data per test; reset it back to the
 	// fixture's own Doula session (#835) for the one test that bypasses
 	// setup() and reads straight off the fixture.
@@ -158,6 +161,20 @@ beforeEach(() => {
 });
 
 describe('the Practice landing page', () => {
+	it('says how to add DoulaCloud to the Home Screen where an iPhone in Safari needs it', async () => {
+		isHomeScreenRequiredForPush.mockReturnValue(true);
+		await setup();
+
+		await expect.element(testPage.getByText('add DoulaCloud to your Home Screen', { exact: false })).toBeVisible();
+	});
+
+	it('says nothing about the Home Screen where push already works', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Offers awaiting your answer' })).toBeVisible();
+		expect(testPage.getByText('Home Screen', { exact: false }).elements()).toHaveLength(0);
+	});
+
 	it('leads with the Offers still awaiting an answer, and drops the decided ones', async () => {
 		await setup();
 
