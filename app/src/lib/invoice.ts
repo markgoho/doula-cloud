@@ -215,16 +215,26 @@ export function practiceInvoicesPath(practiceId: string, cursor?: string, view: 
 	return search ? `${path}?${search}` : path;
 }
 
-/** Loads one page of the Practice's Invoices in a view. Throws with the response body text on a non-2xx response --
+/** Loads one page of the Practice's Invoices in a view. A search -- a
+ * reference, or a Client's name -- makes it a POST with the view and the
+ * cursor in the body (#2746): a Client's name is in no URL, so in no log
+ * (#1829). Throws with the response body text on a non-2xx response --
  * the route's `load` maps status codes to SvelteKit errors before
  * calling this, so a throw here is only ever an unexpected failure. */
 export async function loadPracticeInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	cursor?: string,
-	view: InvoicesView = 'all'
+	view: InvoicesView = 'all',
+	search = ''
 ): Promise<PracticeInvoicePage> {
-	const response = await fetcher(practiceInvoicesPath(practiceId, cursor, view));
+	const response = search
+		? await fetcher(`/api/practices/${practiceId}/invoices/list`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ view, search, cursor: cursor ?? '' })
+			})
+		: await fetcher(practiceInvoicesPath(practiceId, cursor, view));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -725,6 +735,16 @@ export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
 }
 
+/** Whether a Staff list says an Invoice's state after its amount as a badge,
+ * and in which color (DESIGN.md, "Money is said once"): owed is the amber
+ * badge and overdue the red one; every other state is a plain word, so it
+ * has none. The Clients list and the Invoices list both read it (#2746). */
+export function invoiceStateBadge(invoice: InvoiceStanding): 'warning' | 'error' | undefined {
+	if (invoice.paymentProcessing) return undefined;
+	if (invoice.daysOverdue > 0) return 'error';
+	return invoice.status === 'open' ? 'warning' : undefined;
+}
+
 /** The Badge variant beside invoiceRowStatusLabel: Overdue is the error,
  * so late money never shares a color with money merely owed. A payment on
  * its way is information, as Open is. */
@@ -819,15 +839,27 @@ const VIEW_ORDER: Record<InvoicesView, string> = {
  * how many rows are on screen, of how many the view holds, which view, and
  * in what order. `shown` grows with each "Load more", so the line says how
  * far through the list the reader is.
+ *
+ * A search (a reference, or a Client's name) is said in the line, in the
+ * words typed. The book's counts are not counts of what matched, so a
+ * searched line says no "of how many".
  */
 export function invoicesResultSummary(
 	view: InvoicesView,
 	shown: number,
 	hasMore: boolean,
-	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>
+	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>,
+	search = ''
 ): string {
-	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
 	const kind = view === 'all' ? '' : `${view} `;
+	if (search) {
+		if (shown === 0) return `No ${kind}Invoice matches "${search}".`;
+		const matching = `matching "${search}"`;
+		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}.`;
+		return `Showing ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+	}
+	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
 	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
 	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
 	if (shown === 1) return `Showing 1 ${kind}Invoice.`;

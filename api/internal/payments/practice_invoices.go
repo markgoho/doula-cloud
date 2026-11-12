@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
@@ -18,6 +19,7 @@ import (
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/textmatch"
 )
 
 // PracticeInvoiceView is one row of the Practice-wide Invoice list. It is
@@ -156,52 +158,126 @@ type PracticeInvoicesResponse struct {
 // Must be mounted behind staffauth.Middleware.
 func GetPracticeInvoicesHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		tx, practiceID := c.Tx, c.PracticeID
-
+		// The search can be a Client's name, and a URL is logged (#1829): it
+		// travels in ListPracticeInvoicesHandler's body only, so a GET that
+		// carries one is refused rather than answered with the whole book.
+		if r.URL.Query().Has("search") {
+			apierr.WriteError(w, "Send the search in a POST to /invoices/list, not in the address.", http.StatusBadRequest)
+			return
+		}
 		narrowing := narrowingFor(r)
 		after, ok := pagecursor.FromQuery(w, r, narrowing.decodeCursor, "invalid cursor")
 		if !ok {
 			return
 		}
-		// #1965: one zone and one instant for the whole response, so the
-		// rows, the narrowing and the totals cannot disagree about which
-		// day it is at the Practice.
-		zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		days := bookDays{zone: zone, now: clock.Now(r.Context())}
-
-		items, next, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowing, days)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone))
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		resp := PracticeInvoicesResponse{
-			Items:            items,
-			HasMore:          next != nil,
-			NextCursor:       next,
-			OutstandingCents: totals.outstandingCents,
-			OutstandingCount: totals.outstandingCount,
-			InvoiceCount:     totals.invoiceCount,
-			PaidCents:        totals.paidCents,
-			RefundedCents:    totals.refundedCents,
-			OverdueCents:     totals.overdueCents,
-			OverdueCount:     totals.overdueCount,
-			ClientsCanPay:    totals.clientsCanPay,
-		}
-		apierr.WriteJSON(w, http.StatusOK, resp)
+		servePracticeInvoices(w, r, c, invoiceListQuery{narrowing: narrowing, after: after})
 	}, staffauth.NotAmbientContractor())
+}
+
+// PracticeInvoicesListRequest is the body of the Practice-wide Invoice list
+// read sent as a POST (#2746): the view and cursor the GET reads from its
+// query string, plus the one thing it refuses there, a search.
+//
+// View is "all", "unpaid" or "overdue" ("" is "all"), the screen's own
+// names for the GET's ?unpaid=true and ?overdue=true. Search is matched,
+// case-insensitively, anywhere in an Invoice's reference or its Client's
+// name.
+type PracticeInvoicesListRequest struct {
+	View   string `json:"view"`
+	Search string `json:"search"`
+	Cursor string `json:"cursor"`
+}
+
+// maxSearchRunes bounds the search: a reference or a name is short, and the
+// bound keeps the pattern the database matches against short too.
+const maxSearchRunes = 100
+
+// ListPracticeInvoicesHandler is GetPracticeInvoicesHandler with its view,
+// cursor and search in a request body, so a Client's name never reaches a
+// URL, a request log or a Referer (#1829). The same rows in the same order
+// under the same refusal, narrowed to the Invoices whose reference or Client
+// matches the search: a check "for invoice INV-0012", or a bank transfer
+// that names the Client (#2746). It writes nothing. Must be mounted behind
+// staffauth.Middleware.
+func ListPracticeInvoicesHandler() http.Handler {
+	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		var req PracticeInvoicesListRequest
+		if !apierr.DecodeJSON(w, r, &req) {
+			return
+		}
+		narrowing, ok := narrowingNamed(req.View)
+		if !ok {
+			apierr.WriteError(w, "Choose every Invoice, unpaid or overdue.", http.StatusBadRequest)
+			return
+		}
+		search := strings.TrimSpace(req.Search)
+		if utf8.RuneCountInString(search) > maxSearchRunes {
+			apierr.WriteError(w, "Use 100 characters or fewer for the search.", http.StatusBadRequest)
+			return
+		}
+		q := invoiceListQuery{narrowing: narrowing, search: search}
+		if req.Cursor != "" {
+			after, err := narrowing.decodeCursor(req.Cursor)
+			if err != nil {
+				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
+				return
+			}
+			q.after = &after
+		}
+		servePracticeInvoices(w, r, c, q)
+	}, staffauth.NotAmbientContractor())
+}
+
+// invoiceListQuery is what either entry point read and checked: which slice
+// of the book, the page after which row, and the search, "" for none.
+type invoiceListQuery struct {
+	narrowing invoiceNarrowing
+	after     *invoiceCursor
+	search    string
+}
+
+// servePracticeInvoices answers the Practice-wide list for a query either
+// entry point has already read and checked.
+func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.Call, q invoiceListQuery) {
+	tx, practiceID := c.Tx, c.PracticeID
+	// #1965: one zone and one instant for the whole response, so the
+	// rows, the narrowing and the totals cannot disagree about which
+	// day it is at the Practice.
+	zone, err := practicetimezone.Load(r.Context(), tx, practiceID)
+	if err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	days := bookDays{zone: zone, now: clock.Now(r.Context())}
+
+	items, next, err := listPracticeInvoices(r.Context(), tx, practiceID, q, days)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone))
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	resp := PracticeInvoicesResponse{
+		Items:            items,
+		HasMore:          next != nil,
+		NextCursor:       next,
+		OutstandingCents: totals.outstandingCents,
+		OutstandingCount: totals.outstandingCount,
+		InvoiceCount:     totals.invoiceCount,
+		PaidCents:        totals.paidCents,
+		RefundedCents:    totals.refundedCents,
+		OverdueCents:     totals.overdueCents,
+		OverdueCount:     totals.overdueCount,
+		ClientsCanPay:    totals.clientsCanPay,
+	}
+	apierr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // practiceInvoiceColumns and practiceInvoiceJoins are shared by the first-
@@ -282,21 +358,50 @@ func narrowingFor(r *http.Request) invoiceNarrowing {
 	}
 }
 
-// listPracticeInvoicesQuery and its after-cursor twin take the narrowing
-// as a fixed clause from invoiceNarrowing rather than as a parameter --
-// it is never request text, so no interpolation of a caller's input can
-// reach the SQL. The overdue cutoff is the one value it carries, and it
-// rides as the parameter after the query's own, bound only when the
-// overdue narrowing names it.
-func listPracticeInvoicesQuery(narrowing invoiceNarrowing) string {
-	return practiceInvoiceColumns + narrowing.clause("$3") + `
-	ORDER BY ` + narrowing.order() + ` LIMIT $2`
+// narrowingNamed reads the view a POST body names, by the names its cursor
+// carries; "" is the whole book.
+func narrowingNamed(view string) (invoiceNarrowing, bool) {
+	for _, n := range []invoiceNarrowing{narrowAll, narrowUnpaid, narrowOverdue} {
+		if view == n.name() {
+			return n, true
+		}
+	}
+	return narrowAll, view == ""
 }
 
-func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
-	return practiceInvoiceColumns + narrowing.clause("$5") + `
-	AND ` + narrowing.after() + `
-	ORDER BY ` + narrowing.order() + ` LIMIT $4`
+// searchExpr is the search, bound as $param: the pattern matches anywhere in
+// the Invoice's reference ("0012" and "INV-0012" both find INV-0012) or in
+// its Client's name, as the Clients list's Name field matches it.
+func searchExpr(param int) string {
+	return fmt.Sprintf(` AND (i.reference ILIKE $%d OR `, param) + textmatch.ClientNameExpr("cl", param) + `)`
+}
+
+// listPracticeInvoicesQuery builds one page's query and its arguments. The
+// narrowing and the order are fixed clauses from invoiceNarrowing, never
+// request text; every value -- the overdue cutoff, the search pattern, the
+// cursor and the limit -- is a bound parameter, numbered in the order it is
+// added, so no interpolation of a caller's input can reach the SQL.
+func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookDays) (string, []any) {
+	args := []any{practiceID}
+	bind := func(v any) int {
+		args = append(args, v)
+		return len(args)
+	}
+	query := practiceInvoiceColumns
+	if q.narrowing == narrowOverdue {
+		query += q.narrowing.clause(fmt.Sprintf("$%d", bind(overdue.From(days.now, days.zone))))
+	} else {
+		query += q.narrowing.clause("")
+	}
+	if q.search != "" {
+		query += searchExpr(bind(textmatch.Contains(q.search)))
+	}
+	if q.after != nil {
+		at, id := bind(q.after.createdAt), bind(q.after.invoiceID)
+		query += ` AND ` + q.narrowing.after(at, id)
+	}
+	query += ` ORDER BY ` + q.narrowing.order() + fmt.Sprintf(` LIMIT $%d`, bind(invoicePageSize+1))
+	return query, args
 }
 
 // name is the narrowing as its cursor carries it.
@@ -345,11 +450,13 @@ func (n invoiceNarrowing) order() string {
 	return `i.created_at DESC, i.id DESC`
 }
 
-func (n invoiceNarrowing) after() string {
+// after is the cursor's condition, with its instant and id bound as $at and
+// $id.
+func (n invoiceNarrowing) after(at, id int) string {
 	if n.isByPaymentDue() {
-		return `(i.due_at, i.id) > ($2, $3)`
+		return fmt.Sprintf(`(i.due_at, i.id) > ($%d, $%d)`, at, id)
 	}
-	return `(i.created_at, i.id) < ($2, $3)`
+	return fmt.Sprintf(`(i.created_at, i.id) < ($%d, $%d)`, at, id)
 }
 
 // listPracticeInvoices fetches one page of the Practice's Invoices,
@@ -362,18 +469,19 @@ func (n invoiceNarrowing) after() string {
 // scan of at most invoicePageSize+1 rows rather than a sort of the
 // Practice's whole book. A narrowed list sorts only its open Invoices.
 //
+// A search adds no index of its own. A pattern open at both ends cannot use
+// a b-tree, so the same index order is walked and each row is tested against
+// its reference and its Client's name until a page is full. A search that
+// matches fewer than a page reads the Practice's whole book -- a 14-doula
+// agency's thousands of rows, already one practice_id's range of the index
+// -- which Postgres does in milliseconds. A trigram index on the reference
+// and the name would be the next step if a book outgrew that.
+//
 // The cursor carries whichever instant the narrowing orders by, so a
 // later page has to be asked for under the narrowing its first page was.
-func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing, days bookDays) ([]PracticeInvoiceView, *string, error) {
-	query := listPracticeInvoicesQuery(narrowing)
-	args := []any{practiceID, invoicePageSize + 1}
-	if after != nil {
-		query = listPracticeInvoicesAfterQuery(narrowing)
-		args = []any{practiceID, after.createdAt, after.invoiceID, invoicePageSize + 1}
-	}
-	if narrowing == narrowOverdue {
-		args = append(args, overdue.From(days.now, days.zone))
-	}
+func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q invoiceListQuery, days bookDays) ([]PracticeInvoiceView, *string, error) {
+	narrowing := q.narrowing
+	query, args := listPracticeInvoicesQuery(practiceID, q, days)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {

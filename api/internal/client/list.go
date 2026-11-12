@@ -20,6 +20,7 @@ import (
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/textmatch"
 )
 
 // pageSize is the fixed number of Clients returned per page, matching
@@ -417,18 +418,11 @@ func nameParam(w http.ResponseWriter, raw string) (string, bool) {
 	return text, true
 }
 
-// likeEscaper escapes the three characters LIKE reads as more than
-// themselves, so a name typed with "%" or "_" matches only itself.
-var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
-
-// nameMatchExpr is ?q: the pattern, bound as $%[1]d, matches (case-insensitively)
-// her given, preferred or family name, or her full name as the list reads it
-// or as her record spells it.
-const nameMatchExpr = `($%[1]d::text = '' OR (
-	c.given_name ILIKE $%[1]d OR c.preferred_name ILIKE $%[1]d OR c.family_name ILIKE $%[1]d
-	OR concat_ws(' ', COALESCE(NULLIF(c.preferred_name, ''), c.given_name), c.family_name) ILIKE $%[1]d
-	OR concat_ws(' ', c.given_name, c.family_name) ILIKE $%[1]d
-))`
+// nameMatchExpr is the name filter: the pattern, bound as $param, matches
+// her name the way textmatch.ClientNameExpr reads it, or "" for none.
+func nameMatchExpr(param int) string {
+	return fmt.Sprintf(`($%d::text = '' OR `, param) + textmatch.ClientNameExpr("c", param) + `)`
+}
 
 // doulaExpr is ?doula, bound as $%[1]d: an open Engagement of hers with an
 // open, granted attachment for that Staff member. Aliased apart from both
@@ -447,11 +441,7 @@ func (f listFilters) narrowing(first int) (string, []any) {
 	if f.doula != "" {
 		doula = f.doula
 	}
-	pattern := ""
-	if f.name != "" {
-		pattern = "%" + likeEscaper.Replace(f.name) + "%"
-	}
-	return fmt.Sprintf(doulaExpr, first) + " AND " + fmt.Sprintf(nameMatchExpr, first+1), []any{doula, pattern}
+	return fmt.Sprintf(doulaExpr, first) + " AND " + nameMatchExpr(first+1), []any{doula, textmatch.Contains(f.name)}
 }
 
 // queryFlag is whether the address carries name=true.

@@ -18,7 +18,7 @@
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
-	import { formatAmount, invoiceRowStatusVariant, invoiceStateWord } from '#lib/invoice.js';
+	import { formatAmount, invoiceStateBadge, invoiceStateWord } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -554,9 +554,7 @@ import type { PageProps as PageProperties } from './$types';
 	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
 		const standing = standingOf(line);
 		if (standing.paymentProcessing) return { word: 'clearing' };
-		const word = invoiceStateWord(standing);
-		if (standing.daysOverdue > 0 || standing.status === 'open') return { word, variant: invoiceRowStatusVariant(standing) };
-		return { word };
+		return { word: invoiceStateWord(standing), variant: invoiceStateBadge(standing) };
 	}
 
 	function moneyLines(client: ClientListItem): MoneyLine[] {

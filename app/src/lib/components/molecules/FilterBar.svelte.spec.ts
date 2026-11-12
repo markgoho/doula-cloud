@@ -1,7 +1,7 @@
 import { createRawSnippet } from 'svelte';
 import { page, userEvent } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { cleanup, render } from 'vitest-browser-svelte';
 import FilterBar from './FilterBar.svelte';
 // The skip link is hidden by the design tokens' spacing, so they must load.
 import '#lib/styles/app.css';
@@ -56,6 +56,7 @@ interface SetupOptions {
 	withHeldSwitch?: boolean;
 	// One removable tag, as the Clients list draws its selected filters.
 	withApplied?: boolean;
+	holdsAppliedRow?: boolean;
 	foldsFieldsOnly?: boolean;
 	withFields?: boolean;
 	status?: string;
@@ -83,6 +84,7 @@ async function setup({
 	withSwitches = false,
 	withHeldSwitch = false,
 	withApplied = false,
+	holdsAppliedRow = false,
 	foldsFieldsOnly = false,
 	withFields = true,
 	status = 'Showing 2 scheduled visits.',
@@ -107,6 +109,7 @@ async function setup({
 		foldsFieldsOnly,
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
+		holdsAppliedRow,
 		folded: withFolded ? fromField() : undefined,
 		children: withFields ? (withFolded ? nameField() : fromField()) : undefined
 	});
@@ -516,6 +519,26 @@ describe('FilterBar that folds only its fields', () => {
 		await setup();
 
 		await expect.element(page.getByRole('list', { name: 'Applied filters' })).not.toBeInTheDocument();
+	});
+
+	it('holds the applied row unseen with holdsAppliedRow, so applying a filter moves neither Apply nor the result line', async () => {
+		await setup({ foldsFieldsOnly: true, holdsAppliedRow: true });
+		const apply = applyBox();
+		const status = statusBox();
+		await expect.element(page.getByRole('list', { name: 'Applied filters' })).not.toBeInTheDocument();
+		await expect.element(page.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+
+		cleanup();
+		await setup({ foldsFieldsOnly: true, holdsAppliedRow: true, withApplied: true, clearHref: '/practices/practice-1/schedule' });
+
+		const tags = page.getByRole('list', { name: 'Applied filters' });
+		const clear = page.getByRole('link', { name: 'Clear filters' });
+		await expect.element(clear).toBeVisible();
+		// "Clear filters" ends the tags' row rather than following Apply.
+		expect(clear.element().getBoundingClientRect().top).toBeGreaterThan(applyBox().bottom);
+		expect(clear.element().getBoundingClientRect().left).toBeGreaterThan(tags.element().getBoundingClientRect().right);
+		expect(applyBox().top).toBe(apply.top);
+		expect(statusBox().top).toBe(status.top);
 	});
 
 	it('draws no fold when the bar has no fields', async () => {

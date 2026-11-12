@@ -35,7 +35,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const invalidate = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn() }));
 
 const [openInvoice, paidInvoice] = data.items;
 

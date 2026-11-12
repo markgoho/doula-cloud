@@ -393,6 +393,18 @@ func TestGetPracticeInvoicesHandler_InvoiceCountIsTheWholeBook(t *testing.T) {
 	}
 }
 
+// bookReaders is who may read the Practice-wide book, by the GET or by the
+// POST that searches it, and the status each is answered with.
+var bookReaders = []struct {
+	name string
+	who  []fixture.StaffOption
+	want int
+}{
+	{"an Owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
+	{"an employed Doula", []fixture.StaffOption{fixture.Doula()}, http.StatusOK},
+	{"a contractor Doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
+}
+
 // TestGetPracticeInvoicesHandler_RolesReachTheBook proves ADR-0008's money
 // row as amended by #282: an employed Doula reaches the Practice-wide
 // Invoice book the same as an Owner or Admin. A contractor is refused by
@@ -400,16 +412,7 @@ func TestGetPracticeInvoicesHandler_InvoiceCountIsTheWholeBook(t *testing.T) {
 // by the role the GatedRouter mount declares, which
 // api/gate_guardrail_test.go already covers but cannot behaviorally test.
 func TestGetPracticeInvoicesHandler_RolesReachTheBook(t *testing.T) {
-	cases := []struct {
-		name string
-		who  []fixture.StaffOption
-		want int
-	}{
-		{"an Owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{"an employed Doula", []fixture.StaffOption{fixture.Doula()}, http.StatusOK},
-		{"a contractor Doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
-	}
-	for _, tc := range cases {
+	for _, tc := range bookReaders {
 		t.Run(tc.name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(tc.who...))
 			e.expect(http.MethodGet, practiceInvoicesPath(), tc.want)

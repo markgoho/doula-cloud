@@ -38,6 +38,7 @@ const navigation = vi.hoisted(() => ({ goto: vi.fn(), onMove: undefined as (() =
 vi.mock('$app/navigation', () => ({
 	goto: navigation.goto,
 	invalidate: vi.fn(),
+	beforeNavigate: vi.fn(),
 	afterNavigate: (callback: () => void) => {
 		navigation.onMove = callback;
 	}
@@ -160,15 +161,16 @@ describe('the overdue book (#768)', () => {
 
 		await testPage.getByRole('radio', { name: 'Overdue' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=overdue`);
+		const noSearch = { state: { invoicesSearch: '' } };
+		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=overdue`, noSearch);
 
 		await testPage.getByRole('radio', { name: 'Unpaid' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=unpaid`);
+		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=unpaid`, noSearch);
 
 		await testPage.getByRole('radio', { name: 'Every Invoice' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`);
+		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`, noSearch);
 	});
 
 	it('moves focus to the result line once a changed narrowing has loaded, never on first arrival', async () => {

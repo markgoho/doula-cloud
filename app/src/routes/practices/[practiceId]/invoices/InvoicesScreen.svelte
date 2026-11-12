@@ -10,7 +10,7 @@
 	 */
 	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { afterNavigate, goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
@@ -19,19 +19,22 @@
 		formatAmount,
 		INVOICES_RESULT_RULER,
 		invoiceDateLine,
-		invoiceRowStatusVariant,
 		invoicesResultSummary,
+		invoiceStateBadge,
 		invoiceStateWord,
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
 		PAYMENT_ON_ITS_WAY_STATUS,
 		type InvoicesView,
-		type PracticeInvoice
+		type PracticeInvoice,
+		type PracticeInvoicePage
 	} from '#lib/invoice.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
@@ -66,41 +69,93 @@
 	);
 
 	/*
-	 * Grows from the landed read's first page (#446). The list owns its own
-	 * cursor, in-flight guard and error text, so re-deriving from `data` --
-	 * which would drop every page appended since -- is not something this
-	 * file can do by accident.
-	 *
-	 * #2254: a narrowing re-runs `load` without remounting this screen. The
-	 * derived holds back a rerender that hands back the same read.
+	 * #2746: the typed search can be a Client's name, so it is in no URL
+	 * (#1829). It rides in the history entry's state (`goto(url, { state })`),
+	 * as the Clients list's Name does: Back and Forward restore it, a reload
+	 * drops it. `load` never sees history state, so a searched read is this
+	 * screen's own, a POST with the search in its body.
 	 */
-	const read = $derived(data);
-	const invoices = new PaginatedList({
-		first: untrack(() => read) ?? { items: [], hasMore: false },
-		// Every later page asks for the same view its rows were read under
-		// (#768) -- otherwise "load more" on an overdue list would append the
-		// whole book underneath it, and its cursor would be read in the wrong
-		// order (#2746).
-		loadPage: (cursor) =>
-			loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, read?.view ?? view),
+	const appliedSearch = $derived((page.state.invoicesSearch ?? '').trim());
+	type ReadKey = { view: InvoicesView; search: string };
+	const isSameKey = (a: ReadKey | undefined, b: ReadKey) => a?.view === b.view && a.search === b.search;
+	const wanted = $derived<ReadKey>({ view, search: appliedSearch });
+
+	/*
+	 * What the rows on screen were read under, and the latest page read for
+	 * them. While a newer filter loads the rows still answer to the last one,
+	 * so the result line and the empty state never describe rows that are not
+	 * there, and the list and Apply are marked busy (as on the Clients list).
+	 *
+	 * The totals are the latest page's: the BFF returns the whole book's
+	 * figures on every page, so a "Load more" after an Invoice was paid
+	 * brings the figures up to date with the rows, and paging never makes
+	 * "Clients owe" look like it is only what has been scrolled to.
+	 */
+	let shown = $state.raw<ReadKey>();
+	let book = $state.raw<PracticeInvoicePage>();
+	// The searched read that failed, so the list is not left marked busy.
+	let failedKey = $state.raw<ReadKey>();
+	let isApplying = $state(false);
+	const isBusy = $derived(isApplying || (shown !== undefined && !isSameKey(shown, wanted) && !isSameKey(failedKey, wanted)));
+
+	// Grows from the landed read's first page (#446). The list owns its own
+	// cursor, in-flight guard and error text.
+	const invoices = new PaginatedList<PracticeInvoice>({
+		first: { items: [], hasMore: false },
+		// Every later page asks for the view and the search its rows were read
+		// under (#768) -- otherwise "load more" on an overdue list would append
+		// the whole book underneath it, and its cursor would be read in the
+		// wrong order (#2746).
+		loadPage: async (cursor) => {
+			const under = shown!;
+			const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search);
+			if (shown === under) book = next;
+			return next;
+		},
 		failureMessage: 'Failed to load more invoices'
 	});
+
+	function adopt(first: PracticeInvoicePage, key: ReadKey) {
+		invoices.reset(first);
+		book = first;
+		shown = key;
+		refreshSessionIfClientsCanPayChanged(session ?? {}, first.clientsCanPay);
+	}
+
+	// #2254: a narrowing re-runs `load` without remounting this screen. The
+	// load's read is the list while no search is applied, and again once the
+	// search is removed, though the address and so the read are unchanged.
+	let adopted: PracticeInvoiceListData | undefined;
 	$effect(() => {
-		const landed = read;
-		if (!landed) return;
+		const landed = data;
+		if (!landed || appliedSearch !== '') return;
 		untrack(() => {
-			invoices.reset(landed);
-			refreshSessionIfClientsCanPayChanged(session ?? {}, landed.clientsCanPay);
+			if (landed === adopted && shown?.search === '') return;
+			adopted = landed;
+			adopt(landed, { view: landed.view, search: '' });
 		});
 	});
 
-	/*
-	 * The totals stay the load's, never the loaded pages': the BFF returns
-	 * the whole book's figures on every page, so paging must not make
-	 * "Clients owe" look like it is only what has been scrolled to.
-	 */
+	// A searched read, the latest asked for winning.
+	let latestSearch = 0;
+	$effect(() => {
+		const key = wanted;
+		if (key.search === '') return;
+		const thisSearch = ++latestSearch;
+		untrack(() => void readSearch(key, thisSearch));
+	});
+	async function readSearch(key: ReadKey, thisSearch: number) {
+		try {
+			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search);
+			if (thisSearch === latestSearch) adopt(first, key);
+		} catch {
+			if (thisSearch === latestSearch) failedKey = key;
+		}
+	}
+	const hasSearchFailed = $derived(isSameKey(failedKey, wanted) && !isSameKey(shown, wanted));
+
 	const isBookEmpty = $derived(
-		read !== undefined && read.view === 'all' && invoices.items.length === 0
+		shown !== undefined && shown.view === 'all' && shown.search === '' && invoices.items.length === 0
 	);
 
 	const invoiceCount = (count: number) => `on ${count} ${count === 1 ? 'Invoice' : 'Invoices'}`;
@@ -121,10 +176,10 @@
 		return { label, figure, note, value: `${figure} ${note}`.trim() };
 	}
 	const totals = $derived([
-		totalRow('Clients owe', read?.outstandingCents, invoiceCount(read?.outstandingCount ?? 10)),
-		totalRow('Of that, overdue', read?.overdueCents, invoiceCount(read?.overdueCount ?? 10)),
-		totalRow('Clients have paid', read?.paidCents, ''),
-		totalRow('Of that, returned', read?.refundedCents, 'to Clients')
+		totalRow('Clients owe', book?.outstandingCents, invoiceCount(book?.outstandingCount ?? 10)),
+		totalRow('Of that, overdue', book?.overdueCents, invoiceCount(book?.overdueCount ?? 10)),
+		totalRow('Clients have paid', book?.paidCents, ''),
+		totalRow('Of that, returned', book?.refundedCents, 'to Clients')
 	]);
 
 	/*
@@ -147,38 +202,77 @@
 		{ value: 'overdue', label: 'Overdue', tag: 'Overdue Invoices' }
 	];
 
-	// What the radios hold before Apply, put back in step with the address
-	// after every navigation.
+	// What the radios and the field hold before Apply, put back in step with
+	// the address and the history entry after every navigation. A field the
+	// person typed in since the navigation began is hers: the seed leaves it.
 	let draftView = $state<InvoicesView>('all');
+	let draftSearch = $state('');
+	let isSearchTouched = false;
 	let filterBar = $state<{ focusStatus: () => void }>();
 	let isFocusPending = $state(false);
-	let lastView: InvoicesView | undefined;
+	let lastKey: ReadKey | undefined;
 	function seedDrafts() {
 		draftView = view;
+		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
+	beforeNavigate(() => (isSearchTouched = false));
 	afterNavigate(() => {
 		seedDrafts();
-		// A change of view lands on the result line once its list has
+		// A change of filter lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
-		if (lastView !== undefined && lastView !== view) isFocusPending = true;
-		lastView = view;
+		if (lastKey !== undefined && !isSameKey(lastKey, wanted)) isFocusPending = true;
+		lastKey = wanted;
 	});
 	$effect(() => {
-		if (!isFocusPending || read?.view !== view) return;
+		if (!isFocusPending || !isSameKey(shown, wanted)) return;
 		isFocusPending = false;
 		filterBar?.focusStatus();
 	});
 
-	async function applyFilters(event: SubmitEvent) {
-		event.preventDefault();
-		await goto(`${invoicesHref}${invoicesViewQuery(draftView)}`);
+	// Every move to another filter: a page already being added is abandoned,
+	// so it never lands in the new list, and Apply answers the press at once.
+	async function showFilter(href: string, search: string) {
+		invoices.abandon();
+		isApplying = true;
+		try {
+			await goto(href, { state: { invoicesSearch: search } });
+		} finally {
+			isApplying = false;
+		}
 	}
 
-	const appliedLabel = $derived(VIEW_OPTIONS.find((option) => option.value === view && view !== 'all')?.tag);
+	async function applyFilters(event: SubmitEvent) {
+		event.preventDefault();
+		await showFilter(`${invoicesHref}${invoicesViewQuery(draftView)}`, draftSearch.trim());
+	}
+
+	/*
+	 * The GOV.UK "selected filters": one removable tag for the view and one
+	 * for the search, each a link to the list minus that one. The search is in
+	 * no address, so removing the view hands it on in the history entry's
+	 * state, and removing the search hands on an empty one.
+	 */
+	type AppliedTag = { text: string; href: string; search: string };
+	const appliedTags = $derived.by(() => {
+		const tags: AppliedTag[] = [];
+		const viewTag = VIEW_OPTIONS.find((option) => option.value === view && view !== 'all')?.tag;
+		if (viewTag) tags.push({ text: viewTag, href: invoicesHref, search: appliedSearch });
+		if (appliedSearch) {
+			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view)}`, search: '' });
+		}
+		return tags;
+	});
+
+	function removeTag(event: MouseEvent, tag: AppliedTag) {
+		event.preventDefault();
+		void showFilter(tag.href, tag.search);
+	}
 
 	const resultSummary = $derived(
-		read ? invoicesResultSummary(read.view, invoices.items.length, invoices.hasMore, read) : ''
+		shown && book
+			? invoicesResultSummary(shown.view, invoices.items.length, invoices.hasMore, book, shown.search)
+			: ''
 	);
 
 	// The result line's id, which the table is described by.
@@ -189,7 +283,8 @@
 	/*
 	 * The money said once (DESIGN.md): the amount and its state, in the
 	 * Clients list's words ("owed", "12 days overdue", through
-	 * `invoiceStateWord`), every state a badge in its one meaning's color.
+	 * `invoiceStateWord`). Owed is the amber badge and overdue the red one;
+	 * every other state is a plain word (`invoiceStateBadge`).
 	 * #2225: a payment on its way comes first, in the words the Engagement's
 	 * Invoices section uses.
 	 */
@@ -257,8 +352,9 @@
 </script>
 
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
-	<!-- In the table, the amount and its state in two tracks, so amounts end at one place whatever the badge says; on a card, the badge follows the amount. -->
-	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span><Badge label={stateWord(invoice)} variant={invoiceRowStatusVariant(invoice)} /></span></span>
+	<!-- In the table, the amount and its state in two tracks, so amounts end at one place whatever the state says; on a card, the state follows the amount. -->
+	{@const badge = invoiceStateBadge(invoice)}
+	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={stateWord(invoice)} variant={badge} />{:else}{stateWord(invoice)}{/if}</span></span>
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
@@ -276,23 +372,51 @@
 {/snippet}
 
 {#snippet total(row: { figure: string; note: string })}
-	{#if read}
+	{#if book}
 		<span class="figure">{row.figure}</span>{#if row.note}<span class="note">{` ${row.note}`}</span>{/if}
 	{:else}
 		<span class="figure"><Skeleton variant="text" lines={1} /></span>{#if row.note}<span class="note reserve" aria-hidden="true">{` ${row.note}`}</span>{/if}
 	{/if}
 {/snippet}
 
+<!-- The × comes first, as on the MOJ filter's tags; the name says what pressing it does. -->
 {#snippet applied()}
-	<li>
-		<Link
-			href={invoicesHref}
-			label={appliedLabel ?? ''}
-			variant="chip"
-			icon="x"
-			ariaLabel={`Remove filter: ${appliedLabel}`}
-		/>
-	</li>
+	{#each appliedTags as tag (tag.text)}
+		<li>
+			<Link
+				href={tag.href}
+				label={tag.text}
+				variant="chip"
+				icon="x"
+				ariaLabel={`Remove filter: ${tag.text.replaceAll('"', '')}`}
+				onClick={(event) => removeTag(event, tag)}
+			/>
+		</li>
+	{/each}
+{/snippet}
+
+<!-- Folded behind "More filters" in a narrow bar, so a phone's first screen still holds the first Invoice; beside the view where the bar is wide. Unnamed, so a Client's name never reaches the address (#1829). -->
+{#snippet searchField()}
+	<div class="search">
+		<LabeledField label="Reference or Client" width={20}>
+			{#snippet children({ id, describedBy, invalid, width })}
+				<TextInput
+					{id}
+					{describedBy}
+					{invalid}
+					{width}
+					type="search"
+					maxlength={100}
+					autocomplete="off"
+					value={draftSearch}
+					onInput={(value) => {
+						isSearchTouched = true;
+						draftSearch = value;
+					}}
+				/>
+			{/snippet}
+		</LabeledField>
+	</div>
 {/snippet}
 
 {#snippet content()}
@@ -335,12 +459,15 @@
 				status={resultSummary}
 				statusRuler={INVOICES_RESULT_RULER}
 				statusId={RESULT_ID}
-				empty={read !== undefined && invoices.items.length === 0}
-				clearHref={view === 'all' ? undefined : invoicesHref}
-				applied={appliedLabel ? applied : undefined}
+				empty={shown !== undefined && invoices.items.length === 0}
+				clearHref={appliedTags.length > 0 ? invoicesHref : undefined}
+				applied={appliedTags.length > 0 ? applied : undefined}
+				holdsAppliedRow
+				folded={searchField}
 				foldsFieldsOnly
+				{isBusy}
 			>
-				<!-- Beside Apply, wrapping under it only where the row runs out. The bar's legend names the group. -->
+				<!-- Beside Apply, wrapping under it only where the row runs out. The bar's legend names the bar: these radios, then the field. -->
 				<RadioGroup
 					name="show"
 					options={VIEW_OPTIONS}
@@ -351,7 +478,11 @@
 			</FilterBar>
 		{/if}
 
-		{#if read}
+		{#if hasSearchFailed}
+			<Notice message="Your search did not run. Nothing you saved is lost." variant="error" />
+		{/if}
+
+		{#if shown}
 			<div class="invoices-table">
 				<DataTable
 					{columns}
@@ -361,14 +492,15 @@
 					hasMore={invoices.hasMore}
 					onLoadMore={() => invoices.loadMore()}
 					isLoadingMore={invoices.isLoadingMore}
-					emptyMessage={read.view === 'all'
+					emptyMessage={isBookEmpty
 						? 'No Invoices yet. One appears here as soon as a Contract is billed.'
 						: resultSummary}
-					emptyAction={read.view === 'all' ? undefined : everyInvoice}
+					emptyAction={isBookEmpty ? undefined : everyInvoice}
 					caption="Invoices"
 					describedBy={isBookEmpty ? undefined : RESULT_ID}
 					columnWidths="fill"
 					recordLayout="compact"
+					{isBusy}
 				/>
 			</div>
 		{:else}
@@ -450,7 +582,9 @@
 			white-space: nowrap;
 		}
 
+		/* A state with no badge is a plain word, quieter than its amount. */
 		.state {
+			color: var(--color-on-surface-variant);
 			text-align: start;
 		}
 

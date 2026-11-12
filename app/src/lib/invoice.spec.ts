@@ -8,6 +8,8 @@ import {
 	formatAmount,
 	invoiceRowStatusLabel,
 	invoiceRowStatusVariant,
+	invoicesResultSummary,
+	invoiceStateBadge,
 	invoiceStatusLabel,
 	invoiceStatusVariant,
 	loadBillingMode,
@@ -91,6 +93,59 @@ describe('loadContractorInvoices (#2094)', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('engagement not found', 404));
 
 		await expect(loadContractorInvoices(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('engagement not found');
+	});
+});
+
+describe('loadPracticeInvoices with a search (#2746, #1829)', () => {
+	it('sends the search, the view and the cursor in a POST body, never in the address', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadPracticeInvoices(fetcher, 'practice-1', 'cursor-1', 'overdue', 'Quinn Harper');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/invoices/list', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ view: 'overdue', search: 'Quinn Harper', cursor: 'cursor-1' })
+		});
+	});
+
+	it('sends an empty cursor for the first page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadPracticeInvoices(fetcher, 'practice-1', undefined, 'all', '0012');
+
+		expect(JSON.parse((fetcher.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ view: 'all', search: '0012', cursor: '' });
+	});
+});
+
+describe('invoiceStateBadge (DESIGN.md, "Money is said once")', () => {
+	it('gives owed the amber badge and overdue the red one', () => {
+		expect(invoiceStateBadge({ status: 'open', daysOverdue: 0 })).toBe('warning');
+		expect(invoiceStateBadge({ status: 'open', daysOverdue: 4 })).toBe('error');
+	});
+
+	it('gives every other state a plain word, a payment on its way among them', () => {
+		for (const status of ['paid', 'void', 'draft', 'uncollectible']) {
+			expect(invoiceStateBadge({ status, daysOverdue: 0 })).toBeUndefined();
+		}
+		expect(invoiceStateBadge({ status: 'open', daysOverdue: 4, paymentProcessing: true })).toBeUndefined();
+	});
+});
+
+describe('invoicesResultSummary with a search (#2746)', () => {
+	const counts = { invoiceCount: 35, outstandingCount: 17, overdueCount: 7 };
+
+	it('says the words looked for, and no "of how many", since the counts are the book', () => {
+		expect(invoicesResultSummary('all', 30, true, counts, '0012')).toBe('Showing the first 30 Invoices matching "0012", newest first.');
+		expect(invoicesResultSummary('unpaid', 2, false, counts, 'Quinn')).toBe(
+			'Showing 2 unpaid Invoices matching "Quinn", earliest payment due first.'
+		);
+		expect(invoicesResultSummary('overdue', 1, false, counts, 'Quinn')).toBe('Showing 1 overdue Invoice matching "Quinn".');
+	});
+
+	it('says when nothing matched', () => {
+		expect(invoicesResultSummary('all', 0, false, counts, 'Zelda')).toBe('No Invoice matches "Zelda".');
+		expect(invoicesResultSummary('overdue', 0, false, counts, 'Zelda')).toBe('No overdue Invoice matches "Zelda".');
 	});
 });
 

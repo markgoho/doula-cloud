@@ -35,9 +35,12 @@ declare global {
 		 * What a history entry keeps beside its address (`goto(url, { state })`,
 		 * `page.state`). `clientsName` is the Name typed into the Clients list's
 		 * filter: a Client's name is never in a URL (#1829), so it rides here.
+		 * `invoicesSearch` is the Invoices list's "Reference or Client" field,
+		 * which can hold a Client's name, for the same reason (#2746).
 		 */
 		interface PageState {
 			clientsName?: string;
+			invoicesSearch?: string;
 			// How many pages of the Clients list were open, for a Back to it.
 			clientsPages?: number;
 		}

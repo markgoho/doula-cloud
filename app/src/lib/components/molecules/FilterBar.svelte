@@ -125,9 +125,19 @@
 		 * The filters that are on, as GOV.UK's "selected filters": one `<li>` for
 		 * each, a removable tag, drawn in a list directly above the result line.
 		 * Given only while a filter is on, so the bar draws no row for them
-		 * otherwise.
+		 * otherwise, unless `holdsAppliedRow`.
 		 */
 		applied?: Snippet;
+		/**
+		 * Keep the applied tags' row while no filter is on, unseen and out of
+		 * reach, one tag tall, so applying a filter or removing the last one
+		 * moves neither the result line nor the list. "Clear filters" then ends
+		 * the tags' row rather than following Apply. For a list whose first
+		 * row has to stay on a phone's first screen whatever is applied: the
+		 * Invoices list (#2746). The Clients list draws the row only while a
+		 * filter is on, so its default list loses no row.
+		 */
+		holdsAppliedRow?: boolean;
 		/**
 		 * Switches that sit in a row of their own above the fields, so a
 		 * switch drawn or hidden never moves a field or Apply.
@@ -153,8 +163,9 @@
 		 */
 		folded?: Snippet;
 		/**
-		 * The fields, each a `LabeledField` with a named control. A bar of
-		 * switches alone, such as the Invoices list's, has none.
+		 * The fields, each a `LabeledField` with a named control, or a field of
+		 * inline radios (`RadioGroup isInline`, the Invoices list's view). A bar
+		 * of switches alone has none.
 		 */
 		children?: Snippet;
 	}
@@ -171,6 +182,7 @@
 		statusId = `filter-bar-status-${uid}`,
 		statusRuler,
 		applied,
+		holdsAppliedRow = false,
 		switches,
 		foldsFieldsOnly = false,
 		isBusy = false,
@@ -255,7 +267,7 @@
 					     and Apply keeps the width of its words in a narrow bar. -->
 					<div class="actions">
 						<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
-						{@render clear()}
+						{#if !holdsAppliedRow}{@render clear()}{/if}
 					</div>
 				</cluster-l>
 			</stack-l>
@@ -280,10 +292,24 @@
 		</fieldset>
 	</details>
 	{/if}
-	{#if applied}
+	{#if applied && holdsAppliedRow}
+		<!-- "Clear filters" ends the tags' row, as on the MOJ filter, so Apply keeps no room for it. -->
+		<div class="applied-row">
+			<ul class="applied" aria-label="Applied filters">
+				{@render applied()}
+			</ul>
+			{@render clear()}
+		</div>
+	{:else if applied}
 		<ul class="applied" aria-label="Applied filters">
 			{@render applied()}
 		</ul>
+	{:else if holdsAppliedRow}
+		<!-- One tag's box, unseen, out of the tab order and the accessibility tree. -->
+		<div class="applied-row reserve" aria-hidden="true" inert>
+			<span class="applied"><Link href={action} label="Clear filters" variant="chip" icon="x" /></span>
+			<Link href={action} label="Clear filters" />
+		</div>
 	{/if}
 	<!-- On the bar's left edge, in a row of its own directly above the list, at every width,
 	     and one line tall while empty: what is applied never moves Apply or the list. -->
@@ -448,6 +474,13 @@
 			margin: 0;
 			padding: 0;
 			list-style: none;
+		}
+
+		.applied-row {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1) var(--space-2);
 		}
 
 		/* A tag is a target the height of a table row's (`--row-target-min`, 44px at a
