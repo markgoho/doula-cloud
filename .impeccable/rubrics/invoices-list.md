@@ -1,0 +1,41 @@
+# Invoices list: what a 4 means
+
+A heuristic scores 4 only when **every** check under it passes, each with evidence a grader can point to: a screenshot, a measured value, the accessible text, or a walk's act log. A check with no evidence fails. 3 = one check fails, 2 = two, 1 = three or more, 0 = the heuristic's core job is absent.
+
+Graders are three independent agents per round. None sees an earlier score, this branch's commits, or another grader's output. The score per heuristic is the median of the three.
+
+Seed: the demo Practice under `dev:full` (Rooted Birth Collective, 14 doulas, 30+ Clients, an Invoice book of 30 or more across every state the screen can show). Widths: 1440px, 1280px, 768px, 375px; 200% zoom at 1280px.
+
+## The jobs
+
+Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`, `docs/test-plans`), not research (ADR-0045). The records name the jobs; the action budgets are ours.
+
+- **T1 Renata, what is unpaid:** from arriving on Invoices, see what Clients owe in total and every unpaid Invoice across the Practice, without opening an Engagement. ≤ 2 actions, and the count and the total are stated. (`personas/practice-owner.md:19`, `journeys/practice-owner.md:147`)
+- **T2 Dee, who to chase:** see every overdue Invoice, the longest overdue first, each row with the Client, the reference, the amount and how many days late. A payment already on its way is not among them. ≤ 2 actions, and the count is stated. (`personas/non-doula-admin.md:11`, `test-plans/non-doula-admin.md:288`)
+- **T3 Dee, a check came in:** from the list, reach that Invoice in its Engagement's Invoices section, where Record payment is, in 1 action from its row. Coming back restores the filter and the position, and the row reads Paid. (`journeys/non-doula-admin.md:149,161`)
+- **T4 Dee, match a payment:** a check says "for invoice INV-0012", or a bank transfer names a Client. Find that Invoice in a book of 30 or more. ≤ 2 actions, no lost filter state, and no Client's name in a URL (#1829).
+- **T5 Maya, phone (375px):** see who still owes, with the first unpaid Invoice on the first screen (375×740). Walked on Rooted's book, which stands in for hers. (`personas/solo-birth-doula.md:11,13,17`)
+- **T6 Screen reader:** a row reads as the Client, then each fact with its kind (reference, amount, state, days overdue, how billed, the days) and audible separators. The table's purpose and count are announced, and the totals read as label then figure. Two Invoices of one Client have links a list of links tells apart.
+- **T7 Keyboard:** every filter and every row is reachable, with a visible focus ring. Tabbing through every control from the title to row 1 takes ≤ 6 stops, and "Skip to results" takes ≤ 2.
+- **T8 Failure:** with the BFF refusing the list, the screen says what happened in Voice-rule words, nothing is lost, and "Try again" recovers. A refused "load more" keeps the rows already shown.
+
+## Heuristic checks
+
+1. **Visibility of system status:** loading shows a skeleton within 300ms and nothing moves when the figures land. Every filter change visibly changes the list or says that nothing matched. The count line states what is shown, including the filter and the order. Load more states progress.
+2. **Match with the real world:** every label is a word an owner or office manager uses, and no two labels on the screen can be read as the same thing ("Billed" and "Billed via", "Paid" the total and "Paid" the day). Money reads as owed, paid or overdue with amounts. Days are shown as a person says them, and lateness as a count of days.
+3. **User control and freedom:** every filter is in the address (back, reload and share keep it), except any that holds a Client's name (#1829), which back and forward keep. Any filter can be cleared in one action. Leaving for an Invoice and coming back restores the filter and position.
+4. **Consistency and standards:** title, intro, filter bar, result line and table the pieces this screen shares with the Clients list are the same components in the same place (measured: same title x/size, same filter bar arrangement, same result line, same table header and row style). Badge colors and words mean what they mean on the Clients list and the Engagement's Invoices section. Each total is the whole book's, and the list narrowed to what a total names (unpaid, overdue) shows that count of rows adding up to that amount.
+5. **Error prevention:** filter combinations that can never match are not offered. A reader the BFF refuses (a contractor Doula with no Owner or Admin role) is never linked here, and one who types the address meets the refusal page, never a broken list. Nothing on the list changes money in one press.
+6. **Recognition rather than recall:** the order is stated and serves the job (T1 and T2 do not depend on knowing when an Invoice was raised). Filters are visible, not hidden in menus. Each badge's meaning is clear from its words alone. An unpaid row says, without opening it, the day payment is due, how it is billed (by hand or Stripe), and whether a payment is on its way.
+7. **Flexibility and efficiency:** T1, T2, T3, T4 and T5 each pass within their action budgets. The page size covers a 14-doula Practice's unpaid Invoices, or a filter makes paging unnecessary.
+8. **Aesthetic and minimalist design:** amber and red together on no more than a third of the rows in the seed's unfiltered list, and only on a state badge, never a row or a cell. Table rows have equal rhythm (row heights within 4px of each other); record cards keep one field order. No element on the page carries no information, and no fact is said twice in a row. At 1280×800 and at 375×740, row 1 (Client, amount, state) is wholly on the first screen, under the title, the totals and the filters.
+9. **Error recovery:** T8 passes. A filter with no results says so and offers the way back to the whole book.
+10. **Help and documentation:** every filter's effect is clear from its label. Each total's meaning is clear from its label, including which totals are a part of another. The empty state for each filter says what was looked for and what to do. No term needs a glossary.
+
+## Cross-cutting (each failure costs a point from the heuristic named)
+
+- 320px and 200% zoom: no horizontal page scroll, every control usable (4, 7).
+- WCAG 2.2 AA: contrast, focus not obscured, target size 24px (4, 7).
+- The constraints hold: ADR-0021 GOV.UK patterns, ADR-0024 intrinsic layout (no viewport queries), the Voice rules, "Payment due" never "Due date" (ADR-0015) (4, 2).
+
+## Changes to this rubric
