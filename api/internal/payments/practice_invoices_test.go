@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -236,6 +237,22 @@ func TestGetPracticeInvoicesHandler_InvalidCursorReturns400(t *testing.T) {
 	}
 }
 
+// TestGetPracticeInvoicesHandler_CursorFromAnotherViewReturns400 proves a
+// cursor minted under one view is refused under another (#2746): the
+// whole book's cursor holds a created_at, which the unpaid and overdue
+// views would read as a due_at and page the wrong rows.
+func TestGetPracticeInvoicesHandler_CursorFromAnotherViewReturns400(t *testing.T) {
+	e := newEnv(t)
+	e.seedOpenInvoices(31)
+	whole := e.practiceInvoices()
+	unpaid := e.practiceInvoices("unpaid=true")
+
+	e.expect(http.MethodGet, practiceInvoicesPath("overdue=true", "cursor="+*whole.NextCursor), http.StatusBadRequest)
+	e.expect(http.MethodGet, practiceInvoicesPath("unpaid=true", "cursor="+*whole.NextCursor), http.StatusBadRequest)
+	e.expect(http.MethodGet, practiceInvoicesPath("cursor="+*unpaid.NextCursor), http.StatusBadRequest)
+	e.expect(http.MethodGet, practiceInvoicesPath("unpaid=true", "cursor="+pagecursor.Encode(time.Now(), "no-view")), http.StatusBadRequest)
+}
+
 // TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen proves
 // ?unpaid=true (#427) narrows the list to status 'open' -- the same
 // definition the outstanding totals already use -- while a paid, draft,
@@ -268,7 +285,8 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterKeepsOnlyOpen(t *testing.T) {
 // combines with cursor pagination: a book with more open Invoices than
 // one page holds still resumes exactly where the first unpaid page
 // stopped, and a paid Invoice interleaved among them never appears on
-// either page.
+// either page. The unpaid list is by payment due, earliest first (#2746),
+// so the Invoice billed first, and so due first, leads.
 func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	e := newEnv(t)
 	const totalOpen = 31
@@ -282,8 +300,8 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	if len(first.Items) != 30 {
 		t.Fatalf("first page items = %d, want 30", len(first.Items))
 	}
-	if first.Items[0].ID != ids[totalOpen-1] {
-		t.Fatalf("first page items[0] = %q, want %q (newest open)", first.Items[0].ID, ids[totalOpen-1])
+	if first.Items[0].ID != ids[0] {
+		t.Fatalf("first page items[0] = %q, want %q (payment due first)", first.Items[0].ID, ids[0])
 	}
 	for _, item := range first.Items {
 		if item.ID == paidID {
@@ -295,8 +313,83 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	if second.HasMore {
 		t.Fatal("second page hasMore = true, want false")
 	}
-	if len(second.Items) != 1 || second.Items[0].ID != ids[0] {
-		t.Fatalf("second page items = %+v, want only %q (oldest open)", second.Items, ids[0])
+	if len(second.Items) != 1 || second.Items[0].ID != ids[totalOpen-1] {
+		t.Fatalf("second page items = %+v, want only %q (payment due last)", second.Items, ids[totalOpen-1])
+	}
+}
+
+// walkPracticeInvoices reads every page of the list under one narrowing,
+// following nextCursor, and returns the rows in the order the pages gave
+// them.
+func (e *env) walkPracticeInvoices(narrowing string) []payments.PracticeInvoiceView {
+	e.T.Helper()
+	page := e.practiceInvoices(narrowing)
+	rows := page.Items
+	for page.HasMore {
+		page = e.practiceInvoices(narrowing, "cursor="+*page.NextCursor)
+		rows = append(rows, page.Items...)
+	}
+	return rows
+}
+
+// TestGetPracticeInvoicesHandler_NarrowedListsAreByPaymentDue proves both
+// narrowings are ordered by payment due, earliest first (#2746) -- on the
+// overdue list, the longest overdue first -- and that the cursor resumes
+// exactly across a page boundary that falls inside a run of Invoices due
+// at the same instant: every open Invoice once, none twice.
+func TestGetPracticeInvoicesHandler_NarrowedListsAreByPaymentDue(t *testing.T) {
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus("draft")
+	now := time.Now()
+	early := now.Add(-40 * 24 * time.Hour)
+	tied := now.Add(-20 * 24 * time.Hour)
+	want := []string{seedInvoiceDue(t, e.DB, e.Practice.ID, contractID, "in_due_early", invoiceStatusOpen, 1000, now.Add(-50*24*time.Hour), early)}
+	// The earliest due was raised first, so newest first would put it last.
+	for i := range 32 {
+		want = append(want, seedInvoiceDue(t, e.DB, e.Practice.ID, contractID, "in_due_tied_"+strconv.Itoa(i), invoiceStatusOpen, 1000,
+			now.Add(-time.Duration(i)*time.Minute), tied))
+	}
+	seedInvoiceDue(t, e.DB, e.Practice.ID, contractID, "in_due_paid", invoiceStatusPaid, 1000, now, early)
+
+	for _, narrowing := range []string{"unpaid=true", "overdue=true"} {
+		t.Run(narrowing, func(t *testing.T) {
+			rows := e.walkPracticeInvoices(narrowing)
+			if len(rows) != len(want) {
+				t.Fatalf("rows = %d, want %d", len(rows), len(want))
+			}
+			if rows[0].ID != want[0] {
+				t.Fatalf("rows[0] = %q, want %q (due first)", rows[0].ID, want[0])
+			}
+			seen := map[string]bool{}
+			for i, row := range rows {
+				if seen[row.ID] {
+					t.Fatalf("row %q appears twice", row.ID)
+				}
+				seen[row.ID] = true
+				if i > 1 && row.ID < rows[i-1].ID {
+					t.Fatalf("rows %d and %d out of id order within one payment due", i-1, i)
+				}
+			}
+		})
+	}
+}
+
+// TestGetPracticeInvoicesHandler_InvoiceCountIsTheWholeBook proves
+// invoiceCount (#2746) counts every Invoice whatever its status, on a
+// narrowed read as on the whole book, so the result line can say how many
+// of the book's rows it is showing.
+func TestGetPracticeInvoicesHandler_InvoiceCountIsTheWholeBook(t *testing.T) {
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus("draft")
+	base := time.Now().Add(-time.Hour)
+	seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_count_open", invoiceStatusOpen, 1000, base)
+	seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_count_paid", invoiceStatusPaid, 1000, base.Add(time.Second))
+	seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_count_void", invoiceStatusVoid, 1000, base.Add(2*time.Second))
+
+	for _, narrowing := range []string{"", "unpaid=true"} {
+		if got := e.practiceInvoices(narrowing).InvoiceCount; got != 3 {
+			t.Fatalf("%q invoiceCount = %d, want 3", narrowing, got)
+		}
 	}
 }
 

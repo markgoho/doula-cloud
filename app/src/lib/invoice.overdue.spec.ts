@@ -10,17 +10,62 @@
  * what comes back from it.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { dueLabel, invoicesResultSummary, loadPaymentTerms, practiceInvoicesPath, setPaymentTerms } from './invoice.js';
+import {
+	dueLabel,
+	INVOICES_RESULT_RULER,
+	invoicesResultSummary,
+	invoicesViewOf,
+	invoicesViewQuery,
+	loadPaymentTerms,
+	practiceInvoicesPath,
+	setPaymentTerms
+} from './invoice.js';
+
+const counts = { invoiceCount: 35, outstandingCount: 12, overdueCount: 7 };
 
 describe('invoicesResultSummary', () => {
 	it.each([
-		[false, 0, 'Showing every Invoice.'],
-		[false, 3, 'Showing every Invoice.'],
-		[true, 0, 'No Invoice is overdue.'],
-		[true, 1, 'Showing 1 overdue Invoice.'],
-		[true, 4, 'Showing 4 overdue Invoices.']
-	])('narrowed %s with %i overdue reads "%s"', (isNarrowed, count, text) => {
-		expect(invoicesResultSummary(isNarrowed, count)).toBe(text);
+		['all', 30, true, 'Showing the first 30 of 35 Invoices, newest first.'],
+		['all', 35, false, 'Showing 35 Invoices, newest first.'],
+		['all', 0, false, 'No Invoices yet.'],
+		['unpaid', 12, false, 'Showing 12 unpaid Invoices, earliest payment due first.'],
+		['unpaid', 0, false, 'No Invoice is unpaid.'],
+		['overdue', 7, false, 'Showing 7 overdue Invoices, longest overdue first.'],
+		['overdue', 1, false, 'Showing 1 overdue Invoice.'],
+		['overdue', 0, false, 'No Invoice is overdue.']
+	] as const)('%s with %i shown (more: %s) reads "%s"', (view, shown, hasMore, text) => {
+		expect(invoicesResultSummary(view, shown, hasMore, counts)).toBe(text);
+	});
+
+	// A total read at a later instant than the rows never says fewer than are shown.
+	it('never names a total below the rows on screen', () => {
+		expect(invoicesResultSummary('overdue', 8, true, counts)).toBe(
+			'Showing the first 8 of 8 overdue Invoices, longest overdue first.'
+		);
+	});
+
+	it('reserves room for its longest wording', () => {
+		expect(INVOICES_RESULT_RULER).toBe(
+			'Showing the first 999 of 9999 unpaid Invoices, earliest payment due first.'
+		);
+	});
+});
+
+describe('invoicesViewOf', () => {
+	it.each([
+		['', 'all'],
+		['show=all', 'all'],
+		['show=unpaid', 'unpaid'],
+		['show=overdue', 'overdue'],
+		['show=anything', 'all'],
+		['overdue=true', 'all']
+	] as const)('reads "%s" as %s', (query, view) => {
+		expect(invoicesViewOf(new URLSearchParams(query))).toBe(view);
+	});
+
+	it('names a view as the address the screen links to', () => {
+		expect(invoicesViewQuery('all')).toBe('');
+		expect(invoicesViewQuery('unpaid')).toBe('?show=unpaid');
 	});
 });
 import { jsonResponse } from './testResponse.js';
@@ -44,13 +89,13 @@ describe('dueLabel', () => {
 	});
 });
 
-describe('practiceInvoicesPath with the overdue narrowing', () => {
+describe('practiceInvoicesPath with a view', () => {
 	it('asks for the narrowing, and carries it alongside a cursor', () => {
-		expect(practiceInvoicesPath('practice-1', undefined, true)).toBe(
+		expect(practiceInvoicesPath('practice-1', undefined, 'overdue')).toBe(
 			'/api/practices/practice-1/invoices?overdue=true'
 		);
-		expect(practiceInvoicesPath('practice-1', 'cursor-1', true)).toContain('cursor=cursor-1');
-		expect(practiceInvoicesPath('practice-1', 'cursor-1', true)).toContain('overdue=true');
+		expect(practiceInvoicesPath('practice-1', 'cursor-1', 'unpaid')).toContain('cursor=cursor-1');
+		expect(practiceInvoicesPath('practice-1', 'cursor-1', 'unpaid')).toContain('unpaid=true');
 	});
 });
 

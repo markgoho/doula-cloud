@@ -3,8 +3,10 @@ package payments
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"doula-cloud/api/internal/apierr"
@@ -62,6 +64,9 @@ type PracticeInvoiceView struct {
 	BillingMode string `json:"billingMode"`
 	// PaymentProcessing is InvoiceView's own (#2225).
 	PaymentProcessing bool `json:"paymentProcessing"`
+	// dueAt is the stored instant DueOn is read from, kept for the cursor
+	// of a list ordered by payment due (#2746).
+	dueAt time.Time
 }
 
 // PracticeInvoicesResponse is the cursor-pagination envelope from
@@ -83,6 +88,10 @@ type PracticeInvoicesResponse struct {
 	HasMore          bool                  `json:"hasMore"`
 	OutstandingCents int64                 `json:"outstandingCents"`
 	OutstandingCount int                   `json:"outstandingCount"`
+	// InvoiceCount (#2746) is every Invoice in the book, whatever its
+	// status: the rows the whole-book list holds, so the screen can say
+	// how many of them it is showing.
+	InvoiceCount int `json:"invoiceCount"`
 	// PaidCents is every 'paid' Invoice's full amount -- bills that were
 	// settled. A refunded Invoice stays 'paid' (00115), so it still counts
 	// here in full, and deliberately so: the bill was settled, and this
@@ -134,6 +143,10 @@ type PracticeInvoicesResponse struct {
 // It is a narrowing of ?unpaid=true, not an alternative to it, and wins
 // when a caller passes both.
 //
+// The whole book is newest first. Either narrowing is ordered by payment
+// due, earliest first (#2746): the Invoices to chase lead, and on the
+// overdue list that is the longest overdue first.
+//
 // Who may read it: Owner, Admin, and an employed Doula (ADR-0008's money
 // row as amended by #282). Aggregating the whole Practice's book cannot
 // be narrowed to "her own Engagements", so a contractor is refused
@@ -145,7 +158,8 @@ func GetPracticeInvoicesHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		tx, practiceID := c.Tx, c.PracticeID
 
-		after, ok := pagecursor.FromQuery(w, r, decodeInvoiceCursor, "invalid cursor")
+		narrowing := narrowingFor(r)
+		after, ok := pagecursor.FromQuery(w, r, narrowing.decodeCursor, "invalid cursor")
 		if !ok {
 			return
 		}
@@ -159,7 +173,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 		}
 		days := bookDays{zone: zone, now: clock.Now(r.Context())}
 
-		items, next, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowingFor(r), days)
+		items, next, err := listPracticeInvoices(r.Context(), tx, practiceID, after, narrowing, days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -179,6 +193,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			NextCursor:       next,
 			OutstandingCents: totals.outstandingCents,
 			OutstandingCount: totals.outstandingCount,
+			InvoiceCount:     totals.invoiceCount,
 			PaidCents:        totals.paidCents,
 			RefundedCents:    totals.refundedCents,
 			OverdueCents:     totals.overdueCents,
@@ -275,13 +290,66 @@ func narrowingFor(r *http.Request) invoiceNarrowing {
 // overdue narrowing names it.
 func listPracticeInvoicesQuery(narrowing invoiceNarrowing) string {
 	return practiceInvoiceColumns + narrowing.clause("$3") + `
-	ORDER BY i.created_at DESC, i.id DESC LIMIT $2`
+	ORDER BY ` + narrowing.order() + ` LIMIT $2`
 }
 
 func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
 	return practiceInvoiceColumns + narrowing.clause("$5") + `
-	AND (i.created_at, i.id) < ($2, $3)
-	ORDER BY i.created_at DESC, i.id DESC LIMIT $4`
+	AND ` + narrowing.after() + `
+	ORDER BY ` + narrowing.order() + ` LIMIT $4`
+}
+
+// name is the narrowing as its cursor carries it.
+func (n invoiceNarrowing) name() string {
+	switch n {
+	case narrowUnpaid:
+		return "unpaid"
+	case narrowOverdue:
+		return "overdue"
+	case narrowAll:
+	}
+	return "all"
+}
+
+// errCursorForAnotherView refuses a cursor minted under one narrowing and
+// sent with another: its instant is the other list's sort key, so it would
+// page the wrong rows rather than fail.
+var errCursorForAnotherView = errors.New("payments: cursor is for another view")
+
+// decodeCursor reads a cursor this narrowing minted. The cursor's id is
+// prefixed with the narrowing's name, and a cursor from another one is
+// refused the way a malformed one is (docs/api-design.md section 4).
+func (n invoiceNarrowing) decodeCursor(s string) (invoiceCursor, error) {
+	c, err := decodeInvoiceCursor(s)
+	if err != nil {
+		return invoiceCursor{}, err
+	}
+	view, id, found := strings.Cut(c.invoiceID, ":")
+	if !found || view != n.name() {
+		return invoiceCursor{}, errCursorForAnotherView
+	}
+	return invoiceCursor{createdAt: c.createdAt, invoiceID: id}, nil
+}
+
+// isByPaymentDue is whether the narrowing orders by payment due, earliest
+// first, rather than newest first. The cursor's instant is then due_at,
+// not created_at.
+func (n invoiceNarrowing) isByPaymentDue() bool {
+	return n != narrowAll
+}
+
+func (n invoiceNarrowing) order() string {
+	if n.isByPaymentDue() {
+		return `i.due_at ASC, i.id ASC`
+	}
+	return `i.created_at DESC, i.id DESC`
+}
+
+func (n invoiceNarrowing) after() string {
+	if n.isByPaymentDue() {
+		return `(i.due_at, i.id) > ($2, $3)`
+	}
+	return `(i.created_at, i.id) < ($2, $3)`
 }
 
 // listPracticeInvoices fetches one page of the Practice's Invoices,
@@ -289,10 +357,13 @@ func listPracticeInvoicesAfterQuery(narrowing invoiceNarrowing) string {
 // staffauth.Middleware already set up on tx -- the app layer's own
 // filter, so a bug in either one alone can't leak rows.
 //
-// The ordering matches invoices_practice_created_idx
-// (00056_invoices_practice_listing_index.sql), so the page is an index
+// The whole book's ordering matches invoices_practice_created_idx
+// (00056_invoices_practice_listing_index.sql), so its page is an index
 // scan of at most invoicePageSize+1 rows rather than a sort of the
-// Practice's whole book.
+// Practice's whole book. A narrowed list sorts only its open Invoices.
+//
+// The cursor carries whichever instant the narrowing orders by, so a
+// later page has to be asked for under the narrowing its first page was.
 func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, after *invoiceCursor, narrowing invoiceNarrowing, days bookDays) ([]PracticeInvoiceView, *string, error) {
 	query := listPracticeInvoicesQuery(narrowing)
 	args := []any{practiceID, invoicePageSize + 1}
@@ -325,6 +396,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 		}
 		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
+		it.dueAt = dueAt
 		it.DueOn = practiceDay(dueAt, days.zone)
 		it.RaisedOn = practiceDay(it.CreatedAt, days.zone)
 		it.DaysOverdue = overdue.Days(it.Status, it.PaymentProcessing, dueAt, days.now, days.zone)
@@ -337,7 +409,10 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 	}
 
 	items, next, _ := pagecursor.Cut(items, invoicePageSize, func(v PracticeInvoiceView) (time.Time, string) {
-		return v.CreatedAt, v.ID
+		if narrowing.isByPaymentDue() {
+			return v.dueAt, narrowing.name() + ":" + v.ID
+		}
+		return v.CreatedAt, narrowing.name() + ":" + v.ID
 	})
 	return items, next, nil
 }
@@ -347,6 +422,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, af
 type invoiceTotals struct {
 	outstandingCents int64
 	outstandingCount int
+	invoiceCount     int
 	paidCents        int64
 	overdueCents     int64
 	overdueCount     int
@@ -368,6 +444,7 @@ type invoiceTotals struct {
 var practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'open'), 0),
 		COUNT(*) FILTER (WHERE i.status = 'open'),
+		COUNT(*),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'paid'), 0),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE ` + overdue.Expr("$2") + `), 0),
 		COUNT(*) FILTER (WHERE ` + overdue.Expr("$2") + `),
@@ -385,7 +462,7 @@ var practiceInvoiceTotalsQuery = `SELECT
 func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time) (invoiceTotals, error) {
 	var t invoiceTotals
 	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff).
-		Scan(&t.outstandingCents, &t.outstandingCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
+		Scan(&t.outstandingCents, &t.outstandingCount, &t.invoiceCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)
 	}

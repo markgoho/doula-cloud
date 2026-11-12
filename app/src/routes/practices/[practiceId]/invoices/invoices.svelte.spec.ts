@@ -151,7 +151,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 		// #2015: an empty book has nothing to total and nothing to narrow.
 		await expect.element(testPage.getByText('Clients owe')).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).not.toBeInTheDocument();
 	});
 
 	it('appends the next page rather than replacing the one already read', async () => {
@@ -229,7 +229,7 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 		await setupLoading();
 
 		await expect.element(testPage.getByText('Clients owe')).toBeVisible();
-		await expect.element(testPage.getByRole('checkbox', { name: 'Only overdue Invoices' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeChecked();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
 	});

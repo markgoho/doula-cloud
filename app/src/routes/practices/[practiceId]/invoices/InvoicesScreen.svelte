@@ -20,17 +20,20 @@
 		cardPaymentsWait,
 		dueLabel,
 		formatAmount,
+		INVOICES_RESULT_RULER,
 		invoiceRowStatusLabel,
 		invoiceRowStatusVariant,
 		invoicesResultSummary,
+		invoicesViewOf,
+		invoicesViewQuery,
 		loadPracticeInvoices,
+		type InvoicesView,
 		type PracticeInvoice
 	} from '#lib/invoice.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
-	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
-	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -50,7 +53,7 @@
 	 */
 	let { data }: { data?: PracticeInvoiceListData } = $props();
 
-	const isNarrowedToOverdue = $derived(page.url.searchParams.get('overdue') === 'true');
+	const view = $derived(invoicesViewOf(page.url.searchParams));
 	const session = $derived((page.data as { session?: PracticeSession }).session);
 	// #2200: Stripe not being connected stops a card payment, never a
 	// Practice that bills by hand, so that one is told nothing about it.
@@ -76,16 +79,12 @@
 	const read = $derived(data);
 	const invoices = new PaginatedList({
 		first: untrack(() => read) ?? { items: [], hasMore: false },
-		// Every later page asks for the same narrowing its rows were read
-		// under (#768) -- otherwise "load more" on an overdue list would
-		// append the whole book underneath it.
+		// Every later page asks for the same view its rows were read under
+		// (#768) -- otherwise "load more" on an overdue list would append the
+		// whole book underneath it, and its cursor would be read in the wrong
+		// order (#2746).
 		loadPage: (cursor) =>
-			loadPracticeInvoices(
-				apiFetchWithSession,
-				page.params.practiceId!,
-				cursor,
-				read?.isNarrowedToOverdue ?? isNarrowedToOverdue
-			),
+			loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, read?.view ?? view),
 		failureMessage: 'Failed to load more invoices'
 	});
 	$effect(() => {
@@ -103,7 +102,7 @@
 	 * "Clients owe" look like it is only what has been scrolled to.
 	 */
 	const isBookEmpty = $derived(
-		read !== undefined && !read.isNarrowedToOverdue && invoices.items.length === 0
+		read !== undefined && read.view === 'all' && invoices.items.length === 0
 	);
 
 	const summary = $derived(
@@ -134,48 +133,57 @@
 	);
 
 	/*
-	 * #768: the narrowing is in the address, not in memory the page holds --
-	 * the URL is the state, so it survives a reload and a back button. It is
-	 * the filter bar every other Staff list uses: a checkbox named for the
-	 * parameter, so the form reaches the address with no script running, and
-	 * the Practice's own overdue count in the result line, because a filter
-	 * that shows nothing and a filter nobody needs look identical until the
-	 * number is said.
+	 * #768, #2746: the view is in the address, not in memory the page holds
+	 * -- the URL is the state, so it survives a reload and a back button.
+	 * One radio choice, since overdue is a part of unpaid and two boxes would
+	 * offer a pair that means only one of them. The radios are named `show`,
+	 * so the form reaches the same address with no script running.
 	 */
 	const invoicesHref = $derived(
 		resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! })
 	);
 
-	// What the checkbox holds before Apply, put back in step with the address
+	const VIEW_OPTIONS: readonly { value: InvoicesView; label: string }[] = [
+		{ value: 'all', label: 'Every Invoice' },
+		{ value: 'unpaid', label: 'Unpaid Invoices' },
+		{ value: 'overdue', label: 'Overdue Invoices' }
+	];
+
+	// What the radios hold before Apply, put back in step with the address
 	// after every navigation.
-	let isOverdueChecked = $state(false);
+	let draftView = $state<InvoicesView>('all');
 	let filterBar = $state<{ focusStatus: () => void }>();
 	let isFocusPending = $state(false);
-	let lastNarrowing: boolean | undefined;
+	let lastView: InvoicesView | undefined;
 	function seedDrafts() {
-		isOverdueChecked = isNarrowedToOverdue;
+		draftView = view;
 	}
 	seedDrafts();
 	afterNavigate(() => {
 		seedDrafts();
-		// A change of narrowing lands on the result line once its list has
+		// A change of view lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
-		if (lastNarrowing !== undefined && lastNarrowing !== isNarrowedToOverdue) isFocusPending = true;
-		lastNarrowing = isNarrowedToOverdue;
+		if (lastView !== undefined && lastView !== view) isFocusPending = true;
+		lastView = view;
 	});
 	$effect(() => {
-		if (!isFocusPending || read?.isNarrowedToOverdue !== isNarrowedToOverdue) return;
+		if (!isFocusPending || read?.view !== view) return;
 		isFocusPending = false;
 		filterBar?.focusStatus();
 	});
 
-	// eslint-disable-next-line unicorn/consistent-boolean-name -- mirrors the native HTMLInputElement `checked` property Checkbox's onChange wraps 1:1 (same exception Checkbox.svelte itself carries)
-	const handleToggleOverdue = (checked: boolean) => (isOverdueChecked = checked);
-
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		await goto(isOverdueChecked ? `${invoicesHref}?overdue=true` : invoicesHref);
+		await goto(`${invoicesHref}${invoicesViewQuery(draftView)}`);
 	}
+
+	const appliedLabel = $derived(VIEW_OPTIONS.find((option) => option.value === view && view !== 'all')?.label);
+
+	const resultSummary = $derived(
+		read ? invoicesResultSummary(read.view, invoices.items.length, invoices.hasMore, read) : ''
+	);
+
+	const everyInvoice = $derived({ label: 'Show every Invoice', href: invoicesHref });
 
 	const columns = [
 		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName },
@@ -246,6 +254,18 @@
 	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} />
 {/snippet}
 
+{#snippet applied()}
+	<li>
+		<Link
+			href={invoicesHref}
+			label={appliedLabel ?? ''}
+			variant="chip"
+			icon="x"
+			ariaLabel={`Remove filter: ${appliedLabel}`}
+		/>
+	</li>
+{/snippet}
+
 {#snippet pendingFigure()}
 	<Skeleton variant="text" lines={1} />
 {/snippet}
@@ -265,17 +285,21 @@
 			action={invoicesHref}
 			onSubmit={applyFilters}
 			legend="Choose which Invoices to show"
-			status={read ? invoicesResultSummary(read.isNarrowedToOverdue, read.overdueCount) : ''}
+			status={resultSummary}
+			statusRuler={INVOICES_RESULT_RULER}
 			empty={read !== undefined && invoices.items.length === 0}
-			clearHref={isNarrowedToOverdue ? invoicesHref : undefined}
+			clearHref={view === 'all' ? undefined : invoicesHref}
+			applied={appliedLabel ? applied : undefined}
 			foldsFieldsOnly
 		>
 			{#snippet switches()}
-				<LabeledField label="Only overdue Invoices" orientation="inline">
-					{#snippet children(control)}
-						<Checkbox name="overdue" value="true" checked={isOverdueChecked} onChange={handleToggleOverdue} {...control} />
-					{/snippet}
-				</LabeledField>
+				<RadioGroup
+					legend="Show"
+					name="show"
+					options={VIEW_OPTIONS}
+					value={draftView}
+					onChange={(chosen) => (draftView = chosen)}
+				/>
 			{/snippet}
 		</FilterBar>
 	{/if}
@@ -305,9 +329,10 @@
 				hasMore={invoices.hasMore}
 				onLoadMore={() => invoices.loadMore()}
 				isLoadingMore={invoices.isLoadingMore}
-				emptyMessage={read.isNarrowedToOverdue
-					? 'Nothing is overdue. Every unpaid invoice is still within its payment terms.'
-					: 'No Invoices yet. One appears here as soon as a Contract is billed.'}
+				emptyMessage={read.view === 'all'
+					? 'No Invoices yet. One appears here as soon as a Contract is billed.'
+					: resultSummary}
+				emptyAction={read.view === 'all' ? undefined : everyInvoice}
 			/>
 		</div>
 	{:else}

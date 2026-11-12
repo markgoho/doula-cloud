@@ -145,6 +145,10 @@ export interface PracticeInvoicePage {
 	hasMore: boolean;
 	outstandingCents: number;
 	outstandingCount: number;
+	/**
+	 * Every Invoice in the book, whatever its status (#2746).
+	 */
+	invoiceCount: number;
 	/** Every 'paid' Invoice's full amount -- settled bills. A refunded
 	 * Invoice stays 'paid', so it still counts here in full; what went
 	 * back is refundedCents beside it. */
@@ -165,24 +169,44 @@ export interface PracticeInvoicePage {
 	clientsCanPay: boolean;
 }
 
+/** Which Invoices the Practice-wide list shows (#2746): the whole book,
+ * the unpaid ones, or the overdue part of those. One choice, since overdue
+ * is a part of unpaid. */
+export type InvoicesView = 'all' | 'unpaid' | 'overdue';
+
+/**
+ * The view an address names: `?show=unpaid` or `?show=overdue`, which is
+ * also what the filter bar's radios submit with no script running.
+ */
+export function invoicesViewOf(search: Pick<URLSearchParams, 'get'>): InvoicesView {
+	const shown = search.get('show');
+	return shown === 'unpaid' || shown === 'overdue' ? shown : 'all';
+}
+
+/**
+ * The query string that names a view, empty for the whole book.
+ */
+export function invoicesViewQuery(view: InvoicesView): string {
+	return view === 'all' ? '' : `?show=${view}`;
+}
+
 /** What the Practice-wide Invoice route's `load` hands its page: one page
- * of the book, plus which narrowing it was read under (#768). The
- * narrowing lives in the URL rather than in the page's memory, and the
- * page needs it for two things -- which filter link reads as current, and
- * which narrowing every later page asks for. */
+ * of the book, plus which view it was read under (#768, #2746). The view
+ * lives in the URL rather than in the page's memory, and every later page
+ * has to ask for the same one. */
 export interface PracticeInvoiceListData extends PracticeInvoicePage {
-	isNarrowedToOverdue: boolean;
+	view: InvoicesView;
 }
 
 /** The Practice-wide Invoice list's path -- exported so the route's
  * `load` can call `apiFetch` on it directly and handle 401/403 the way
  * SvelteKit needs (see the billing route's `+page.ts` for why a
  * role-gated read loads there rather than in `onMount`). */
-export function practiceInvoicesPath(practiceId: string, cursor?: string, isNarrowedToOverdue = false): string {
+export function practiceInvoicesPath(practiceId: string, cursor?: string, view: InvoicesView = 'all'): string {
 	const path = `/api/practices/${practiceId}/invoices`;
 	const query = new URLSearchParams();
-	if (isNarrowedToOverdue) {
-		query.set('overdue', 'true');
+	if (view !== 'all') {
+		query.set(view, 'true');
 	}
 	if (cursor) {
 		query.set('cursor', cursor);
@@ -191,17 +215,16 @@ export function practiceInvoicesPath(practiceId: string, cursor?: string, isNarr
 	return search ? `${path}?${search}` : path;
 }
 
-/** Loads one page of every Invoice the Practice has billed, newest
- * first. Throws with the response body text on a non-2xx response --
+/** Loads one page of the Practice's Invoices in a view. Throws with the response body text on a non-2xx response --
  * the route's `load` maps status codes to SvelteKit errors before
  * calling this, so a throw here is only ever an unexpected failure. */
 export async function loadPracticeInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	cursor?: string,
-	isNarrowedToOverdue = false
+	view: InvoicesView = 'all'
 ): Promise<PracticeInvoicePage> {
-	const response = await fetcher(practiceInvoicesPath(practiceId, cursor, isNarrowedToOverdue));
+	const response = await fetcher(practiceInvoicesPath(practiceId, cursor, view));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -779,16 +802,39 @@ export function dueLabel(invoice: Pick<PracticeInvoice, 'dueOn' | 'daysOverdue'>
 	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
 }
 
+const VIEW_ORDER: Record<InvoicesView, string> = {
+	all: 'newest first',
+	unpaid: 'earliest payment due first',
+	overdue: 'longest overdue first'
+};
+
 /**
- * The Invoices list's result line, the status of its filter bar: the whole
- * book, or the overdue count (#768) the narrowing carries, which is the
- * number the old "Overdue (n)" chip showed.
+ * The Invoices list's result line, the status of its filter bar (#2746):
+ * how many rows are on screen, of how many the view holds, which view, and
+ * in what order. `shown` grows with each "Load more", so the line says how
+ * far through the list the reader is.
  */
-export function invoicesResultSummary(isNarrowedToOverdue: boolean, overdueCount: number): string {
-	if (!isNarrowedToOverdue) return 'Showing every Invoice.';
-	if (overdueCount === 0) return 'No Invoice is overdue.';
-	return `Showing ${overdueCount} overdue ${overdueCount === 1 ? 'Invoice' : 'Invoices'}.`;
+export function invoicesResultSummary(
+	view: InvoicesView,
+	shown: number,
+	hasMore: boolean,
+	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>
+): string {
+	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
+	const kind = view === 'all' ? '' : `${view} `;
+	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
+	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
+	if (shown === 1) return `Showing 1 ${kind}Invoice.`;
+	return `Showing ${shown} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
 }
+
+/** The longest wording the result line can say, which the filter bar
+ * reserves room for so the list does not move when the line changes. */
+export const INVOICES_RESULT_RULER = (['all', 'unpaid', 'overdue'] as const)
+	.map((view) =>
+		invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 })
+	)
+	.toSorted((a, b) => b.length - a.length)[0];
 
 /** A Practice's payment terms (#768): how many days after an Invoice is
  * raised it falls due. `isDefault` is true when the Practice has never

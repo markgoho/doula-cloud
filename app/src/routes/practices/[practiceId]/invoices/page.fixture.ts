@@ -90,14 +90,15 @@ export const data: PracticeInvoiceListData = {
 	hasMore: false,
 	outstandingCents: 630_000,
 	outstandingCount: 2,
+	invoiceCount: 3,
 	paidCents: 250_000,
 	refundedCents: 125_050,
 	overdueCents: 450_000,
 	overdueCount: 1,
 	clientsCanPay: true,
-	// #768: the unnarrowed list, so the fixture sweeps the "Payment due"
-	// column and both filter links in the state a Practice meets first.
-	isNarrowedToOverdue: false
+	// #768: the whole book, so the fixture sweeps the "Payment due" column
+	// and the filter bar in the state a Practice meets first.
+	view: 'all'
 };
 
 /*
@@ -108,8 +109,8 @@ export const data: PracticeInvoiceListData = {
  */
 export const narrowedToOverdue: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide invoice list, narrowed to overdue',
-	url: 'https://example.test/practices/practice-1/invoices?overdue=true',
-	props: { data: { ...data, items: [data.items[0]], isNarrowedToOverdue: true } }
+	url: 'https://example.test/practices/practice-1/invoices?show=overdue',
+	props: { data: { ...data, items: [data.items[0]], view: 'overdue' } }
 };
 
 /*
@@ -150,6 +151,7 @@ export const typical: RouteVariant<RouteParameters> = {
 			// The totals the eight rows above add up to.
 			outstandingCents: 630_000,
 			outstandingCount: 5,
+			invoiceCount: 8,
 			paidCents: 450_000,
 			refundedCents: 0,
 			overdueCents: 90_000,
