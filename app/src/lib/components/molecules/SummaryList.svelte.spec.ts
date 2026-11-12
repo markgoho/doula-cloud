@@ -286,3 +286,20 @@ describe('SummaryList.svelte', () => {
 		expect(plain.querySelector('dl')).not.toHaveClass('bordered');
 	});
 });
+
+describe('SummaryList.svelte, compact (#2746)', () => {
+	it('keeps every key beside its value at a phone width, the values starting at one edge', async () => {
+		await page.viewport(320, 700);
+		const totals: SummaryListRow[] = [
+			{ label: 'Clients owe', value: '$15,465.00' },
+			{ label: 'Of that, overdue', value: '$6,775.00' }
+		];
+		await render(SummaryList, { props: { rows: totals, isCompact: true } });
+
+		const owed = page.getByRole('definition').nth(0).element().getBoundingClientRect();
+		const overdue = page.getByRole('definition').nth(1).element().getBoundingClientRect();
+		const key = page.getByRole('term').nth(0).element().getBoundingClientRect();
+		expect(owed.top).toBe(key.top);
+		expect(owed.left).toBe(overdue.left);
+	});
+});

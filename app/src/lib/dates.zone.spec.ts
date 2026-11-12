@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { formatCalendarDay, formatInstant } from './dates.js';
 import { invoiceFacts, type ClientInvoice } from './clientInvoice.js';
-import { dueLabel } from './invoice.js';
+import { invoiceDateLine, invoiceStateWord } from './invoice.js';
 
 /*
  * #1958's and #1965's proof, with the zone set by the spec itself rather
@@ -58,8 +58,8 @@ describe('a date in a zone behind UTC (America/New_York)', () => {
 	});
 
 	it('shows the due day the BFF sent, with the lateness it counted', () => {
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 0 })).toBe('Nov 23, 2026');
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 1 })).toBe('Nov 23, 2026 — 1 day overdue');
+		expect(invoiceDateLine({ status: 'open', dueOn: '2026-11-23' })?.day).toBe('Nov 23, 2026');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 1 })).toBe('1 day overdue');
 	});
 
 	it('still reads a real instant in the reader zone', () => {
@@ -85,7 +85,8 @@ describe('a date in a zone ahead of UTC (Asia/Tokyo)', () => {
 	});
 
 	it('shows the due day the BFF sent, with the lateness it counted', () => {
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 3 })).toBe('Nov 23, 2026 — 3 days overdue');
+		expect(invoiceDateLine({ status: 'open', dueOn: '2026-11-23' })?.day).toBe('Nov 23, 2026');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 3 })).toBe('3 days overdue');
 	});
 
 	it('still reads a real instant in the reader zone', () => {

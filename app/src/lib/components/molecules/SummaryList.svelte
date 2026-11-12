@@ -87,14 +87,22 @@
 		 * key and the value cannot share a line.
 		 */
 		isStacked?: boolean;
+		/**
+		 * Every key beside its value at any width, the keys in one column so
+		 * the values start at one edge, and the rows close with no rule
+		 * between them: a few totals read in one glance before the list
+		 * they sum, the Invoices list's (#2746). A value too long for its
+		 * track wraps inside it. For rows with no action, tag or detail.
+		 */
+		isCompact?: boolean;
 	}
 
-	let { rows, value, action, detail, isBordered = false, isStacked = false }: Properties = $props();
+	let { rows, value, action, detail, isBordered = false, isStacked = false, isCompact = false }: Properties = $props();
 
 	const listId = $props.id();
 </script>
 
-<dl class:bordered={isBordered} class:stacked={isStacked}>
+<dl class:bordered={isBordered} class:stacked={isStacked} class:compact={isCompact}>
 	<!--
 		Keyed on index, not on the label (#464): a record can show the same
 		label twice -- two phone numbers, two Practice-defined fields a
@@ -257,6 +265,22 @@
 		/* Every key above its value at every width (`isStacked`). */
 		.stacked .value {
 			flex-basis: 100%;
+		}
+
+		/* `isCompact`: one grid whose rows share its two tracks, so every key
+		   is one column wide and every value starts at one edge. */
+		dl.compact {
+			display: grid;
+			grid-template-columns: max-content minmax(0, 1fr);
+			column-gap: var(--space-2);
+		}
+
+		.compact > .row {
+			grid-column: 1 / -1;
+			display: grid;
+			grid-template-columns: subgrid;
+			padding-block: calc(var(--space-1) / 2);
+			border-block-end: none;
 		}
 
 		/* The in-place form takes the row's whole width, on a line of its own. */

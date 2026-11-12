@@ -40,8 +40,8 @@ export const data: PracticeInvoiceListData = {
 			// carrying #537's hostile client-name value.
 			reference: 'INV-0042',
 			billingMode: 'by_hand',
-			// #768: overdue, so the "Payment due" cell renders its longest
-			// form -- a date plus a day count -- at every width the continuum
+			// #768: overdue, so the Money cell renders its red badge
+			// -- a count of days late -- at every width the continuum
 			// sweeps. The count is the BFF's, in the Practice's zone (#1965).
 			dueOn: '2026-08-31',
 			daysOverdue: 56
@@ -59,17 +59,17 @@ export const data: PracticeInvoiceListData = {
 			raisedOn: '2026-07-01',
 			paidOn: '2026-07-04',
 			// #271: the Stripe rail's own reference, so this fixture's two
-			// rows realize both billing-mode states the "Billed via" column
+			// rows realize both billing-mode states the Reference cell
 			// renders.
 			reference: 'DC-0092',
 			billingMode: 'stripe',
-			// Paid, so its due date reads plainly however long ago it passed:
+			// Paid, so its row says the day it was paid, not this one:
 			// the BFF counts no lateness on a settled Invoice.
 			dueOn: '2026-07-31',
 			daysOverdue: 0
 		},
 		{
-			// #2225: a bank payment on its way, so the Status column carries
+			// #2225: a bank payment on its way, so the Money cell carries
 			// its longest words. Still open, so it counts as outstanding.
 			id: 'inv-3',
 			engagementId: 'eng-3',
@@ -96,7 +96,7 @@ export const data: PracticeInvoiceListData = {
 	overdueCents: 450_000,
 	overdueCount: 1,
 	clientsCanPay: true,
-	// #768: the whole book, so the fixture sweeps the "Payment due" column
+	// #768: the whole book, so the fixture sweeps the "Due or paid" column
 	// and the filter bar in the state a Practice meets first.
 	view: 'all'
 };

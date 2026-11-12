@@ -381,6 +381,13 @@
 			flex-basis: 100%;
 		}
 
+		/* A field of inline answers (`RadioGroup isInline`, the Invoices list's
+		   view) gives its answers to the row, so Apply follows the last one on
+		   its line instead of taking a line of its own at a phone's width. */
+		.fields > :global(.choices-inline) {
+			display: contents;
+		}
+
 		/* The switches are stacked at a phone's width; each keeps its own
 		   target, so the rows sit close. */
 		.switches {

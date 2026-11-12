@@ -18,7 +18,7 @@
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
-	import { formatAmount, invoiceRowStatusLabel, invoiceRowStatusVariant, invoiceStatusLabel } from '#lib/invoice.js';
+	import { formatAmount, invoiceRowStatusVariant, invoiceStateWord } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -554,12 +554,9 @@ import type { PageProps as PageProperties } from './$types';
 	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
 		const standing = standingOf(line);
 		if (standing.paymentProcessing) return { word: 'clearing' };
-		if (standing.daysOverdue > 0) {
-			const days = `${standing.daysOverdue} day${standing.daysOverdue === 1 ? '' : 's'}`;
-			return { word: `${days} ${invoiceRowStatusLabel(standing).toLowerCase()}`, variant: invoiceRowStatusVariant(standing) };
-		}
-		if (line.invoiceStatus === 'open') return { word: 'owed', variant: 'warning' };
-		return { word: invoiceStatusLabel(line.invoiceStatus ?? '').toLowerCase() };
+		const word = invoiceStateWord(standing);
+		if (standing.daysOverdue > 0 || standing.status === 'open') return { word, variant: invoiceRowStatusVariant(standing) };
+		return { word };
 	}
 
 	function moneyLines(client: ClientListItem): MoneyLine[] {
@@ -1298,6 +1295,7 @@ import type { PageProps as PageProperties } from './$types';
 		   fields on one line wrap to a second at some widths and not at others. A
 		   field a Client has nothing in is not drawn, so cards differ in height. */
 		.clients-table :global(.record-view .compact-meta) {
+			display: flex;
 			flex-direction: column;
 		}
 

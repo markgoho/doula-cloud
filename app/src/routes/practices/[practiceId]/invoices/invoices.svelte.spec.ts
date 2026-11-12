@@ -38,6 +38,14 @@ const invalidate = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn() }));
 
 const [openInvoice, paidInvoice] = data.items;
+
+// A cell's name as a screen reader hears it. Chromium puts a space either
+// side of a visually hidden comma, which is out of the flow, so the words
+// are matched with any spacing between them.
+function heard(text: string): RegExp {
+	const words = text.replaceAll(/[$.]/g, String.raw`\$&`).split(/,? /);
+	return new RegExp(`^${words.join(String.raw`\s*,?\s*`)}$`);
+}
 const { practiceId } = fixture.params;
 
 beforeEach(() => {
@@ -64,19 +72,25 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 	it('shows a paid Invoice on the day the BFF sent, month first', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Paid Jul 4, 2026', exact: true })).toBeVisible();
 	});
 
-	it('shows the due day the BFF sent, with the lateness it counted', async () => {
+	it('shows the due day the BFF sent while it can be paid, and the lateness it counted with the amount', async () => {
 		await setup();
 
-		await expect
-			.element(testPage.getByRole('cell', { name: 'Aug 31, 2026 — 56 days overdue', exact: true }))
-			.toBeVisible();
-		// Within the paid row: the first row's Billed instant is also Jul 31
-		// in a zone behind UTC.
+		await expect.element(testPage.getByRole('cell', { name: 'Payment due Aug 31, 2026', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
+		// The paid row's Raised day, which an instant read in a zone behind
+		// UTC would have put on Jun 30.
 		const paidRow = testPage.getByRole('row').filter({ hasText: 'DC-0092' });
-		await expect.element(paidRow.getByRole('cell', { name: 'Jul 31, 2026', exact: true })).toBeVisible();
+		await expect.element(paidRow.getByRole('cell', { name: 'Jul 1, 2026', exact: true })).toBeVisible();
+	});
+
+	it('says no day for an Invoice nobody will pay', async () => {
+		await setup({ ...data, items: [{ ...openInvoice, status: 'void', daysOverdue: 0 }] });
+
+		await expect.element(testPage.getByRole('cell', { name: 'No payment due', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, void') })).toBeVisible();
 	});
 });
 
@@ -93,18 +107,35 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: paidInvoice.clientName }))
 			.toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: '$4,500.00' })).toBeVisible();
-		// The open row is past its due day, so it reads Overdue, as it does
-		// on its Engagement's Invoices section (#2122).
-		await expect.element(testPage.getByRole('cell', { name: 'Overdue', exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Paid', exact: true })).toBeVisible();
+		// The money said once, its state in the Clients list's words: the
+		// open row is past its due day, so it says how late (#2122).
+		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00, paid') })).toBeVisible();
 	});
 
-	it('reads an open Invoice that is not yet late as Owed', async () => {
+	it('reads an open Invoice that is not yet late as owed', async () => {
 		await setup({ ...data, items: [{ ...openInvoice, daysOverdue: 0 }] });
 
-		await expect.element(testPage.getByRole('cell', { name: 'Owed', exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Open', exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, owed') })).toBeVisible();
+	});
+
+	it('says how each Invoice was billed, beside its reference', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('cell', { name: heard('INV-0042, billed By hand') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('DC-0092, billed through Stripe') })).toBeVisible();
+	});
+
+	// T6: the table is named, described by the result line, and two
+	// Invoices of one Client are two links a list of links tells apart.
+	it('names the table, describes it by the result line, and names each link by Client and reference', async () => {
+		await setup({ ...data, items: [openInvoice, { ...openInvoice, id: 'inv-9', reference: 'INV-0043' }] });
+
+		const table = testPage.getByRole('table', { name: 'Invoices' });
+		await expect.element(table).toBeVisible();
+		await expect.element(table).toHaveAccessibleDescription('Showing 2 Invoices, newest first.');
+		await expect.element(testPage.getByRole('link', { name: `${openInvoice.clientName}, INV-0042` })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: `${openInvoice.clientName}, INV-0043` })).toBeVisible();
 	});
 
 	it('names each Client as the way in to that Invoice on her Engagement', async () => {
@@ -121,21 +152,22 @@ describe('the Practice-wide invoice list (#265)', () => {
 	it('shows what Clients owe across the Practice', async () => {
 		await setup();
 
-		// The summary is a description list, so its three values are read
-		// positionally -- both figures also appear as a row's own amount,
+		// The summary is a description list, so its values are read
+		// positionally -- the figures also appear as a row's own amount,
 		// which is exactly why an unscoped getByText would not say which is
 		// the whole book's.
 		const totals = testPage.getByRole('definition');
-		await expect.element(totals.nth(0)).toHaveTextContent('$6,300.00');
-		await expect.element(totals.nth(1)).toHaveTextContent('2');
+		await expect.element(totals.nth(0)).toHaveTextContent('$6,300.00 on 2 Invoices');
 		await expect.element(totals.nth(2)).toHaveTextContent('$2,500.00');
+		await expect.element(totals.nth(3)).toHaveTextContent('$1,250.50 to Clients');
+		await expect.element(testPage.getByRole('term').nth(3)).toHaveTextContent('Of that, returned');
 	});
 
 	// #2225: the BFF says a payment is on its way, and the row says so.
 	it('reads a bank payment that is still clearing as on its way', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Payment on its way').first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$1,800.00, payment on its way') })).toBeVisible();
 	});
 
 	it('says so plainly when nothing has been billed yet', async () => {
@@ -151,7 +183,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 		// #2015: an empty book has nothing to total and nothing to narrow.
 		await expect.element(testPage.getByText('Clients owe')).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).not.toBeInTheDocument();
 	});
 
 	it('appends the next page rather than replacing the one already read', async () => {
@@ -232,6 +264,20 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeChecked();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
+	});
+
+	// H1: the totals hold their place while the figures load, so the filter
+	// does not move when they land, at a desk's width or a phone's.
+	it.each([1440, 375])('does not move the filter when the figures land, at %ipx', async (width) => {
+		await testPage.viewport(width, 900);
+		const { rerender } = await render(Page, {});
+		const apply = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect().top;
+		const before = apply();
+
+		await rerender({ data });
+		await expect.element(testPage.getByRole('definition').nth(0)).toHaveTextContent('$6,300.00');
+
+		expect(apply()).toBe(before);
 	});
 });
 

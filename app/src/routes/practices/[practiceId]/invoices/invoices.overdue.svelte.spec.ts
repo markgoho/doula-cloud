@@ -63,31 +63,31 @@ describe('the overdue book (#768)', () => {
 	it('says how much of what Clients owe is late, beside that figure itself', async () => {
 		await setup();
 
-		// $4,500.00 owed, all of it overdue -- the fixture's first
-		// row is open and past its due date.
-		await expect.element(testPage.getByText('Overdue invoices', { exact: true })).toBeVisible();
-		await expect
-			.element(testPage.getByRole('term').filter({ hasText: /^Overdue$/ }))
-			.toBeVisible();
+		// $4,500.00 owed on one Invoice is overdue -- the fixture's first
+		// row is open and past its due date. Its label says it is a part of
+		// what Clients owe, the line above it.
+		const terms = testPage.getByRole('term');
+		await expect.element(terms.nth(0)).toHaveTextContent('Clients owe');
+		await expect.element(terms.nth(1)).toHaveTextContent('Of that, overdue');
+		await expect.element(testPage.getByRole('definition').nth(1)).toHaveTextContent('$4,500.00 on 1 Invoice');
 	});
 
-	it('says how late an unpaid invoice is, in the row itself', async () => {
+	it('says how late an unpaid invoice is with its amount, and the day payment was due beside it', async () => {
 		await setup();
 
 		// The cell, not the whole row: DataTable renders both a table cell
 		// and a record-view line for every value, and only one of them is
 		// on screen at this width.
-		await expect
-			.element(testPage.getByRole('cell', { name: /days overdue/ }))
-			.toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Payment due Aug 31, 2026', exact: true })).toBeVisible();
 	});
 
 	it('offers every Invoice, unpaid and overdue as one choice, and says what is shown and in what order', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeChecked();
-		await expect.element(testPage.getByRole('radio', { name: 'Unpaid Invoices' })).not.toBeChecked();
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Unpaid' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).not.toBeChecked();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 3 Invoices, newest first.');
 		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
@@ -97,8 +97,8 @@ describe('the overdue book (#768)', () => {
 	it('names the radios so the form reaches an address the load reads with no script', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).toHaveAttribute('name', 'show');
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).toHaveAttribute('value', 'overdue');
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).toHaveAttribute('name', 'show');
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).toHaveAttribute('value', 'overdue');
 		const form = testPage.getByRole('button', { name: 'Apply' }).element().closest('form')!;
 		expect(form.method).toBe('get');
 		expect(new URL(form.action).pathname).toBe(`/practices/${practiceId}/invoices`);
@@ -109,7 +109,7 @@ describe('the overdue book (#768)', () => {
 		await setup({ ...data, view: 'overdue', items: [data.items[0], data.items[0]].map((row, index) => ({ ...row, id: `late-${index}` })), overdueCount: 2 });
 
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 2 overdue Invoices, longest overdue first.');
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).toBeChecked();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Clear filters' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
@@ -129,15 +129,17 @@ describe('the overdue book (#768)', () => {
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 4 Invoices, newest first.');
 	});
 
-	// The same arrangement as the Clients list's bar: switches above, Apply with
-	// the held "Clear filters" box on one row, the count under them on the left edge, a quiet legend.
-	it('draws the filter bar the way the Clients list does, and does not move Apply once narrowed', async () => {
+	// The radios on one line with Apply after them and the held "Clear filters"
+	// box, the count under them on the left edge, a quiet legend: the Clients
+	// list's bar, with its fields' row holding the radios.
+	it('draws the radios beside Apply, and does not move Apply once narrowed', async () => {
 		await setup();
 		const apply = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
 		const before = apply();
 		const status = testPage.getByRole('status').element().getBoundingClientRect();
-		const switchBox = testPage.getByRole('radio', { name: 'Overdue Invoices' }).element().getBoundingClientRect();
-		expect(switchBox.bottom).toBeLessThanOrEqual(before.top);
+		const radio = testPage.getByRole('radio', { name: 'Overdue' }).element().getBoundingClientRect();
+		expect(radio.right).toBeLessThanOrEqual(before.left);
+		expect(radio.bottom).toBeGreaterThan(before.top);
 		expect(status.top).toBeGreaterThanOrEqual(before.bottom);
 		const legend = testPage.getByRole('group', { name: 'Choose which Invoices to show' }).element().querySelector('legend')!;
 		expect(legend.getBoundingClientRect().height).toBeLessThanOrEqual(1);
@@ -156,11 +158,11 @@ describe('the overdue book (#768)', () => {
 	it('goes to the address for the chosen view on Apply', async () => {
 		await setup();
 
-		await testPage.getByRole('radio', { name: 'Overdue Invoices' }).click();
+		await testPage.getByRole('radio', { name: 'Overdue' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=overdue`);
 
-		await testPage.getByRole('radio', { name: 'Unpaid Invoices' }).click();
+		await testPage.getByRole('radio', { name: 'Unpaid' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=unpaid`);
 
@@ -248,7 +250,7 @@ describe('the overdue book (#768)', () => {
 		pageState.url = new URL(`https://example.test/practices/${practiceId}/invoices?show=unpaid`);
 		await setup({ ...data, view: 'unpaid' });
 
-		await expect.element(testPage.getByRole('radio', { name: 'Unpaid Invoices' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Unpaid' })).toBeChecked();
 		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Unpaid Invoices' })).toBeVisible();
 	});
 
@@ -257,7 +259,7 @@ describe('the overdue book (#768)', () => {
 		await testPage.viewport(1440, 900);
 		await render(Page, {});
 
-		await expect.element(testPage.getByRole('radio', { name: 'Overdue Invoices' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).toBeChecked();
 	});
 
 	it('keeps the pages already loaded when the same read is handed back', async () => {

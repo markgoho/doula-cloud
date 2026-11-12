@@ -312,7 +312,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		 *
 		 * By role rather than by text: a screen's heading words turn up
 		 * again in its own content -- `Invoices` is both the `<h1>` and
-		 * part of the `Unpaid invoices` label beside the total -- and a
+		 * part of the `on 17 Invoices` beside a total -- and a
 		 * text query matching two elements fails as a strict-mode
 		 * violation rather than as a fixture that named the wrong thing.
 		 */

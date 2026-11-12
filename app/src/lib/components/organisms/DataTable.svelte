@@ -157,6 +157,14 @@
 		 */
 		rowHref?: (row: T) => string;
 		/**
+		 * The row link's accessible name, where its visible text alone does
+		 * not tell two rows apart: the Invoices list's two Invoices of one
+		 * Client ("Tessa Moreau, INV-0012"). It starts with the visible
+		 * text, so a person who says what she sees still reaches it (WCAG
+		 * 2.5.3, Label in Name).
+		 */
+		rowLinkLabel?: (row: T) => string;
+		/**
 		 * An id for each row, so a link can land on one (#2240). It names
 		 * the view, since both trees are always in the DOM (#666), and the
 		 * row takes `tabindex="-1"` so the caller can move focus to it.
@@ -249,6 +257,7 @@
 		columns,
 		rows,
 		rowHref,
+		rowLinkLabel,
 		rowId,
 		rowActions,
 		hasMore = false,
@@ -367,10 +376,10 @@
 {#snippet cell(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
 	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}
-			><Link href={rowHref(row)} label={column.accessor(row)} /></time
+			><Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} /></time
 		>
 	{:else if columnIndex === 0 && rowHref}
-		<Link href={rowHref(row)} label={column.accessor(row)} />
+		<Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} />
 	{:else if column.content}
 		{@render column.content(row, view)}
 	{:else if column.datetimeAccessor}
@@ -488,10 +497,11 @@
 						{#if rest.length > 0}
 							<div class="compact-meta">
 								{#each rest as field, index (field.label)}
-									{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}
+									<!-- The dot rides at the end of the field before it, so a line
+									     that wraps ends on a dot and never starts with one. -->
 									<span class="compact-field">
 										<span class="visually-hidden">{`${field.label}: `}</span>
-										{@render cell(field.column, field.columnIndex, row, view)}
+										{@render cell(field.column, field.columnIndex, row, view)}{#if index < rest.length - 1}<span class="compact-separator" aria-hidden="true">·</span>{/if}
 									</span>
 								{/each}
 							</div>
@@ -977,16 +987,17 @@
 			font-variant-numeric: tabular-nums;
 		}
 
+		/* The fields run on as one line of text and wrap where a line runs
+		   out, between words, so a short field fills the end of the line a
+		   long one left (#2746). A caller that wants one field to a line
+		   makes the line a column (the Clients list). */
 		.compact-meta {
-			display: flex;
-			flex-wrap: wrap;
-			column-gap: var(--space-1);
 			color: var(--color-on-surface-variant);
+			overflow-wrap: anywhere;
 		}
 
-		.compact-field {
-			min-inline-size: 0;
-			overflow-wrap: anywhere;
+		.compact-separator {
+			padding-inline-start: var(--space-1);
 		}
 
 		/* The last row's hairline is the card's edge's job. */

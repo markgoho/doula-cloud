@@ -11,8 +11,9 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import {
-	dueLabel,
 	INVOICES_RESULT_RULER,
+	invoiceDateLine,
+	invoiceStateWord,
 	invoicesResultSummary,
 	invoicesViewOf,
 	invoicesViewQuery,
@@ -70,22 +71,35 @@ describe('invoicesViewOf', () => {
 });
 import { jsonResponse } from './testResponse.js';
 
-describe('dueLabel', () => {
+describe('invoiceStateWord', () => {
 	it('says how late an unpaid invoice is, in the plural it earns', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 1 })).toBe('Oct 1, 2026 — 1 day overdue');
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 3 })).toBe('Oct 1, 2026 — 3 days overdue');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 1 })).toBe('1 day overdue');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 3 })).toBe('3 days overdue');
 	});
 
 	// The BFF sends 0 for an Invoice within its terms, on its own due day,
 	// and for every settled one, however long ago its day passed.
-	it('says only the day when the BFF counted no lateness', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toBe('Oct 1, 2026');
+	it('says the state in words when the BFF counted no lateness', () => {
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 0 })).toBe('owed');
+		expect(invoiceStateWord({ status: 'paid', daysOverdue: 0 })).toBe('paid');
 	});
+});
 
+describe('invoiceDateLine', () => {
 	// `dueOn` is a calendar day, month first (#1958), never "10/1/2026",
 	// and never moved by the reader's zone (dates.zone.spec.ts).
-	it('prints the due day month first', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 2026$/);
+	it('says the day payment is due while the Invoice can be paid', () => {
+		expect(invoiceDateLine({ status: 'open', dueOn: '2026-10-01' })).toEqual({ lead: 'Payment due', day: 'Oct 1, 2026', on: '2026-10-01' });
+		expect(invoiceDateLine({ status: 'draft', dueOn: '2026-10-01' })?.lead).toBe('Payment due');
+	});
+
+	it('says the day it was paid once it is', () => {
+		expect(invoiceDateLine({ status: 'paid', dueOn: '2026-10-01', paidOn: '2026-09-28' })).toEqual({ lead: 'Paid', day: 'Sep 28, 2026', on: '2026-09-28' });
+	});
+
+	it('says no day for an Invoice nobody will pay', () => {
+		expect(invoiceDateLine({ status: 'void', dueOn: '2026-10-01' })).toBeUndefined();
+		expect(invoiceDateLine({ status: 'uncollectible', dueOn: '2026-10-01' })).toBeUndefined();
 	});
 });
 

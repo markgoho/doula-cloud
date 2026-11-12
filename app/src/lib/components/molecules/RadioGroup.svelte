@@ -80,15 +80,36 @@
 		 * legend gave it a <fieldset> to be described by.
 		 */
 		error?: string;
+		/*
+		 * The answers side by side, wrapping onto a further line only where
+		 * the row runs out: GOV.UK's inline radios, for a few short answers.
+		 * The Invoices list's filter (#2746) is the consumer: three views
+		 * beside Apply, where three stacked rows put its first Invoice
+		 * below a phone's first screen. Not for answers with a hint or a
+		 * conditional reveal, which need the row's width.
+		 */
+		isInline?: boolean;
 	}
 
 	const generatedName = $props.id();
 
-	let { legend, hint, name = generatedName, options, value, onChange, error }: Properties<T> = $props();
+	let { legend, hint, name = generatedName, options, value, onChange, error, isInline = false }: Properties<T> = $props();
 </script>
 
 {#snippet radios()}
-	<stack-l space="var(--space-5)">
+	{#if isInline}
+		<!-- `choices-inline` names it to a FilterBar, which lets Apply follow the last answer. -->
+		<cluster-l class="inline choices-inline" space="var(--space-related)" align="center">
+			{@render choices()}
+		</cluster-l>
+	{:else}
+		<stack-l space="var(--space-5)">
+			{@render choices()}
+		</stack-l>
+	{/if}
+{/snippet}
+
+{#snippet choices()}
 		<!-- v8 ignore start: only the compiled branch for "was this keyed
 		     <div> added/removed from the DOM since the last render" is
 		     unreachable here (Svelte's own each-block diffing internals, not
@@ -141,7 +162,6 @@
 			{/if}
 		{/each}
 		<!-- v8 ignore stop -->
-	</stack-l>
 {/snippet}
 
 <ChoiceGroup {legend} {hint} {error} {name}>
@@ -160,6 +180,11 @@
 		 * far to the right of "No Doula yet" select it too. GOV.UK ends
 		 * the target where the text ends.
 		 */
+		/* Inline answers wrap close, each keeping its own target. */
+		.inline {
+			row-gap: var(--space-1);
+		}
+
 		.choice {
 			display: grid;
 			grid-template-columns: auto minmax(0, max-content);

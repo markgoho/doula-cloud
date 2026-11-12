@@ -288,3 +288,22 @@ describe('RadioGroup.svelte', () => {
 		expect(label.getBoundingClientRect().right).toBeLessThanOrEqual(320);
 	});
 });
+
+describe('RadioGroup.svelte, inline (#2746)', () => {
+	it('puts short answers on one line where the row has room, and wraps them where it does not', async () => {
+		await page.viewport(1280, 800);
+		const views = [
+			{ value: 'all', label: 'Every Invoice' },
+			{ value: 'unpaid', label: 'Unpaid' },
+			{ value: 'overdue', label: 'Overdue' }
+		] as const;
+		await render(RadioGroup<(typeof views)[number]['value']>, { name: 'show', options: views, value: 'all', onChange: vi.fn(), isInline: true });
+
+		const tops = views.map((view) => page.getByRole('radio', { name: view.label }).element().getBoundingClientRect().top);
+		expect(new Set(tops).size).toBe(1);
+
+		await page.viewport(200, 800);
+		const wrapped = views.map((view) => page.getByRole('radio', { name: view.label }).element().getBoundingClientRect().top);
+		expect(new Set(wrapped).size).toBeGreaterThan(1);
+	});
+});

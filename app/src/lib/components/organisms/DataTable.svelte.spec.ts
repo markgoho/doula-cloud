@@ -135,6 +135,7 @@ interface SetupOptions {
 	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
+	rowLinkLabel?: (row: Row) => string;
 	rowActions?: { label: string; onRemove: (row: Row) => void };
 	hasMore?: boolean;
 	onLoadMore?: () => void;
@@ -165,6 +166,7 @@ async function setup({
 	columns: columnsOption = columns,
 	rows: rowsOption = rows,
 	rowHref,
+	rowLinkLabel,
 	rowActions,
 	hasMore = false,
 	onLoadMore,
@@ -184,6 +186,7 @@ async function setup({
 		columns: columnsOption,
 		rows: rowsOption,
 		rowHref,
+		rowLinkLabel,
 		rowActions: rowActions && {
 			label: rowActions.label,
 			content: removeActionSnippet(rowActions.onRemove)
@@ -436,6 +439,15 @@ describe('DataTable.svelte', () => {
 		// Scoped to .table-view: the record view links the same rows, and
 		// counting the whole container would count both trees' anchors.
 		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(rows.length);
+	});
+
+	// Two rows that read alike are two links a list of links tells apart.
+	it('names each row link with rowLinkLabel, keeping its visible text', async () => {
+		await setup({ rowHref: (row) => `/clients/${row.name}`, rowLinkLabel: (row) => `${row.name}, ${row.status}` });
+
+		const link = page.getByRole('link', { name: `${rows[0]!.name}, ${rows[0]!.status}`, exact: true });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveTextContent(rows[0]!.name);
 	});
 
 	/*

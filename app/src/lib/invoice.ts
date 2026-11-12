@@ -710,10 +710,10 @@ export const paymentOnItsWayLine = 'You can record a payment by hand if this ban
 /** The status every Staff screen shows for an Invoice (#2094, #2122):
  * Overdue in place of Open once the BFF counts it late, because lateness
  * is the one status the stored value does not say. Every other status
- * reads through invoiceStatusLabel. One function for the Engagement's
- * Invoices section, for every role, the Practice-wide list, and the
- * Clients list's rollup line (#2130), so one Invoice cannot read Overdue
- * on one Staff screen and Open on the next.
+ * reads through invoiceStatusLabel. The Engagement's Invoices section
+ * reads it for every role; the Clients and Invoices lists say the same
+ * state after an amount through invoiceStateWord (#2746), so one Invoice
+ * cannot read late on one Staff screen and Open on the next.
  * Never the Client portal's: ADR-0038 keeps Overdue off it, and she
  * reads "Not yet paid" (clientInvoiceStatusLabel).
  *
@@ -781,25 +781,31 @@ export function cardPaymentsRefusal(reader: CardPaymentsReader): string {
  * only as feedback after a Send. */
 export const clientHasNoEmailMessage = 'This Client has no email address on file. Add one before creating an Invoice.';
 
-/** What the Practice-wide list's "Payment due" cell reads (#768): the due
- * day, and how late it is when it is late.
- *
- * The BFF decides lateness (#1965): an Invoice is overdue from the start
- * of the day after `dueOn` in the Practice's own timezone, and
- * `daysOverdue` is 0 for one that is not, including every paid, voided or
- * written-off Invoice. The screen does not count on the reader's own
- * clock, so it cannot call an Invoice late that the page's overdue figure
- * does not count.
- *
- * "Payment due", never "due date": in this domain a due date is the
- * pregnancy's (ADR-0015), and the two must not share a word. */
-export function dueLabel(invoice: Pick<PracticeInvoice, 'dueOn' | 'daysOverdue'>): string {
-	const due = formatCalendarDay(invoice.dueOn);
+/** The state an Invoice's amount is said with, in the words every Staff
+ * list puts after it (DESIGN.md, "Money is said once"): "owed", "paid",
+ * "void", and "12 days overdue" once the BFF counts it late (#1965), so
+ * the Clients list and the Invoices list say one Invoice's lateness alike.
+ * A payment on its way is each list's own word, so the caller says it. */
+export function invoiceStateWord(invoice: Pick<InvoiceStanding, 'status' | 'daysOverdue'>): string {
 	const late = invoice.daysOverdue;
-	if (late < 1) {
-		return due;
+	if (late > 0) return `${late} ${late === 1 ? 'day' : 'days'} overdue`;
+	return invoiceStatusLabel(invoice.status).toLowerCase();
+}
+
+/** The one day the Invoices list's Date cell says for a row (#768, #2746):
+ * the day payment is due while it can still be paid, and the day it was
+ * paid once it is. A void or written-off Invoice has neither.
+ *
+ * "Payment due", never a bare "due": in this domain a due date is the
+ * pregnancy's (ADR-0015), and the two must not share a word. */
+export function invoiceDateLine(
+	invoice: Pick<PracticeInvoice, 'status' | 'dueOn' | 'paidOn'>
+): { lead: 'Paid' | 'Payment due'; day: string; on: string } | undefined {
+	if (invoice.paidOn) return { lead: 'Paid', day: formatCalendarDay(invoice.paidOn), on: invoice.paidOn };
+	if (invoice.status === 'open' || invoice.status === 'draft') {
+		return { lead: 'Payment due', day: formatCalendarDay(invoice.dueOn), on: invoice.dueOn };
 	}
-	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
+	return undefined;
 }
 
 const VIEW_ORDER: Record<InvoicesView, string> = {
