@@ -1444,9 +1444,9 @@ describe('the Status column (#264, #2022)', () => {
 		await expect.element(table().getByText('Owes', { exact: true })).not.toBeInTheDocument();
 	});
 
-	// #2225: she has paid and the money is clearing, so it is neither late
+	// #2225: she has paid and the money is on its way, so it is neither late
 	// nor owed.
-	it('reads "clearing" in the Money column while a payment settles, even on a late Invoice', async () => {
+	it('reads "payment on its way" in the Money column while a payment settles, even on a late Invoice', async () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
@@ -1455,7 +1455,7 @@ describe('the Status column (#264, #2022)', () => {
 			})
 		);
 
-		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*clearing$/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*payment on its way$/ })).toBeVisible();
 		await expect.element(table().getByText(/overdue|Owes/i)).not.toBeInTheDocument();
 	});
 
@@ -1602,9 +1602,10 @@ describe('the Money column', () => {
 	it.each([
 		['an open Invoice', { daysOverdue: 0 }, 'owed'],
 		['a late Invoice', { daysOverdue: 12 }, '12 days overdue'],
-		['a payment clearing', { paymentProcessing: true }, 'clearing'],
+		['a payment on its way', { paymentProcessing: true }, 'payment on its way'],
 		['a paid Invoice', { invoiceStatus: 'paid', daysOverdue: 0 }, 'paid'],
-		['a void Invoice', { invoiceStatus: 'void', daysOverdue: 0 }, 'void']
+		['a void Invoice', { invoiceStatus: 'void', daysOverdue: 0 }, 'void'],
+		['a written-off Invoice', { invoiceStatus: 'uncollectible', daysOverdue: 0 }, 'written off']
 	])('reads %s as "%s"', async (_name, line, text) => {
 		await setup(only(line));
 
@@ -2463,7 +2464,7 @@ describe('the filter bar between filter states', () => {
 
 // A state is whole, and the Date column begins after it.
 describe('the Money column’s state', () => {
-	// The typical page, with one payment clearing: the other long state word.
+	// The typical page, with one payment on its way: the longest state words.
 	const withClearing = seedLikeClients.map((client, index) => {
 		const [line] = client.openEngagements ?? [];
 		return index === 3 && line ? { ...client, openEngagements: [{ ...line, invoiceStatus: 'open', invoiceAmountCents: 150_000, paymentProcessing: true }] } : client;

@@ -31,7 +31,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidate: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto, invalidate: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn() }));
 
 const { practiceId } = fixture.params;
 const listPath = `/api/practices/${practiceId}/invoices/list`;
@@ -137,12 +137,30 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 2 Invoices matching "Anne", newest first.');
 	});
 
-	it('says a search that did not run, and leaves the list unmarked', async () => {
-		apiFetchWithSession.mockResolvedValue(new Response('no', { status: 500 }));
+	it('says a search that did not run, leaves the list unmarked, and Try again runs it again', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(new Response('no', { status: 500 }));
 		await setupSearch({ search: 'Anne' });
 
 		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeEnabled();
+		await expect.element(testPage.getByRole('searchbox', { name: 'Reference or Client' })).toHaveValue('Anne');
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ ...data, items: [overdueInvoice] }));
+		await testPage.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: overdueInvoice.clientName })).toBeVisible();
+		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).not.toBeInTheDocument();
+		expect(lastBody()).toEqual({ view: 'all', search: 'Anne', cursor: '' });
+	});
+
+	it('leaves a failed page read to the search while one is applied', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [overdueInvoice] }));
+		pageState.state = { invoicesSearch: 'Anne' };
+		await testPage.viewport(1440, 900);
+		await render(Page, { hasReadFailed: true });
+
+		await expect.element(testPage.getByRole('link', { name: overdueInvoice.clientName })).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();
 	});
 
 	it('lists the whole read again when the search is removed and the address is unchanged', async () => {

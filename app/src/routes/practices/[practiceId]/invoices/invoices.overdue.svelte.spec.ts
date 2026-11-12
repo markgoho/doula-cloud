@@ -34,12 +34,13 @@ vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 // The route's own `afterNavigate` callback, kept so a spec can play a move to
 // this list (SvelteKit calls it after every navigation, the first load too).
-const navigation = vi.hoisted(() => ({ goto: vi.fn(), onMove: undefined as (() => void) | undefined }));
+const navigation = vi.hoisted(() => ({ goto: vi.fn(), onMove: undefined as ((move: { from: undefined }) => void) | undefined }));
 vi.mock('$app/navigation', () => ({
 	goto: navigation.goto,
 	invalidate: vi.fn(),
 	beforeNavigate: vi.fn(),
-	afterNavigate: (callback: () => void) => {
+	replaceState: vi.fn(),
+	afterNavigate: (callback: (move: { from: undefined }) => void) => {
 		navigation.onMove = callback;
 	}
 }));
@@ -177,11 +178,11 @@ describe('the overdue book (#768)', () => {
 		// Reactive, because the route reads the address through a derived.
 		pageState.url = new SvelteURL(fixture.url);
 		const { rerender } = await setup();
-		navigation.onMove!();
+		navigation.onMove!({ from: undefined });
 		await expect.element(testPage.getByRole('status')).not.toHaveFocus();
 
 		pageState.url.searchParams.set('show', 'overdue');
-		navigation.onMove!();
+		navigation.onMove!({ from: undefined });
 		await rerender({ data: { ...data, view: 'overdue', overdueCount: 1 } });
 
 		await expect.element(testPage.getByRole('status')).toHaveFocus();

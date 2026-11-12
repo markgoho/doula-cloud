@@ -634,7 +634,7 @@ const invoiceStatusLabels: Record<string, string> = {
 	draft: 'Draft',
 	open: 'Owed',
 	paid: 'Paid',
-	uncollectible: 'Uncollectible',
+	uncollectible: 'Written off',
 	void: 'Void'
 };
 
@@ -645,8 +645,8 @@ export function invoiceStatusLabel(status: string): string {
 /** Which Badge variant each status wears (#2059), kept beside the labels
  * so a status and its color are decided in one place. Owed (the stored
  * 'open') needs the Client to pay, so it is the warning, the amber of what
- * needs someone to act; Uncollectible is a collection that
- * failed, so it is the error (red means late or failed, and nothing else);
+ * needs someone to act; Written off (the stored 'uncollectible') is a
+ * collection that failed, so it is the error (red means late or failed, and nothing else);
  * Draft and Void are settled with no money moving, so they are neutral. An
  * unknown status is neutral too. */
 const invoiceStatusVariants: Record<string, 'warning' | 'success' | 'error' | 'neutral'> = {
@@ -803,10 +803,14 @@ export const clientHasNoEmailMessage = 'This Client has no email address on file
 
 /** The state an Invoice's amount is said with, in the words every Staff
  * list puts after it (DESIGN.md, "Money is said once"): "owed", "paid",
- * "void", and "12 days overdue" once the BFF counts it late (#1965), so
- * the Clients list and the Invoices list say one Invoice's lateness alike.
- * A payment on its way is each list's own word, so the caller says it. */
-export function invoiceStateWord(invoice: Pick<InvoiceStanding, 'status' | 'daysOverdue'>): string {
+ * "void", "written off", and "12 days overdue" once the BFF counts it late
+ * (#1965), so the Clients list and the Invoices list say one Invoice's
+ * lateness alike. A payment on its way comes first, in the Engagement's
+ * Invoices section's words. */
+export function invoiceStateWord(
+	invoice: Pick<InvoiceStanding, 'status' | 'daysOverdue'> & { paymentProcessing?: boolean }
+): string {
+	if (invoice.paymentProcessing) return PAYMENT_ON_ITS_WAY_STATUS.toLowerCase();
 	const late = invoice.daysOverdue;
 	if (late > 0) return `${late} ${late === 1 ? 'day' : 'days'} overdue`;
 	return invoiceStatusLabel(invoice.status).toLowerCase();

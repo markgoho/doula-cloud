@@ -15,6 +15,7 @@ import { toPageState } from '../../../routeFixture.js';
 import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { clientsCannotPay, data, fixture } from './page.fixture.js';
 import { pageState } from '#testing/routePage.js';
+import { afterNavigate, beforeNavigate, replaceState } from '$app/navigation';
 
 /*
  * The screen's content and the `page` it reads both come from the route's
@@ -35,7 +36,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const invalidate = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn() }));
 
 const [openInvoice, paidInvoice] = data.items;
 
@@ -227,16 +228,96 @@ describe('the Practice-wide invoice list (#265)', () => {
 		);
 	});
 
-	it('reports a failed next page in place rather than losing the list', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse('invalid cursor', 400));
+	it('reports a failed next page in its own words, keeps the rows, and lets Load more try again', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse('invalid cursor', 400));
 
 		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('invalid cursor');
 		await expect
-			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
-			.toBeVisible();
+			.element(testPage.getByRole('alert'))
+			.toHaveTextContent('More Invoices did not load. Nothing you saved is lost. Try again.');
+		await expect.element(testPage.getByText('invalid cursor')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: openInvoice.clientName })).toBeVisible();
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();
+	});
+});
+
+// T8 (#2746): a read that may work a second time says so in the screen's
+// own words, keeps the view and the search, and "Try again" runs it again.
+describe('a read that did not land', () => {
+	it('says the Invoices did not load, holds no placeholder, and Try again runs the read again', async () => {
+		await testPage.viewport(1440, 900);
+		const retried = Promise.withResolvers<void>();
+		const onRetry = vi.fn(() => retried.promise);
+		await render(Page, { hasReadFailed: true, onRetry });
+
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Your Invoices did not load. Nothing you saved is lost.');
+		await expect.element(testPage.getByRole('status', { name: 'Loading your Invoices' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeVisible();
+
+		const tryAgain = testPage.getByRole('button', { name: 'Try again' });
+		await tryAgain.click();
+		expect(onRetry).toHaveBeenCalledOnce();
+		await expect.element(tryAgain).toHaveAttribute('aria-busy', 'true');
+		retried.resolve();
+		await expect.element(tryAgain).toHaveAttribute('aria-busy', 'false');
+	});
+
+	it('draws the list once the read Try again ran lands', async () => {
+		await testPage.viewport(1440, 900);
+		const screen = await render(Page, { hasReadFailed: true });
+		await screen.rerender({ hasReadFailed: false, data });
+
+		await expect.element(testPage.getByRole('link', { name: openInvoice.clientName })).toBeVisible();
+		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();
+	});
+});
+
+// T3 (#2746): Back from an Invoice puts her on the same rows, where she was.
+describe('coming back from an Invoice', () => {
+	afterEach(() => {
+		pageState.state = {};
+		vi.restoreAllMocks();
+	});
+
+	it('keeps how many pages were open and how far down she was when she leaves for another screen', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
+
+		const leave = vi.mocked(beforeNavigate).mock.calls.at(-1)![0];
+		const away = (type: string, pathname: string) =>
+			leave({ type, to: { url: new URL(`https://example.test${pathname}`) } } as never);
+		away('popstate', '/elsewhere');
+		away('link', pageState.url.pathname);
+		expect(replaceState).not.toHaveBeenCalled();
+
+		away('link', `/practices/${practiceId}/engagements/eng-1`);
+		expect(replaceState).toHaveBeenCalledWith('', expect.objectContaining({ invoicesPages: 2, invoicesScrollY: scrollY }));
+	});
+
+	it('reads as many pages again, scrolls back, and lands on the row she left from', async () => {
+		pageState.state = { invoicesPages: 2, invoicesScrollY: 120 };
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		await testPage.viewport(1440, 900);
+		const screen = await render(Page, {});
+		const arrive = vi.mocked(afterNavigate).mock.calls.at(-1)![0];
+		arrive({ from: { url: new URL('https://example.test/practices/p/engagements/e#invoice-inv-9') } } as never);
+		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
+
+		const left = testPage.getByRole('link', { name: /^Cleo,/ });
+		await expect.element(left).toBeVisible();
+		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
+		await expect.element(left).toHaveFocus();
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 	});
 });
 

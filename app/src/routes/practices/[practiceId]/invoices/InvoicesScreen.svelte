@@ -8,9 +8,11 @@
 	 * filter a `FilterBar` and the book a `DataTable`, the pieces the
 	 * Clients list is built from (#2746).
 	 */
-	import { untrack } from 'svelte';
+	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, replaceState } from '$app/navigation';
+	import { pagesToRestore } from '#lib/listReturn.js';
+	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
@@ -25,7 +27,6 @@
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
-		PAYMENT_ON_ITS_WAY_STATUS,
 		type InvoicesView,
 		type PracticeInvoice,
 		type PracticeInvoicePage
@@ -52,7 +53,23 @@
 	 * what the URL already says -- the totals' labels and the filter -- with
 	 * placeholders where the figures and the rows will land.
 	 */
-	let { data }: { data?: PracticeInvoiceListData } = $props();
+	let {
+		data,
+		hasReadFailed = false,
+		onRetry = async () => {}
+	}: {
+		data?: PracticeInvoiceListData;
+		// The page's read failed in a way that may work a second time
+		// (`+page.svelte`); `onRetry` runs it again.
+		hasReadFailed?: boolean;
+		onRetry?: () => Promise<void>;
+	} = $props();
+
+	// What a person reads when a read fails: no status code and no server
+	// text, and that nothing is lost (T8, as on the Clients list).
+	const LOAD_FAILED = 'Your Invoices did not load. Nothing you saved is lost.';
+	const SEARCH_FAILED = 'Your search did not run. Nothing you saved is lost.';
+	const LOAD_MORE_FAILED = 'More Invoices did not load. Nothing you saved is lost. Try again.';
 
 	const view = $derived(invoicesViewOf(page.url.searchParams));
 	const session = $derived((page.data as { session?: PracticeSession }).session);
@@ -96,7 +113,6 @@
 	// The searched read that failed, so the list is not left marked busy.
 	let failedKey = $state.raw<ReadKey>();
 	let isApplying = $state(false);
-	const isBusy = $derived(isApplying || (shown !== undefined && !isSameKey(shown, wanted) && !isSameKey(failedKey, wanted)));
 
 	// Grows from the landed read's first page (#446). The list owns its own
 	// cursor, in-flight guard and error text.
@@ -108,18 +124,64 @@
 		// wrong order (#2746).
 		loadPage: async (cursor) => {
 			const under = shown!;
-			const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search);
-			if (shown === under) book = next;
-			return next;
+			try {
+				const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search);
+				if (shown === under) book = next;
+				return next;
+			} catch {
+				throw new Error(LOAD_MORE_FAILED);
+			}
 		},
-		failureMessage: 'Failed to load more invoices'
+		failureMessage: LOAD_MORE_FAILED
 	});
 
 	function adopt(first: PracticeInvoicePage, key: ReadKey) {
+		shown = key;
 		invoices.reset(first);
 		book = first;
-		shown = key;
+		pagesLoaded = 1;
 		refreshSessionIfClientsCanPayChanged(session ?? {}, first.clientsCanPay);
+		if (heldReturn) void restoreReturn(heldReturn);
+	}
+
+	/*
+	 * T3: leaving for an Invoice keeps, in this history entry's state, how
+	 * many pages were open and how far down she was; Back reads as many
+	 * pages again under the same view and search, then puts her where she
+	 * was, with focus on the row she left from. SvelteKit's own scroll
+	 * restore runs before the rows have landed, so it cannot reach that far.
+	 */
+	let pagesLoaded = 1;
+	let heldReturn: { pages: number; scrollY: number; invoiceId?: string } | undefined = (() => {
+		const held = untrack(() => page.state);
+		return held.invoicesPages === undefined
+			? undefined
+			: { pages: pagesToRestore(held.invoicesPages), scrollY: held.invoicesScrollY ?? 0 };
+	})();
+
+	async function didLoadMore(): Promise<boolean> {
+		const before = invoices.items.length;
+		await invoices.loadMore();
+		if (invoices.items.length === before) return false;
+		pagesLoaded += 1;
+		return true;
+	}
+
+	async function restoreReturn(back: { pages: number; scrollY: number; invoiceId?: string }) {
+		heldReturn = undefined;
+		while (pagesLoaded < back.pages && (await didLoadMore()));
+		await tick();
+		window.scrollTo(0, back.scrollY);
+		if (back.invoiceId) rowLink(back.invoiceId)?.focus({ preventScroll: true });
+	}
+
+	const rowDomId = (invoiceId: string, view: DataTableView) => `invoice-row-${invoiceId}-${view}`;
+
+	// Both trees are in the DOM (DataTable's #666); the displayed one wins.
+	function rowLink(invoiceId: string): HTMLElement | undefined {
+		return (['table', 'record'] as const)
+			.map((view) => document.querySelector<HTMLElement>(`#${rowDomId(invoiceId, view)} a`))
+			.find((link) => link?.checkVisibility()) ?? undefined;
 	}
 
 	// #2254: a narrowing re-runs `load` without remounting this screen. The
@@ -153,6 +215,22 @@
 		}
 	}
 	const hasSearchFailed = $derived(isSameKey(failedKey, wanted) && !isSameKey(shown, wanted));
+	// The page's own read stands for the list only while no search is applied.
+	const readFailure = $derived(
+		hasReadFailed && appliedSearch === '' ? LOAD_FAILED : (hasSearchFailed ? SEARCH_FAILED : '')
+	);
+	const isBusy = $derived(isApplying || (shown !== undefined && !isSameKey(shown, wanted) && readFailure === ''));
+
+	// "Try again" runs the read that failed, under the same view and search.
+	let isRetrying = $state(false);
+	async function tryAgain() {
+		isRetrying = true;
+		try {
+			await (appliedSearch === '' ? onRetry() : readSearch(wanted, ++latestSearch));
+		} finally {
+			isRetrying = false;
+		}
+	}
 
 	const isBookEmpty = $derived(
 		shown !== undefined && shown.view === 'all' && shown.search === '' && invoices.items.length === 0
@@ -216,8 +294,15 @@
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
-	beforeNavigate(() => (isSearchTouched = false));
-	afterNavigate(() => {
+	beforeNavigate(({ type, to }) => {
+		isSearchTouched = false;
+		// A Back has already left this entry, and a move within the list
+		// starts a new one; only a move away to another screen is kept.
+		if (type === 'popstate' || type === 'leave' || to?.url.pathname === page.url.pathname) return;
+		replaceState('', { ...page.state, invoicesPages: pagesLoaded, invoicesScrollY: window.scrollY });
+	});
+	afterNavigate(({ from }) => {
+		if (heldReturn && from?.url.hash.startsWith('#invoice-')) heldReturn.invoiceId = from.url.hash.slice('#invoice-'.length);
 		seedDrafts();
 		// A change of filter lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
@@ -285,12 +370,7 @@
 	 * Clients list's words ("owed", "12 days overdue", through
 	 * `invoiceStateWord`). Owed is the amber badge and overdue the red one;
 	 * every other state is a plain word (`invoiceStateBadge`).
-	 * #2225: a payment on its way comes first, in the words the Engagement's
-	 * Invoices section uses.
 	 */
-	function stateWord(invoice: PracticeInvoice): string {
-		return invoice.paymentProcessing ? PAYMENT_ON_ITS_WAY_STATUS.toLowerCase() : invoiceStateWord(invoice);
-	}
 
 	// #271: local and Stripe Invoices share one book, so the rail is said per
 	// row, beside the reference it decides the shape of.
@@ -317,7 +397,7 @@
 		{
 			label: 'Money',
 			numeric: true,
-			accessor: (invoice: PracticeInvoice) => `${formatAmount(invoice.amountCents)}, ${stateWord(invoice)}`,
+			accessor: (invoice: PracticeInvoice) => `${formatAmount(invoice.amountCents)}, ${invoiceStateWord(invoice)}`,
 			content: moneyCell
 		},
 		{
@@ -354,7 +434,7 @@
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
 	<!-- In the table, the amount and its state in two tracks, so amounts end at one place whatever the state says; on a card, the state follows the amount. -->
 	{@const badge = invoiceStateBadge(invoice)}
-	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={stateWord(invoice)} variant={badge} />{:else}{stateWord(invoice)}{/if}</span></span>
+	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={invoiceStateWord(invoice)} variant={badge} />{:else}{invoiceStateWord(invoice)}{/if}</span></span>
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
@@ -426,7 +506,8 @@
 		narrowed list keeps both even when it is empty: the bar is its way
 		back to the whole book.
 	-->
-	{#if !isBookEmpty}
+	<!-- A read that failed before any landed has no figures to wait for. -->
+	{#if !isBookEmpty && (book || !readFailure)}
 		<div class="totals">
 			<SummaryList rows={totals} value={total} isCompact />
 		</div>
@@ -456,7 +537,7 @@
 				action={invoicesHref}
 				onSubmit={applyFilters}
 				legend="Choose which Invoices to show"
-				status={resultSummary}
+				status={readFailure ? '' : resultSummary}
 				statusRuler={INVOICES_RESULT_RULER}
 				statusId={RESULT_ID}
 				empty={shown !== undefined && invoices.items.length === 0}
@@ -478,20 +559,24 @@
 			</FilterBar>
 		{/if}
 
-		{#if hasSearchFailed}
-			<Notice message="Your search did not run. Nothing you saved is lost." variant="error" />
-		{/if}
-
-		{#if shown}
+		<!-- T8: in place of the list, so no row from another view is read as this one's; the bar keeps the view and the search. -->
+		{#if readFailure}
+			<stack-l space="var(--space-related)">
+				<Notice message={readFailure} variant="error" />
+				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
+			</stack-l>
+		{:else if shown}
 			<div class="invoices-table">
 				<DataTable
 					{columns}
 					rows={invoices.items}
 					rowHref={engagementHref}
+					rowId={(invoice, view) => rowDomId(invoice.id, view)}
 					{rowLinkLabel}
 					hasMore={invoices.hasMore}
-					onLoadMore={() => invoices.loadMore()}
+					onLoadMore={didLoadMore}
 					isLoadingMore={invoices.isLoadingMore}
+					loadMoreError={invoices.loadMoreError}
 					emptyMessage={isBookEmpty
 						? 'No Invoices yet. One appears here as soon as a Contract is billed.'
 						: resultSummary}
@@ -507,10 +592,6 @@
 			<Skeleton variant="row" lines={6} label="Loading your Invoices" />
 		{/if}
 	</stack-l>
-
-	{#if invoices.loadMoreError}
-		<Notice message={invoices.loadMoreError} variant="error" />
-	{/if}
 {/snippet}
 
 <ListPage title="Invoices" {content} />

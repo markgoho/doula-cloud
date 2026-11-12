@@ -43,6 +43,10 @@ declare global {
 			invoicesSearch?: string;
 			// How many pages of the Clients list were open, for a Back to it.
 			clientsPages?: number;
+			// How many pages of the Invoices list were open, and how far down it
+			// she had scrolled, for a Back to it.
+			invoicesPages?: number;
+			invoicesScrollY?: number;
 		}
 		// interface Platform {}
 	}

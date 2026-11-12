@@ -114,6 +114,21 @@ export const narrowedToOverdue: RouteVariant<RouteParameters> = {
 };
 
 /*
+ * #2746: a view and a typed search together, so the applied tags row holds
+ * two tags, one of them as long as a Client's full hyphenated name, and
+ * must wrap rather than push the page sideways at 320px. The search rides
+ * in the history entry's state and is read in a POST of the screen's own.
+ */
+const searchedBook: PracticeInvoiceListData = { ...data, items: [data.items[0]], view: 'overdue' };
+export const searched: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, narrowed to overdue and searched',
+	url: 'https://example.test/practices/practice-1/invoices?show=overdue',
+	state: { invoicesSearch: 'Alexandra Montgomery-Vanderbilt Okonkwo-Fairweather' },
+	props: { data: searchedBook },
+	respond: () => Response.json(searchedBook)
+};
+
+/*
  * Typical pilot data (#1981), the screen this route's table floor is
  * measured on (`typicalPilot.ts` says where each value comes from): eight
  * Invoices from a 14-doula agency's book, a birth fee of $1,500.00 and a
@@ -191,7 +206,7 @@ export const clientsCannotPayWhileLoading: RouteVariant<RouteParameters> = {
 
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
+	variants: [narrowedToOverdue, searched, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',

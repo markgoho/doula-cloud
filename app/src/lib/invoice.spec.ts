@@ -637,7 +637,7 @@ describe('invoiceStatusLabel', () => {
 		expect(invoiceStatusLabel('draft')).toBe('Draft');
 		expect(invoiceStatusLabel('open')).toBe('Owed');
 		expect(invoiceStatusLabel('paid')).toBe('Paid');
-		expect(invoiceStatusLabel('uncollectible')).toBe('Uncollectible');
+		expect(invoiceStatusLabel('uncollectible')).toBe('Written off');
 		expect(invoiceStatusLabel('void')).toBe('Void');
 	});
 

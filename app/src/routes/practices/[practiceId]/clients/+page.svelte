@@ -13,6 +13,7 @@
 	} from '#lib/client.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
+	import { pagesToRestore } from '#lib/listReturn.js';
 	import { onMount, untrack, type ComponentProps } from 'svelte';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
@@ -553,7 +554,6 @@ import type { PageProps as PageProperties } from './$types';
 	// meaning per color), the rest plain words.
 	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
 		const standing = standingOf(line);
-		if (standing.paymentProcessing) return { word: 'clearing' };
 		return { word: invoiceStateWord(standing), variant: invoiceStateBadge(standing) };
 	}
 
@@ -726,7 +726,7 @@ import type { PageProps as PageProperties } from './$types';
 		try {
 			// Back to this list from a Client: as many pages as were open, under
 			// the same filters, so the row she came from is there to land on.
-			const wanted = Math.min(untrack(() => page.state.clientsPages ?? 1), MAX_RESTORED_PAGES);
+			const wanted = pagesToRestore(untrack(() => page.state.clientsPages));
 			let first = await loadClients(apiFetchWithSession, page.params.practiceId!, view);
 			let pages = 1;
 			while (pages < wanted && first.hasMore && first.nextCursor) {
@@ -764,9 +764,7 @@ import type { PageProps as PageProperties } from './$types';
 	}
 
 	// How many pages the list holds, kept in this history entry's state so a
-	// Back to the list can load as many again. Capped, so a reader who paged
-	// a long way gets a sane reload rather than the whole book.
-	const MAX_RESTORED_PAGES = 5;
+	// Back to the list can load as many again (`listReturn.ts`).
 	let pagesLoaded = 1;
 	async function loadMore() {
 		const before = clients.items.length;
@@ -1363,7 +1361,7 @@ import type { PageProps as PageProperties } from './$types';
 
 		/* The amount and its state in two tracks, so every amount in the column
 		   ends at the same place whatever the state beside it says. The state
-		   track holds the longest state word ("overdue", "clearing") with room to
+		   track holds the longest state word ("payment on its way") with room to
 		   spare, and the cell keeps a gap after it, so a state word never touches
 		   the Date column's first letter. */
 		.money {

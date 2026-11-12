@@ -27,7 +27,7 @@ describe('invoices/+page.ts load', () => {
 	it('fetches the Practice-wide invoices path and hands over the page', async () => {
 		const { fetchMock } = setup(200, emptyBook);
 
-		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
+		const data = await load({ depends: () => {}, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/practice-1/invoices',
@@ -42,6 +42,7 @@ describe('invoices/+page.ts load', () => {
 		const { fetchMock } = setup(200, emptyBook);
 
 		const data = await load({
+			depends: () => {},
 			params: { practiceId: 'practice-1' },
 			url: new URL('https://example.test/practices/practice-1/invoices?show=overdue')
 		} as Parameters<typeof load>[0]);
@@ -62,6 +63,7 @@ describe('invoices/+page.ts load', () => {
 		const { fetchMock } = setup(200, emptyBook);
 
 		const data = await load({
+			depends: () => {},
 			params: { practiceId: 'practice-1' },
 			url: new URL(`https://example.test/practices/practice-1/invoices?${query}`)
 		} as Parameters<typeof load>[0]);
@@ -76,7 +78,7 @@ describe('invoices/+page.ts load', () => {
 	it('hands a refusal to the screen rather than throwing mid-load', async () => {
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
-		const data = await load({ params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
+		const data = await load({ depends: () => {}, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		await expect(settledRead(data)).resolves.toMatchObject({ isLoaded: false, response: { status: 403 } });
 	});
