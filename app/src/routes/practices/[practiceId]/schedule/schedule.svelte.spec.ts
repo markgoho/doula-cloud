@@ -137,6 +137,19 @@ describe('the Practice-wide schedule (#263)', () => {
 	});
 });
 
+describe('each row says what kind of Visit it is (#2870)', () => {
+	it('puts the type in its own column after the When, in the Engagement’s words', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('columnheader', { name: 'Type' })).toBeVisible();
+		const headings = testPage.getByRole('columnheader').elements().map((heading) => heading.textContent?.trim());
+		expect(headings).toEqual(['Client', 'When', 'Type', 'Doula']);
+		for (const label of ['Prenatal', 'Birth', 'Postpartum']) {
+			await expect.element(testPage.getByRole('cell', { name: label, exact: true })).toBeVisible();
+		}
+	});
+});
+
 // The heading is drawn once in the table and once above the cards, both always in the document.
 const headingCount = (text: string) => testPage.getByText(text, { exact: true }).elements().length;
 
@@ -556,7 +569,8 @@ describe('paging', () => {
 				staffId: 'staff-2',
 				staffName: 'Bo Ng',
 				scheduledAt: '2026-09-25T09:00:00Z',
-				isOffEngagement: false
+				isOffEngagement: false,
+				type: 'prenatal'
 			}
 		],
 		hasMore: false

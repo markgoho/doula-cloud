@@ -42,6 +42,10 @@ export interface ScheduledVisit {
 	A booked Visit whose Doula was taken off its Engagement (#2596).
 	*/
 	isOffEngagement: boolean;
+	/**
+	prenatal, birth or postpartum: the BFF's one derivation (ADR-0036).
+	*/
+	type: string;
 }
 
 /**

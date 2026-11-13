@@ -25,7 +25,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 			staffId: 'staff-1',
 			staffName: 'Persephone Vandermeulen-Achterberg, CD(DONA)',
 			scheduledAt: '2026-09-12T14:30:00Z',
-			isOffEngagement: false
+			isOffEngagement: false,
+			type: 'prenatal'
 		},
 		{
 			visitId: 'visit-2',
@@ -35,7 +36,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 			staffId: 'staff-2',
 			staffName: 'Bo Ng',
 			scheduledAt: '2026-09-19T02:05:00Z',
-			isOffEngagement: false
+			isOffEngagement: false,
+			type: 'birth'
 		},
 		// The state that needs someone to act, in a later year so its day says the year too.
 		{
@@ -45,7 +47,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 			staffId: 'staff-2',
 			staffName: 'Bo Ng',
 			scheduledAt: '2027-01-04T10:30:00Z',
-			isOffEngagement: true
+			isOffEngagement: true,
+			type: 'postpartum'
 		}
 	],
 	hasMore: false
@@ -85,7 +88,8 @@ export const typical: RouteVariant<RouteParameters> = {
 						staffId: doula.staffId,
 						staffName: doula.name,
 						scheduledAt: `2026-09-${String(8 + index * 3).padStart(2, '0')}T14:30:00Z`,
-						isOffEngagement: false
+						isOffEngagement: false,
+						type: 'prenatal'
 					};
 				}),
 				hasMore: false

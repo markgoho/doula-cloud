@@ -17,7 +17,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatScheduledVisit } from '#lib/dates.js';
-	import { visitDoulaText } from '#lib/engagementDetail.js';
+	import { visitDoulaText, visitTypeLabel } from '#lib/engagementDetail.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
@@ -394,6 +394,7 @@
 	const columns = [
 		{ label: 'Client', accessor: (visit: ScheduledVisit) => visit.clientName, grows: true },
 		{ label: 'When', accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: whenCell },
+		{ label: 'Type', accessor: (visit: ScheduledVisit) => visitTypeLabel(visit.type) },
 		{
 			label: 'Doula',
 			accessor: (visit: ScheduledVisit) => visitDoulaText(visit.staffName, visit.isOffEngagement),
@@ -568,6 +569,11 @@
 			--data-table-cell-inset: var(--space-2);
 			/* The Client's track: the longest name the seed holds, so no narrowing is the one a name widens. */
 			--data-table-grows-track: 15.2ch;
+		}
+
+		/* The Type's track: "Postpartum", so the Doula starts at one place whichever types the days hold. */
+		.schedule-table :global(.table-view tr:not(.group-heading) > :is(th, td):nth-child(3)) {
+			min-inline-size: calc(10ch + 2 * var(--data-table-cell-inset));
 		}
 
 		/* The Doula's track: a long name with the "No longer on this work" badge, so

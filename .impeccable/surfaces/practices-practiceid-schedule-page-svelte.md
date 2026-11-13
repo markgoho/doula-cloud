@@ -27,7 +27,7 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 - **No Client's name is filtered here.** The address carries days and a Staff id only, so #1829 does not bind; nothing is added that would put a name in a URL.
 - **The total comes with the first page.** The BFF counts the Visits of the days and the Doula chosen from the same predicate as the rows, so a contractor's total is her own.
 - **The way in is the Client's name, to the Engagement.** A Visit has no page of its own; Reassign lives on the Engagement.
-- **The Visit has no place, length or status** (#330, #428), and the screen does not invent them. Its type is derived by the BFF and comes to this list in #2870.
+- **The Visit has no place, length or status** (#330, #428), and the screen does not invent them. Its type is derived by the BFF and is the one thing about it the row says (#2870).
 
 ## Category baseline
 
@@ -69,7 +69,7 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | A calendar feed (.ics) | Later (#330) | with the calendar work |
 | Last read at, and refresh | Later | decided with the offline store (ADR-0059), where a book read without signal must say when it was read |
 | Inline status change | Declined | a Visit has no status (#330) |
-| The Visit's type on the row (prenatal, birth, postpartum) | Build (#2870) | the Engagement's Visits show it and this list's endpoint did not send it; Priya asked "is it a prenatal or the birth?" (walked 2026-11-13); all three graders of round 4 named it |
+| The Visit's type on the row (prenatal, birth, postpartum) | Have it (#2870) | a Type column beside the When in the table and "Prenatal · Priya Raman" on the card, in the Engagement's words from the BFF's one derivation; the Engagement's Visits showed it and this list's endpoint did not send it; Priya asked "is it a prenatal or the birth?" (walked 2026-11-13); all three graders of round 4 named it |
 | A Visit's length and place on the row | Later (#330) | the model holds neither |
 | A narrowing to the Visits that need a new Doula, with their count | Build (#2863) | four blind walks as Dee reached for it; the badge marks the rows and nothing narrows to them |
 | A reader's own Visits first ("Mine" on already for a Doula) | Build (#2870) | decided by its design call for this list and the Clients list together; Priya, both walks: "This is everyone's"; Linear opens a member on "My issues" (unread) |
