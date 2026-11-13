@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { formatCalendarDay, formatInstant } from './dates.js';
 import { invoiceFacts, type ClientInvoice } from './clientInvoice.js';
-import { dueLabel } from './invoice.js';
+import { invoiceDateLine, invoiceStateWord } from './invoice.js';
 
 /*
  * #1958's and #1965's proof, with the zone set by the spec itself rather
@@ -45,6 +45,17 @@ function inZone(zone: string): void {
 	});
 }
 
+function itShowsTheDaysTheBffSent(daysOverdue: number, lateness: string): void {
+	it('shows a paid day of 2026-10-25 as Oct 25, 2026', () => {
+		expect(formatCalendarDay('2026-10-25')).toBe('Oct 25, 2026');
+	});
+
+	it('shows the due day the BFF sent, with the lateness it counted', () => {
+		expect(invoiceDateLine({ status: 'open', dueOn: '2026-11-23' })?.day).toBe('Nov 23, 2026');
+		expect(invoiceStateWord({ status: 'open', daysOverdue })).toBe(lateness);
+	});
+}
+
 describe('a date in a zone behind UTC (America/New_York)', () => {
 	inZone('America/New_York');
 
@@ -53,14 +64,7 @@ describe('a date in a zone behind UTC (America/New_York)', () => {
 		expect(new Date('2026-10-25T00:00:00Z').getDate()).toBe(24);
 	});
 
-	it('shows a paid day of 2026-10-25 as Oct 25, 2026', () => {
-		expect(formatCalendarDay('2026-10-25')).toBe('Oct 25, 2026');
-	});
-
-	it('shows the due day the BFF sent, with the lateness it counted', () => {
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 0 })).toBe('Nov 23, 2026');
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 1 })).toBe('Nov 23, 2026 — 1 day overdue');
-	});
+	itShowsTheDaysTheBffSent(1, '1 day overdue');
 
 	it('still reads a real instant in the reader zone', () => {
 		expect(formatInstant('2026-10-25T00:00:00Z')).toBe('Oct 24, 2026');
@@ -80,13 +84,7 @@ describe('a date in a zone ahead of UTC (Asia/Tokyo)', () => {
 		expect(new Date('2026-10-25T20:00:00Z').getDate()).toBe(26);
 	});
 
-	it('shows a paid day of 2026-10-25 as Oct 25, 2026', () => {
-		expect(formatCalendarDay('2026-10-25')).toBe('Oct 25, 2026');
-	});
-
-	it('shows the due day the BFF sent, with the lateness it counted', () => {
-		expect(dueLabel({ dueOn: '2026-11-23', daysOverdue: 3 })).toBe('Nov 23, 2026 — 3 days overdue');
-	});
+	itShowsTheDaysTheBffSent(3, '3 days overdue');
 
 	it('still reads a real instant in the reader zone', () => {
 		expect(formatInstant('2026-10-25T20:00:00Z')).toBe('Oct 26, 2026');

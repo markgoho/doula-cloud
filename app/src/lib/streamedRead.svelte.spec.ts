@@ -137,6 +137,20 @@ describe('Streamed', () => {
 		stop();
 	});
 
+	// The Invoices list holds a Back's place until the read it came back to lands (#2746).
+	it('says a read is running until it settles, landed or failed', async () => {
+		const { streamed, next, stop } = follow(Promise.resolve({ isLoaded: true as const, value: 1 }));
+		await vi.waitFor(() => expect(streamed.isPending).toBe(false));
+
+		const later = Promise.withResolvers<StreamedRead<number>>();
+		next(later.promise);
+		expect(streamed.isPending).toBe(true);
+
+		later.resolve({ isLoaded: false });
+		await vi.waitFor(() => expect(streamed.isPending).toBe(false));
+		stop();
+	});
+
 	it('ignores a read that was overtaken', async () => {
 		const overtaken = Promise.withResolvers<StreamedRead<number>>();
 		const { streamed, next, stop } = follow(overtaken.promise);

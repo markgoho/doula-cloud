@@ -135,6 +135,7 @@ interface SetupOptions {
 	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
+	rowLinkLabel?: (row: Row) => string;
 	rowActions?: { label: string; onRemove: (row: Row) => void };
 	hasMore?: boolean;
 	onLoadMore?: () => void;
@@ -146,7 +147,7 @@ interface SetupOptions {
 	describedBy?: string;
 	hasRowHeader?: boolean;
 	isBusy?: boolean;
-	columnWidths?: 'content' | 'even' | 'fill';
+	columnWidths?: 'content' | 'even' | 'one-line';
 	recordLayout?: 'list' | 'compact';
 }
 
@@ -165,6 +166,7 @@ async function setup({
 	columns: columnsOption = columns,
 	rows: rowsOption = rows,
 	rowHref,
+	rowLinkLabel,
 	rowActions,
 	hasMore = false,
 	onLoadMore,
@@ -184,6 +186,7 @@ async function setup({
 		columns: columnsOption,
 		rows: rowsOption,
 		rowHref,
+		rowLinkLabel,
 		rowActions: rowActions && {
 			label: rowActions.label,
 			content: removeActionSnippet(rowActions.onRemove)
@@ -273,58 +276,79 @@ describe('DataTable.svelte', () => {
 		}
 	});
 
-	it('lets a filling table\'s one growing column take the room, and every other column keep its content\'s width', async () => {
-		const { container } = await setup({
-			columns: [
-				{ label: 'Name', accessor: (row: Row) => row.name },
-				{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
-			],
-			columnWidths: 'fill',
-			caption: 'People'
-		});
+	it('stops a one-line table where its columns are satisfied, every fact on one line, the growing column at its track', async () => {
+		document.body.style.setProperty('--data-table-grows-track', '30ch');
+		try {
+			const { container } = await setup({
+				columns: [
+					{ label: 'Name', accessor: (row: Row) => row.name },
+					{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
+				],
+				columnWidths: 'one-line',
+				caption: 'People'
+			});
 
-		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
-		const table = container.querySelector('table')!.getBoundingClientRect();
-		const name = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect();
-		const status = page.getByRole('columnheader', { name: 'Status' }).element().getBoundingClientRect();
-		const longest = Math.max(
-			...page
-				.getByRole('rowheader')
-				.elements()
-				.map((header) => {
-					const range = document.createRange();
-					range.selectNodeContents(header);
-					return range.getBoundingClientRect().width;
-				})
-		);
-		// The name column is its longest name and the cell's inset, not a share of the frame.
-		expect(name.width).toBeLessThan(longest + 24);
-		expect(status.width).toBeGreaterThan(table.width / 2);
-		expect(name.width + status.width).toBeCloseTo(table.width, 0);
+			await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+			const table = container.querySelector('table')!.getBoundingClientRect();
+			// A wide frame's room is left after the table, never spread between a name and its status.
+			expect(table.width).toBeLessThan(WIDE[0] / 2);
+			const status = page.getByRole('columnheader', { name: 'Status' }).element();
+			const track = Number(getComputedStyle(status).fontSize.replace('px', '')) * 30 * 0.5;
+			expect(status.getBoundingClientRect().width).toBeGreaterThan(track);
+			for (const header of page.getByRole('rowheader').elements()) {
+				const range = document.createRange();
+				range.selectNodeContents(header);
+				expect(range.getClientRects()).toHaveLength(1);
+			}
+		} finally {
+			document.body.style.removeProperty('--data-table-grows-track');
+		}
 	});
 
-	it('moves no column left of the growing one when a column right of it is left out of a filling table', async () => {
-		const filling = [
+	it('keeps a growing value longer than its track on one line while the frame has room', async () => {
+		document.body.style.setProperty('--data-table-grows-track', '5ch');
+		try {
+			await setup({
+				columns: [
+					{ label: 'Status', accessor: (row: Row) => row.status },
+					{ label: 'Name', accessor: (row: Row) => row.name, grows: true }
+				],
+				columnWidths: 'one-line',
+				caption: 'People'
+			});
+
+			await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+			for (const cell of page.getByRole('cell').elements()) {
+				const range = document.createRange();
+				range.selectNodeContents(cell);
+				expect(range.getClientRects()).toHaveLength(1);
+			}
+		} finally {
+			document.body.style.removeProperty('--data-table-grows-track');
+		}
+	});
+
+	it('moves no column left of the growing one when a column right of it is left out of a one-line table', async () => {
+		const oneLine = [
 			{ label: 'Name', accessor: (row: Row) => row.name },
 			{ label: 'Status', accessor: (row: Row) => row.status, grows: true },
 			{ label: 'Extra', accessor: () => 'Some words' }
 		];
-		const { container } = await setup({ columns: filling, columnWidths: 'fill', caption: 'People' });
+		await setup({ columns: oneLine, columnWidths: 'one-line', caption: 'People' });
 		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
-		const before = container.querySelector('table')!.getBoundingClientRect().width;
-		const nameBefore = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect().width;
+		const statusBefore = page.getByRole('columnheader', { name: 'Status' }).element().getBoundingClientRect();
 
 		await render(DataTable<Row>, {
-			columns: filling.slice(0, 2),
+			columns: oneLine.slice(0, 2),
 			rows,
 			emptyMessage: '',
-			columnWidths: 'fill',
+			columnWidths: 'one-line',
 			caption: 'Others'
 		});
 
-		const tables = document.querySelectorAll('table');
-		expect(tables[1]!.getBoundingClientRect().width).toBeCloseTo(before, 0);
-		expect(page.getByRole('columnheader', { name: 'Name' }).nth(1).element().getBoundingClientRect().width).toBeCloseTo(nameBefore, 0);
+		const statusAfter = page.getByRole('columnheader', { name: 'Status' }).nth(1).element().getBoundingClientRect();
+		expect(statusAfter.left).toBeCloseTo(statusBefore.left, 0);
+		expect(statusAfter.width).toBeCloseTo(statusBefore.width, 0);
 	});
 
 	it('draws a compact record as the name, the next field, then the rest on one line, with labels read not drawn', async () => {
@@ -366,6 +390,29 @@ describe('DataTable.svelte', () => {
 		const metas = [...page.getByRole('group', { name: 'People' }).element().querySelectorAll('.compact-meta')] as HTMLElement[];
 		expect(metas).toHaveLength(1);
 		expect(metas[0]!.textContent).toContain('Priya Raman');
+	});
+
+	it('never ends or starts a compact record’s wrapped line on a dot', async () => {
+		const days = ['Sent', 'Paid', 'Due'].map((label) => ({ label, accessor: () => `${label} Nov 12, 2026` }));
+		await setup({ columns: [...columns, ...days], recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		// No accessible signal: the dots are aria-hidden, and where each is drawn is the fact.
+		const meta = page.getByRole('group', { name: 'People' }).element().querySelector<HTMLElement>('.compact-meta')!;
+		const fields = [...meta.children] as HTMLElement[];
+		const tops = new Set(fields.map((field) => Math.round(field.getBoundingClientRect().top)));
+		expect(tops.size, 'the fields wrap to more than one line').toBeGreaterThan(1);
+		expect(tops.size, 'and two of them share a line').toBeLessThan(fields.length);
+		const edge = meta.getBoundingClientRect().left;
+		for (const [index, field] of fields.entries()) {
+			const dot = field.querySelector('[aria-hidden="true"]');
+			if (index === 0) {
+				expect(dot).toBeNull();
+				continue;
+			}
+			const isLineStart = Math.round(field.getBoundingClientRect().top) !== Math.round(fields[index - 1]!.getBoundingClientRect().top);
+			expect(dot!.getBoundingClientRect().right <= edge, `field ${index}'s dot is past the line's start only when the field starts a line`).toBe(isLineStart);
+		}
 	});
 
 	it('marks the table and the record view busy while a newer page is on its way', async () => {
@@ -436,6 +483,15 @@ describe('DataTable.svelte', () => {
 		// Scoped to .table-view: the record view links the same rows, and
 		// counting the whole container would count both trees' anchors.
 		expect(container.querySelector('.table-view')!.querySelectorAll('a')).toHaveLength(rows.length);
+	});
+
+	// Two rows that read alike are two links a list of links tells apart.
+	it('names each row link with rowLinkLabel, keeping its visible text', async () => {
+		await setup({ rowHref: (row) => `/clients/${row.name}`, rowLinkLabel: (row) => `${row.name}, ${row.status}` });
+
+		const link = page.getByRole('link', { name: `${rows[0]!.name}, ${rows[0]!.status}`, exact: true });
+		await expect.element(link).toBeVisible();
+		await expect.element(link).toHaveTextContent(rows[0]!.name);
 	});
 
 	/*

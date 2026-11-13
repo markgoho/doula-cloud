@@ -292,6 +292,13 @@
 	/* Layout -- #98, default line-length cap for the Center primitive. */
 	--measure: 65ch;
 
+	/* A list's Money cell (`MoneyAmount`): the track its state takes after
+	   the amount, as wide as the longest state a list can say, a red "NNN
+	   days overdue" badge or "$N,NNN.NN refunded", so every amount in a
+	   column ends on one edge whatever its state says. The column's header
+	   ends where the amounts do by the same length. */
+	--money-state-track: 20ch;
+
 	/* The page frame every Template owns (ADR-0018). The brief fixes the
 	   desktop gutter at 40px and leaves the width caps to the Template
 	   layer, so the numbers are chosen here and argued on #422: the gutter

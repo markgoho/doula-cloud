@@ -31,6 +31,8 @@ export const data: PracticeInvoiceListData = {
 			engagementId: 'eng-1',
 			contractId: 'contract-1',
 			clientName: 'Anne-Marie Ochieng-Whitfield',
+			// #2746: the longer of the two kinds, on the row with the most to say.
+			engagementKind: 'postpartum',
 			status: 'open',
 			amountCents: 450_000,
 			currency: 'usd',
@@ -40,11 +42,12 @@ export const data: PracticeInvoiceListData = {
 			// carrying #537's hostile client-name value.
 			reference: 'INV-0042',
 			billingMode: 'by_hand',
-			// #768: overdue, so the "Payment due" cell renders its longest
-			// form -- a date plus a day count -- at every width the continuum
+			// #768: overdue, so the Money cell renders its red badge
+			// -- a count of days late -- at every width the continuum
 			// sweeps. The count is the BFF's, in the Practice's zone (#1965).
 			dueOn: '2026-08-31',
-			daysOverdue: 56
+			daysOverdue: 56,
+			refundedCents: 0
 		},
 		{
 			id: 'inv-2',
@@ -52,6 +55,7 @@ export const data: PracticeInvoiceListData = {
 			contractId: 'contract-2',
 			clientName:
 				'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			engagementKind: 'birth',
 			status: 'paid',
 			amountCents: 250_000,
 			currency: 'usd',
@@ -59,22 +63,26 @@ export const data: PracticeInvoiceListData = {
 			raisedOn: '2026-07-01',
 			paidOn: '2026-07-04',
 			// #271: the Stripe rail's own reference, so this fixture's two
-			// rows realize both billing-mode states the "Billed via" column
+			// rows realize both billing-mode states the Reference cell
 			// renders.
 			reference: 'DC-0092',
 			billingMode: 'stripe',
-			// Paid, so its due date reads plainly however long ago it passed:
+			// Paid, so its row says the day it was paid, not this one:
 			// the BFF counts no lateness on a settled Invoice.
 			dueOn: '2026-07-31',
-			daysOverdue: 0
+			daysOverdue: 0,
+			// #2746: half of it went back, so the Money cell says the refund
+			// beside the amount, and the rows add up to the book's figure.
+			refundedCents: 125_050
 		},
 		{
-			// #2225: a bank payment on its way, so the Status column carries
+			// #2225: a bank payment on its way, so the Money cell carries
 			// its longest words. Still open, so it counts as outstanding.
 			id: 'inv-3',
 			engagementId: 'eng-3',
 			contractId: 'contract-3',
 			clientName: 'Imani Brooks',
+			engagementKind: 'birth',
 			status: 'open',
 			amountCents: 180_000,
 			currency: 'usd',
@@ -84,20 +92,22 @@ export const data: PracticeInvoiceListData = {
 			billingMode: 'stripe',
 			dueOn: '2026-09-19',
 			daysOverdue: 0,
-			paymentProcessing: true
+			paymentProcessing: true,
+			refundedCents: 0
 		}
 	],
 	hasMore: false,
 	outstandingCents: 630_000,
 	outstandingCount: 2,
+	invoiceCount: 3,
 	paidCents: 250_000,
 	refundedCents: 125_050,
 	overdueCents: 450_000,
 	overdueCount: 1,
 	clientsCanPay: true,
-	// #768: the unnarrowed list, so the fixture sweeps the "Payment due"
-	// column and both filter links in the state a Practice meets first.
-	isNarrowedToOverdue: false
+	// #768: the whole book, so the fixture sweeps the Payment column
+	// and the filter bar in the state a Practice meets first.
+	view: 'all'
 };
 
 /*
@@ -108,8 +118,23 @@ export const data: PracticeInvoiceListData = {
  */
 export const narrowedToOverdue: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide invoice list, narrowed to overdue',
-	url: 'https://example.test/practices/practice-1/invoices?overdue=true',
-	props: { data: { ...data, items: [data.items[0]], isNarrowedToOverdue: true } }
+	url: 'https://example.test/practices/practice-1/invoices?show=overdue',
+	props: { data: { ...data, items: [data.items[0]], view: 'overdue' } }
+};
+
+/*
+ * #2746: a view and a typed search together, so the applied tags row holds
+ * two tags, one of them as long as a Client's full hyphenated name, and
+ * must wrap rather than push the page sideways at 320px. The search rides
+ * in the history entry's state and is read in a POST of the screen's own.
+ */
+const searchedBook: PracticeInvoiceListData = { ...data, items: [data.items[0]], view: 'overdue' };
+export const searched: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, narrowed to overdue and searched',
+	url: 'https://example.test/practices/practice-1/invoices?show=overdue',
+	state: { invoicesSearch: 'Alexandra Montgomery-Vanderbilt Okonkwo-Fairweather' },
+	props: { data: searchedBook },
+	respond: () => Response.json(searchedBook)
 };
 
 /*
@@ -135,6 +160,7 @@ export const typical: RouteVariant<RouteParameters> = {
 					engagementId: `eng-${index + 1}`,
 					contractId: `contract-${index + 1}`,
 					clientName: person.name,
+					engagementKind: index % 3 === 2 ? ('postpartum' as const) : ('birth' as const),
 					status: isPaid ? 'paid' : 'open',
 					amountCents: index % 3 === 2 ? 90_000 : 150_000,
 					currency: 'usd',
@@ -144,12 +170,14 @@ export const typical: RouteVariant<RouteParameters> = {
 					reference: isByHand ? `INV-00${String(index + 10)}` : `DC-00${String(index + 10)}`,
 					billingMode: isByHand ? 'by_hand' : 'stripe',
 					dueOn: `2026-09-${String(15 + index * 2).padStart(2, '0')}`,
-					daysOverdue: isOverdue ? 36 : 0
+					daysOverdue: isOverdue ? 36 : 0,
+					refundedCents: 0
 				};
 			}),
 			// The totals the eight rows above add up to.
 			outstandingCents: 630_000,
 			outstandingCount: 5,
+			invoiceCount: 8,
 			paidCents: 450_000,
 			refundedCents: 0,
 			overdueCents: 90_000,
@@ -189,7 +217,7 @@ export const clientsCannotPayWhileLoading: RouteVariant<RouteParameters> = {
 
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
+	variants: [narrowedToOverdue, searched, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',

@@ -475,6 +475,27 @@ func TestRefundedInvoice_BookFiguresTellTheTruth(t *testing.T) {
 	}
 }
 
+// TestPracticeInvoices_RowSaysWhatWasRefunded proves #2746's per-row
+// figure: a partly refunded Invoice's row on the Practice-wide list says
+// how much went back, and the rows' figures add up to the book's.
+func TestPracticeInvoices_RowSaysWhatWasRefunded(t *testing.T) {
+	e := newEnv(t)
+	_, invoiceID, paymentID := e.paidByHandInvoice()
+	e.refund(invoiceID, paymentID, checkRefund(3000))
+
+	book := e.practiceInvoices()
+	var sum int64
+	for _, row := range book.Items {
+		sum += row.RefundedCents
+		if row.ID == invoiceID && row.RefundedCents != 3000 {
+			t.Fatalf("row refundedCents = %d, want 3000", row.RefundedCents)
+		}
+	}
+	if sum != book.RefundedCents || sum != 3000 {
+		t.Fatalf("rows' refunds = %d, book's = %d, want both 3000", sum, book.RefundedCents)
+	}
+}
+
 // TestStripeCardPayment_IsOfferedAsActive proves #1009's widening of
 // activePaymentId: a card Payment Stripe collected is now reachable, so
 // a Refund can name it.

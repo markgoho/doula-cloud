@@ -121,6 +121,7 @@ describe('RefundPaymentForm', () => {
 
 			await expect.element(page.getByText(stripeRefundFeeWarning)).toBeVisible();
 			await expect.element(page.getByText('Stripe, to the card that paid')).toBeVisible();
+			await expect.element(page.getByText('Refunded by')).toBeVisible();
 			await confirmButton().click();
 
 			expect(onConfirm).toHaveBeenCalledWith({ amountCents: 50_000 });

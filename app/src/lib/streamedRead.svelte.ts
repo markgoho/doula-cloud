@@ -78,11 +78,16 @@ export class Streamed<Value> {
 	/** The refusal's own code and sentence, for a screen that says more
 	 * than its `failure` kind can (#2270's ended Attachment). */
 	refusal = $state.raw<{ code?: string; message?: string }>();
+	/**
+	 * A read is running whose result `value` does not hold yet.
+	 */
+	isPending = $state(false);
 
 	constructor(read: () => Promise<StreamedRead<Value>>) {
 		$effect(() => {
 			const pending = read();
 			let isCurrent = true;
+			this.isPending = true;
 			void this.#settle(pending, () => isCurrent);
 			return () => {
 				isCurrent = false;
@@ -93,6 +98,7 @@ export class Streamed<Value> {
 	async #settle(pending: Promise<StreamedRead<Value>>, isCurrent: () => boolean): Promise<void> {
 		const read = await pending;
 		if (!isCurrent()) return;
+		this.isPending = false;
 		if (read.isLoaded) {
 			this.failure = undefined;
 			this.refusal = undefined;

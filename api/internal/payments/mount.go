@@ -79,6 +79,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	// her own Engagements -- so it stays where the per-Engagement Contract
 	// read already puts it.
 	g.Get("/api/practices/{practiceId}/invoices", staffauth.AnyStaff, GetPracticeInvoicesHandler())
+	// #2746, #1829: the same list read with its view, cursor and search in a
+	// body, the only way to search it -- the GET refuses ?search, since a
+	// search can be a Client's name. A read, so nothing to replay.
+	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/list",
+		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
+		false, staffauth.AnyStaff, ListPracticeInvoicesHandler())
 
 	// Billing mode (#271): a Practice-level choice between billing through
 	// Stripe and billing by hand. Reading is any Staff -- a Doula meets

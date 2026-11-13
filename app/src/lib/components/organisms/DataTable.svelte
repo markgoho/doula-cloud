@@ -121,11 +121,14 @@
 		 */
 		wraps?: boolean;
 		/**
-		 * The one column of a `columnWidths="fill"` table that takes the room
-		 * the others leave. Every other column keeps its content's width on
-		 * one line, so a column starts where its own values make it start and
-		 * a filter that leaves a column out gives that room to this one. Read
-		 * only by that layout. One per table.
+		 * The one column of a `columnWidths="one-line"` table that may wrap.
+		 * Every other column keeps its content's width on one line. This one
+		 * is at least its track (`--data-table-grows-track` on an ancestor, a
+		 * width the route measures its busiest value at), so the columns after
+		 * it start at one place whichever rows are shown; a longer value takes
+		 * its own one-line width while the frame has room, and wraps only
+		 * where the frame is too narrow for the table. Read only by that
+		 * layout. One per table.
 		 */
 		grows?: boolean;
 	}
@@ -157,6 +160,14 @@
 		 */
 		rowHref?: (row: T) => string;
 		/**
+		 * The row link's accessible name, where its visible text alone does
+		 * not tell two rows apart: the Invoices list's two Invoices of one
+		 * Client ("Tessa Moreau, INV-0012"). It starts with the visible
+		 * text, so a person who says what she sees still reaches it (WCAG
+		 * 2.5.3, Label in Name).
+		 */
+		rowLinkLabel?: (row: T) => string;
+		/**
 		 * An id for each row, so a link can land on one (#2240). It names
 		 * the view, since both trees are always in the DOM (#666), and the
 		 * row takes `tabindex="-1"` so the caller can move focus to it.
@@ -176,6 +187,13 @@
 		emptyMessage: string;
 		emptyAction?: EmptyStateAction;
 		/**
+		 * False where the list's own live result line (`FilterBar`'s status,
+		 * hidden from sight while the list is empty) says `emptyMessage`
+		 * word for word: the line is then read there and drawn here, never
+		 * heard twice (`EmptyState`'s `isMessageSpoken`).
+		 */
+		isEmptyMessageSpoken?: boolean;
+		/**
 		 * Wraps the whole table in a closed-by-default `Details` (#1520),
 		 * named by this string -- the Client portal's own placement for the
 		 * activity ledger (brief.md's #433 amendment: "behind a closed
@@ -193,14 +211,15 @@
 		 * the content does not decide, for sibling tables of the same
 		 * columns read one under the next -- the portal's three Invoice
 		 * sections -- so a column starts at the same place in each (Law of
-		 * Similarity). `fill` takes the frame's width, up to a ceiling, for one
-		 * list a reader filters again and again: the Clients list, whose columns
-		 * moved sideways with every result under `content`. Every column but the
-		 * one marked `grows` is as wide as its longest value, and that one takes
-		 * the rest, so no column is sized by a guess at what it will hold. It
+		 * Similarity). `one-line` is for a list a reader filters again and
+		 * again (the Clients and Invoices lists, whose columns moved sideways
+		 * with every result under `content`): every column but the one marked
+		 * `grows` keeps its longest value on one line, that one holds its
+		 * track, and the table stops where its columns are satisfied, never
+		 * stretched across a wide frame, so a row's facts stay together. It
 		 * changes the table only; the record view is already one card width.
 		 */
-		columnWidths?: 'content' | 'even' | 'fill';
+		columnWidths?: 'content' | 'even' | 'one-line';
 		/**
 		 * How a record is drawn when the frame is too narrow for the table.
 		 * `list`, the default, is the card of labeled rows. `compact` is for a
@@ -249,6 +268,7 @@
 		columns,
 		rows,
 		rowHref,
+		rowLinkLabel,
 		rowId,
 		rowActions,
 		hasMore = false,
@@ -258,6 +278,7 @@
 		disclosure,
 		emptyMessage,
 		emptyAction,
+		isEmptyMessageSpoken = true,
 		columnWidths = 'content',
 		recordLayout = 'list',
 		caption,
@@ -367,10 +388,10 @@
 {#snippet cell(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
 	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}
-			><Link href={rowHref(row)} label={column.accessor(row)} /></time
+			><Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} /></time
 		>
 	{:else if columnIndex === 0 && rowHref}
-		<Link href={rowHref(row)} label={column.accessor(row)} />
+		<Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} />
 	{:else if column.content}
 		{@render column.content(row, view)}
 	{:else if column.datetimeAccessor}
@@ -388,7 +409,7 @@
 	     the total above it has said it all (#982). -->
 	{#if rows.length === 0}
 		{#if emptyMessage}
-			<EmptyState message={emptyMessage} action={emptyAction} />
+			<EmptyState message={emptyMessage} action={emptyAction} isMessageSpoken={isEmptyMessageSpoken} />
 		{/if}
 	{:else}
 		<table
@@ -396,7 +417,7 @@
 			aria-describedby={describedBy}
 			aria-busy={isBusy}
 			class:even={columnWidths === 'even'}
-			class:fill={columnWidths === 'fill'}
+			class:one-line={columnWidths === 'one-line'}
 			class:has-wrapping-column={columns.some((column) => column.wraps)}
 		>
 			{#if caption}
@@ -488,10 +509,12 @@
 						{#if rest.length > 0}
 							<div class="compact-meta">
 								{#each rest as field, index (field.label)}
-									{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}
+									<!-- The dot hangs in the gap before its field, so a field that
+									     starts a line takes its dot past the line's start, where it is
+									     clipped: no line starts or ends on one. -->
 									<span class="compact-field">
 										<span class="visually-hidden">{`${field.label}: `}</span>
-										{@render cell(field.column, field.columnIndex, row, view)}
+										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}{@render cell(field.column, field.columnIndex, row, view)}
 									</span>
 								{/each}
 							</div>
@@ -603,23 +626,34 @@
 			table-layout: fixed;
 		}
 
-		/* `columnWidths="fill"`: the frame's width, up to a ceiling, with one
-		   column (`grows`) taking what the others leave. Each of the others
-		   asks for 1% and cannot wrap, so the table algorithm gives it its
-		   longest value and no more; the room that is left lands in the one
-		   that has no width. A filter that leaves a column out therefore
-		   moves nothing but that column. The ceiling is what #542 asked for:
-		   a cell never absorbs a whole screen. Three measures (about
-		   1750px): a list read at 1440px uses the width its container gives,
-		   with no empty band beside it, while a 4K window still stops short
-		   of a row that crosses the screen. */
-		.table-view.fill {
-			inline-size: min(100%, calc(var(--measure) * 3));
+		/* `columnWidths="one-line"` (#2739): the shrink-to-fit width #542
+		   chose, so the table stops where its columns are satisfied and a
+		   wide frame leaves its room after the table, not between a name and
+		   its amount. Every column but `grows` keeps its value on one line;
+		   that one is as wide as its track or its longest value on one line,
+		   whichever is wider, so the columns after it start at one place in
+		   every filter state, and it alone wraps, only where the frame runs
+		   out. The track is an empty grid in the header cell, whose
+		   `minmax(0, track)` counts toward the column's one-line width and
+		   not its least one: a width set on the cell itself would replace the
+		   one-line width (a two-word name wrapped beside an empty frame), and
+		   a least width would push the table past a narrow frame. The track
+		   is the whole cell's width, so the grid is the track less the cell's
+		   inline padding. */
+		.table-view.one-line :is(th, td):not(.grows) {
+			white-space: nowrap;
 		}
 
-		.table-view.fill :is(th, td):not(.grows) {
-			inline-size: 1%;
-			white-space: nowrap;
+		.table-view.one-line th.grows::after {
+			--grows-padding: calc(2 * var(--data-table-cell-inset, var(--space-3)));
+
+			content: '';
+			display: grid;
+			grid-template-columns: minmax(0, calc(var(--data-table-grows-track, 0ch) - var(--grows-padding)));
+		}
+
+		.table-view.one-line th.grows:first-child::after {
+			--grows-padding: var(--data-table-cell-inset, var(--space-3));
 		}
 
 		/* Rows that are about to be replaced (`isBusy`) dim a little, so a
@@ -630,7 +664,7 @@
 			opacity: 0.6;
 		}
 
-		.table-view.fill :is(th, td) {
+		.table-view.one-line :is(th, td) {
 			max-inline-size: none;
 		}
 
@@ -710,6 +744,40 @@
 			background-color: var(--color-surface-container);
 			color: var(--color-on-surface-variant);
 			font-weight: var(--font-weight-semibold);
+		}
+
+		/* #2839: the header row stays at the top of the window while its
+		   table's rows scroll, and leaves with the table. Above the body's
+		   positioned boxes (a cell's visually hidden words), on an opaque
+		   tint. The hairline is drawn by the cell itself, since a collapsed
+		   border stays with the grid. */
+		.table-view > thead th {
+			position: sticky;
+			inset-block-start: 0;
+			z-index: 1;
+			box-shadow: inset 0 calc(-1 * var(--border-thin)) 0 var(--color-outline-variant);
+		}
+
+		/* Forced colors drop the shadow, so the rule under the stuck header is
+		   a border there, in the system's own text color. */
+		@media (forced-colors: active) {
+			.table-view > thead th::after {
+				content: '';
+				position: absolute;
+				inset-inline: 0;
+				inset-block-end: 0;
+				border-block-end: var(--border-thin) solid CanvasText;
+			}
+		}
+
+		/* WCAG 2.2 Focus Not Obscured: whatever focus lands on in a row -- its
+		   link or control by Tab or Shift+Tab -- keeps one row and its hairline
+		   clear above it, so it scrolls out from under the stuck header. Only on
+		   the table's own targets, so a page whose table is not drawn, and a
+		   jump to an anchor elsewhere, keep their own scroll. */
+		.table-view > tbody > tr :global(:is(a, button, input, select, textarea, [tabindex])),
+		.table-view > tbody > tr[tabindex]:not([id]) {
+			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
 		}
 
 		/* A row hover tint. The row's link stays the one target, and the
@@ -977,16 +1045,31 @@
 			font-variant-numeric: tabular-nums;
 		}
 
+		/* The fields run on as one line and wrap between fields, so a short
+		   field fills the end of the line a long one left (#2746). Each dot
+		   sits in the gap before its field; a field that starts a line puts
+		   its dot past the line's start, which the clip hides; only that
+		   edge is clipped, so a field too long for its line still shows. A
+		   caller that wants one field to a line makes the line a column (the
+		   Clients list). */
 		.compact-meta {
 			display: flex;
 			flex-wrap: wrap;
-			column-gap: var(--space-1);
+			column-gap: var(--space-3);
+			clip-path: inset(-100vmax -100vmax -100vmax 0);
 			color: var(--color-on-surface-variant);
+			overflow-wrap: anywhere;
 		}
 
 		.compact-field {
 			min-inline-size: 0;
-			overflow-wrap: anywhere;
+		}
+
+		.compact-separator {
+			display: inline-block;
+			inline-size: var(--space-3);
+			margin-inline-start: calc(-1 * var(--space-3));
+			text-align: center;
 		}
 
 		/* The last row's hairline is the card's edge's job. */

@@ -39,15 +39,21 @@
 	interface Properties {
 		message: string;
 		action?: EmptyStateAction;
+		/**
+		 * False where a live line above already says the same sentence (a
+		 * list's filter bar result line): the line is drawn here and read
+		 * there, so a screen reader hears it once.
+		 */
+		isMessageSpoken?: boolean;
 	}
 
-	let { message, action }: Properties = $props();
+	let { message, action, isMessageSpoken = true }: Properties = $props();
 </script>
 
 <div class="empty-state">
 	<span class="icon"><Icon name="tray" size={32} weight="duotone" /></span>
 	<stack-l space="var(--space-3)">
-		<Text text={message} />
+		<div aria-hidden={isMessageSpoken ? undefined : 'true'}><Text text={message} /></div>
 		{#if action && 'href' in action}
 			<div><Link href={action.href} label={action.label} /></div>
 		{:else if action}

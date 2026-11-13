@@ -41,7 +41,7 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, afterNavigate: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto, afterNavigate: vi.fn(), invalidate: vi.fn() }));
 
 const didFollowSessionRefusal = vi.hoisted(() => vi.fn(async () => false));
 vi.mock('#lib/api.js', async (importOriginal) => ({

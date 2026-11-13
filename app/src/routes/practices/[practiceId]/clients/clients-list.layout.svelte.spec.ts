@@ -63,6 +63,7 @@ const navigation = vi.hoisted(() => ({
 vi.mock('$app/navigation', () => ({
 	goto,
 	replaceState,
+	snapshot: vi.fn(),
 	beforeNavigate: (callback: () => void) => {
 		navigation.onBefore = callback;
 	},
@@ -391,10 +392,12 @@ describe('the columns between filter states', () => {
 		expect(Object.keys(states.noContract)).not.toContain('Money');
 	});
 
+	// At 1024px the fields leave Apply's line no room for a tag and "Clear filters", so
+	// one filter's take the line under it. At 1280px the bar holds the longest wording on one line.
 	it.each([
-		[1280, 2],
-		[1024, 2]
-	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines) => {
+		[1280, 1, 1],
+		[1024, 2, 1]
+	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines, oneFilter) => {
 		const tops: number[] = [];
 		const heights: number[] = [];
 		const states = [
@@ -409,17 +412,20 @@ describe('the columns between filter states', () => {
 			await renderListScreen({ width, height: 800, respond: () => jsonResponse({ items: [shortest], hasMore: true }, 200) });
 			await ready();
 			const status = document.querySelector('#clients-result')!;
-			heights.push(status.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight));
+			heights.push(document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight));
 			tops.push(document.querySelector('table.table-view thead')!.getBoundingClientRect().top);
 			cleanup();
 			for (const key of Object.keys(queries)) pageState.url.searchParams.delete(key);
 		}
 
-		for (const height of heights) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
-		// The default draws no tags; every other state draws their one row, so those are held against each other.
-		const tagged = tops.slice(1);
-		expect(Math.max(...tagged) - Math.min(...tagged), `table tops ${tops}`).toBeLessThanOrEqual(1);
-		expect(tagged[0]! - tops[0]!, `the tag row, table tops ${tops}`).toBeLessThan(70);
+		// The tags follow Apply in the room beside it: one tag fits there, so neither it nor
+		// a typed name moves the table. Three tags and "Clear filters" take more than that
+		// room, so they wrap under Apply and the table moves by those lines, nothing held for them.
+		const [rest, owes, three, name] = heights;
+		for (const height of [rest!, owes!, name!]) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
+		expect(three!, `count line heights ${heights}`).toBeGreaterThanOrEqual(lines - 0.5);
+		for (const top of [tops[1]!, tops[3]!]) expect(Math.abs(top - tops[0]!), `table tops ${tops}`).toBeLessThanOrEqual(oneFilter);
+		expect(tops[2]! - tops[0]!, `the three tags' lines, table tops ${tops}`).toBeLessThan(100);
 	});
 
 	it('keeps Money and Date where they were when a Doula is chosen, and Date follows Status when Money is left out', async () => {
@@ -527,64 +533,47 @@ describe('the focused “Skip to results” link', () => {
 	});
 });
 
-const chOf = (element: Element) => {
-	const probe = document.createElement('span');
-	probe.style.cssText = `display:inline-block;inline-size:1ch;font-size:${getComputedStyle(element).fontSize}`;
-	element.append(probe);
-	const width = probe.getBoundingClientRect().width;
-	probe.remove();
-	return width;
-};
-
 // The distinct lines an unseen wording is drawn on, clipped or not.
 const linesOf = (element: Element) => new Set([...wordsOf(element).getClientRects()].map((box) => Math.round(box.top))).size;
 
-// The count line is a reading line, capped at 75ch, and its held room is what the
-// longest wording takes wrapped at that cap, never a line more.
-describe('the count line’s measure and its held room', () => {
-	it.each([1280, 1440, 1920])('never runs wider than 75ch and wraps its longest wording, at %ipx', async (width) => {
-		await renderListScreen({ width, height: 800 });
-		await ready();
+async function measureCountLine(width: number) {
+	await renderListScreen({ width, height: 800 });
+	await ready();
+	const status = document.querySelector<HTMLElement>('#clients-result')!;
+	const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
+	return { held, needed: linesOf(document.querySelector('.ruler')!) };
+}
 
-		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const ruler = document.querySelector<HTMLElement>('.ruler')!;
-		const cap = 75 * chOf(status);
-		expect(status.getBoundingClientRect().width, 'the result line').toBeLessThanOrEqual(cap + 0.5);
-		expect(ruler.getBoundingClientRect().width, 'the held wording').toBeLessThanOrEqual(cap + 0.5);
-		expect(linesOf(ruler), 'the longest wording wraps instead of running past the cap').toBe(2);
+// The count line is a status line, as wide as the bar, and its held room is what the
+// longest wording takes wrapped at that width, never a line more.
+describe('the count line’s measure and its held room', () => {
+	it.each([1280, 1440, 1920])('holds its longest wording on one line, as the Invoices list holds its own, at %ipx', async (width) => {
+		const { held, needed } = await measureCountLine(width);
+		expect(needed, 'the longest wording').toBe(1);
+		expect(held, 'one line held').toBeLessThan(1.5);
 	});
 
 	it.each([320, 375, 640, 768, 880, 960, 1024, 1100, 1280, 1440, 1920])('holds no more lines than the longest wording takes wrapped, at %ipx', async (width) => {
-		await renderListScreen({ width, height: 800 });
-		await ready();
-
-		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
-		const needed = linesOf(document.querySelector('.ruler')!);
+		const { held, needed } = await measureCountLine(width);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeLessThan(needed + 0.5);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeGreaterThan(Math.min(needed, 2) - 0.5);
 	});
 });
 
 describe('the header’s tint', () => {
-	it('reaches the same inset past the first column’s text as past the last column’s, with the text on the page’s edge', async () => {
+	// H4 (#2746): flush with the page's edge, as the Invoices list's band is.
+	it('starts on the page’s edge with the text, as the Invoices list’s does', async () => {
 		await renderListScreen({ width: 1440, height: 900, respond: busiest });
 		await ready();
 
-		const heads = drawn('table.table-view thead th');
-		const first = heads[0]!;
-		const last = heads.at(-1)!;
-		const inset = px(getComputedStyle(last).paddingInlineEnd);
-		expect(inset).toBeGreaterThan(0);
+		const first = drawn('table.table-view thead th')[0]!;
 		expect(px(getComputedStyle(first).paddingInlineStart), 'the text stays on the page’s edge').toBe(0);
 		expect(first.getBoundingClientRect().left).toBeCloseTo(document.querySelector('h1')!.getBoundingClientRect().left, 0);
 
 		const middle = first.getBoundingClientRect().top + first.getBoundingClientRect().height / 2;
 		const left = first.getBoundingClientRect().left;
-		expect(document.elementsFromPoint(left - inset / 2, middle), 'tint inside the inset').toContain(first);
-		expect(document.elementsFromPoint(left - inset - 2, middle), 'no tint past it').not.toContain(first);
-		expect(getComputedStyle(first, '::before').backgroundColor).toBe(getComputedStyle(first).backgroundColor);
-		expect(px(getComputedStyle(first, '::before').width)).toBeCloseTo(inset, 0);
+		expect(document.elementsFromPoint(left + 2, middle), 'tint under the text').toContain(first);
+		expect(document.elementsFromPoint(left - 2, middle), 'no tint past the edge').not.toContain(first);
 	});
 });
 

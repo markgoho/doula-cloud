@@ -10,47 +10,106 @@
  * what comes back from it.
  */
 import { describe, expect, it, vi } from 'vitest';
-import { dueLabel, invoicesResultSummary, loadPaymentTerms, practiceInvoicesPath, setPaymentTerms } from './invoice.js';
+import {
+	INVOICES_RESULT_RULER,
+	invoiceDateLine,
+	invoiceStateWord,
+	invoicesResultSummary,
+	invoicesViewOf,
+	invoicesViewQuery,
+	loadPaymentTerms,
+	practiceInvoicesPath,
+	setPaymentTerms
+} from './invoice.js';
+
+const counts = { invoiceCount: 35, outstandingCount: 12, overdueCount: 7 };
 
 describe('invoicesResultSummary', () => {
 	it.each([
-		[false, 0, 'Showing every Invoice.'],
-		[false, 3, 'Showing every Invoice.'],
-		[true, 0, 'No Invoice is overdue.'],
-		[true, 1, 'Showing 1 overdue Invoice.'],
-		[true, 4, 'Showing 4 overdue Invoices.']
-	])('narrowed %s with %i overdue reads "%s"', (isNarrowed, count, text) => {
-		expect(invoicesResultSummary(isNarrowed, count)).toBe(text);
+		['all', 30, true, 'Showing the first 30 of 35 Invoices, newest first.'],
+		['all', 35, false, 'Showing 35 Invoices, newest first.'],
+		['all', 0, false, 'No Invoices yet.'],
+		['unpaid', 12, false, 'Showing 12 unpaid Invoices, earliest payment due first.'],
+		['unpaid', 0, false, 'No Invoice is unpaid.'],
+		['overdue', 7, false, 'Showing 7 overdue Invoices, longest overdue first.'],
+		['overdue', 1, false, 'Showing 1 overdue Invoice.'],
+		['overdue', 0, false, 'No Invoice is overdue.']
+	] as const)('%s with %i shown (more: %s) reads "%s"', (view, shown, hasMore, text) => {
+		expect(invoicesResultSummary(view, shown, hasMore, counts)).toBe(text);
+	});
+
+	// A total read at a later instant than the rows never says fewer than are shown.
+	it('never names a total below the rows on screen', () => {
+		expect(invoicesResultSummary('overdue', 8, true, counts)).toBe(
+			'Showing the first 8 of 8 overdue Invoices, longest overdue first.'
+		);
+	});
+
+	it('reserves room for its longest wording', () => {
+		expect(INVOICES_RESULT_RULER).toBe(
+			'Showing the first 999 of 9999 unpaid Invoices, earliest payment due first.'
+		);
+	});
+});
+
+describe('invoicesViewOf', () => {
+	it.each([
+		['', 'all'],
+		['show=all', 'all'],
+		['show=unpaid', 'unpaid'],
+		['show=overdue', 'overdue'],
+		['show=anything', 'all'],
+		['overdue=true', 'all']
+	] as const)('reads "%s" as %s', (query, view) => {
+		expect(invoicesViewOf(new URLSearchParams(query))).toBe(view);
+	});
+
+	it('names a view as the address the screen links to', () => {
+		expect(invoicesViewQuery('all')).toBe('');
+		expect(invoicesViewQuery('unpaid')).toBe('?show=unpaid');
 	});
 });
 import { jsonResponse } from './testResponse.js';
 
-describe('dueLabel', () => {
+describe('invoiceStateWord', () => {
 	it('says how late an unpaid invoice is, in the plural it earns', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 1 })).toBe('Oct 1, 2026 — 1 day overdue');
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 3 })).toBe('Oct 1, 2026 — 3 days overdue');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 1 })).toBe('1 day overdue');
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 3 })).toBe('3 days overdue');
 	});
 
 	// The BFF sends 0 for an Invoice within its terms, on its own due day,
 	// and for every settled one, however long ago its day passed.
-	it('says only the day when the BFF counted no lateness', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toBe('Oct 1, 2026');
-	});
-
-	// `dueOn` is a calendar day, month first (#1958), never "10/1/2026",
-	// and never moved by the reader's zone (dates.zone.spec.ts).
-	it('prints the due day month first', () => {
-		expect(dueLabel({ dueOn: '2026-10-01', daysOverdue: 0 })).toMatch(/^[A-Z][a-z]{2} \d{1,2}, 2026$/);
+	it('says the state in words when the BFF counted no lateness', () => {
+		expect(invoiceStateWord({ status: 'open', daysOverdue: 0 })).toBe('owed');
+		expect(invoiceStateWord({ status: 'paid', daysOverdue: 0 })).toBe('paid');
 	});
 });
 
-describe('practiceInvoicesPath with the overdue narrowing', () => {
+describe('invoiceDateLine', () => {
+	// `dueOn` is a calendar day, month first (#1958), never "10/1/2026",
+	// and never moved by the reader's zone (dates.zone.spec.ts).
+	it('says the day payment is due while the Invoice can be paid', () => {
+		expect(invoiceDateLine({ status: 'open', dueOn: '2026-10-01' })).toEqual({ lead: 'Payment due', day: 'Oct 1, 2026', on: '2026-10-01' });
+		expect(invoiceDateLine({ status: 'draft', dueOn: '2026-10-01' })?.lead).toBe('Payment due');
+	});
+
+	it('says the day it was paid once it is', () => {
+		expect(invoiceDateLine({ status: 'paid', dueOn: '2026-10-01', paidOn: '2026-09-28' })).toEqual({ lead: 'Paid', day: 'Sep 28, 2026', on: '2026-09-28' });
+	});
+
+	it('says no day for an Invoice nobody will pay', () => {
+		expect(invoiceDateLine({ status: 'void', dueOn: '2026-10-01' })).toBeUndefined();
+		expect(invoiceDateLine({ status: 'uncollectible', dueOn: '2026-10-01' })).toBeUndefined();
+	});
+});
+
+describe('practiceInvoicesPath with a view', () => {
 	it('asks for the narrowing, and carries it alongside a cursor', () => {
-		expect(practiceInvoicesPath('practice-1', undefined, true)).toBe(
+		expect(practiceInvoicesPath('practice-1', undefined, 'overdue')).toBe(
 			'/api/practices/practice-1/invoices?overdue=true'
 		);
-		expect(practiceInvoicesPath('practice-1', 'cursor-1', true)).toContain('cursor=cursor-1');
-		expect(practiceInvoicesPath('practice-1', 'cursor-1', true)).toContain('overdue=true');
+		expect(practiceInvoicesPath('practice-1', 'cursor-1', 'unpaid')).toContain('cursor=cursor-1');
+		expect(practiceInvoicesPath('practice-1', 'cursor-1', 'unpaid')).toContain('unpaid=true');
 	});
 });
 

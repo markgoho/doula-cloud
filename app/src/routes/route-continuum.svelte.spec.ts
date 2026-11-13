@@ -180,6 +180,7 @@ vi.mock('$app/navigation', () => ({
 	preloadCode: vi.fn(),
 	pushState: vi.fn(),
 	replaceState: vi.fn(),
+	snapshot: vi.fn(),
 	refreshAll: vi.fn(),
 }));
 
@@ -312,7 +313,7 @@ async function mountRoute(fixture: RouteFixture): Promise<Mounted> {
 		 *
 		 * By role rather than by text: a screen's heading words turn up
 		 * again in its own content -- `Invoices` is both the `<h1>` and
-		 * part of the `Unpaid invoices` label beside the total -- and a
+		 * part of the `on 17 Invoices` beside a total -- and a
 		 * text query matching two elements fails as a strict-mode
 		 * violation rather than as a fixture that named the wrong thing.
 		 */
@@ -528,7 +529,7 @@ function toRouteFloorKey(condition: Condition): string {
  * member's page wrap their What column the same way, and since #2112
  * every activity ledger does: the hub's keeps a floor of its own, lowered
  * from 48rem to 28.5rem. Since #2146 the Invoices on an Engagement are
- * measured with the typical screen's rows too, with their Invoice and Raised
+ * measured with the typical screen's rows too, with their Invoice and Sent
  * columns: an Owner's rows need 586px and an employee Doula's 480px
  * (macOS/Chromium), under 55rem, so they keep DataTable's own floor.
  */

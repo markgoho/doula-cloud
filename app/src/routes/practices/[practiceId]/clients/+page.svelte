@@ -13,16 +13,18 @@
 	} from '#lib/client.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
-	import { onMount, untrack, type ComponentProps } from 'svelte';
+	import { pagesToRestore } from '#lib/listReturn.js';
+	import { onMount, untrack } from 'svelte';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
-	import { formatAmount, invoiceRowStatusLabel, invoiceRowStatusVariant, invoiceStatusLabel } from '#lib/invoice.js';
+	import { formatAmount, invoiceMoneyState } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import MoneyAmount from '#lib/components/molecules/MoneyAmount.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -229,6 +231,7 @@ import type { PageProps as PageProperties } from './$types';
 	let lastFilterKey: string | undefined;
 
 	afterNavigate(({ from }) => {
+		isLeaving = false;
 		seedDrafts();
 		if (from?.route.id === CLIENT_HUB_ROUTE) {
 			pendingFocus = { clientId: from.params!.clientId };
@@ -284,7 +287,14 @@ import type { PageProps as PageProperties } from './$types';
 		if (!touched.includes('name')) draftName = appliedName;
 	}
 	seedDrafts();
-	beforeNavigate(() => (touched = []));
+	// A page that lands once she has left for another screen is not stamped
+	// (`loadMore`): `replaceState` resolves the route first, so it would
+	// write this list's address and pages onto the entry being opened.
+	let isLeaving = false;
+	beforeNavigate((leaving) => {
+		touched = [];
+		isLeaving = leaving?.to?.url.pathname !== page.url.pathname;
+	});
 
 	// The field's wrapper, whose form is read when the page takes over.
 	let nameField = $state<HTMLElement>();
@@ -543,36 +553,22 @@ import type { PageProps as PageProperties } from './$types';
 		prefix: string;
 		lead: string;
 		amount: string;
-		word: string;
-		// Set where the state asks for a badge: amber for owed, red for overdue.
-		variant?: ComponentProps<typeof Badge>['variant'];
+		// An Invoice's state, said once, in the Invoices list's words and badges.
+		state?: ReturnType<typeof invoiceMoneyState>;
 	};
 	const NO_MONEY = 'No amount';
-
-	// The state of an Invoice, said once, here: late and owed are badges (one
-	// meaning per color), the rest plain words.
-	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
-		const standing = standingOf(line);
-		if (standing.paymentProcessing) return { word: 'clearing' };
-		if (standing.daysOverdue > 0) {
-			const days = `${standing.daysOverdue} day${standing.daysOverdue === 1 ? '' : 's'}`;
-			return { word: `${days} ${invoiceRowStatusLabel(standing).toLowerCase()}`, variant: invoiceRowStatusVariant(standing) };
-		}
-		if (line.invoiceStatus === 'open') return { word: 'owed', variant: 'warning' };
-		return { word: invoiceStatusLabel(line.invoiceStatus ?? '').toLowerCase() };
-	}
 
 	function moneyLines(client: ClientListItem): MoneyLine[] {
 		const lines = client.openEngagements ?? [];
 		const held = lines.map((line): Omit<MoneyLine, 'engagementId' | 'prefix'> => {
 			if (line.invoiceStatus) {
 				const amount = line.invoiceAmountCents === undefined ? '' : formatAmount(line.invoiceAmountCents);
-				return { lead: '', amount, ...moneyState(line) };
+				return { lead: '', amount, state: invoiceMoneyState(standingOf(line)) };
 			}
-			if (line.feeCents !== undefined) return { lead: 'Your fee', amount: formatAmount(line.feeCents), word: '' };
-			return { lead: '', amount: '', word: '' };
+			if (line.feeCents !== undefined) return { lead: 'Your fee', amount: formatAmount(line.feeCents) };
+			return { lead: '', amount: '' };
 		});
-		if (held.every((money) => money.amount === '' && money.word === '')) return [];
+		if (held.every((money) => money.amount === '' && !money.state?.word)) return [];
 		return lines.map((line, index) => {
 			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
 			return { engagementId: line.engagementId, prefix, ...held[index]! };
@@ -637,8 +633,9 @@ import type { PageProps as PageProperties } from './$types';
 	// Blocked email addresses link (#785) went with them, and a pending
 	// Request is a badge in Status. What is left fits a desktop.
 	// Name, Money, Date and Doula are each as wide as their longest value and
-	// never wrap; Status, the column with the most to say, takes the rest
-	// (`columnWidths="fill"`). A Client with two Engagements stacks hers by design.
+	// never wrap; Status, the column with the most to say, holds its track and
+	// wraps only where the frame runs out (`columnWidths="one-line"`). A Client
+	// with two Engagements stacks hers by design.
 	const columnSet = {
 		name: { label: 'Name', accessor: (client: ClientListItem) => client.name },
 		status: { label: 'Status', accessor: statusText, content: statusCell, grows: true },
@@ -731,7 +728,7 @@ import type { PageProps as PageProperties } from './$types';
 		try {
 			// Back to this list from a Client: as many pages as were open, under
 			// the same filters, so the row she came from is there to land on.
-			const wanted = Math.min(untrack(() => page.state.clientsPages ?? 1), MAX_RESTORED_PAGES);
+			const wanted = pagesToRestore(untrack(() => page.state.clientsPages));
 			let first = await loadClients(apiFetchWithSession, page.params.practiceId!, view);
 			let pages = 1;
 			while (pages < wanted && first.hasMore && first.nextCursor) {
@@ -769,16 +766,14 @@ import type { PageProps as PageProperties } from './$types';
 	}
 
 	// How many pages the list holds, kept in this history entry's state so a
-	// Back to the list can load as many again. Capped, so a reader who paged
-	// a long way gets a sane reload rather than the whole book.
-	const MAX_RESTORED_PAGES = 5;
+	// Back to the list can load as many again (`listReturn.ts`).
 	let pagesLoaded = 1;
 	async function loadMore() {
 		const before = clients.items.length;
 		await clients.loadMore();
 		if (clients.items.length === before) return;
 		pagesLoaded += 1;
-		replaceState('', { clientsName: page.state.clientsName, clientsPages: pagesLoaded });
+		if (!isLeaving) replaceState('', { clientsName: page.state.clientsName, clientsPages: pagesLoaded });
 	}
 
 	function searchHref(): string {
@@ -852,7 +847,7 @@ import type { PageProps as PageProperties } from './$types';
 							{/each}
 						</span>
 					</cluster-l>
-					{#if view === 'record' && owed && (owed.amount || owed.word)}{@render recordMoney(owed)}{/if}
+					{#if view === 'record' && owed && (owed.amount || owed.state?.word)}{@render recordMoney(owed)}{/if}
 				</li>
 			{/each}
 			{#if pending}
@@ -870,8 +865,7 @@ import type { PageProps as PageProperties } from './$types';
      has some. The table draws them in its own column. -->
 {#snippet recordMoney(owed: MoneyLine)}
 	<div class="record-money">
-		<span class="visually-hidden">Money: </span><span class="no-break">{owed.lead ? `${owed.lead} ` : ''}{owed.amount}</span>
-		{#if owed.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(owed)}{/if}
+		<span class="visually-hidden">Money: </span>{#if owed.state}<MoneyAmount amount={owed.amount} state={owed.state} />{:else}<span class="no-break">{owed.lead ? `${owed.lead} ` : ''}{owed.amount}</span>{/if}
 	</div>
 {/snippet}
 
@@ -938,14 +932,9 @@ import type { PageProps as PageProperties } from './$types';
 	{/if}
 {/snippet}
 
-<!-- The state said once: a badge where it asks for one (amber owed, red overdue with its days), else a plain word. -->
-{#snippet stateWord(line: MoneyLine)}
-	{#if line.variant}<Badge label={line.word} variant={line.variant} />{:else}{line.word}{/if}
-{/snippet}
-
-<!-- The amount and its state in two tracks, so amounts end at one place; a fee is the words "Your fee" and the amount. -->
+<!-- The amount and its state (`MoneyAmount`, the Invoices list's too); a fee is the words "Your fee" and the amount. -->
 {#snippet moneyValue(line: MoneyLine)}
-	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}{/if}{:else if line.word}<span class="money"><span>{line.amount}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}</span></span>{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
+	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.state}<MoneyAmount amount="" state={line.state} />{/if}{:else if line.state}<MoneyAmount amount={line.amount} state={line.state} isTracked />{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
 {/snippet}
 
 {#snippet actions()}
@@ -1030,6 +1019,7 @@ import type { PageProps as PageProperties } from './$types';
 				empty={isReady && clients.items.length === 0}
 				clearHref={isFiltered ? clientsPath({}) : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
+				appliedCount={appliedTags.length}
 				foldsFieldsOnly
 				{isBusy}
 				statusId={RESULT_ID}
@@ -1042,7 +1032,7 @@ import type { PageProps as PageProperties } from './$types';
 				{#snippet switches()}
 					<!-- One group, so "Clients" is said once, by the page, and each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
 					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- named boxes of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
-					<fieldset class="show-only">
+					<fieldset>
 						<legend>Show only</legend>
 						<div class="show-only-boxes">
 							<LabeledField label="Who owe money" orientation="inline">
@@ -1141,8 +1131,9 @@ import type { PageProps as PageProperties } from './$types';
 				isLoadingMore={clients.isLoadingMore}
 				loadMoreError={clients.loadMoreError}
 				{emptyMessage}
+				isEmptyMessageSpoken={isContractor || emptyMessage !== summary}
 				caption="Clients"
-				columnWidths="fill"
+				columnWidths="one-line"
 				recordLayout="compact"
 				describedBy={isContractor ? undefined : RESULT_ID}
 				{isBusy}
@@ -1185,20 +1176,15 @@ import type { PageProps as PageProperties } from './$types';
 		   `DataTable.svelte`'s floor comment says why a floor can be the route's. */
 		.clients-table {
 			container: clients-table / inline-size;
-			/* The Money column's right edge, written once: the amounts end a
-			   state track and a gap before the cell's inset, and the header ends
-			   where they do. */
-			--money-state-track: 19.7ch;
-			--money-state-gap: var(--space-1);
 			/* The room a cell keeps either side, so two columns are two insets apart. */
 			--data-table-cell-inset: var(--space-2);
 			/* The Name column's least width, a long two-word name, so what follows it
 			   starts at one place whichever Clients the page holds; a longer name
 			   widens it. */
 			--name-track: 15ch;
-			/* The Status column's width: its busiest line on one line, and no wider, so
-			   a wide window leaves no gap between the status words and the Money. */
-			--status-track: 32ch;
+			/* The Status column's width (`grows`): its busiest line on one line, and no
+			   wider, so a wide window leaves no gap between the status words and the Money. */
+			--data-table-grows-track: 32ch;
 		}
 
 		.clients-table > :global(*) {
@@ -1207,18 +1193,8 @@ import type { PageProps as PageProperties } from './$types';
 			--data-table-records-display: grid;
 		}
 
-		/* The table shrinks to its columns instead of filling the frame. */
-		.clients-table :global(.table-view.fill),
-		.clients-table :global(.table-view.fill :is(th, td):not(.grows)) {
-			inline-size: auto;
-		}
-
 		.clients-table :global(.table-view :is(th, td):first-child) {
 			min-inline-size: var(--name-track);
-		}
-
-		.clients-table :global(.table-view th.grows) {
-			inline-size: var(--status-track);
 		}
 
 		/* Records fill the container, in as many columns as it holds. */
@@ -1272,25 +1248,9 @@ import type { PageProps as PageProperties } from './$types';
 			}
 		}
 
+		/* The header ends where the amounts do (`MoneyAmount`'s two tracks). */
 		.clients-table :global(th.numeric) {
-			padding-inline-end: calc(var(--data-table-cell-inset, var(--space-3)) + var(--money-state-track) + var(--money-state-gap));
-		}
-
-		/* The header's tint reaches the same inset past the first column's text
-		   as it does past the last column's, so its two ends are alike while the
-		   text stays on the page's left edge. */
-		.clients-table :global(.table-view thead th:first-child) {
-			position: relative;
-		}
-
-		.clients-table :global(.table-view thead th:first-child)::before {
-			content: '';
-			position: absolute;
-			inset-block: 0 calc(-1 * var(--border-thin));
-			inset-inline-end: 100%;
-			inline-size: var(--data-table-cell-inset);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
+			padding-inline-end: calc(var(--data-table-cell-inset) + var(--money-state-track) + var(--space-1));
 		}
 
 		/* A card's fields come in one order: the name, the Status, the Money where
@@ -1298,6 +1258,7 @@ import type { PageProps as PageProperties } from './$types';
 		   fields on one line wrap to a second at some widths and not at others. A
 		   field a Client has nothing in is not drawn, so cards differ in height. */
 		.clients-table :global(.record-view .compact-meta) {
+			display: flex;
 			flex-direction: column;
 		}
 
@@ -1316,28 +1277,7 @@ import type { PageProps as PageProperties } from './$types';
 			visibility: hidden;
 		}
 
-		/* The group of narrowing boxes with its visible legend on their own row:
-		   a floated legend is an ordinary box beside the boxes, where a rendered
-		   one would take a row above them. */
-		.show-only {
-			margin: 0;
-			padding: 0;
-			border: 0;
-			min-inline-size: 0;
-		}
-
-		.show-only legend {
-			float: inline-start;
-			display: flex;
-			align-items: center;
-			min-block-size: var(--hit-target-min);
-			padding: 0;
-			margin-inline-end: var(--space-related);
-			font-size: var(--text-label-size);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface-variant);
-		}
-
+		/* The boxes wrap among themselves beside FilterBar's floated legend. */
 		.show-only-boxes {
 			display: flex;
 			flex-wrap: wrap;
@@ -1365,21 +1305,6 @@ import type { PageProps as PageProperties } from './$types';
 			padding-inline: var(--space-1);
 		}
 
-		/* The amount and its state in two tracks, so every amount in the column
-		   ends at the same place whatever the state beside it says. The state
-		   track holds the longest state word ("overdue", "clearing") with room to
-		   spare, and the cell keeps a gap after it, so a state word never touches
-		   the Date column's first letter. */
-		.money {
-			/* The state's badge is a pill taller than a line of text by its own block
-			   padding; this margin takes that padding back, so a row with a badge is as
-			   tall as a row without one. */
-			margin-block: calc(var(--space-1) / -2);
-			display: inline-grid;
-			grid-template-columns: auto var(--money-state-track);
-			column-gap: var(--money-state-gap);
-		}
-
 		/* The lead word and the day in two tracks, so every day in the column
 		   starts at one place whichever word leads it. The lead track holds the
 		   longest ("Ended") with room to spare. The words stay one phrase to a
@@ -1391,35 +1316,24 @@ import type { PageProps as PageProperties } from './$types';
 			white-space: nowrap;
 		}
 
-		/* One line, though a cell breaks a word anywhere: a state word is never
-		   split to fit its track. */
-		.money {
-			white-space: nowrap;
-		}
-
 		/* A date, or an amount with its word, is never broken across two lines. */
 		.no-break {
 			white-space: nowrap;
 		}
 
-		.state {
-			color: var(--color-on-surface-variant);
-			text-align: start;
-		}
-
 		/* Name and Doula: in a narrow column each takes half of the line, and
-		   where there is room each stops at its own width. Apply wraps under
-		   them only when the line is full. */
+		   where there is room each stands at its own width from the start, so the
+		   applied filters' tags after Apply join the line only where room is left
+		   beside the fields at their full width. Apply wraps under them only when
+		   the line is full. */
 		.field {
-			flex: 1 1 8rem;
-		}
-
-		.name {
-			max-inline-size: 22ch;
+			--field-width: 22ch;
+			flex: 1 1 min(var(--field-width), calc(50% - var(--space-related) / 2));
+			max-inline-size: var(--field-width);
 		}
 
 		.doula {
-			max-inline-size: 34ch;
+			--field-width: 34ch;
 		}
 	}
 </style>

@@ -1,10 +1,13 @@
 import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import {
+	invoicesViewOf,
 	practiceInvoicesPath,
 	type PracticeInvoiceListData,
 	type PracticeInvoicePage
 } from '#lib/invoice.js';
 import type { PageLoad } from './$types';
+
+export const _INVOICES_READ = 'app:invoices';
 
 /**
  * Loads through SvelteKit's `load`, for the reason the Billing route's
@@ -17,19 +20,22 @@ import type { PageLoad } from './$types';
 export const load: PageLoad = ({
 	params,
 	url,
-	fetch
+	fetch,
+	depends
 }): { read: Promise<StreamedRead<PracticeInvoiceListData>> } => {
-	// #768: the overdue narrowing is a link, not a control the page holds
+	// The screen's "Try again" runs this read again (#2746).
+	depends(_INVOICES_READ);
+	// #768, #2746: the view is in the address, not a control the page holds
 	// in memory -- the URL is the state, so it survives a reload, a back
 	// button and a link a Practice sends to itself. The load reads it and
-	// carries it through, because every later page of the same narrowed
-	// list has to ask for the same narrowing.
-	const isNarrowedToOverdue = url.searchParams.get('overdue') === 'true';
-	const path = practiceInvoicesPath(params.practiceId, undefined, isNarrowedToOverdue);
+	// carries it through, because every later page of the same list has to
+	// ask for the same view.
+	const view = invoicesViewOf(url.searchParams);
+	const path = practiceInvoicesPath(params.practiceId, undefined, view);
 	return {
 		read: mapRead(streamRead<PracticeInvoicePage>(path, fetch), (invoices) => ({
 			...invoices,
-			isNarrowedToOverdue
+			view
 		}))
 	};
 };

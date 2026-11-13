@@ -79,6 +79,12 @@
 	</section>
 
 	<section>
+		<h2>Inline</h2>
+		<!-- The Invoices list's filter (#2746): three short answers on one line where there is room, wrapping where there is not. The long labels show where a line breaks. -->
+		<RadioGroup name="inline-doula" options={doulaOptions} value={doula} onChange={(value) => (doula = value)} isInline />
+	</section>
+
+	<section>
 		<h2>Error</h2>
 		<RadioGroup legend="Are you creating an account?" options={modeOptions} value="" onChange={() => {}} error="Select whether you are creating an account or signing in" />
 	</section>

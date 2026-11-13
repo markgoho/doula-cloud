@@ -100,7 +100,7 @@ export function toPageState(fixture: RouteFixture): {
 		params: { ...fixture.params },
 		url: new URL(fixture.url),
 		data: { ...fixture.pageData },
-		state: {}
+		state: { ...fixture.state }
 	};
 }
 
@@ -213,6 +213,11 @@ export interface RouteFixture<RouteParameters extends Record<string, string> = R
 	*/
 	readonly pageData?: Readonly<Record<string, unknown>>;
 	/**
+	`page.state`, the history entry's state, for a screen that keeps what
+	is in no address there: the Invoices list's typed search (#1829, #2746).
+	*/
+	readonly state?: Readonly<Record<string, unknown>>;
+	/**
 	The screen's own level-1 heading, matched by role. It must be on the page before a measurement is taken. A route
 	that loads in `onMount` renders a Skeleton first, and sweeping that
 	measures the loading state rather than the screen -- an honest wait, not
@@ -301,6 +306,10 @@ export interface RouteVariant<
 	/** `page.data`, restated whole. This is where a Practice route's
 	session lives, so it is the field nearly every variant sets. */
 	readonly pageData?: Readonly<Record<string, unknown>>;
+	/**
+	`page.state`, restated whole.
+	*/
+	readonly state?: Readonly<Record<string, unknown>>;
 	/** The level-1 heading, when this branch's screen is titled
 	differently. */
 	readonly readyText?: string;

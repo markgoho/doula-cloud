@@ -8,8 +8,9 @@
 // provision.ts's provisionTail, and every Staff member joins through a real
 // Invitation and acceptance. Each write goes through the BFF and the Auth
 // emulator, the way the e2e helpers do, so the rows are what the product
-// itself makes. One write cannot: an overdue Invoice, because no endpoint
-// raises an Invoice in the past (stack.ts's backdateInvoice says why).
+// itself makes. One write cannot: an Invoice raised weeks ago, overdue or
+// paid, because no endpoint raises an Invoice in the past (stack.ts's
+// backdateInvoice says why).
 //
 // Two things the World leaves open, decided here for a demo:
 //
@@ -31,7 +32,7 @@ import { drainOutbox, readMailbox } from '../e2e/outboxMail';
 import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateInvoice, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, simulatedDateAfter } from '../e2e/stack';
+import { backdateInvoice, backdateInvoices, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 import {
@@ -95,6 +96,8 @@ const PRIYA_CLIENTS: readonly NamedClient[] = [
 // The World's own loss is Nadia Haddad's, at Maya's Practice, not Rooted.
 const AFTER_A_LOSS: NamedClient = { givenName: 'Mira', familyName: 'Castellanos', kind: 'birth', dueInDays: 64 };
 const PREGNANCY_ENDED_DAYS_AGO = 6;
+
+const RATE_CENTS = { birth: 150_000, postpartum: 95_000 } as const;
 
 /**
 A fixed sign-in account, as the summary prints it.
@@ -191,8 +194,8 @@ async function buildRoster(request: APIRequestContext): Promise<Roster> {
 	// writes the operator's act directly.
 	seedFoundingGrant(practiceId, 'Local demo seed');
 	// A Contract takes its price from the rate for its kind (#967).
-	await send(request, 'PUT', `/api/practices/${practiceId}/rates/birth`, owner, { amountCents: 150_000 });
-	await send(request, 'PUT', `/api/practices/${practiceId}/rates/postpartum`, owner, { amountCents: 95_000 });
+	await send(request, 'PUT', `/api/practices/${practiceId}/rates/birth`, owner, { amountCents: RATE_CENTS.birth });
+	await send(request, 'PUT', `/api/practices/${practiceId}/rates/postpartum`, owner, { amountCents: RATE_CENTS.postpartum });
 	return { practiceId, owner, staff };
 }
 
@@ -211,7 +214,7 @@ async function spreadTailAcrossPhases(
 	for (const [index, client] of tail.entries()) {
 		if (index % 4 === 0) continue;
 		const engagementPath = `/api/practices/${practiceId}/engagements/${client.engagementId}`;
-		const isFinished = index % 4 === 3 && client.kind === 'postpartum';
+		const isFinished = isCareFinished(index, client);
 		await send(request, 'POST', `${engagementPath}/visits`, owner, {
 			staffId: staff[client.attachedDoulaSlug].staffId,
 			scheduledAt: isFinished ? instantAfter(today, -40, 15) : instantAfter(today, 1 + (index % 12), 14 + (index % 5))
@@ -356,6 +359,7 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 		note: 'Check 1042',
 		paidOn: dayAfter(today, -2)
 	});
+	backdateInvoice(paid, 1);
 	await scheduleVisit(request, roster, tessa, priya.staffId, instantAfter(today, 7, 15));
 	await send(request, 'POST', messagesPath(tessa), priya.headers, {
 		body: 'Your check came in, thank you. See you next week.'
@@ -422,6 +426,146 @@ async function seedOffers(
 	await offer(births[1], roster.staff.fern.staffId, 50_000);
 }
 
+type PaymentMethod = 'check' | 'bank_transfer' | 'cash' | 'other';
+
+interface BookInvoice {
+	// A share of the Contract's price, to the nearest $5; omitted, what the
+	// Contract has left to bill.
+	share?: number;
+	// Over 30, moved back by backdateInvoices; omitted, raised today.
+	raisedDaysAgo?: number;
+	// Omitted, the Practice's 30-day terms from the day it was raised.
+	dueInDays?: number;
+	paid?: { method: PaymentMethod; note?: string; daysAgo: number };
+	after?: 'write-off' | 'void' | { reverse: string } | { refundCents: number; method: PaymentMethod; note: string };
+}
+
+const BOOK_INVOICES: readonly (readonly BookInvoice[])[] = [
+	[
+		{ share: 1 / 2, raisedDaysAgo: 95, paid: { method: 'check', note: 'Check 2217', daysAgo: 90 } },
+		{ raisedDaysAgo: 75 }
+	],
+	[
+		{
+			raisedDaysAgo: 42,
+			paid: { method: 'bank_transfer', daysAgo: 37 },
+			after: { refundCents: 30_000, method: 'check', note: 'Two prenatal visits not used' }
+		}
+	],
+	[{ raisedDaysAgo: 38, paid: { method: 'check', note: 'Check 5530', daysAgo: 33 }, after: { reverse: 'The check was returned unpaid by the bank' } }],
+	[{ raisedDaysAgo: 65, after: 'write-off' }],
+	[{ share: 0.4, after: 'void' }, { dueInDays: 21 }],
+	[{ share: 1 / 3, raisedDaysAgo: 35, dueInDays: 10 }],
+	[{ raisedDaysAgo: 33 }],
+	[{ share: 1 / 3, raisedDaysAgo: 50, paid: { method: 'cash', daysAgo: 47 } }, {}],
+	[{ raisedDaysAgo: 40, paid: { method: 'bank_transfer', daysAgo: 12 } }],
+	[{}],
+	[{ share: 1 / 3, raisedDaysAgo: 45, paid: { method: 'check', note: 'Check 318', daysAgo: 41 } }, { dueInDays: 60 }],
+	[{ raisedDaysAgo: 57 }],
+	[{ share: 1 / 3, dueInDays: 7 }],
+	[{ share: 1 / 3, raisedDaysAgo: 130, paid: { method: 'cash', daysAgo: 126 } }, { raisedDaysAgo: 92 }],
+	[{ raisedDaysAgo: 44, paid: { method: 'other', note: 'Venmo', daysAgo: 40 } }],
+	[
+		{ share: 1 / 3, raisedDaysAgo: 120, paid: { method: 'bank_transfer', daysAgo: 118 } },
+		{ share: 1 / 3, raisedDaysAgo: 60, paid: { method: 'check', note: 'Check 7781', daysAgo: 55 } },
+		{ raisedDaysAgo: 35, dueInDays: 25 }
+	],
+	[{ raisedDaysAgo: 34, paid: { method: 'bank_transfer', daysAgo: 31 } }],
+	[{ share: 1 / 2, raisedDaysAgo: 36, paid: { method: 'cash', daysAgo: 36 } }, { dueInDays: 18 }],
+	[{ raisedDaysAgo: 49 }],
+	[{}],
+	[{ raisedDaysAgo: 31, paid: { method: 'check', note: 'Check 1187', daysAgo: 2 } }],
+	[{ raisedDaysAgo: 90, paid: { method: 'bank_transfer', daysAgo: 85 } }],
+	[{ share: 1 / 3, raisedDaysAgo: 33, paid: { method: 'bank_transfer', daysAgo: 30 } }],
+	[{ share: 1 / 6, raisedDaysAgo: 32, paid: { method: 'cash', daysAgo: 32 } }]
+];
+
+function isCareFinished(index: number, client: ProvisionedClient): boolean {
+	return index % 4 === 3 && client.kind === 'postpartum';
+}
+
+// An agency's Invoice book across the tail (#2746): mostly paid, some owed
+// and not yet due, several overdue by different days, deposits and
+// balances on one Contract, and a refund, a bounced check, a write-off and
+// a void, each young enough to be on the list's first page. Not on the two
+// Engagements the Offers are on, nor on finished care. Raised after
+// Priya's three, so INV-0001 to INV-0003 stay hers. A
+// tail Client has no address, and accepting a portal invitation needs one.
+async function seedInvoiceBook(
+	request: APIRequestContext,
+	roster: Roster,
+	today: string,
+	tail: readonly ProvisionedClient[]
+): Promise<void> {
+	const { practiceId, owner } = roster;
+	const offered = new Set(
+		tail
+			.filter((client) => client.kind === 'birth')
+			.slice(0, 2)
+			.map((client) => client.engagementId)
+	);
+	const billed = tail.filter((client, index) => !offered.has(client.engagementId) && !isCareFinished(index, client));
+	const moves: { invoiceId: string; days: number }[] = [];
+	for (const [index, client] of billed.entries()) {
+		const invoices = BOOK_INVOICES[index];
+		if (invoices === undefined) break;
+		const { givenName, familyName, kind } = client;
+		const email = demoAddress(givenName, familyName);
+		await send(request, 'PUT', `/api/practices/${practiceId}/clients/${client.clientId}`, owner, {
+			givenName,
+			familyName,
+			email,
+			override: true
+		});
+		const engagement: NamedEngagement = {
+			client: { givenName, familyName, kind },
+			clientId: client.clientId,
+			engagementId: client.engagementId,
+			email
+		};
+		await contractFor(request, roster, today, engagement, await portalSessionFor(request, roster, engagement));
+		for (const invoice of invoices) {
+			const raisedDaysAgo = invoice.raisedDaysAgo ?? 0;
+			const { id } = await send<{ id: string }>(
+				request,
+				'POST',
+				`/api/practices/${practiceId}/engagements/${client.engagementId}/contract/invoices`,
+				owner,
+				{
+					billingMode: 'by_hand',
+					amountCents: invoice.share === undefined ? undefined : Math.round((RATE_CENTS[kind] * invoice.share) / 500) * 500,
+					dueOn: invoice.dueInDays === undefined ? undefined : dayAfter(today, invoice.dueInDays + raisedDaysAgo)
+				}
+			);
+			if (raisedDaysAgo > 0) moves.push({ invoiceId: id, days: raisedDaysAgo - 30 });
+			const invoicePath = `/api/practices/${practiceId}/invoices/${id}`;
+			const payment = invoice.paid
+				? await send<{ id: string }>(request, 'POST', `${invoicePath}/payments`, owner, {
+						method: invoice.paid.method,
+						note: invoice.paid.note,
+						paidOn: dayAfter(today, -invoice.paid.daysAgo)
+					})
+				: undefined;
+			const after = invoice.after;
+			if (after === 'write-off' || after === 'void') {
+				await send(request, 'POST', `${invoicePath}/${after}`, owner);
+			} else if (after !== undefined && payment !== undefined) {
+				const paymentPath = `${invoicePath}/payments/${payment.id}`;
+				if ('reverse' in after) {
+					await send(request, 'POST', `${paymentPath}/reverse`, owner, { reason: after.reverse });
+				} else {
+					await send(request, 'POST', `${paymentPath}/refund`, owner, {
+						amountCents: after.refundCents,
+						method: after.method,
+						note: after.note
+					});
+				}
+			}
+		}
+	}
+	backdateInvoices(moves);
+}
+
 export interface DemoPractice {
 	practiceId: string;
 	// false when this call found the demo Practice already there and wrote
@@ -486,6 +630,7 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	await seedPriyaBook(request, roster, today);
 	await seedAfterALoss(request, roster, today);
 	await seedOffers(request, roster, today, tail);
+	await seedInvoiceBook(request, roster, today, tail);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 

@@ -35,6 +35,15 @@ describe('EmptyState.svelte', () => {
 			.toHaveAttribute('href', '/clients/new');
 	});
 
+	// A list's live result line already says it, so the line is drawn here and heard there.
+	it('draws a line a live line above already says, and leaves it to that line to be heard', async () => {
+		await setup({ message: 'No Invoice matches "zzqx".', isMessageSpoken: false, action: { label: 'Show every Invoice', href: '/invoices' } });
+
+		await expect.element(page.getByText('No Invoice matches "zzqx".')).toBeVisible();
+		expect(page.getByRole('paragraph').elements()).toHaveLength(0);
+		await expect.element(page.getByRole('link', { name: 'Show every Invoice' })).toBeVisible();
+	});
+
 	it('offers a change on the same screen as a button that runs it', async () => {
 		const onClick = vi.fn();
 		await setup({ action: { label: 'Add a question', onClick } });

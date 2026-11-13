@@ -43,7 +43,7 @@ export interface Invoice {
 	/** The day this Invoice was raised (#2146), `YYYY-MM-DD`, in the
 	 * Practice's own timezone: the same day a contractor's row carries as
 	 * `ContractorInvoice.raisedOn`, so every Staff reader of one Invoice
-	 * reads one Raised day. */
+	 * reads one Sent day. */
 	raisedOn: string;
 	/** The Payment currently covering this Invoice (#945), if any --
 	 * present only while status is 'paid' via a Payment nothing has
@@ -124,14 +124,13 @@ export type BillingMode = 'stripe' | 'by_hand';
  * be able to quietly grow the other's fields. `clientName` is her
  * preferred name, the one every screen uses.
  *
- * Less refundedCents (#1009): the Practice-wide list sends no per-row
- * Refund total -- the book's own RefundedCents on the page is what that
- * screen shows -- so the type does not claim one it will never receive.
- * Less refundableCents and reversible too: that list offers no act on a
- * Payment. */
-export interface PracticeInvoice extends Omit<Invoice, 'refundedCents' | 'refundableCents' | 'reversible'> {
+ * Less refundableCents and reversible: that list offers no act on a
+ * Payment. Its refundedCents (#2746) is the Engagement's own figure, so
+ * the rows that say refunded add up to the book's refundedCents. */
+export interface PracticeInvoice extends Omit<Invoice, 'refundableCents' | 'reversible'> {
 	engagementId: string;
 	clientName: string;
+	engagementKind: 'birth' | 'postpartum';
 }
 
 /** A page of the Practice-wide Invoice list, with the whole book's
@@ -145,6 +144,10 @@ export interface PracticeInvoicePage {
 	hasMore: boolean;
 	outstandingCents: number;
 	outstandingCount: number;
+	/**
+	 * Every Invoice in the book, whatever its status (#2746).
+	 */
+	invoiceCount: number;
 	/** Every 'paid' Invoice's full amount -- settled bills. A refunded
 	 * Invoice stays 'paid', so it still counts here in full; what went
 	 * back is refundedCents beside it. */
@@ -165,24 +168,44 @@ export interface PracticeInvoicePage {
 	clientsCanPay: boolean;
 }
 
+/** Which Invoices the Practice-wide list shows (#2746): the whole book,
+ * the unpaid ones, or the overdue part of those. One choice, since overdue
+ * is a part of unpaid. */
+export type InvoicesView = 'all' | 'unpaid' | 'overdue';
+
+/**
+ * The view an address names: `?show=unpaid` or `?show=overdue`, which is
+ * also what the filter bar's radios submit with no script running.
+ */
+export function invoicesViewOf(search: Pick<URLSearchParams, 'get'>): InvoicesView {
+	const shown = search.get('show');
+	return shown === 'unpaid' || shown === 'overdue' ? shown : 'all';
+}
+
+/**
+ * The query string that names a view, empty for the whole book.
+ */
+export function invoicesViewQuery(view: InvoicesView): string {
+	return view === 'all' ? '' : `?show=${view}`;
+}
+
 /** What the Practice-wide Invoice route's `load` hands its page: one page
- * of the book, plus which narrowing it was read under (#768). The
- * narrowing lives in the URL rather than in the page's memory, and the
- * page needs it for two things -- which filter link reads as current, and
- * which narrowing every later page asks for. */
+ * of the book, plus which view it was read under (#768, #2746). The view
+ * lives in the URL rather than in the page's memory, and every later page
+ * has to ask for the same one. */
 export interface PracticeInvoiceListData extends PracticeInvoicePage {
-	isNarrowedToOverdue: boolean;
+	view: InvoicesView;
 }
 
 /** The Practice-wide Invoice list's path -- exported so the route's
  * `load` can call `apiFetch` on it directly and handle 401/403 the way
  * SvelteKit needs (see the billing route's `+page.ts` for why a
  * role-gated read loads there rather than in `onMount`). */
-export function practiceInvoicesPath(practiceId: string, cursor?: string, isNarrowedToOverdue = false): string {
+export function practiceInvoicesPath(practiceId: string, cursor?: string, view: InvoicesView = 'all'): string {
 	const path = `/api/practices/${practiceId}/invoices`;
 	const query = new URLSearchParams();
-	if (isNarrowedToOverdue) {
-		query.set('overdue', 'true');
+	if (view !== 'all') {
+		query.set(view, 'true');
 	}
 	if (cursor) {
 		query.set('cursor', cursor);
@@ -191,17 +214,26 @@ export function practiceInvoicesPath(practiceId: string, cursor?: string, isNarr
 	return search ? `${path}?${search}` : path;
 }
 
-/** Loads one page of every Invoice the Practice has billed, newest
- * first. Throws with the response body text on a non-2xx response --
+/** Loads one page of the Practice's Invoices in a view. A search -- a
+ * reference, or a Client's name -- makes it a POST with the view and the
+ * cursor in the body (#2746): a Client's name is in no URL, so in no log
+ * (#1829). Throws with the response body text on a non-2xx response --
  * the route's `load` maps status codes to SvelteKit errors before
  * calling this, so a throw here is only ever an unexpected failure. */
 export async function loadPracticeInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	cursor?: string,
-	isNarrowedToOverdue = false
+	view: InvoicesView = 'all',
+	search = ''
 ): Promise<PracticeInvoicePage> {
-	const response = await fetcher(practiceInvoicesPath(practiceId, cursor, isNarrowedToOverdue));
+	const response = search
+		? await fetcher(`/api/practices/${practiceId}/invoices/list`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ view, search, cursor: cursor ?? '' })
+			})
+		: await fetcher(practiceInvoicesPath(practiceId, cursor, view));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -601,7 +633,7 @@ const invoiceStatusLabels: Record<string, string> = {
 	draft: 'Draft',
 	open: 'Owed',
 	paid: 'Paid',
-	uncollectible: 'Uncollectible',
+	uncollectible: 'Written off',
 	void: 'Void'
 };
 
@@ -612,8 +644,8 @@ export function invoiceStatusLabel(status: string): string {
 /** Which Badge variant each status wears (#2059), kept beside the labels
  * so a status and its color are decided in one place. Owed (the stored
  * 'open') needs the Client to pay, so it is the warning, the amber of what
- * needs someone to act; Uncollectible is a collection that
- * failed, so it is the error (red means late or failed, and nothing else);
+ * needs someone to act; Written off (the stored 'uncollectible') is a
+ * collection that failed, so it is the error (red means late or failed, and nothing else);
  * Draft and Void are settled with no money moving, so they are neutral. An
  * unknown status is neutral too. */
 const invoiceStatusVariants: Record<string, 'warning' | 'success' | 'error' | 'neutral'> = {
@@ -687,10 +719,10 @@ export const paymentOnItsWayLine = 'You can record a payment by hand if this ban
 /** The status every Staff screen shows for an Invoice (#2094, #2122):
  * Overdue in place of Open once the BFF counts it late, because lateness
  * is the one status the stored value does not say. Every other status
- * reads through invoiceStatusLabel. One function for the Engagement's
- * Invoices section, for every role, the Practice-wide list, and the
- * Clients list's rollup line (#2130), so one Invoice cannot read Overdue
- * on one Staff screen and Open on the next.
+ * reads through invoiceStatusLabel. The Engagement's Invoices section
+ * reads it for every role; the Clients and Invoices lists say the same
+ * state after an amount through invoiceStateWord (#2746), so one Invoice
+ * cannot read late on one Staff screen and Open on the next.
  * Never the Client portal's: ADR-0038 keeps Overdue off it, and she
  * reads "Not yet paid" (clientInvoiceStatusLabel).
  *
@@ -708,6 +740,16 @@ export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'warning' | 'success' | 'error' | 'neutral' {
 	if (invoice.paymentProcessing) return 'info';
 	return invoice.daysOverdue > 0 ? 'error' : invoiceStatusVariant(invoice.status);
+}
+
+/** Whether a Staff list says an Invoice's state after its amount as a badge,
+ * and in which color (DESIGN.md, "Money is said once"): the Engagement's
+ * own color, kept only where it asks something of the reader -- amber owed,
+ * red overdue or written off. Every other state is a plain word, so it has
+ * none. The Clients list and the Invoices list both read it (#2746). */
+export function invoiceStateBadge(invoice: InvoiceStanding): 'warning' | 'error' | undefined {
+	const variant = invoiceRowStatusVariant(invoice);
+	return variant === 'warning' || variant === 'error' ? variant : undefined;
 }
 
 /**
@@ -758,37 +800,97 @@ export function cardPaymentsRefusal(reader: CardPaymentsReader): string {
  * only as feedback after a Send. */
 export const clientHasNoEmailMessage = 'This Client has no email address on file. Add one before creating an Invoice.';
 
-/** What the Practice-wide list's "Payment due" cell reads (#768): the due
- * day, and how late it is when it is late.
- *
- * The BFF decides lateness (#1965): an Invoice is overdue from the start
- * of the day after `dueOn` in the Practice's own timezone, and
- * `daysOverdue` is 0 for one that is not, including every paid, voided or
- * written-off Invoice. The screen does not count on the reader's own
- * clock, so it cannot call an Invoice late that the page's overdue figure
- * does not count.
- *
- * "Payment due", never "due date": in this domain a due date is the
- * pregnancy's (ADR-0015), and the two must not share a word. */
-export function dueLabel(invoice: Pick<PracticeInvoice, 'dueOn' | 'daysOverdue'>): string {
-	const due = formatCalendarDay(invoice.dueOn);
+/** The state an Invoice's amount is said with, in the words every Staff
+ * list puts after it (DESIGN.md, "Money is said once"): "owed", "paid",
+ * "void", "written off", and "12 days overdue" once the BFF counts it late
+ * (#1965), so the Clients list and the Invoices list say one Invoice's
+ * lateness alike. A payment on its way comes first, in the Engagement's
+ * Invoices section's words. */
+export function invoiceStateWord(
+	invoice: Pick<InvoiceStanding, 'status' | 'daysOverdue'> & { paymentProcessing?: boolean }
+): string {
+	if (invoice.paymentProcessing) return PAYMENT_ON_ITS_WAY_STATUS.toLowerCase();
 	const late = invoice.daysOverdue;
-	if (late < 1) {
-		return due;
-	}
-	return `${due} — ${late} ${late === 1 ? 'day' : 'days'} overdue`;
+	if (late > 0) return `${late} ${late === 1 ? 'day' : 'days'} overdue`;
+	return invoiceStatusLabel(invoice.status).toLowerCase();
 }
 
-/**
- * The Invoices list's result line, the status of its filter bar: the whole
- * book, or the overdue count (#768) the narrowing carries, which is the
- * number the old "Overdue (n)" chip showed.
- */
-export function invoicesResultSummary(isNarrowedToOverdue: boolean, overdueCount: number): string {
-	if (!isNarrowedToOverdue) return 'Showing every Invoice.';
-	if (overdueCount === 0) return 'No Invoice is overdue.';
-	return `Showing ${overdueCount} overdue ${overdueCount === 1 ? 'Invoice' : 'Invoices'}.`;
+/** What a Staff list's Money cell says after an Invoice's amount, and the
+ * badge it takes, if any (`MoneyAmount`): the Clients list and the Invoices
+ * list say one Invoice alike. A paid Invoice some of which went back says
+ * how much, "$300.00 refunded", where the reader knows it, so the rows
+ * that say refunded add up to "Of that, refunded". */
+export function invoiceMoneyState(
+	invoice: InvoiceStanding & { refundedCents?: number }
+): { word: string; variant?: 'warning' | 'error' } {
+	const refunded = invoice.refundedCents ?? 0;
+	if (invoice.status === 'paid' && !invoice.paymentProcessing && refunded > 0) {
+		return { word: `${formatAmount(refunded)} refunded` };
+	}
+	return { word: invoiceStateWord(invoice), variant: invoiceStateBadge(invoice) };
 }
+
+/** The one day the Invoices list's Date cell says for a row (#768, #2746):
+ * the day payment is due while it can still be paid, and the day it was
+ * paid once it is. A void or written-off Invoice has neither.
+ *
+ * "Payment due", never a bare "due": in this domain a due date is the
+ * pregnancy's (ADR-0015), and the two must not share a word. */
+export function invoiceDateLine(
+	invoice: Pick<PracticeInvoice, 'status' | 'dueOn' | 'paidOn'>
+): { lead: 'Paid' | 'Payment due'; day: string; on: string } | undefined {
+	if (invoice.paidOn) return { lead: 'Paid', day: formatCalendarDay(invoice.paidOn), on: invoice.paidOn };
+	if (invoice.status === 'open' || invoice.status === 'draft') {
+		return { lead: 'Payment due', day: formatCalendarDay(invoice.dueOn), on: invoice.dueOn };
+	}
+	return undefined;
+}
+
+const VIEW_ORDER: Record<InvoicesView, string> = {
+	all: 'newest first',
+	unpaid: 'earliest payment due first',
+	overdue: 'longest overdue first'
+};
+
+/**
+ * The Invoices list's result line, the status of its filter bar (#2746):
+ * how many rows are on screen, of how many the view holds, which view, and
+ * in what order. `shown` grows with each "Load more", so the line says how
+ * far through the list the reader is.
+ *
+ * A search (a reference, or a Client's name) is said in the line, in the
+ * words typed. The book's counts are not counts of what matched, so a
+ * searched line says no "of how many".
+ */
+export function invoicesResultSummary(
+	view: InvoicesView,
+	shown: number,
+	hasMore: boolean,
+	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>,
+	search = ''
+): string {
+	const kind = view === 'all' ? '' : `${view} `;
+	if (search) {
+		if (shown === 0) return `No ${kind}Invoice matches "${search}".`;
+		const matching = `matching "${search}"`;
+		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}.`;
+		return `Showing ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+	}
+	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
+	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
+	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
+	if (shown === 1) return `Showing 1 ${kind}Invoice.`;
+	return `Showing ${shown} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
+}
+
+/** The longest wording the result line can say, which the filter bar
+ * reserves room for so the list does not move when the line changes. */
+export const INVOICES_RESULT_RULER = (['all', 'unpaid', 'overdue'] as const)
+	.map((view) =>
+		invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 })
+	)
+	.toSorted((a, b) => b.length - a.length)[0];
 
 /** A Practice's payment terms (#768): how many days after an Invoice is
  * raised it falls due. `isDefault` is true when the Practice has never

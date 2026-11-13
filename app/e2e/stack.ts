@@ -684,11 +684,23 @@ export function seedInvoice(
  * the two instants, keeping their 30-day gap.
  */
 export function backdateInvoice(invoiceId: string, days: number): void {
-	if (!Number.isSafeInteger(days) || days <= 0) {
-		throw new Error(`stack: invalid day count ${days}`);
+	backdateInvoices([{ invoiceId, days }]);
+}
+
+/**
+ * backdateInvoice for many Invoices in one statement: each container exec
+ * costs about a second, and the demo book backdates dozens.
+ */
+export function backdateInvoices(moves: readonly { invoiceId: string; days: number }[]): void {
+	if (moves.length === 0) return;
+	for (const { days } of moves) {
+		if (!Number.isSafeInteger(days) || days <= 0) {
+			throw new Error(`stack: invalid day count ${days}`);
+		}
 	}
+	const rows = moves.map(({ invoiceId, days }) => `(${sqlLiteral(invoiceId)}::uuid, interval '${days + 30} days')`).join(', ');
 	execSQL(
-		`UPDATE invoices SET created_at = created_at - interval '${days + 30} days', due_at = due_at - interval '${days + 30} days' WHERE id = ${sqlLiteral(invoiceId)}`
+		`UPDATE invoices SET created_at = invoices.created_at - moved.shift, due_at = invoices.due_at - moved.shift FROM (VALUES ${rows}) AS moved(id, shift) WHERE invoices.id = moved.id`
 	);
 }
 

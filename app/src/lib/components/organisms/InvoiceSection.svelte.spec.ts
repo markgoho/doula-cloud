@@ -228,7 +228,7 @@ describe('InvoiceSection.svelte', () => {
 	});
 
 	// The card's title is the Invoice column; its facts follow in order.
-	it('reads Raised, Amount and Status under the number, in that order', async () => {
+	it('reads Sent, Amount and Status under the number, in that order', async () => {
 		await setup({ invoices: [invoiceOpen], billing: 'unset' });
 		await expect.element(page.getByRole('term').first()).toBeVisible();
 
@@ -236,7 +236,7 @@ describe('InvoiceSection.svelte', () => {
 			.getByRole('term')
 			.all()
 			.map((term) => term.element().textContent?.trim());
-		expect(terms.slice(0, 3)).toEqual(['Raised', 'Amount', 'Status']);
+		expect(terms.slice(0, 3)).toEqual(['Sent', 'Amount', 'Status']);
 	});
 
 	// #2122: the Owner's row reads Overdue from the BFF's count, the same
@@ -1267,6 +1267,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [partlyRefunded], isOwnerOrAdmin: true });
 
 			await expect.element(invoiceFact('$100.00')).toBeVisible();
+			await expect.element(page.getByRole('term').filter({ hasText: 'Refunded' })).toBeVisible();
 			await expect.element(invoiceFact('Paid')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Return money' })).toBeVisible();
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
