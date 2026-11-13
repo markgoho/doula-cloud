@@ -23,23 +23,34 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 
 Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). Read on 2026-11-13: Linear's display options page (https://linear.app/docs/display-options) says "Ordering is allowed in most list views and lets you order issues", by status, priority, last created, last updated, due date and more, and "You can also reverse the sort order", beside its filters and grouping. Stripe's dashboard search page (https://docs.stripe.com/dashboard/search) says list views show "column headings, some of which provide sorting options". The MOJ Design System's sortable table (https://design-patterns.service.justice.gov.uk/components/sortable-table/) says "Use this component when sorting is needed to help find data within a large table of data", combined with the filter pattern. GOV.UK's table component has no sort. Still unread: Stripe's own Payments, Invoices and Customers lists' default order and column editor; Google Calendar's Schedule view grouping events under a heading per day (its help page says only "To find a list of all your events or tasks by day, choose Schedule"); Calendly's and Acuity's lists. An order the BFF does not serve is never drawn by sorting loaded rows in the browser: the list loads 30 rows at a time from a cursor.
 
+The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows they rejected are builds with their tickets, and a decline they accepted for a weak reason carries the better one.
+
 | Convention | Verdict | Reason |
 | --- | --- | --- |
 | Filters, with the view in the address | Have it | the rubric's H3 |
 | Empty, loading and failed states | Have it | the rubric's H1, H9, T8 |
 | A deep link to a row | Have it | the Engagement at `#invoice-<id>` |
 | Paging | Have it | "Load more"; the result line counts the rows shown and, while more exist, the whole ("the first 30 of 35") |
-| Bulk selection and bulk actions | Declined | the rubric's H5: nothing on a list changes money or a Visit in one press; no bulk job on record |
-| Density and column choice | Declined | no job on record; each control is a Tab stop against T7's budget |
-| Keyboard shortcuts | Declined | no job on record; T7 is met by Tab and "Skip to results" |
-| A list-level export, print or copy | Declined | Settings exports the whole Practice; no job for a list's CSV |
-| Row actions without opening the record | Declined | H5; the Engagement holds Record payment, one action from the row |
+| Bulk selection and bulk actions | Declined | nothing on record is done to several Invoices at once, and sending or voiding in bulk is the kind of one-press money change H5 refuses |
+| Density and column choice | Declined | the columns are the facts a chaser needs |
+| Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
+| A list-level export, print or copy | Build (#2871) | both readings rejected "Settings exports the whole Practice": that export is raw tables with clinical records in them, and "unpaid, this month" means joining files; Stripe's lists "filter … or export" (https://docs.stripe.com/dashboard/basics) |
+| Row actions without opening the record | Declined | Record payment is a form (amount, day, method), and a second copy of it on the list is a second place for money to be entered wrongly; one action from the row reaches it |
 | A reader-chosen order (sent, payment due, amount; each either way) | Build (#2869) | Linear and Stripe give the reader a chosen order beside the filters; each view's own order stays its default ("All" newest first, "Unpaid" earliest due first, "Overdue" longest overdue first) |
-| The order said to assistive technology (`aria-sort`) | Build (#2867) | the view orders by a column a screen reader is not told |
+| The order said to assistive technology (`aria-sort`) | Build (#2869) | the view orders by a column a screen reader is not told; moved here from #2867 |
 | Search by reference or Client | Have it | "Reference or Client" (T4; #1829) |
 | A total count | Have it | the four totals, and the whole in the result line while more exist ("the first 30 of 35") |
-| Date navigation, grouping, a calendar view, relative days | Declined | a book of Invoices is not read by day; the two days in a row are facts of the row |
+| A period (date-range) narrowing | Build (#2871) | a book of Invoices is chased by when it fell due |
+| Relative days | Have it | "12 days overdue" in the Money cell (`invoiceStateWord`) |
+| Grouping by day, a calendar view | Declined | a book of Invoices is not read by day |
 | Time zone shown | Declined | days only, no times |
+| Clear all filters | Have it | "Clear filters" beside two tags; one tag's × clears it |
+| A next step from an empty result | Have it | "Show all Invoices", and a search's "Search all Invoices for …" |
+| A saved or default view | Declined | the address is the saved view; Linear saves "personal preferences or … the default" (https://linear.app/docs/display-options) |
+| Filters kept across visits | Declined | the address and the history keep the view |
+| A count beside each filter option | Declined | each count is another read, and GOV.UK's filters show none |
+| Column resize | Declined | it fights the intrinsic layout (ADR-0024) |
+| Inline status change | Declined | an Invoice's state follows its Payments |
 
 The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
