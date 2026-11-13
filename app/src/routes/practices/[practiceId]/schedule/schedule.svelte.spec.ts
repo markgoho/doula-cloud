@@ -164,14 +164,14 @@ describe('the result line, the empty state and the way back', () => {
 		expect(testPage.getByRole('table').elements()).toHaveLength(0);
 	});
 
-	it('offers every Doula\'s Visits, on the same days, from an empty Mine view', async () => {
+	it('offers the next 30 days first, keeping Mine, from an empty Mine view of other days', async () => {
 		setAddress('?days=7&mine=true');
 		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '' }, { from: '2026-09-07', to: '2026-09-13', staffId: 'staff-1' }) });
 
 		await expect.element(testPage.getByText('You have no Visits from Mon Sep 7 to Sun Sep 13.').first()).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: "Show every Doula's Visits" }))
-			.toHaveAttribute('href', `${schedulePath}?days=7`);
+			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
+			.toHaveAttribute('href', `${schedulePath}?mine=true`);
 	});
 
 	it('offers the next 30 days from an empty view of other days with nobody narrowed', async () => {
@@ -218,7 +218,7 @@ describe('the result line, the empty state and the way back', () => {
 
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent('Showing 3 of your Visits from Mon Sep 7 to Tue Oct 6, soonest first.');
+			.toHaveTextContent('Showing your 3 Visits from Mon Sep 7 to Tue Oct 6, soonest first.');
 	});
 });
 

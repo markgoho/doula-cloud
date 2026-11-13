@@ -315,15 +315,19 @@ describe('scheduleDaysTag, one day', () => {
 describe('scheduleEmptyNextStep', () => {
 	const opening = view({});
 
-	it('offers every Doula\'s Visits, on the same days, when Mine or a Doula is on', () => {
-		const chosen = { from: '2026-11-16', to: '2026-11-17' };
+	it('offers every Doula\'s Visits, on the opening days, when Mine or a Doula is on', () => {
 		expect(scheduleEmptyNextStep(view({ isMine: true }))).toEqual({
 			label: "Show every Doula's Visits",
 			view: view({ isMine: false, doula: '' })
 		});
+		expect(scheduleEmptyNextStep(view({ doula: 'staff-1', isMine: true }))?.view).toEqual(view({}));
+	});
+
+	it('offers the opening days first, keeping Mine and the Doula, when other days are on', () => {
+		const chosen = { from: '2026-11-16', to: '2026-11-17' };
 		expect(scheduleEmptyNextStep(view({ doula: 'staff-1', chosen, isMine: true }))).toEqual({
-			label: "Show every Doula's Visits",
-			view: view({ doula: '', chosen, isMine: false })
+			label: 'Show the next 30 days',
+			view: view({ doula: 'staff-1', isMine: true })
 		});
 	});
 
@@ -389,12 +393,15 @@ describe('scheduleResultSummary', () => {
 
 	it('says whose when narrowed', () => {
 		expect(say(4, false, { doulaName: 'Priya Raman' })).toBe(
-			"Showing 4 of Priya Raman's Visits from Fri Nov 13 to Thu Nov 19, soonest first."
+			"Showing Priya Raman's 4 Visits from Fri Nov 13 to Thu Nov 19, soonest first."
 		);
 		expect(say(30, true, { doulaName: 'Priya Raman' })).toBe(
 			"Showing the first 30 of Priya Raman's Visits from Fri Nov 13 to Thu Nov 19, soonest first."
 		);
-		expect(say(5, false, { isMine: true })).toBe('Showing 5 of your Visits from Fri Nov 13 to Thu Nov 19, soonest first.');
+		expect(say(5, false, { isMine: true })).toBe('Showing your 5 Visits from Fri Nov 13 to Thu Nov 19, soonest first.');
+		expect(say(30, true, { isMine: true })).toBe(
+			'Showing the first 30 of your Visits from Fri Nov 13 to Thu Nov 19, soonest first.'
+		);
 	});
 
 	it('says an empty result in words, for each whose', () => {

@@ -292,19 +292,21 @@ function scheduleDaysSpan(days: ScheduleDays, now: Date): string {
 }
 
 /**
- * The action an empty result offers, by what narrowed it: a Doula or Mine
- * answers with every Doula's Visits on the same days; otherwise days other
- * than the opening ones answer with those. Nothing where the opening days
- * are all that is on.
+ * The action an empty result offers, the way back to the days the screen
+ * opens on first, keeping Mine and the Doula; with those days on, Mine or a
+ * Doula answers with every Doula's Visits on the same days. Nothing where
+ * the opening days are on and nothing is narrowed.
  */
 export function scheduleEmptyNextStep(
 	view: ScheduleView
 ): { label: string; view: ScheduleView } | undefined {
+	if (view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen) {
+		return { label: `Show the next ${DEFAULT_SCHEDULE_DAYS} days`, view: withDefaultDays(view) };
+	}
 	if (view.isMine || view.doula) {
 		return { label: "Show every Doula's Visits", view: { ...view, isMine: false, doula: '' } };
 	}
-	if (view.preset === DEFAULT_SCHEDULE_DAYS && !view.chosen) return undefined;
-	return { label: `Show the next ${DEFAULT_SCHEDULE_DAYS} days`, view: withDefaultDays(view) };
+	return undefined;
 }
 
 export interface ScheduleWho {
@@ -340,9 +342,10 @@ export function scheduleResultSummary(
 		const one = hasMore ? 'first Visit' : '1 Visit';
 		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)} ${span}${ordered}.`;
 	}
-	const whose = who.isMine ? 'of your' : (who.doulaName ? `of ${who.doulaName}'s` : '');
-	const amount = hasMore ? `the first ${count}` : String(count);
-	const what = whose ? `${amount} ${whose} Visits` : `${amount} Visits`;
+	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
+	const what = hasMore
+		? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
+		: `${owner ? `${owner} ` : ''}${count} Visits`;
 	return `Showing ${what} ${span}${ordered}.`;
 }
 
