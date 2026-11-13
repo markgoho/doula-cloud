@@ -40,6 +40,7 @@ vi.mock('$app/navigation', () => ({
 	invalidate: vi.fn(),
 	beforeNavigate: vi.fn(),
 	replaceState: vi.fn(),
+	snapshot: vi.fn(),
 	afterNavigate: (callback: (move: { from: undefined }) => void) => {
 		navigation.onMove = callback;
 	}

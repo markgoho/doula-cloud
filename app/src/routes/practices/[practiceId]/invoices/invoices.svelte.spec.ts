@@ -15,7 +15,8 @@ import { toPageState } from '../../../routeFixture.js';
 import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
 import { clientsCannotPay, data, fixture } from './page.fixture.js';
 import { pageState } from '#testing/routePage.js';
-import { afterNavigate, beforeNavigate, replaceState } from '$app/navigation';
+import { beforeNavigate, replaceState, snapshot } from '$app/navigation';
+import type { ListReturn } from '#lib/listReturn.js';
 
 /*
  * The screen's content and the `page` it reads both come from the route's
@@ -36,7 +37,14 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const invalidate = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ invalidate, goto: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn() }));
+vi.mock('$app/navigation', () => ({
+	invalidate,
+	goto: vi.fn(),
+	afterNavigate: vi.fn(),
+	beforeNavigate: vi.fn(),
+	replaceState: vi.fn(),
+	snapshot: vi.fn()
+}));
 
 const [openInvoice, paidInvoice] = data.items;
 
@@ -87,6 +95,8 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 		await expect.element(paidRow.getByRole('cell', { name: 'Jul 1, 2026', exact: true })).toBeVisible();
 		// H2 (#2746): an office's word for that day.
 		await expect.element(testPage.getByRole('columnheader', { name: 'Sent', exact: true })).toBeVisible();
+		// ADR-0015: no bare "due" over the column, the pregnancy's word.
+		await expect.element(testPage.getByRole('columnheader', { name: 'Payment', exact: true })).toBeVisible();
 	});
 
 	it('says no day for an Invoice nobody will pay', async () => {
@@ -114,8 +124,24 @@ describe('the Practice-wide invoice list (#265)', () => {
 		// open row is past its due day, so it says how late (#2122). A paid
 		// row's state is its date cell's lead, so its amount stands alone.
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00') })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: heard('Paid Jul 4, 2026') })).toBeVisible();
+	});
+
+	it('says a paid row alone by its amount, unless some of it went back', async () => {
+		await setup({ ...data, items: [{ ...paidInvoice, refundedCents: 0 }] });
+
+		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00') })).toBeVisible();
+	});
+
+	// H2, H4 (#2746): the rows that say refunded add up to "Of that, refunded".
+	it('says how much of a paid Invoice was refunded, once, beside its amount', async () => {
+		await setup();
+
+		const cell = testPage.getByRole('cell', { name: heard('$2,500.00, $1,250.50 refunded') });
+		await expect.element(cell).toBeVisible();
+		await expect.element(testPage.getByRole('definition').nth(3)).toHaveTextContent('$1,250.50');
+		const row = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element();
+		expect(row.textContent!.match(/refunded/g)).toHaveLength(1);
 	});
 
 	it('reads an open Invoice that is not yet late as owed', async () => {
@@ -287,6 +313,14 @@ describe('a read that did not land', () => {
 	});
 });
 
+// The list's own entry is stamped as the navigation leaves it, in step,
+// never by a replaceState that resolves the route first and could land on
+// the Engagement's entry (#2746, T3).
+const kept = () => vi.mocked(snapshot).mock.calls.at(-1)![0] as {
+	capture: () => ListReturn;
+	restore: (held: ListReturn) => void;
+};
+
 // T3 (#2746): Back from an Invoice puts her on the same rows, where she was.
 describe('coming back from an Invoice', () => {
 	afterEach(() => {
@@ -294,31 +328,26 @@ describe('coming back from an Invoice', () => {
 		vi.restoreAllMocks();
 	});
 
-	it('keeps how many pages were open and how far down she was when she leaves for another screen', async () => {
+	it('keeps how many pages were open, how far down she was and the Invoice she left for', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
 		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
 
-		const leave = vi.mocked(beforeNavigate).mock.calls.at(-1)![0];
-		const away = (type: string, pathname: string) =>
-			leave({ type, to: { url: new URL(`https://example.test${pathname}`) } } as never);
-		away('popstate', '/elsewhere');
-		away('link', pageState.url.pathname);
-		expect(replaceState).not.toHaveBeenCalled();
+		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) {
+			leave({ type: 'link', to: { url: new URL(`https://example.test/practices/${practiceId}/engagements/eng-1#invoice-inv-9`) } } as never);
+		}
 
-		away('link', `/practices/${practiceId}/engagements/eng-1`);
-		expect(replaceState).toHaveBeenCalledWith('', expect.objectContaining({ invoicesPages: 2, invoicesScrollY: scrollY }));
+		expect(kept().capture()).toEqual({ pages: 2, scrollY, rowId: 'inv-9' });
+		expect(replaceState).not.toHaveBeenCalled();
 	});
 
 	it('reads as many pages again, scrolls back, and lands on the row she left from', async () => {
-		pageState.state = { invoicesPages: 2, invoicesScrollY: 120 };
 		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
 		await testPage.viewport(1440, 900);
 		const screen = await render(Page, {});
-		const arrive = vi.mocked(afterNavigate).mock.calls.at(-1)![0];
-		arrive({ from: { url: new URL('https://example.test/practices/p/engagements/e#invoice-inv-9') } } as never);
+		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
 		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
 		const left = testPage.getByRole('link', { name: /^Cleo,/ });
@@ -326,6 +355,17 @@ describe('coming back from an Invoice', () => {
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
 		await expect.element(left).toHaveFocus();
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
+	});
+
+	it('restores at once when the rows had already landed, and names no row for a move off the app', async () => {
+		vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+		kept().restore({ pages: 2, scrollY: 0 });
+		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
+
+		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) leave({ type: 'leave', to: undefined } as never);
+		expect(kept().capture()).toEqual({ pages: 2, scrollY, rowId: undefined });
 	});
 });
 

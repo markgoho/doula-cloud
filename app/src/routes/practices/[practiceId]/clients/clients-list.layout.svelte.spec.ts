@@ -63,6 +63,7 @@ const navigation = vi.hoisted(() => ({
 vi.mock('$app/navigation', () => ({
 	goto,
 	replaceState,
+	snapshot: vi.fn(),
 	beforeNavigate: (callback: () => void) => {
 		navigation.onBefore = callback;
 	},
@@ -570,24 +571,19 @@ describe('the count line’s measure and its held room', () => {
 });
 
 describe('the header’s tint', () => {
-	it('reaches the same inset past the first column’s text as past the last column’s, with the text on the page’s edge', async () => {
+	// H4 (#2746): flush with the page's edge, as the Invoices list's band is.
+	it('starts on the page’s edge with the text, as the Invoices list’s does', async () => {
 		await renderListScreen({ width: 1440, height: 900, respond: busiest });
 		await ready();
 
-		const heads = drawn('table.table-view thead th');
-		const first = heads[0]!;
-		const last = heads.at(-1)!;
-		const inset = px(getComputedStyle(last).paddingInlineEnd);
-		expect(inset).toBeGreaterThan(0);
+		const first = drawn('table.table-view thead th')[0]!;
 		expect(px(getComputedStyle(first).paddingInlineStart), 'the text stays on the page’s edge').toBe(0);
 		expect(first.getBoundingClientRect().left).toBeCloseTo(document.querySelector('h1')!.getBoundingClientRect().left, 0);
 
 		const middle = first.getBoundingClientRect().top + first.getBoundingClientRect().height / 2;
 		const left = first.getBoundingClientRect().left;
-		expect(document.elementsFromPoint(left - inset / 2, middle), 'tint inside the inset').toContain(first);
-		expect(document.elementsFromPoint(left - inset - 2, middle), 'no tint past it').not.toContain(first);
-		expect(getComputedStyle(first, '::before').backgroundColor).toBe(getComputedStyle(first).backgroundColor);
-		expect(px(getComputedStyle(first, '::before').width)).toBeCloseTo(inset, 0);
+		expect(document.elementsFromPoint(left + 2, middle), 'tint under the text').toContain(first);
+		expect(document.elementsFromPoint(left - 2, middle), 'no tint past the edge').not.toContain(first);
 	});
 });
 

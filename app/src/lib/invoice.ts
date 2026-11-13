@@ -124,12 +124,10 @@ export type BillingMode = 'stripe' | 'by_hand';
  * be able to quietly grow the other's fields. `clientName` is her
  * preferred name, the one every screen uses.
  *
- * Less refundedCents (#1009): the Practice-wide list sends no per-row
- * Refund total -- the book's own RefundedCents on the page is what that
- * screen shows -- so the type does not claim one it will never receive.
- * Less refundableCents and reversible too: that list offers no act on a
- * Payment. */
-export interface PracticeInvoice extends Omit<Invoice, 'refundedCents' | 'refundableCents' | 'reversible'> {
+ * Less refundableCents and reversible: that list offers no act on a
+ * Payment. Its refundedCents (#2746) is the Engagement's own figure, so
+ * the rows that say refunded add up to the book's refundedCents. */
+export interface PracticeInvoice extends Omit<Invoice, 'refundableCents' | 'reversible'> {
 	engagementId: string;
 	clientName: string;
 	engagementKind: 'birth' | 'postpartum';
@@ -736,22 +734,22 @@ export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 	return invoice.daysOverdue > 0 ? 'Overdue' : invoiceStatusLabel(invoice.status);
 }
 
-/** Whether a Staff list says an Invoice's state after its amount as a badge,
- * and in which color (DESIGN.md, "Money is said once"): owed is the amber
- * badge and overdue the red one; every other state is a plain word, so it
- * has none. The Clients list and the Invoices list both read it (#2746). */
-export function invoiceStateBadge(invoice: InvoiceStanding): 'warning' | 'error' | undefined {
-	if (invoice.paymentProcessing) return undefined;
-	if (invoice.daysOverdue > 0) return 'error';
-	return invoice.status === 'open' ? 'warning' : undefined;
-}
-
 /** The Badge variant beside invoiceRowStatusLabel: Overdue is the error,
  * so late money never shares a color with money merely owed. A payment on
  * its way is information, as Open is. */
 export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'warning' | 'success' | 'error' | 'neutral' {
 	if (invoice.paymentProcessing) return 'info';
 	return invoice.daysOverdue > 0 ? 'error' : invoiceStatusVariant(invoice.status);
+}
+
+/** Whether a Staff list says an Invoice's state after its amount as a badge,
+ * and in which color (DESIGN.md, "Money is said once"): the Engagement's
+ * own color, kept only where it asks something of the reader -- amber owed,
+ * red overdue or written off. Every other state is a plain word, so it has
+ * none. The Clients list and the Invoices list both read it (#2746). */
+export function invoiceStateBadge(invoice: InvoiceStanding): 'warning' | 'error' | undefined {
+	const variant = invoiceRowStatusVariant(invoice);
+	return variant === 'warning' || variant === 'error' ? variant : undefined;
 }
 
 /**

@@ -10,8 +10,8 @@
 	 */
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { afterNavigate, beforeNavigate, goto, replaceState } from '$app/navigation';
-	import { pagesToRestore } from '#lib/listReturn.js';
+	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+	import { keepListReturn, type ListReturn } from '#lib/listReturn.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -146,19 +146,23 @@
 	}
 
 	/*
-	 * T3: leaving for an Invoice keeps, in this history entry's state, how
-	 * many pages were open and how far down she was; Back reads as many
-	 * pages again under the same view and search, then puts her where she
-	 * was, with focus on the row she left from. SvelteKit's own scroll
-	 * restore runs before the rows have landed, so it cannot reach that far.
+	 * T3: leaving this entry keeps how many pages were open, how far down
+	 * she was and the Invoice she left for (`keepListReturn`); Back reads as
+	 * many pages again under the same view and search, then puts her where
+	 * she was, with focus on that row. SvelteKit's own scroll restore runs
+	 * before the rows have landed, so it cannot reach that far.
 	 */
 	let pagesLoaded = 1;
-	let heldReturn: { pages: number; scrollY: number; invoiceId?: string } | undefined = (() => {
-		const held = untrack(() => page.state);
-		return held.invoicesPages === undefined
-			? undefined
-			: { pages: pagesToRestore(held.invoicesPages), scrollY: held.invoicesScrollY ?? 0 };
-	})();
+	let heldReturn: ListReturn | undefined;
+	keepListReturn({
+		id: 'invoices-list',
+		pagesLoaded: () => pagesLoaded,
+		rowOf: (to) => (to.hash.startsWith('#invoice-') ? to.hash.slice('#invoice-'.length) : undefined),
+		restore: (back) => {
+			heldReturn = back;
+			if (book && isSameKey(shown, wanted)) void restoreReturn(back);
+		}
+	});
 
 	async function didLoadMore(): Promise<boolean> {
 		const before = invoices.items.length;
@@ -168,12 +172,16 @@
 		return true;
 	}
 
-	async function restoreReturn(back: { pages: number; scrollY: number; invoiceId?: string }) {
+	// The row she left from was in view when she left, but may sit under the
+	// table's stuck header (#2839); `nearest` moves it clear only if it does.
+	async function restoreReturn(back: ListReturn) {
 		heldReturn = undefined;
 		while (pagesLoaded < back.pages && (await didLoadMore()));
 		await tick();
 		window.scrollTo(0, back.scrollY);
-		if (back.invoiceId) rowLink(back.invoiceId)?.focus({ preventScroll: true });
+		const link = back.rowId ? rowLink(back.rowId) : undefined;
+		link?.focus({ preventScroll: true });
+		link?.scrollIntoView({ block: 'nearest' });
 	}
 
 	const rowDomId = (invoiceId: string, view: DataTableView) => `invoice-row-${invoiceId}-${view}`;
@@ -295,15 +303,10 @@
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
-	beforeNavigate(({ type, to }) => {
+	beforeNavigate(() => {
 		isSearchTouched = false;
-		// A Back has already left this entry, and a move within the list
-		// starts a new one; only a move away to another screen is kept.
-		if (type === 'popstate' || type === 'leave' || to?.url.pathname === page.url.pathname) return;
-		replaceState('', { ...page.state, invoicesPages: pagesLoaded, invoicesScrollY: window.scrollY });
 	});
-	afterNavigate(({ from }) => {
-		if (heldReturn && from?.url.hash.startsWith('#invoice-')) heldReturn.invoiceId = from.url.hash.slice('#invoice-'.length);
+	afterNavigate(() => {
 		seedDrafts();
 		// A change of filter lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
@@ -369,13 +372,16 @@
 	/*
 	 * The money said once (DESIGN.md): the amount and its state, in the
 	 * Clients list's words ("owed", "12 days overdue", through
-	 * `invoiceStateWord`). Owed is the amber badge and overdue the red one;
-	 * every other state is a plain word (`invoiceStateBadge`). A paid row's
+	 * `invoiceStateWord`). Owed is the amber badge, overdue and written off
+	 * the red one; every other state is a plain word (`invoiceStateBadge`). A paid row's
 	 * state is its date cell's lead, "Paid Nov 10, 2026", so the amount
-	 * stands alone.
+	 * stands alone, unless some of it went back: then the state says how
+	 * much, "$300.00 refunded", so the rows add up to "Of that, refunded".
 	 */
-	const stateWord = (invoice: PracticeInvoice) =>
-		invoiceDateLine(invoice)?.lead === 'Paid' && !invoice.paymentProcessing ? '' : invoiceStateWord(invoice);
+	function stateWord(invoice: PracticeInvoice): string {
+		if (invoiceDateLine(invoice)?.lead !== 'Paid' || invoice.paymentProcessing) return invoiceStateWord(invoice);
+		return invoice.refundedCents > 0 ? `${formatAmount(invoice.refundedCents)} refunded` : '';
+	}
 
 	const moneyStateTrack = $derived.by(() => {
 		const widths = new Set(
@@ -433,7 +439,8 @@
 			accessor: (invoice: PracticeInvoice) => formatCalendarDay(invoice.raisedOn),
 			content: raisedCell
 		},
-		{ label: 'Due or paid', accessor: dateText, content: dateCell }
+		// H2 (ADR-0015): no bare "due", the pregnancy's word on the Clients list.
+		{ label: 'Payment', accessor: dateText, content: dateCell }
 	];
 
 	// #2240: to the Invoice itself in its Engagement's Invoices section,

@@ -180,6 +180,7 @@ vi.mock('$app/navigation', () => ({
 	preloadCode: vi.fn(),
 	pushState: vi.fn(),
 	replaceState: vi.fn(),
+	snapshot: vi.fn(),
 	refreshAll: vi.fn(),
 }));
 

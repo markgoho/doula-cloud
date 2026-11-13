@@ -119,13 +119,14 @@ describe('loadPracticeInvoices with a search (#2746, #1829)', () => {
 });
 
 describe('invoiceStateBadge (DESIGN.md, "Money is said once")', () => {
-	it('gives owed the amber badge and overdue the red one', () => {
+	it('gives owed the amber badge, and overdue and written off the red one, as the Engagement does', () => {
 		expect(invoiceStateBadge({ status: 'open', daysOverdue: 0 })).toBe('warning');
 		expect(invoiceStateBadge({ status: 'open', daysOverdue: 4 })).toBe('error');
+		expect(invoiceStateBadge({ status: 'uncollectible', daysOverdue: 0 })).toBe('error');
 	});
 
 	it('gives every other state a plain word, a payment on its way among them', () => {
-		for (const status of ['paid', 'void', 'draft', 'uncollectible']) {
+		for (const status of ['paid', 'void', 'draft']) {
 			expect(invoiceStateBadge({ status, daysOverdue: 0 })).toBeUndefined();
 		}
 		expect(invoiceStateBadge({ status: 'open', daysOverdue: 4, paymentProcessing: true })).toBeUndefined();

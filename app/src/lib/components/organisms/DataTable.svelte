@@ -722,6 +722,28 @@
 			font-weight: var(--font-weight-semibold);
 		}
 
+		/* #2839: the header row stays at the top of the window while its
+		   table's rows scroll, and leaves with the table. Above the body's
+		   positioned boxes (a cell's visually hidden words), on an opaque
+		   tint. The hairline is drawn by the cell itself, since a collapsed
+		   border stays with the grid. */
+		.table-view > thead th {
+			position: sticky;
+			inset-block-start: 0;
+			z-index: 1;
+			box-shadow: inset 0 calc(-1 * var(--border-thin)) 0 var(--color-outline-variant);
+		}
+
+		/* WCAG 2.2 Focus Not Obscured: the window's own scrollport starts
+		   below the stuck header, one row and its hairline, so whatever focus
+		   lands on -- a row's link or control by Tab or Shift+Tab, the row
+		   Load more moves to -- is scrolled clear of it. A scroll-margin on
+		   the row is not enough: Chromium leaves a focused element that is
+		   partly in view where it is. */
+		:global(html:has(table.table-view)) {
+			scroll-padding-block-start: calc(var(--row-height) + var(--border-thin));
+		}
+
 		/* A row hover tint. The row's link stays the one target, and the
 		   tint is never the only cue for anything. */
 		tbody tr:hover > :is(td, th) {

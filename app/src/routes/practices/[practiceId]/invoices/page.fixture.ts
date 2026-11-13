@@ -46,7 +46,8 @@ export const data: PracticeInvoiceListData = {
 			// -- a count of days late -- at every width the continuum
 			// sweeps. The count is the BFF's, in the Practice's zone (#1965).
 			dueOn: '2026-08-31',
-			daysOverdue: 56
+			daysOverdue: 56,
+			refundedCents: 0
 		},
 		{
 			id: 'inv-2',
@@ -69,7 +70,10 @@ export const data: PracticeInvoiceListData = {
 			// Paid, so its row says the day it was paid, not this one:
 			// the BFF counts no lateness on a settled Invoice.
 			dueOn: '2026-07-31',
-			daysOverdue: 0
+			daysOverdue: 0,
+			// #2746: half of it went back, so the Money cell says the refund
+			// beside the amount, and the rows add up to the book's figure.
+			refundedCents: 125_050
 		},
 		{
 			// #2225: a bank payment on its way, so the Money cell carries
@@ -88,7 +92,8 @@ export const data: PracticeInvoiceListData = {
 			billingMode: 'stripe',
 			dueOn: '2026-09-19',
 			daysOverdue: 0,
-			paymentProcessing: true
+			paymentProcessing: true,
+			refundedCents: 0
 		}
 	],
 	hasMore: false,
@@ -100,7 +105,7 @@ export const data: PracticeInvoiceListData = {
 	overdueCents: 450_000,
 	overdueCount: 1,
 	clientsCanPay: true,
-	// #768: the whole book, so the fixture sweeps the "Due or paid" column
+	// #768: the whole book, so the fixture sweeps the Payment column
 	// and the filter bar in the state a Practice meets first.
 	view: 'all'
 };
@@ -165,7 +170,8 @@ export const typical: RouteVariant<RouteParameters> = {
 					reference: isByHand ? `INV-00${String(index + 10)}` : `DC-00${String(index + 10)}`,
 					billingMode: isByHand ? 'by_hand' : 'stripe',
 					dueOn: `2026-09-${String(15 + index * 2).padStart(2, '0')}`,
-					daysOverdue: isOverdue ? 36 : 0
+					daysOverdue: isOverdue ? 36 : 0,
+					refundedCents: 0
 				};
 			}),
 			// The totals the eight rows above add up to.

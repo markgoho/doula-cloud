@@ -31,7 +31,7 @@ const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidate: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn() }));
+vi.mock('$app/navigation', () => ({ goto, invalidate: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn(), snapshot: vi.fn() }));
 
 const { practiceId } = fixture.params;
 const listPath = `/api/practices/${practiceId}/invoices/list`;
@@ -233,7 +233,7 @@ describe('the state said once (DESIGN.md, "Money is said once")', () => {
 	it('says a paid Invoice once, by its day paid, and an overdue one in its badge', async () => {
 		await setupSearch();
 
-		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00$/ });
+		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*\$1,250\.50 refunded$/ });
 		const overdue = testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ });
 		await expect.element(paid).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: /^Paid Jul 4, 2026$/ })).toBeVisible();
@@ -244,9 +244,27 @@ describe('the state said once (DESIGN.md, "Money is said once")', () => {
 		expect(overdue.element().querySelector('svg')).not.toBeNull();
 	});
 
-	it('keeps the plain word for a written-off Invoice, which has no day paid', async () => {
-		await setupSearch({ read: { ...data, items: [{ ...data.items[0]!, status: 'uncollectible', paidOn: undefined, daysOverdue: 0 }] } });
+	// H4, C3 (#2746): written off is failed, so it is the red badge the
+	// Engagement's Invoices section draws it in; void stays a plain word.
+	it('draws a written-off Invoice in the red badge, as the Engagement does, and void as a plain word', async () => {
+		await setupSearch({
+			read: {
+				...data,
+				items: [
+					{ ...data.items[0]!, status: 'uncollectible', paidOn: undefined, daysOverdue: 0 },
+					{ ...data.items[0]!, id: 'inv-void', reference: 'INV-0050', status: 'void', paidOn: undefined, daysOverdue: 0 }
+				]
+			}
+		});
 
-		await expect.element(testPage.getByRole('cell', { name: /,\s*written off$/ })).toBeVisible();
+		const writtenOff = testPage.getByRole('cell', { name: /,\s*written off$/ });
+		await expect.element(writtenOff).toBeVisible();
+		const badge = writtenOff.getByText('written off', { exact: true }).element();
+		expect(getComputedStyle(badge).getPropertyValue('--badge-hue').trim()).toBe(
+			getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim()
+		);
+		const voided = testPage.getByRole('cell', { name: /,\s*void$/ });
+		await expect.element(voided).toBeVisible();
+		expect(voided.element().querySelector('svg')).toBeNull();
 	});
 });

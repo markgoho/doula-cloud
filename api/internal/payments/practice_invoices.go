@@ -70,6 +70,11 @@ type PracticeInvoiceView struct {
 	BillingMode string `json:"billingMode"`
 	// PaymentProcessing is InvoiceView's own (#2225).
 	PaymentProcessing bool `json:"paymentProcessing"`
+	// RefundedCents (#1009, #2746) is InvoiceView's own: how much of this
+	// Invoice has gone back to the Client. Every Refund targets the
+	// Invoice's standing Payment, so the rows' figures add up to the
+	// book's RefundedCents.
+	RefundedCents int64 `json:"refundedCents"`
 	// dueAt is the stored instant DueOn is read from, kept for the cursor
 	// of a list ordered by payment due (#2746).
 	dueAt time.Time
@@ -300,7 +305,7 @@ func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.C
 // covering Payment's kind is what says whether paid_at holds a typed day
 // or Stripe's instant (#1965, invoicePaidOn).
 const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name, cl.family_name, e.kind,
-		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind, ` + paymentProcessingExpr + `
+		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind, ` + refundedCentsColumn + `, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
 	JOIN engagements e ON e.id = c.engagement_id
@@ -502,7 +507,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q 
 		var dueAt time.Time
 		var stripeInvoiceID, activePaymentKind sql.NullString
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName, &it.EngagementKind,
-			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.PaymentProcessing); err != nil {
+			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}

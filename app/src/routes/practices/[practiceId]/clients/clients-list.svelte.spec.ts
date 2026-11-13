@@ -57,12 +57,13 @@ const replaceState = vi.hoisted(() => vi.fn());
 type Move = { from?: { route: { id: string }; params: Record<string, string> } };
 const navigation = vi.hoisted(() => ({
 	onMove: undefined as ((move: Move) => void) | undefined,
-	onBefore: undefined as (() => void) | undefined
+	onBefore: undefined as ((leaving?: { to: { url: URL } }) => void) | undefined
 }));
 vi.mock('$app/navigation', async () => ({
 	...(await import('#testing/routePage.js')),
 	replaceState,
-	beforeNavigate: (callback: () => void) => {
+	snapshot: vi.fn(),
+	beforeNavigate: (callback: (leaving?: { to: { url: URL } }) => void) => {
 		navigation.onBefore = callback;
 	},
 	afterNavigate: (callback: (move: Move) => void) => {
@@ -2727,6 +2728,20 @@ describe('Back to the list after Load more', () => {
 		await expect.element(testPage.getByRole('rowheader', { name: clients[1].name })).toBeVisible();
 
 		expect(replaceState).toHaveBeenLastCalledWith('', { clientsName: undefined, clientsPages: 2 });
+	});
+
+	// T3 (#2746): replaceState resolves the route before it writes, so a page
+	// that lands once she has left would stamp the entry she is opening.
+	it('stamps nothing when the page lands after she has left for a Client', async () => {
+		await setup(undefined, { responder: answerPages });
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
+		replaceState.mockClear();
+
+		navigation.onBefore!({ to: { url: new URL(`https://example.test/practices/${practiceId}/clients/${clients[1].clientId}`) } });
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('rowheader', { name: clients[1].name })).toBeVisible();
+
+		expect(replaceState).not.toHaveBeenCalled();
 	});
 
 	it('loads that many pages again, then lands on the row she came from', async () => {

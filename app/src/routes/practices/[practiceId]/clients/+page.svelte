@@ -230,6 +230,7 @@ import type { PageProps as PageProperties } from './$types';
 	let lastFilterKey: string | undefined;
 
 	afterNavigate(({ from }) => {
+		isLeaving = false;
 		seedDrafts();
 		if (from?.route.id === CLIENT_HUB_ROUTE) {
 			pendingFocus = { clientId: from.params!.clientId };
@@ -285,7 +286,14 @@ import type { PageProps as PageProperties } from './$types';
 		if (!touched.includes('name')) draftName = appliedName;
 	}
 	seedDrafts();
-	beforeNavigate(() => (touched = []));
+	// A page that lands once she has left for another screen is not stamped
+	// (`loadMore`): `replaceState` resolves the route first, so it would
+	// write this list's address and pages onto the entry being opened.
+	let isLeaving = false;
+	beforeNavigate((leaving) => {
+		touched = [];
+		isLeaving = leaving?.to?.url.pathname !== page.url.pathname;
+	});
 
 	// The field's wrapper, whose form is read when the page takes over.
 	let nameField = $state<HTMLElement>();
@@ -545,7 +553,7 @@ import type { PageProps as PageProperties } from './$types';
 		lead: string;
 		amount: string;
 		word: string;
-		// Set where the state asks for a badge: amber for owed, red for overdue.
+		// Set where the state asks for a badge: amber for owed, red for overdue or written off.
 		variant?: ComponentProps<typeof Badge>['variant'];
 	};
 	const NO_MONEY = 'No amount';
@@ -771,7 +779,7 @@ import type { PageProps as PageProperties } from './$types';
 		await clients.loadMore();
 		if (clients.items.length === before) return;
 		pagesLoaded += 1;
-		replaceState('', { clientsName: page.state.clientsName, clientsPages: pagesLoaded });
+		if (!isLeaving) replaceState('', { clientsName: page.state.clientsName, clientsPages: pagesLoaded });
 	}
 
 	function searchHref(): string {
@@ -1267,23 +1275,6 @@ import type { PageProps as PageProperties } from './$types';
 
 		.clients-table :global(th.numeric) {
 			padding-inline-end: calc(var(--data-table-cell-inset, var(--space-3)) + var(--money-state-track) + var(--money-state-gap));
-		}
-
-		/* The header's tint reaches the same inset past the first column's text
-		   as it does past the last column's, so its two ends are alike while the
-		   text stays on the page's left edge. */
-		.clients-table :global(.table-view thead th:first-child) {
-			position: relative;
-		}
-
-		.clients-table :global(.table-view thead th:first-child)::before {
-			content: '';
-			position: absolute;
-			inset-block: 0 calc(-1 * var(--border-thin));
-			inset-inline-end: 100%;
-			inline-size: var(--data-table-cell-inset);
-			border-block-end: var(--border-thin) solid var(--color-outline-variant);
-			background-color: var(--color-surface-container);
 		}
 
 		/* A card's fields come in one order: the name, the Status, the Money where
