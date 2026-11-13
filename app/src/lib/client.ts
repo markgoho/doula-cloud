@@ -97,6 +97,11 @@ export interface ClientListPage {
 	items: ClientListItem[];
 	nextCursor?: string;
 	hasMore: boolean;
+	/**
+	 * How many Clients the narrowing matches in all (#2867), on the first page
+	 * only; a page that lacks it says no total.
+	 */
+	clientCount?: number;
 }
 
 function clientsPath(practiceId: string): string {
@@ -266,7 +271,8 @@ export function clientsResultSummary(
 	isShowingMine = false,
 	isShowingOwing = false,
 	isShowingNoContract = false,
-	{ doulaName = '', name = '' }: { doulaName?: string; name?: string } = {}
+	{ doulaName = '', name = '' }: { doulaName?: string; name?: string } = {},
+	total?: number
 ): string {
 	const narrowing = { isShowingEveryone, isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name };
 	// Mine, owing, no Contract and a Doula each imply an Engagement, so the switch for the rest
@@ -279,14 +285,16 @@ export function clientsResultSummary(
 		}
 		return isShowingEveryone ? 'No Clients.' : 'No Clients in care yet.';
 	}
-	const isPlural = count !== 1;
-	const active = isShowingNoContract ? 'active ' : '';
-	let clients = `${count} ${active}Client${isPlural ? 's' : ''}`;
+	// While more exist the line says how many there are in all (#2867); a page
+	// that carried no total says none.
+	const inAll = hasMore && total !== undefined ? Math.max(total, count) : undefined;
+	const isPlural = (inAll ?? count) !== 1;
+	const noun = `${isShowingNoContract ? 'active ' : ''}Client${isPlural ? 's' : ''}`;
+	const all = inAll === undefined ? '' : `${inAll} `;
+	let clients = all ? `${count} of ${all}${noun}` : `${count} ${noun}`;
 	if (doulaName) {
-		clients = hasMore
-			? `${count} of ${doulaName}'s ${active}Clients`
-			: `${doulaName}'s ${count} ${active}Client${isPlural ? 's' : ''}`;
-	} else if (isShowingMine) clients = `${count} of your ${active}Clients`;
+		clients = hasMore ? `${count} of ${doulaName}'s ${all}${noun}` : `${doulaName}'s ${count} ${noun}`;
+	} else if (isShowingMine) clients = `${count} of your ${all}${noun}`;
 	const named = name ? ` named "${name}"` : '';
 	let traits = '';
 	if (isShowingOwing) {

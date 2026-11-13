@@ -386,6 +386,40 @@ describe('clientsResultSummary (#2068)', () => {
 		expect(clientsResultSummary(30, true, false)).toBe('Showing the first 30 Clients, soonest due first, then most recently ended.');
 	});
 
+	it('says how many there are in all while more exist, for every narrowing (#2867)', () => {
+		const tail = ', soonest due first, then most recently ended.';
+		const doula = { doulaName: 'Kimiko Nakashima' };
+		expect(clientsResultSummary(30, true, false, false, false, false, {}, 58)).toBe(`Showing the first 30 of 58 Clients${tail}`);
+		expect(clientsResultSummary(30, true, true, false, false, false, {}, 58)).toBe(
+			`Showing the first 30 of 58 Clients, including anyone not yet in care${tail}`
+		);
+		expect(clientsResultSummary(30, true, false, true, false, false, {}, 58)).toBe(`Showing the first 30 of your 58 Clients${tail}`);
+		expect(clientsResultSummary(30, true, false, false, false, false, doula, 58)).toBe(
+			`Showing the first 30 of Kimiko Nakashima's 58 Clients${tail}`
+		);
+		expect(clientsResultSummary(30, true, false, false, true, true, { name: 'Cam' }, 58)).toBe(
+			`Showing the first 30 of 58 active Clients named "Cam" who owe money and have no Contract${tail}`
+		);
+	});
+
+	it('says the plain line once every Client is shown, and never a total smaller than the rows', () => {
+		const tail = ', soonest due first, then most recently ended.';
+		expect(clientsResultSummary(58, false, false, false, false, false, {}, 58)).toBe(`Showing 58 Clients${tail}`);
+		expect(clientsResultSummary(31, true, false, false, false, false, {}, 30)).toBe(`Showing the first 31 of 31 Clients${tail}`);
+	});
+
+	it('says Clients in the plural when the total is, however few are shown', () => {
+		expect(clientsResultSummary(1, true, false, false, true, false, {}, 2)).toBe(
+			'Showing the first 1 of 2 Clients who owe money, soonest due first, then most recently ended.'
+		);
+	});
+
+	it('says no total when the page carried none', () => {
+		expect(clientsResultSummary(30, true, false, false, false, false, {}, undefined)).toBe(
+			'Showing the first 30 Clients, soonest due first, then most recently ended.'
+		);
+	});
+
 	// A loss is not a birth: the order names what it sorts by, neutrally.
 	it('never calls an ended pregnancy a birth in how it says the list is ordered', () => {
 		const lines = [

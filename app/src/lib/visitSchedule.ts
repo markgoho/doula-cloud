@@ -43,6 +43,15 @@ export interface ScheduledVisit {
 	isOffEngagement: boolean;
 }
 
+/**
+ * One page of the schedule. `visitCount` (#2867) is how many Visits the
+ * days and Doula chosen hold in all, on the first page only; a page that
+ * lacks it says no total.
+ */
+export interface SchedulePage extends CursorPage<ScheduledVisit> {
+	visitCount?: number;
+}
+
 /** How many days ahead the screen looks when the reader has named no
  * range, and the window On call opens on. */
 export const DEFAULT_SCHEDULE_DAYS = 30;
@@ -263,7 +272,7 @@ export async function loadPracticeSchedule(
 	practiceId: string,
 	filters: ResolvedScheduleFilters,
 	cursor = ''
-): Promise<CursorPage<ScheduledVisit>> {
+): Promise<SchedulePage> {
 	const response = await fetcher(practiceSchedulePath(practiceId, filters, cursor));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
@@ -340,14 +349,16 @@ export interface ScheduleWho {
 	isMine?: boolean;
 }
 
-/** What the result line says: the count, whether more exist (the BFF
- * gives no total), the days, whose, and the order. */
+/** What the result line says: the count, and while more exist how many there
+ * are in all (`total`, the BFF's `visitCount`; a page without one says no
+ * "of how many"), the days, whose, and the order. */
 export function scheduleResultSummary(
 	count: number,
 	hasMore: boolean,
 	days: ScheduleDays,
 	who: ScheduleWho = {},
-	now: Date = new Date()
+	now: Date = new Date(),
+	total?: number
 ): string {
 	const span = scheduleDaysSpan(days, now);
 	if (count === 0) {
@@ -363,9 +374,14 @@ export function scheduleResultSummary(
 		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)} ${span}${ordered}.`;
 	}
 	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
-	const what = hasMore
-		? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
-		: `${owner ? `${owner} ` : ''}${count} Visits`;
+	const whose = owner ? `${owner} ` : '';
+	let what = `${whose}${count} Visits`;
+	if (hasMore) {
+		what =
+			total === undefined
+				? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
+				: `the first ${count} of ${whose}${Math.max(total, count)} Visits`;
+	}
 	return `Showing ${what} ${span}${ordered}.`;
 }
 
@@ -376,8 +392,8 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 	const days = { from: '2000-09-29', to: '2000-12-29' };
 	const now = new Date(1999, 0, 1);
 	return [
-		scheduleResultSummary(999, true, days, { doulaName: longestDoulaName }, now),
-		scheduleResultSummary(999, true, days, { isMine: true }, now),
+		scheduleResultSummary(999, true, days, { doulaName: longestDoulaName }, now, 9999),
+		scheduleResultSummary(999, true, days, { isMine: true }, now, 9999),
 		scheduleResultSummary(0, false, days, { isMine: true, doulaName: longestDoulaName }, now)
 	].toSorted((a, b) => b.length - a.length)[0];
 }

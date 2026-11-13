@@ -38,7 +38,7 @@ Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). 
 | Sort by Money or by Doula | Declined | every Client who owes, or every Client of one Doula, is a narrowing; "Who owe money" and the Doula select do it (T1, T3) |
 | Search by name | Have it | Name (T5; #1829) |
 | Grouping by Doula | Declined | the Doula column and the Doula select |
-| A total count | Build (#2867) | the result line counts the rows shown and says whether more exist ("Showing the first 30 Clients") and states no total, where the Invoices list says "the first 30 of 35"; an owner who "can no longer hold it in her head" (`personas/practice-owner.md:11`) is owed the whole |
+| A total count | Have it | while more exist the result line says "Showing the first 30 of 58 Clients", the first page's count of the narrowing, from the same predicate as the rows, so a contractor's total is her own (#2867); an owner who "can no longer hold it in her head" (`personas/practice-owner.md:11`) is owed the whole |
 | Date navigation, a calendar view, relative days | Declined | a roster is not read by day; the Date column says weeks to or since the birth |
 | Time zone shown | Declined | days only, no times |
 

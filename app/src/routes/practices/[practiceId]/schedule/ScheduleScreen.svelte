@@ -334,7 +334,8 @@
 			schedule.hasMore,
 			read.filters,
 			{ isMine, doulaName: isPicked ? doulaNameOf(shown.doula) : undefined },
-			now
+			now,
+			read.page.visitCount
 		);
 	});
 	const resultRuler = $derived(

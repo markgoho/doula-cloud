@@ -577,6 +577,23 @@ describe('paging', () => {
 		expect(url.searchParams.get('staffId')).toBe('staff-2');
 	});
 
+	it('says how many there are in all while more exist, and the plain line once Load more has shown every one (#2867)', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse(nextPage));
+		await setup({ data: { ...data, page: { ...morePage, visitCount: 4 } } });
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing the first 3 of 4 Visits from');
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 4 Visits from');
+	});
+
+	it('still says the first of more when the page carries no total (#2867)', async () => {
+		await setup({ data: { ...data, page: morePage } });
+		const line = testPage.getByRole('status');
+		await expect.element(line).toHaveTextContent('Showing the first 3 Visits from');
+		await expect.element(line).not.toHaveTextContent(' of ');
+	});
+
 	it('says a failed next page through the table, keeps the rows, and shows no raw server text', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse('invalid cursor', 400));
 		await setup({ data: { ...data, page: morePage } });

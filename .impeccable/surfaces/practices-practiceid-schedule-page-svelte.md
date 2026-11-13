@@ -25,7 +25,7 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 - **A three-column list keeps its content measure.** Its table is narrower than the siblings' five-column tables, and the Doula track is held so the table is the same width in every filter state (DESIGN.md, Data table: a table stops where its columns are satisfied).
 - **The narrowing always has a range.** A bare address means "Next 30 days", today and the 29 days after it (`visitSchedule.ts`), so "no filter" on this screen is the default range, and the way back from an empty result is to that range, not to "everything".
 - **No Client's name is filtered here.** The address carries days and a Staff id only, so #1829 does not bind; nothing is added that would put a name in a URL.
-- **No total yet.** The BFF answers a page and `hasMore`, never a count of the whole range. The category baseline below asks for the count (#2867).
+- **The total comes with the first page.** The BFF counts the Visits of the days and the Doula chosen from the same predicate as the rows, so a contractor's total is her own.
 - **The way in is the Client's name, to the Engagement.** A Visit has no page of its own; Reassign lives on the Engagement.
 - **The Visit has no type, place, length or status on this endpoint** (#330, #428). The screen does not invent them.
 
@@ -52,7 +52,7 @@ Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). 
 | Relative days ("Today", "Tomorrow") | Have it | "Today" and "Tomorrow" lead the day heading (#2867); the cell keeps `VisitWhen` so the Schedule and the Engagement read the same; ADR-0022's "relative under seven days" is the ledger's rule for past entries |
 | Grouping by person | Declined | the Doula select does it |
 | A week or month calendar beside the list | Later (#330) | a Visit has no length or end time, so no grid can be drawn |
-| A total count | Build (#2867) | the result line says "the first 30 Visits" and no total, where the Invoices list says "the first 30 of 35"; the BFF answers a page and whether more exist, so the count of the days chosen is a new figure on the read. Declining it because the endpoint lacks it would be declining it because it is work |
+| A total count | Have it | while more exist the result line says "the first 30 of 42 Visits", the count of the days and Doula chosen, which the first page carries (#2867) |
 | Time zone shown | Declined | one Practice's Staff share a zone; times are the reader's own; the 7 and 30 day windows are the reader's days |
 | Search by name or reference | Declined | as "Search by Client" |
 

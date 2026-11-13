@@ -163,6 +163,10 @@ type ListResponse struct {
 	Items      []ListItem `json:"items"`
 	NextCursor *string    `json:"nextCursor,omitempty"`
 	HasMore    bool       `json:"hasMore"`
+	// ClientCount (#2867) is every Client the same narrowing matches, for a
+	// reader narrowed to her own attachments only hers. Only the first page
+	// carries it; a request with a cursor omits it.
+	ClientCount *int `json:"clientCount,omitempty"`
 }
 
 // ListHandler lists Clients at the current Practice, Client-shaped,
@@ -278,7 +282,8 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 
 	var list []ListItem
 	var err error
-	if c.Reader.IsAmbientContractor() || req.Mine {
+	attached := c.Reader.IsAmbientContractor() || req.Mine
+	if attached {
 		list, err = listAttachedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, filters, after)
 	} else {
 		list, err = listClients(r.Context(), c.Tx, c.PracticeID, filters, after)
@@ -299,7 +304,17 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		return
 	}
 
-	apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: list, HasMore: hasMore, NextCursor: next})
+	resp := ListResponse{Items: list, HasMore: hasMore, NextCursor: next}
+	if after == nil {
+		count, err := countListedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, attached, filters)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		resp.ClientCount = &count
+	}
+	apierr.WriteJSON(w, http.StatusOK, resp)
 }
 
 // dueSortJoin is shared by both list queries: due.sort_at is the Client's
@@ -511,15 +526,11 @@ func disableJIT(ctx context.Context, tx *sql.Tx) error {
 // Client, total cost 412,838 for the default later page, and the default
 // first page in the same tens of ms, so the figures above stand.
 func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.Cursor) (string, []any) {
-	narrow, narrowArgs := filters.narrowing(5)
-	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
+	from, args := clientsFromWhere(practiceID, filters)
+	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
 		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
-		 FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + `
-		 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND (NOT $2 OR ` + hasWorkExpr + `)
-		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
-		   AND ` + narrow
-	args := append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+		 ` + from
 	if after != nil {
 		query += ` AND (due.sort_at, c.id) > ($7, $8) ORDER BY due.sort_at, c.id LIMIT $9`
 		args = append(args, after.At, after.ID, pageSize+1)
@@ -528,6 +539,59 @@ func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.
 		args = append(args, pageSize+1)
 	}
 	return query, args
+}
+
+// clientsFromWhere is the rows the ambient-reach list holds, from FROM on,
+// with its bind arguments $1 to $6. The page and the count (#2867) both read
+// it, so the total is of the rows and never of a looser set.
+func clientsFromWhere(practiceID string, filters listFilters) (string, []any) {
+	narrow, narrowArgs := filters.narrowing(5)
+	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
+	from := `FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + `
+		 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND (NOT $2 OR ` + hasWorkExpr + `)
+		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
+		   AND ` + narrow
+	return from, append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+}
+
+// attachedClientsFromWhere is clientsFromWhere narrowed to Clients staffID
+// holds an open, granted attachment on, with its bind arguments $1 to $7. It
+// joins one row per attachment, so a reader of it takes DISTINCT c.id.
+func attachedClientsFromWhere(practiceID, staffID string, filters listFilters) (string, []any) {
+	narrow, narrowArgs := filters.narrowing(6)
+	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
+	from := `FROM clients c
+		     JOIN engagements e ON e.client_id = c.id
+		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
+		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
+		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
+		       AND ea.state = 'granted'
+		       AND (NOT $3 OR ` + hasWorkExpr + `)
+		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)
+		       AND ` + narrow
+	return from, append([]any{practiceID, staffID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+}
+
+// countListedClients is how many Clients the list holds under filters,
+// counted from the very FROM and WHERE the page reads: attached when the
+// reader's list is narrowed to her own attachments (an ambient contractor, or
+// ?mine=true), so a contractor's total is her own and never the Practice's.
+func countListedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, attached bool, filters listFilters) (int, error) {
+	var query string
+	var args []any
+	if attached {
+		from, a := attachedClientsFromWhere(practiceID, staffID, filters)
+		query, args = `SELECT count(DISTINCT c.id) `+from, a //nolint:gosec // from is built from this file's own constants; every value rides args
+	} else {
+		from, a := clientsFromWhere(practiceID, filters)
+		query, args = `SELECT count(*) `+from, a //nolint:gosec // from is built from this file's own constants; every value rides args
+	}
+	var n int
+	if err := tx.QueryRowContext(ctx, query, args...).Scan(&n); err != nil { //nolint:gosec // query is built from this file's own constants; every value rides args
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: count listed clients: %w", err)
+	}
+	return n, nil
 }
 
 // listAttachedClients is listClients narrowed to Clients staffID holds an
@@ -545,24 +609,15 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return nil, err
 	}
-	narrow, narrowArgs := filters.narrowing(6)
-	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
+	from, args := attachedClientsFromWhere(practiceID, staffID, filters)
+	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
 		            ` + portalinvite.HerAccessColumns + `,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at
-		     FROM clients c
-		     JOIN engagements e ON e.client_id = c.id
-		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
-		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
-		       AND ea.state = 'granted'
-		       AND (NOT $3 OR ` + hasWorkExpr + `)
-		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)
-		       AND ` + narrow + `
+		     ` + from + `
 		 ) attached`
-	args := append([]any{practiceID, staffID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
 	if after != nil {
 		query += ` WHERE (sort_at, id) > ($8, $9) ORDER BY sort_at, id LIMIT $10`
 		args = append(args, after.At, after.ID, pageSize+1)

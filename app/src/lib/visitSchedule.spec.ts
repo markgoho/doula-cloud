@@ -372,6 +372,8 @@ describe('scheduleResultSummary', () => {
 	const days = { from: '2026-11-13', to: '2026-11-19' };
 	const say = (count: number, hasMore: boolean, who = {}) => plain(scheduleResultSummary(count, hasMore, days, who, now));
 
+	const sayOf = (who = {}, total = 42) => plain(scheduleResultSummary(30, true, days, who, now, total));
+
 	it('keeps each day whole on one line, so a line breaks between days and never inside one', () => {
 		const text = scheduleResultSummary(3, false, days, {}, now);
 		expect(text).toContain('Fri Nov 13');
@@ -427,6 +429,26 @@ describe('scheduleResultSummary', () => {
 		);
 	});
 
+	it('says how many there are in all while more exist, for each whose (#2867)', () => {
+		expect(sayOf()).toBe('Showing the first 30 of 42 Visits from Fri Nov 13 to Thu Nov 19, soonest first.');
+		expect(sayOf({ doulaName: 'Priya Raman' })).toBe(
+			"Showing the first 30 of Priya Raman's 42 Visits from Fri Nov 13 to Thu Nov 19, soonest first."
+		);
+		expect(sayOf({ isMine: true })).toBe('Showing the first 30 of your 42 Visits from Fri Nov 13 to Thu Nov 19, soonest first.');
+	});
+
+	it('says the plain line once every Visit is shown, no total smaller than the rows, and none when the page had none', () => {
+		expect(plain(scheduleResultSummary(42, false, days, { isMine: true }, now, 42))).toBe(
+			'Showing your 42 Visits from Fri Nov 13 to Thu Nov 19, soonest first.'
+		);
+		expect(plain(scheduleResultSummary(31, true, days, {}, now, 30))).toBe(
+			'Showing the first 31 of 31 Visits from Fri Nov 13 to Thu Nov 19, soonest first.'
+		);
+		expect(plain(scheduleResultSummary(30, true, days, {}, now, undefined))).toBe(
+			'Showing the first 30 Visits from Fri Nov 13 to Thu Nov 19, soonest first.'
+		);
+	});
+
 	it('says an empty result in words, for each whose', () => {
 		expect(say(0, false)).toBe('No Visits from Fri Nov 13 to Thu Nov 19.');
 		expect(say(0, false, { doulaName: 'Priya Raman' })).toBe('No Visits for Priya Raman from Fri Nov 13 to Thu Nov 19.');
@@ -466,7 +488,7 @@ describe('scheduleDayGroup (#2867)', () => {
 describe('scheduleResultRuler', () => {
 	it('is the longest wording the line can say, with the longest Doula’s name and days with a year', () => {
 		const ruler = scheduleResultRuler('Persephone Vandermeulen-Achterberg');
-		expect(ruler).toContain("Showing the first 999 of Persephone Vandermeulen-Achterberg's Visits from");
+		expect(ruler).toContain("Showing the first 999 of Persephone Vandermeulen-Achterberg's 9999 Visits from");
 		expect(ruler).toContain('2000');
 	});
 });

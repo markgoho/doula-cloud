@@ -7,17 +7,16 @@ import {
 	scheduleStaffId,
 	scheduleViewFromParameters,
 	type ResolvedScheduleFilters,
-	type ScheduledVisit,
+	type SchedulePage,
 	type ScheduleRangeErrors,
 	type ScheduleView
 } from '#lib/visitSchedule.js';
-import type { CursorPage } from '#lib/paginatedList.svelte.js';
 import type { PageLoad } from './$types';
 
 export const _SCHEDULE_READ = 'app:schedule';
 
 export interface SchedulePageData {
-	page: CursorPage<ScheduledVisit>;
+	page: SchedulePage;
 	/**
 	What the address said.
 	*/
@@ -51,7 +50,7 @@ export interface SchedulePageData {
 	isRosterUnavailable: boolean;
 }
 
-const NOTHING: CursorPage<ScheduledVisit> = { items: [], hasMore: false };
+const NOTHING: SchedulePage = { items: [], hasMore: false };
 
 /**
  * Loads through SvelteKit's `load`, mirroring the Practice-wide Contract
@@ -86,8 +85,8 @@ export const load: PageLoad = async ({
 		? { ...read.days, staffId: whose.staffId }
 		: { from: '', to: '' };
 	const isReadable = read.days !== undefined && !whose.isEmpty;
-	const schedule: Promise<StreamedRead<CursorPage<ScheduledVisit>>> = isReadable
-		? streamRead<CursorPage<ScheduledVisit>>(practiceSchedulePath(params.practiceId, filters), fetch)
+	const schedule: Promise<StreamedRead<SchedulePage>> = isReadable
+		? streamRead<SchedulePage>(practiceSchedulePath(params.practiceId, filters), fetch)
 		: Promise.resolve({ isLoaded: true, value: NOTHING });
 	const roster = isOwnerOrAdmin(session)
 		? loadDoulaOptions(params.practiceId, fetch)
