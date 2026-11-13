@@ -13,6 +13,18 @@ export function pagesToRestore(held: number | undefined): number {
 	return Math.min(held ?? 1, MAX_RESTORED_PAGES);
 }
 
+/**
+ * Puts a list back where it was left: scrolled to the held offset, then
+ * focus on the row she left from. The row may sit under a stuck table header
+ * (#2839); `nearest` moves it clear only if it does.
+ */
+export function putListBack(back: ListReturn, rowLink: (rowId: string) => HTMLElement | undefined): void {
+	window.scrollTo(0, back.scrollY);
+	const link = back.rowId ? rowLink(back.rowId) : undefined;
+	link?.focus({ preventScroll: true });
+	link?.scrollIntoView({ block: 'nearest' });
+}
+
 export interface ListReturn {
 	pages: number;
 	scrollY: number;

@@ -11,7 +11,7 @@
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
-	import { keepListReturn, type ListReturn } from '#lib/listReturn.js';
+	import { keepListReturn, putListBack, type ListReturn } from '#lib/listReturn.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -194,10 +194,7 @@
 		while (at === navigations && pagesLoaded < back.pages && (await didLoadMore()));
 		await tick();
 		if (at !== navigations) return;
-		window.scrollTo(0, back.scrollY);
-		const link = back.rowId ? rowLink(back.rowId) : undefined;
-		link?.focus({ preventScroll: true });
-		link?.scrollIntoView({ block: 'nearest' });
+		putListBack(back, rowLink);
 	}
 
 	const rowDomId = (invoiceId: string, view: DataTableView) => `invoice-row-${invoiceId}-${view}`;
