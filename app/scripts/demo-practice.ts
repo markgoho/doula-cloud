@@ -32,7 +32,7 @@ import { drainOutbox, readMailbox } from '../e2e/outboxMail';
 import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateInvoice, backdateInvoices, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, simulatedDateAfter } from '../e2e/stack';
+import { backdateInvoice, backdateInvoices, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 import {
@@ -436,6 +436,9 @@ interface BookInvoice {
 	raisedDaysAgo?: number;
 	// Omitted, the Practice's 30-day terms from the day it was raised.
 	dueInDays?: number;
+	// Moved onto Stripe's rail by seedStripeRail: a Stripe-billed row, or one
+	// whose payment is on its way. An open Invoice only.
+	rail?: 'stripe' | 'on-its-way';
 	paid?: { method: PaymentMethod; note?: string; daysAgo: number };
 	after?: 'write-off' | 'void' | { reverse: string } | { refundCents: number; method: PaymentMethod; note: string };
 }
@@ -461,8 +464,8 @@ const BOOK_INVOICES: readonly (readonly BookInvoice[])[] = [
 	[{ raisedDaysAgo: 40, paid: { method: 'bank_transfer', daysAgo: 12 } }],
 	[{}],
 	[{ share: 1 / 3, raisedDaysAgo: 45, paid: { method: 'check', note: 'Check 318', daysAgo: 41 } }, { dueInDays: 60 }],
-	[{ raisedDaysAgo: 57 }],
-	[{ share: 1 / 3, dueInDays: 7 }],
+	[{ raisedDaysAgo: 57, rail: 'on-its-way' }],
+	[{ share: 1 / 3, dueInDays: 7, rail: 'stripe' }],
 	[{ share: 1 / 3, raisedDaysAgo: 130, paid: { method: 'cash', daysAgo: 126 } }, { raisedDaysAgo: 92 }],
 	[{ raisedDaysAgo: 44, paid: { method: 'other', note: 'Venmo', daysAgo: 40 } }],
 	[
@@ -472,7 +475,7 @@ const BOOK_INVOICES: readonly (readonly BookInvoice[])[] = [
 	],
 	[{ raisedDaysAgo: 34, paid: { method: 'bank_transfer', daysAgo: 31 } }],
 	[{ share: 1 / 2, raisedDaysAgo: 36, paid: { method: 'cash', daysAgo: 36 } }, { dueInDays: 18 }],
-	[{ raisedDaysAgo: 49 }],
+	[{ raisedDaysAgo: 49, rail: 'stripe' }],
 	[{}],
 	[{ raisedDaysAgo: 31, paid: { method: 'check', note: 'Check 1187', daysAgo: 2 } }],
 	[{ raisedDaysAgo: 90, paid: { method: 'bank_transfer', daysAgo: 85 } }],
@@ -506,6 +509,7 @@ async function seedInvoiceBook(
 	);
 	const billed = tail.filter((client, index) => !offered.has(client.engagementId) && !isCareFinished(index, client));
 	const moves: { invoiceId: string; days: number }[] = [];
+	const onStripe: { invoiceId: string; paymentOnItsWay: boolean }[] = [];
 	for (const [index, client] of billed.entries()) {
 		const invoices = BOOK_INVOICES[index];
 		if (invoices === undefined) break;
@@ -538,6 +542,7 @@ async function seedInvoiceBook(
 				}
 			);
 			if (raisedDaysAgo > 0) moves.push({ invoiceId: id, days: raisedDaysAgo - 30 });
+			if (invoice.rail !== undefined) onStripe.push({ invoiceId: id, paymentOnItsWay: invoice.rail === 'on-its-way' });
 			const invoicePath = `/api/practices/${practiceId}/invoices/${id}`;
 			const payment = invoice.paid
 				? await send<{ id: string }>(request, 'POST', `${invoicePath}/payments`, owner, {
@@ -564,6 +569,7 @@ async function seedInvoiceBook(
 		}
 	}
 	backdateInvoices(moves);
+	seedStripeRail(onStripe);
 }
 
 export interface DemoPractice {
