@@ -2478,19 +2478,43 @@ describe('the filter bar between filter states', () => {
 	});
 });
 
+// The typical page with each listed Client's open line changed.
+function changed(changes: Readonly<Partial<Record<number, object>>>) {
+	return seedLikeClients.map((client, index) => {
+		const [line] = client.openEngagements ?? [];
+		const change = changes[index];
+		return change && line ? { ...client, openEngagements: [{ ...line, ...change }] } : client;
+	});
+}
+
 // A state is whole, and the Date column begins after it.
 describe('the Money column’s state', () => {
 	// The typical page, with one payment on its way, the longest plain state words, a
-	// written-off Invoice and one 120 days overdue, the widest red badges.
+	// written-off Invoice and one 120 days overdue, the widest red badges, and a
+	// four-figure refund, the longest plain state (#2849).
+	const refunded = { invoiceStatus: 'paid', invoiceAmountCents: 150_000, daysOverdue: 0, refundedCents: 150_000 } as const;
 	const latest = {
 		3: { invoiceStatus: 'open', invoiceAmountCents: 150_000, paymentProcessing: true },
 		4: { invoiceStatus: 'uncollectible', daysOverdue: 0 },
-		5: { invoiceStatus: 'open', daysOverdue: 120 }
+		5: { invoiceStatus: 'open', daysOverdue: 120 },
+		7: refunded
 	} as const;
-	const withClearing = seedLikeClients.map((client, index) => {
-		const [line] = client.openEngagements ?? [];
-		const change = latest[index as keyof typeof latest];
-		return change && line ? { ...client, openEngagements: [{ ...line, ...change }] } : client;
+	const withClearing = changed(latest);
+
+	// #2739's criterion, kept by #2849: a refund's longer words move nothing.
+	it.each([1024, 1280, 1440])('measures the same with a four-figure refund as without at %ipx', async (width) => {
+		const measure = async (items: typeof seedLikeClients) => {
+			await renderListScreen({ width, height: 900, respond: () => jsonResponse({ items, hasMore: false }) });
+			await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
+			await document.fonts.ready;
+			const table = testPage.getByRole('table').element().getBoundingClientRect();
+			const rows = testPage.getByRole('row').elements().map((row) => Math.round(row.getBoundingClientRect().height));
+			cleanup();
+			return { width: Math.round(table.width), rows };
+		};
+		const without = await measure(changed({ 7: { invoiceStatus: 'paid', invoiceAmountCents: 150_000, daysOverdue: 0 } }));
+		const withRefund = await measure(changed({ 7: refunded }));
+		expect(withRefund).toStrictEqual(without);
 	});
 
 	it.each([1280, 1440, 1920])('fits its track and ends before the Date column’s text at %ipx', async (width) => {
@@ -2501,7 +2525,9 @@ describe('the Money column’s state', () => {
 		const states = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state')].filter((state) => state.getClientRects().length > 0);
 		expect(states.length).toBeGreaterThan(0);
 		for (const state of states) {
-			expect(state.scrollWidth, `"${state.textContent}" overflows its track`).toBeLessThanOrEqual(state.clientWidth);
+			// #2849: a four-figure refund may reach into its own cell's inset, never past the cell.
+			const textEnd = state.getBoundingClientRect().left + state.scrollWidth;
+			expect(textEnd, `"${state.textContent}" overflows its cell`).toBeLessThanOrEqual(state.closest('td')!.getBoundingClientRect().right);
 			const day = state.closest('tr')!.querySelector<HTMLElement>(':scope .date .lead');
 			if (!day) continue;
 			const gap = day.getBoundingClientRect().left - state.getBoundingClientRect().right;

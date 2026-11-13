@@ -294,9 +294,11 @@
 
 	/* A list's Money cell (`MoneyAmount`): the track its state takes after
 	   the amount, as wide as the longest state a list can say, a red "NNN
-	   days overdue" badge or "paid, $N,NNN.NN refunded", so every amount in a
-	   column ends on one edge whatever its state says. The column's header
-	   ends where the amounts do by the same length. */
+	   days overdue" badge, so every amount in a column ends on one edge
+	   whatever its state says. The column's header ends where the amounts do
+	   by the same length. "paid, $N,NNN.NN refunded" runs up to 2px past it
+	   into its cell's inset (#2849): a wider track folds the Clients list's
+	   rows at a 1280px window. */
 	--money-state-track: 20ch;
 
 	/* The page frame every Template owns (ADR-0018). The brief fixes the

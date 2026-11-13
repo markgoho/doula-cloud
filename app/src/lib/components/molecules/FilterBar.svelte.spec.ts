@@ -240,6 +240,16 @@ describe('FilterBar', () => {
 		await expect.element(status).toHaveTextContent('Showing 2 scheduled visits.');
 	});
 
+	// #2849: the focus ring Apply moves to it hugs the sentence, not the bar.
+	it('draws its result line’s box, and so its focus ring, as wide as its sentence', async () => {
+		await setup();
+
+		const status = page.getByRole('status').element();
+		const range = document.createRange();
+		range.selectNodeContents(status);
+		expect(Math.round(statusBox().width)).toBe(Math.round(range.getBoundingClientRect().width));
+	});
+
 	// The list's empty state says it on screen (#2015); the line stays in
 	// the document as a live region, so a screen reader still hears what
 	// the new range found.
