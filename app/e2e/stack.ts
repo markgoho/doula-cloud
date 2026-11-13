@@ -705,6 +705,25 @@ export function backdateInvoices(moves: readonly { invoiceId: string; days: numb
 }
 
 /**
+ * Puts by-hand Invoices on the Stripe rail without calling Stripe: sets a
+ * stripe_invoice_id, which is what the Invoices list reads as "Stripe", and,
+ * for `paymentOnItsWay`, payment_processing_since, which
+ * payment_intent.processing writes (#2225). The by-hand rail cannot reach
+ * either state and the seed must not call Stripe (#2844). The id is not in
+ * Stripe's format, so nothing could mistake it for a real Invoice; only an
+ * open Invoice may carry a payment on its way (00167's CHECKs).
+ */
+export function seedStripeRail(invoices: readonly { invoiceId: string; paymentOnItsWay: boolean }[]): void {
+	if (invoices.length === 0) return;
+	const rows = invoices
+		.map(({ invoiceId, paymentOnItsWay }) => `(${sqlLiteral(invoiceId)}::uuid, ${paymentOnItsWay ? 'now()' : 'NULL::timestamptz'})`)
+		.join(', ');
+	execSQL(
+		`UPDATE invoices SET stripe_invoice_id = 'demo-seed-' || invoices.id::text, payment_processing_since = marked.since FROM (VALUES ${rows}) AS marked(id, since) WHERE invoices.id = marked.id AND invoices.status = 'open'`
+	);
+}
+
+/**
  * Moves an Engagement's start `days` into the past, so a Client with two
  * Engagements reads them apart by date (seed:scenario's
  * returning-postpartum-client). An Engagement starts when it is approved,
