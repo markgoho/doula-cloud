@@ -17,6 +17,8 @@ import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 import StaffTopBar from '#lib/components/organisms/StaffTopBar.svelte';
 import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
 import { goto, pageState } from '#testing/routePage.js';
+import { snapshot } from '$app/navigation';
+import type { ListReturn } from '#lib/listReturn.js';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
 import { clients, fixture, seedLikeClients, typical } from './page.fixture.js';
 import { heldClientsName } from '#lib/clientsReturn.js';
@@ -55,16 +57,22 @@ const replaceState = vi.hoisted(() => vi.fn());
 // The route's own `afterNavigate` callback, kept so a spec can play a move to
 // this list (SvelteKit calls it after every navigation, the first load too).
 type Move = { from?: { route: { id: string }; params: Record<string, string> } };
-const navigation = vi.hoisted(() => ({
-	onMove: undefined as ((move: Move) => void) | undefined,
-	onBefore: undefined as ((leaving?: { to: { url: URL } }) => void) | undefined
-}));
+const navigation = vi.hoisted(() => {
+	const befores: ((leaving?: { to: { url: URL } }) => void)[] = [];
+	return {
+		onMove: undefined as ((move: Move) => void) | undefined,
+		befores,
+		onBefore: (leaving?: { to: { url: URL } }) => {
+			for (const before of befores) before(leaving ?? ({} as never));
+		}
+	};
+});
 vi.mock('$app/navigation', async () => ({
 	...(await import('#testing/routePage.js')),
 	replaceState,
 	snapshot: vi.fn(),
 	beforeNavigate: (callback: (leaving?: { to: { url: URL } }) => void) => {
-		navigation.onBefore = callback;
+		navigation.befores.push(callback);
 	},
 	afterNavigate: (callback: (move: Move) => void) => {
 		navigation.onMove = callback;
@@ -104,6 +112,8 @@ function expectNoNameInAnyAddress(name: string) {
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
 	goto.mockReset();
+	navigation.befores.length = 0;
+	vi.mocked(snapshot).mockClear();
 	replaceState.mockReset();
 	replaceState.mockImplementation((_url: string, state: { clientsName?: string; clientsPages?: number }) => {
 		historyState.clientsPages = state.clientsPages;
@@ -1912,7 +1922,7 @@ describe('where focus goes after the list changes', () => {
 		await waitForRows();
 		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
 
-		navigation.onBefore!();
+		navigation.onBefore();
 		historyState.clientsName = 'Cam';
 		navigation.onMove!({ from: { route: listRoute, params: {} } });
 
@@ -1971,7 +1981,7 @@ describe('a control changed before the page has seeded its controls', () => {
 		const owes = testPage.getByRole('checkbox', { name: 'Who owe money' });
 		await owes.click();
 
-		navigation.onBefore!();
+		navigation.onBefore();
 		navigation.onMove!({});
 
 		await expect.element(owes).not.toBeChecked();
@@ -2758,7 +2768,7 @@ describe('Back to the list after Load more', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
 		replaceState.mockClear();
 
-		navigation.onBefore!({ to: { url: new URL(`https://example.test/practices/${practiceId}/clients/${clients[1].clientId}`) } });
+		navigation.onBefore({ to: { url: new URL(`https://example.test/practices/${practiceId}/clients/${clients[1].clientId}`) } });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 		await expect.element(testPage.getByRole('rowheader', { name: clients[1].name })).toBeVisible();
 
@@ -2791,6 +2801,85 @@ describe('Back to the list after Load more', () => {
 
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(5);
+	});
+});
+
+const kept = () => vi.mocked(snapshot).mock.calls.at(-1)![0] as {
+	capture: () => ListReturn;
+	restore: (held: ListReturn) => void;
+};
+
+// #2840: Back from a Client puts the list where it was, as the Invoices list
+// does (#2746): the same rows, how far down she was, focus on the row.
+describe('coming back from a Client', () => {
+	const pages = [
+		{ items: [clients[0]], nextCursor: 'cursor-2', hasMore: true },
+		{ items: [clients[1]], nextCursor: 'cursor-3', hasMore: true },
+		{ items: [clients[2]], hasMore: false }
+	];
+	const answerPages = (path: string) => {
+		const index = path.includes('cursor=cursor-3') ? 2 : (path.includes('cursor=cursor-2') ? 1 : 0);
+		return Promise.resolve(jsonResponse(pages[index]));
+	};
+	const hubAddress = (index: number) =>
+		new URL(`https://example.test/practices/${practiceId}/clients/${clients[index].clientId}`);
+	const place = { pages: 3, scrollY: 120, rowId: clients[2].clientId };
+
+	afterEach(() => {
+		vi.restoreAllMocks();
+	});
+
+	it('keeps the pages open, how far down she was and the Client she left for', async () => {
+		await setup(undefined, { responder: answerPages });
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('rowheader', { name: clients[1].name })).toBeVisible();
+
+		navigation.onBefore({ to: { url: hubAddress(1) } });
+
+		expect(kept().capture()).toEqual({ pages: 2, scrollY: window.scrollY, rowId: clients[1].clientId });
+	});
+
+	it('scrolls back to where she was once the pages have landed', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		historyState.clientsPages = 3;
+		await setup(undefined, { responder: answerPages });
+		kept().restore(place);
+
+		await expect.element(testPage.getByRole('rowheader', { name: clients[2].name })).toBeVisible();
+		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
+	});
+
+	it('scrolls when the place arrives after the pages have landed', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		historyState.clientsPages = 3;
+		await setup(undefined, { responder: answerPages });
+		await expect.element(testPage.getByRole('rowheader', { name: clients[2].name })).toBeVisible();
+
+		kept().restore(place);
+
+		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
+		await expect.element(testPage.getByRole('link', { name: clients[2].name })).toHaveFocus();
+	});
+
+	it('drops the place when the read fails', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		await setup(textResponse('no'));
+		kept().restore(place);
+		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
+
+		expect(scrollTo).not.toHaveBeenCalled();
+	});
+
+	it('drops the place when she moves to another view before the pages land', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		historyState.clientsPages = 3;
+		await setup(undefined, { responder: answerPages });
+		kept().restore(place);
+		navigation.onBefore({ to: { url: new URL(`https://example.test/practices/${practiceId}/clients?all=true`) } });
+
+		await expect.element(testPage.getByRole('rowheader', { name: clients[2].name })).toBeVisible();
+		expect(scrollTo).not.toHaveBeenCalled();
 	});
 });
 

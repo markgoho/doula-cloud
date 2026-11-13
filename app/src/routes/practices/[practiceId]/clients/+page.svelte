@@ -13,8 +13,8 @@
 	} from '#lib/client.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
-	import { pagesToRestore } from '#lib/listReturn.js';
-	import { onMount, untrack } from 'svelte';
+	import { keepListReturn, pagesToRestore, putListBack, type ListReturn } from '#lib/listReturn.js';
+	import { onMount, tick, untrack } from 'svelte';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
@@ -252,6 +252,34 @@ import type { PageProps as PageProperties } from './$types';
 		return undefined;
 	}
 
+	/*
+	 * Back from a Client also puts her where she was (`keepListReturn`, #2840).
+	 * The pages themselves come back through `loadFirstPage` below, so the
+	 * place is held until that read lands and is dropped if it fails or any
+	 * move comes first: it is never put on another view's rows.
+	 */
+	let heldReturn: ListReturn | undefined;
+	keepListReturn({
+		id: 'clients-list',
+		pagesLoaded: () => pagesLoaded,
+		rowOf: (to) => {
+			const base = `${page.url.pathname}/`;
+			return to.pathname.startsWith(base) ? to.pathname.slice(base.length).split('/', 1)[0] : undefined;
+		},
+		restore: (back) => {
+			if (error) return;
+			heldReturn = back;
+			if (isLoaded && !isRefreshing && loadedKey === filterKey) void restorePlace();
+		}
+	});
+
+	async function restorePlace() {
+		const back = heldReturn;
+		heldReturn = undefined;
+		await tick();
+		if (back) putListBack(back, (clientId) => rowLink(clientId));
+	}
+
 	$effect(() => {
 		if (!pendingFocus || !isReady || loadedKey !== filterKey) return;
 		const { clientId } = pendingFocus;
@@ -293,6 +321,7 @@ import type { PageProps as PageProperties } from './$types';
 	let isLeaving = false;
 	beforeNavigate((leaving) => {
 		touched = [];
+		heldReturn = undefined;
 		isLeaving = leaving?.to?.url.pathname !== page.url.pathname;
 	});
 
@@ -745,8 +774,10 @@ import type { PageProps as PageProperties } from './$types';
 			isDoulaUnknown = false;
 			isLoaded = true;
 			isRefreshing = false;
+			if (heldReturn) void restorePlace();
 		} catch (error_) {
 			if (thisLoad !== latestLoad) return;
+			heldReturn = undefined;
 			// A Doula id the BFF refuses as malformed can never load, so Try again
 			// would only fail again: say what is wrong and offer the way out.
 			if (view.doula && error_ instanceof RefusalError && error_.status === 400) {
