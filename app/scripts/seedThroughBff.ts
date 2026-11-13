@@ -49,7 +49,7 @@ export async function readOk(response: APIResponse, what: string): Promise<strin
 // itself is not a reason to stop.
 export async function send<T>(
 	request: APIRequestContext,
-	method: 'GET' | 'POST' | 'PUT' | 'PATCH',
+	method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
 	path: string,
 	headers: Record<string, string>,
 	data?: unknown

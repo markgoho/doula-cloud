@@ -140,19 +140,22 @@ export function demoTail(today: string): SeededClient[] {
 interface Roster {
 	practiceId: string;
 	owner: Session;
+	ownerStaffId: string;
 	// Every Staff member but the Owner, by slug (her given name).
 	staff: Record<string, DoulaSession>;
 }
 
 // Renata signs up, the way a Practice starts.
-async function signUpOwner(request: APIRequestContext): Promise<{ practiceId: string; owner: Session }> {
-	const { practiceId, owner } = await signUpPractice(request, {
+async function signUpOwner(
+	request: APIRequestContext
+): Promise<{ practiceId: string; owner: Session; ownerStaffId: string }> {
+	const { practiceId, staffId, owner } = await signUpPractice(request, {
 		email: addressOf(OWNER),
 		practiceName: TYPICAL_PRACTICE_NAME,
 		...nameParts(OWNER),
 		workState: OWNER.workState
 	});
-	return { practiceId, owner };
+	return { practiceId, owner, ownerStaffId: staffId };
 }
 
 // One Staff member joins through the real Invitation: the Owner invites
@@ -184,7 +187,7 @@ async function joinStaff(
 }
 
 async function buildRoster(request: APIRequestContext): Promise<Roster> {
-	const { practiceId, owner } = await signUpOwner(request);
+	const { practiceId, owner, ownerStaffId } = await signUpOwner(request);
 	const staff: Record<string, DoulaSession> = {};
 	for (const member of INVITED) {
 		staff[slugOf(member)] = await joinStaff(request, practiceId, owner, member);
@@ -196,7 +199,7 @@ async function buildRoster(request: APIRequestContext): Promise<Roster> {
 	// A Contract takes its price from the rate for its kind (#967).
 	await send(request, 'PUT', `/api/practices/${practiceId}/rates/birth`, owner, { amountCents: RATE_CENTS.birth });
 	await send(request, 'PUT', `/api/practices/${practiceId}/rates/postpartum`, owner, { amountCents: RATE_CENTS.postpartum });
-	return { practiceId, owner, staff };
+	return { practiceId, owner, ownerStaffId, staff };
 }
 
 // The tail across the three care phases. provisionTail leaves each
@@ -572,6 +575,88 @@ async function seedInvoiceBook(
 	seedStripeRail(onStripe);
 }
 
+// RFC 3339 for `days` after `day` at hourUtc:minute; an hour past 23 runs
+// into the next UTC day, which is how an evening Eastern time is written.
+function instantAt(day: string, days: number, hourUtc: number, minute: number): string {
+	const start = Date.parse(`${dayAfter(day, days)}T00:00:00Z`);
+	return new Date(start + (hourUtc * 60 + minute) * 60_000).toISOString().replace('.000Z', 'Z');
+}
+
+// The next :00 or :30 at least `minutes` from now.
+function laterToday(minutes: number): string {
+	const slot = 30 * 60_000;
+	const at = Math.ceil((Date.now() + minutes * 60_000) / slot) * slot;
+	return new Date(at).toISOString().replace('.000Z', 'Z');
+}
+
+// [Doula slug, days from today, hour UTC, minute]. Eastern is UTC-5 or -4:
+// 12:30 is before 9am there, 25:00 is 8 or 9pm.
+const SCHEDULE_BOOK: readonly (readonly [string, number, number, number])[] = [
+	['joss', 1, 14, 0],
+	['marisol', 4, 12, 30],
+	['rowan', 9, 14, 0],
+	['rowan', 9, 17, 30],
+	['delia', 9, 15, 0],
+	['kimiko', 9, 13, 30],
+	['joss', 9, 16, 0],
+	['aditi', 13, 14, 0],
+	['marisol', 15, 18, 30],
+	['bethany', 17, 14, 30],
+	['joss', 18, 25, 0],
+	['kimiko', 20, 16, 0],
+	['rowan', 21, 15, 30],
+	['priya', 23, 14, 0],
+	['renata', 24, 16, 0],
+	['bethany', 26, 12, 30],
+	['delia', 27, 14, 30],
+	['charlene', 29, 15, 0],
+	['joss', -2, 15, 0],
+	['marisol', -3, 14, 30],
+	['bethany', -5, 16, 0],
+	['aditi', -6, 13, 30],
+	['delia', -1, 15, 30]
+];
+
+// The Practice-wide Schedule's book (#2747): a month of Visits across the
+// Doulas, two later today, five in the last week, and one booked Visit whose
+// Doula was then taken off its Engagement (#2596). Only on postpartum care
+// already active, so no Client's status moves (a Visit on intake care moves
+// it to active, ADR-0015) and no birth's on-call attachments change.
+async function seedScheduleBook(
+	request: APIRequestContext,
+	roster: Roster,
+	today: string,
+	tail: readonly ProvisionedClient[]
+): Promise<void> {
+	const active = tail.filter((client, index) => index % 4 !== 0 && !isCareFinished(index, client) && client.kind === 'postpartum');
+	const [takenOff, ...pool] = active;
+	const engagementPath = (engagementId: string) => `/api/practices/${roster.practiceId}/engagements/${engagementId}`;
+	const staffIds: Record<string, string> = {
+		renata: roster.ownerStaffId,
+		...Object.fromEntries(Object.entries(roster.staff).map(([slug, member]) => [slug, member.staffId]))
+	};
+	const visit = (client: ProvisionedClient, slug: string, scheduledAt: string) =>
+		send(request, 'POST', `${engagementPath(client.engagementId)}/visits`, roster.owner, {
+			staffId: staffIds[slug],
+			scheduledAt
+		});
+	const entries: (readonly [string, string])[] = [
+		...SCHEDULE_BOOK.map(([slug, days, hour, minute]) => [slug, instantAt(today, days, hour, minute)] as const),
+		['aditi', laterToday(45)],
+		['kimiko', laterToday(100)]
+	];
+	for (const [index, [slug, scheduledAt]] of entries.entries()) {
+		await visit(pool[index % pool.length], slug, scheduledAt);
+	}
+	await visit(takenOff, 'renata', instantAt(today, 16, 19, 30));
+	await send(
+		request,
+		'DELETE',
+		`${engagementPath(takenOff.engagementId)}/attachments/${staffIds[takenOff.attachedDoulaSlug]}`,
+		roster.owner
+	);
+}
+
 export interface DemoPractice {
 	practiceId: string;
 	// false when this call found the demo Practice already there and wrote
@@ -637,6 +722,7 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	await seedAfterALoss(request, roster, today);
 	await seedOffers(request, roster, today, tail);
 	await seedInvoiceBook(request, roster, today, tail);
+	await seedScheduleBook(request, roster, today, tail);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 
