@@ -24,7 +24,7 @@
 		info: 'info',
 		success: 'check',
 		warning: 'warning',
-		error: 'x',
+		error: 'warning-circle',
 		neutral: 'minus-circle'
 	};
 </script>

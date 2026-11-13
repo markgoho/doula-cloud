@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { contrast, expectDistinctTintHues, pixelOf, themes, withTheme } from '#testing/variantTints.js';
 import Badge from './Badge.svelte';
+import Icon from './Icon.svelte';
 
 type SetupOptions = Partial<ComponentProps<typeof Badge>>;
 
@@ -34,6 +35,23 @@ describe('Badge.svelte', () => {
 		const svg = container.querySelector('svg');
 		expect(svg).toBeInTheDocument();
 		expect(svg).toHaveAttribute('aria-hidden', 'true');
+	});
+
+	it('draws every variant a different icon, so no two meanings share a glyph (#2843)', async () => {
+		const drawn = new Set<string>();
+		for (const variant of variants) {
+			const { container } = await setup({ variant });
+			drawn.add(container.querySelector('svg')!.getHTML());
+		}
+
+		expect(drawn.size).toBe(variants.length);
+	});
+
+	it("does not draw the remove-filter tag's x on the error variant (#2843)", async () => {
+		const { container } = await setup({ variant: 'error' });
+		const { container: tag } = await render(Icon, { name: 'x', size: 16 });
+
+		expect(container.querySelector('svg')!.getHTML()).not.toBe(tag.querySelector('svg')!.getHTML());
 	});
 });
 
