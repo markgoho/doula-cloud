@@ -239,12 +239,12 @@
 	const invoiceCount = (count: number) => `on ${count} ${count === 1 ? 'Invoice' : 'Invoices'}`;
 
 	/*
-	 * Four short lines read before a row (#2746): what Clients owe, the
+	 * Four short totals read before a row (#2746): what Clients owe, the
 	 * overdue part of it (#768: a narrowing of that figure, never a book
 	 * beside it, so its label says so), what Clients have paid, and the part
-	 * of that which went back (#1009: a refunded Invoice stays paid and still
+	 * of that refunded (#1009: a refunded Invoice stays paid and still
 	 * counts in full, so it is said the same way). Each is a label, then its
-	 * figure, then a few words; the figures end on one edge. Before the read
+	 * figure, then a few words; each pair's figures end on one edge. Before the read
 	 * lands, the words hold their place unseen so nothing moves when the
 	 * figures arrive.
 	 */
@@ -257,7 +257,7 @@
 		totalRow('Clients owe', book?.outstandingCents, invoiceCount(book?.outstandingCount ?? 10)),
 		totalRow('Of that, overdue', book?.overdueCents, invoiceCount(book?.overdueCount ?? 10)),
 		totalRow('Clients have paid', book?.paidCents, ''),
-		totalRow('Of that, returned', book?.refundedCents, 'to Clients')
+		totalRow('Of that, refunded', book?.refundedCents, '')
 	]);
 
 	/*
@@ -272,7 +272,7 @@
 	);
 
 	// Short on the radios, which sit under the bar's "Choose which Invoices
-	// to show", so the three and Apply take two lines on a phone; whole on
+	// to show", so on a phone the three and the search take two lines; whole on
 	// the applied tag, which stands alone.
 	const VIEW_OPTIONS: readonly { value: InvoicesView; label: string; tag: string }[] = [
 		{ value: 'all', label: 'Every Invoice', tag: 'Every Invoice' },
@@ -369,8 +369,22 @@
 	 * The money said once (DESIGN.md): the amount and its state, in the
 	 * Clients list's words ("owed", "12 days overdue", through
 	 * `invoiceStateWord`). Owed is the amber badge and overdue the red one;
-	 * every other state is a plain word (`invoiceStateBadge`).
+	 * every other state is a plain word (`invoiceStateBadge`). A paid row's
+	 * state is its date cell's lead, "Paid Nov 10, 2026", so the amount
+	 * stands alone.
 	 */
+	const stateWord = (invoice: PracticeInvoice) =>
+		invoiceDateLine(invoice)?.lead === 'Paid' && !invoice.paymentProcessing ? '' : invoiceStateWord(invoice);
+
+	const moneyStateTrack = $derived.by(() => {
+		const widths = new Set(
+			invoices.items.map((invoice) => {
+				const chars = `${stateWord(invoice).length}ch`;
+				return invoiceStateBadge(invoice) ? `calc(${chars} + 1em + var(--space-1) + 2 * var(--space-3))` : chars;
+			})
+		);
+		return widths.size === 0 ? '0ch' : `max(${[...widths].join(', ')})`;
+	});
 
 	// #271: local and Stripe Invoices share one book, so the rail is said per
 	// row, beside the reference it decides the shape of.
@@ -397,7 +411,8 @@
 		{
 			label: 'Money',
 			numeric: true,
-			accessor: (invoice: PracticeInvoice) => `${formatAmount(invoice.amountCents)}, ${invoiceStateWord(invoice)}`,
+			accessor: (invoice: PracticeInvoice) =>
+				[formatAmount(invoice.amountCents), stateWord(invoice)].filter(Boolean).join(', '),
 			content: moneyCell
 		},
 		{
@@ -434,11 +449,17 @@
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
 	<!-- In the table, the amount and its state in two tracks, so amounts end at one place whatever the state says; on a card, the state follows the amount. -->
 	{@const badge = invoiceStateBadge(invoice)}
-	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={invoiceStateWord(invoice)} variant={badge} />{:else}{invoiceStateWord(invoice)}{/if}</span></span>
+	{@const word = stateWord(invoice)}
+	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state">{#if word}<span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={word} variant={badge} />{:else}{word}{/if}{/if}</span></span>
 {/snippet}
 
-{#snippet referenceCell(invoice: PracticeInvoice)}
-	<span class="no-break">{invoice.reference}<span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+{#snippet referenceCell(invoice: PracticeInvoice, view: DataTableView)}
+	<!-- The table's row link already says the reference (`rowLinkLabel`), so its cell says only how it was billed; a card says both. -->
+	{#if view === 'table'}
+		<span class="no-break"><span aria-hidden="true">{invoice.reference}</span><span class="visually-hidden">{invoice.billingMode === 'by_hand' ? 'Billed ' : 'Billed through '}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+	{:else}
+		<span class="no-break">{invoice.reference}<span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+	{/if}
 {/snippet}
 
 {#snippet dateCell(invoice: PracticeInvoice, view: DataTableView)}
@@ -448,7 +469,7 @@
 
 {#snippet raisedCell(invoice: PracticeInvoice, view: DataTableView)}
 	<!-- A card's day says its kind where the table's header does not stand over it. -->
-	{#if view === 'record'}<span class="lead" aria-hidden="true">Raised&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time>
+	<span class="no-break">{#if view === 'record'}<span class="lead" aria-hidden="true">Raised&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time></span>
 {/snippet}
 
 {#snippet total(row: { figure: string; note: string })}
@@ -475,7 +496,7 @@
 	{/each}
 {/snippet}
 
-<!-- Folded behind "More filters" in a narrow bar, so a phone's first screen still holds the first Invoice; beside the view where the bar is wide. Unnamed, so a Client's name never reaches the address (#1829). -->
+<!-- In view at every width, beside the view where the bar is wide (T4: a check is matched in two actions on a phone too). Unnamed, so a Client's name never reaches the address (#1829). -->
 {#snippet searchField()}
 	<div class="search">
 		<LabeledField label="Reference or Client" width={20}>
@@ -509,7 +530,8 @@
 	<!-- A read that failed before any landed has no figures to wait for. -->
 	{#if !isBookEmpty && (book || !readFailure)}
 		<div class="totals">
-			<SummaryList rows={totals} value={total} isCompact />
+			<SummaryList rows={totals.slice(0, 2)} value={total} isCompact />
+			<SummaryList rows={totals.slice(2)} value={total} isCompact />
 		</div>
 	{/if}
 
@@ -539,12 +561,11 @@
 				legend="Choose which Invoices to show"
 				status={readFailure ? '' : resultSummary}
 				statusRuler={INVOICES_RESULT_RULER}
+				appliedRuler={VIEW_OPTIONS.map((option) => option.tag).toSorted((a, b) => b.length - a.length)[0]}
 				statusId={RESULT_ID}
 				empty={shown !== undefined && invoices.items.length === 0}
 				clearHref={appliedTags.length > 0 ? invoicesHref : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
-				holdsAppliedRow
-				folded={searchField}
 				foldsFieldsOnly
 				{isBusy}
 			>
@@ -556,6 +577,7 @@
 					onChange={(chosen) => (draftView = chosen)}
 					isInline
 				/>
+				{@render searchField()}
 			</FilterBar>
 		{/if}
 
@@ -566,7 +588,7 @@
 				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
 			</stack-l>
 		{:else if shown}
-			<div class="invoices-table">
+			<div class="invoices-table" style:--money-state-track={moneyStateTrack}>
 				<DataTable
 					{columns}
 					rows={invoices.items}
@@ -613,6 +635,20 @@
 			font-size: var(--text-meta-size);
 		}
 
+		/* The owed pair and the paid pair side by side where the row holds both,
+		   the paid pair under the owed one where it does not, with no query. Each
+		   key track is as wide as the longest label, so stacked, all four figures
+		   end on one edge. */
+		.totals {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 0 var(--space-5);
+		}
+
+		.totals :global(dt) {
+			min-inline-size: 14ch;
+		}
+
 		.reserve {
 			visibility: hidden;
 		}
@@ -628,9 +664,9 @@
 			container: invoices-table / inline-size;
 			/* The Money column's right edge, written once: the amounts end a
 			   state track and a gap before the cell's inset, and the header ends
-			   where they do. The track holds the longest state, "payment on its
-			   way". */
-			--money-state-track: 21ch;
+			   where they do. The track holds the longest state among the rows
+			   shown (`moneyStateTrack`), so a book with no payment on its way
+			   leaves no hole before Reference. */
 			--money-state-gap: var(--space-1);
 			--data-table-cell-inset: var(--space-2);
 		}
@@ -676,10 +712,14 @@
 			gap: var(--space-1);
 		}
 
+		/* "Payment due Nov 30, 2026" is one phrase: it wraps whole, never mid-date. */
+		.date {
+			white-space: nowrap;
+		}
+
 		/* The lead word and the day in two tracks in the table, so every day
 		   in the column starts at one place whichever word leads it. */
 		.date.tracked {
-			white-space: nowrap;
 			display: inline-grid;
 			grid-template-columns: 11ch auto;
 			column-gap: var(--space-1);
@@ -696,6 +736,13 @@
 
 		.no-break {
 			white-space: nowrap;
+		}
+
+		/* The field asks for room for a reference or a short name and takes up to
+		   its own width, so on a phone it shares the radios' last line. */
+		.search {
+			flex: 1 1 11rem;
+			max-inline-size: max-content;
 		}
 	}
 </style>

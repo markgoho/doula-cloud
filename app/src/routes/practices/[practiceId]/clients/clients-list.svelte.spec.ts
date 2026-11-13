@@ -2376,16 +2376,14 @@ describe('the rows of a typical page', () => {
 });
 
 // A person reaching for Apply finds it where it was: the bar is the same
-// arrangement whatever is applied, so neither Apply nor the table moves.
-// The tag count is the states' own: the tags are one row of their own, drawn only while a filter is
-// applied, so a state is held against another with the same tag count.
-const states: [string, number, () => void][] = [
-	['default', 0, () => {}],
-	['owes', 1, () => pageState.url.searchParams.set('owes', 'true')],
-	['a Doula', 1, () => pageState.url.searchParams.set('doula', kimiko.value)],
+// arrangement whatever is applied, so neither Apply nor the table moves. The
+// tags share the count's row, before it, inside the room the count holds.
+const states: [string, () => void][] = [
+	['default', () => {}],
+	['owes', () => pageState.url.searchParams.set('owes', 'true')],
+	['a Doula', () => pageState.url.searchParams.set('doula', kimiko.value)],
 	[
 		'a Name and a Doula',
-		2,
 		() => {
 			pageState.url.searchParams.set('doula', kimiko.value);
 			historyState.clientsName = 'Camille';
@@ -2405,8 +2403,7 @@ async function measureState(width: number, apply: () => void) {
 	const result = {
 		applyLeft: button.left,
 		applyTop: button.top,
-		tableTop: rectOf(testPage.getByRole('table')).top,
-		countTop: rectOf(testPage.getByRole('status')).top
+		tableTop: rectOf(testPage.getByRole('table')).top
 	};
 	cleanup();
 	return result;
@@ -2415,22 +2412,14 @@ async function measureState(width: number, apply: () => void) {
 describe('the filter bar between filter states', () => {
 	it.each([1280, 1440, 1920])('keeps Apply, the count and the table where they were in every filter state at %ipx', async (width) => {
 		const measured = [];
-		for (const state of states) measured.push(await measureState(width, state[2]));
+		for (const state of states) measured.push(await measureState(width, state[1]));
 		const [baseline] = measured;
-		for (const [index, [name, tagCount]] of states.entries()) {
+		for (const [index, [name]] of states.entries()) {
 			const here = measured[index]!;
-			// Tags, at these widths, are one row whether one or two, so a state is held against the
-			// first state with the same tag count; with none, that is the default.
-			const same = measured[states.findIndex(([, count]) => count === tagCount || (count > 0 && tagCount > 0))]!;
 			expect(Math.abs(here.applyLeft - baseline!.applyLeft), `${name}: Apply x`).toBeLessThanOrEqual(0.5);
 			expect(Math.abs(here.applyTop - baseline!.applyTop), `${name}: Apply y`).toBeLessThanOrEqual(0.5);
-			expect(Math.abs(here.countTop - same.countTop), `${name}: count y`).toBeLessThanOrEqual(0.5);
-			expect(Math.abs(here.tableTop - same.tableTop), `${name}: table top`).toBeLessThanOrEqual(0.5);
+			expect(Math.abs(here.tableTop - baseline!.tableTop), `${name}: table top`).toBeLessThanOrEqual(0.5);
 		}
-		// The tags are one row, the same height at every width, and the default loses none.
-		const tagRow = measured[1]!.tableTop - baseline!.tableTop;
-		expect(tagRow, `the tag row`).toBeGreaterThan(30);
-		expect(tagRow, `the tag row`).toBeLessThan(70);
 	});
 
 	it('holds the space of "Clear filters" and "Also show…" while hiding them from the tab order and the accessibility tree', async () => {

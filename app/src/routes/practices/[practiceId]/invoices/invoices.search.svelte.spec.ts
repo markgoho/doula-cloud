@@ -205,15 +205,16 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 1 overdue Invoice.');
 	});
 
-	it('holds the applied tags row while no filter is on, so applying one moves nothing under it', async () => {
+	it('holds one tag\'s room beside the result line while no filter is on, so applying one moves nothing under it', async () => {
+		const tableTop = () => testPage.getByRole('table').element().getBoundingClientRect().top;
 		await setupSearch();
-		const before = testPage.getByRole('status').element().getBoundingClientRect().top;
+		const before = tableTop();
 
 		cleanup();
 		await setupSearch({ url: narrowedToOverdue.url!, read: { ...data, view: 'overdue' } });
 
 		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Overdue Invoices' })).toBeVisible();
-		expect(testPage.getByRole('status').element().getBoundingClientRect().top).toBe(before);
+		expect(Math.abs(tableTop() - before)).toBeLessThanOrEqual(0.5);
 	});
 
 	it('brings the totals up to date with each later page', async () => {
@@ -229,16 +230,23 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 });
 
 describe('the state said once (DESIGN.md, "Money is said once")', () => {
-	it('says a paid Invoice in a plain word and an overdue one in its badge', async () => {
+	it('says a paid Invoice once, by its day paid, and an overdue one in its badge', async () => {
 		await setupSearch();
 
-		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*paid$/ });
+		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00$/ });
 		const overdue = testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ });
 		await expect.element(paid).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: /^Paid Jul 4, 2026$/ })).toBeVisible();
 		await expect.element(overdue).toBeVisible();
 		// querySelector, case 2: a badge's icon is drawn and not announced, so
 		// only the drawn tree tells a badge from a plain word.
 		expect(paid.element().querySelector('svg')).toBeNull();
 		expect(overdue.element().querySelector('svg')).not.toBeNull();
+	});
+
+	it('keeps the plain word for a written-off Invoice, which has no day paid', async () => {
+		await setupSearch({ read: { ...data, items: [{ ...data.items[0]!, status: 'uncollectible', paidOn: undefined, daysOverdue: 0 }] } });
+
+		await expect.element(testPage.getByRole('cell', { name: /,\s*written off$/ })).toBeVisible();
 	});
 });

@@ -41,8 +41,12 @@
 	 * not the link is shown. A bar with switches gives them a row above the
 	 * fields, and a switch the route does not draw right now but marks
 	 * `data-holds-space` keeps its box the same way. The count has a row of its
-	 * own under the controls and keeps its height while it is empty. So applying
-	 * a filter moves neither Apply nor the list under the bar.
+	 * own under the controls and keeps its height while it is empty; the applied
+	 * filters' tags share that row, before the count, and a bar given
+	 * `appliedRuler` reserves the row's height for one tag beside the longest
+	 * count. So applying a filter never moves Apply, and applying one filter
+	 * moves the list under the bar only where its tag needs more room than the
+	 * count holds and no `appliedRuler` reserves it.
 	 *
  * With `foldsFieldsOnly`, `children` stay in view at every width and only
 	 * `folded` folds; Apply and "Clear filters" are one item of the row.
@@ -117,27 +121,24 @@
 		/**
 		 * With `foldsFieldsOnly`: the longest wording the result line can say, which the
 		 * bar draws unseen under it. The line then reserves what that wording takes at the
-		 * bar's width (one line where it fits on one) and never more, so the list does not
+		 * bar's width (one line where it fits on one, two at most), so the list does not
 		 * move between results. Without it the line reserves two lines.
 		 */
 		statusRuler?: string;
 		/**
+		 * With `statusRuler`: the longest single applied tag, drawn unseen before the
+		 * ruler's wording, so the row reserves one tag's box at rest and applying one
+		 * filter or removing it moves nothing under the bar. For a list whose first row
+		 * has to stay put whatever is applied: the Invoices list (#2746). The Clients
+		 * list gives none, since a phone's first screen there has no tag's room to spare.
+		 */
+		appliedRuler?: string;
+		/**
 		 * The filters that are on, as GOV.UK's "selected filters": one `<li>` for
-		 * each, a removable tag, drawn in a list directly above the result line.
-		 * Given only while a filter is on, so the bar draws no row for them
-		 * otherwise, unless `holdsAppliedRow`.
+		 * each, a removable tag, drawn on the result line's row before the line.
+		 * Given only while a filter is on.
 		 */
 		applied?: Snippet;
-		/**
-		 * Keep the applied tags' row while no filter is on, unseen and out of
-		 * reach, one tag tall, so applying a filter or removing the last one
-		 * moves neither the result line nor the list. "Clear filters" then ends
-		 * the tags' row rather than following Apply. For a list whose first
-		 * row has to stay on a phone's first screen whatever is applied: the
-		 * Invoices list (#2746). The Clients list draws the row only while a
-		 * filter is on, so its default list loses no row.
-		 */
-		holdsAppliedRow?: boolean;
 		/**
 		 * Switches that sit in a row of their own above the fields, so a
 		 * switch drawn or hidden never moves a field or Apply.
@@ -181,8 +182,8 @@
 		activeLabels = [],
 		statusId = `filter-bar-status-${uid}`,
 		statusRuler,
+		appliedRuler,
 		applied,
-		holdsAppliedRow = false,
 		switches,
 		foldsFieldsOnly = false,
 		isBusy = false,
@@ -225,8 +226,21 @@
 
 {#snippet result()}
 	<div class="count" class:ruled={statusRuler !== undefined}>
-		<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
-		{#if statusRuler !== undefined}<span class="ruler" aria-hidden="true">{statusRuler}</span>{/if}
+		<div class="line">
+			{#if applied}
+				<ul class="applied" aria-label="Applied filters">
+					{@render applied()}
+				</ul>
+			{/if}
+			<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
+		</div>
+		{#if statusRuler !== undefined}
+			<!-- The longest tag and wording, unseen, out of the tab order and the accessibility tree. -->
+			<div class="line ruler" aria-hidden="true" inert>
+				{#if appliedRuler}<span class="applied"><Link href={action} label={appliedRuler} variant="chip" icon="x" /></span>{/if}
+				<span class="status">{statusRuler}</span>
+			</div>
+		{/if}
 	</div>
 {/snippet}
 
@@ -267,7 +281,7 @@
 					     and Apply keeps the width of its words in a narrow bar. -->
 					<div class="actions">
 						<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
-						{#if !holdsAppliedRow}{@render clear()}{/if}
+						{@render clear()}
 					</div>
 				</cluster-l>
 			</stack-l>
@@ -292,27 +306,8 @@
 		</fieldset>
 	</details>
 	{/if}
-	{#if applied && holdsAppliedRow}
-		<!-- "Clear filters" ends the tags' row, as on the MOJ filter, so Apply keeps no room for it. -->
-		<div class="applied-row">
-			<ul class="applied" aria-label="Applied filters">
-				{@render applied()}
-			</ul>
-			{@render clear()}
-		</div>
-	{:else if applied}
-		<ul class="applied" aria-label="Applied filters">
-			{@render applied()}
-		</ul>
-	{:else if holdsAppliedRow}
-		<!-- One tag's box, unseen, out of the tab order and the accessibility tree. -->
-		<div class="applied-row reserve" aria-hidden="true" inert>
-			<span class="applied"><Link href={action} label="Clear filters" variant="chip" icon="x" /></span>
-			<Link href={action} label="Clear filters" />
-		</div>
-	{/if}
 	<!-- On the bar's left edge, in a row of its own directly above the list, at every width,
-	     and one line tall while empty: what is applied never moves Apply or the list. -->
+	     and one line tall while empty: what is applied never moves Apply. -->
 	{@render result()}
 </form>
 
@@ -476,13 +471,6 @@
 			list-style: none;
 		}
 
-		.applied-row {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-1) var(--space-2);
-		}
-
 		/* A tag is a target the height of a table row's (`--row-target-min`, 44px at a
 		   coarse pointer), not the 44px of a link on its own: the list under it is a
 		   table of such rows, and a taller tag row costs it a row. */
@@ -498,6 +486,22 @@
 
 		.count > * {
 			grid-area: 1 / 1;
+			align-self: start;
+		}
+
+		/* The tags, then the count, wrapping: the count shares the tags' line where
+		   the rest of it holds a sentence, and takes a line of its own under them
+		   where it does not, as on a phone. */
+		.line {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1) var(--space-2);
+			min-inline-size: 0;
+		}
+
+		.line > .status {
+			flex: 1 1 30ch;
 		}
 
 		/* Two lines tall whatever it says, and no wider than a reading line (75ch), so the
@@ -506,25 +510,24 @@
 			min-block-size: 2lh;
 		}
 
-		.dense .status,
-		.dense .ruler {
+		.dense .status {
 			max-inline-size: 75ch;
 		}
 
-		/* With a ruler, the longest wording the count can say, drawn unseen in the same box, the
-		   box takes what that wording takes at this width, up to two lines: one where it fits
-		   on one, two where it does not, with no width query. */
+		/* With a ruler, the longest wording the count can say (after the longest tag, given
+		   one), drawn unseen in the same box: the box takes what those take at this width, the
+		   wording up to two lines, with no width query. */
 		.dense > .count.ruled {
 			min-block-size: 1lh;
 		}
 
 		.ruler {
-			margin: 0;
+			visibility: hidden;
+		}
+
+		.ruler > .status {
 			max-block-size: 2lh;
 			overflow: hidden;
-			visibility: hidden;
-			font-size: var(--text-meta-size);
-			line-height: var(--text-meta-leading);
 		}
 
 		/* The link's box when no filter is on: hidden, not removed, so its space

@@ -131,9 +131,9 @@ describe('the overdue book (#768)', () => {
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 4 Invoices, newest first.');
 	});
 
-	// The radios on one line with Apply after them and the held "Clear filters"
-	// box, the count under them on the left edge, a quiet legend: the Clients
-	// list's bar, with its fields' row holding the radios.
+	// The radios and the search on one line with Apply after them and the held
+	// "Clear filters" box, the count under them on the left edge, a quiet
+	// legend: the Clients list's bar, with its fields' row holding the radios.
 	it('draws the radios beside Apply, and does not move Apply once narrowed', async () => {
 		await setup();
 		const apply = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
@@ -154,7 +154,8 @@ describe('the overdue book (#768)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toBeVisible();
 		expect(apply().left).toBe(before.left);
 		expect(apply().top).toBe(before.top);
-		expect(testPage.getByRole('status').element().getBoundingClientRect().left).toBe(status.left);
+		// The tag stands before the line on its row, so the line starts after it.
+		expect(testPage.getByRole('status').element().getBoundingClientRect().left).toBeGreaterThan(status.left);
 	});
 
 	it('goes to the address for the chosen view on Apply', async () => {

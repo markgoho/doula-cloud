@@ -409,17 +409,20 @@ describe('the columns between filter states', () => {
 			await renderListScreen({ width, height: 800, respond: () => jsonResponse({ items: [shortest], hasMore: true }, 200) });
 			await ready();
 			const status = document.querySelector('#clients-result')!;
-			heights.push(status.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight));
+			heights.push(document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight));
 			tops.push(document.querySelector('table.table-view thead')!.getBoundingClientRect().top);
 			cleanup();
 			for (const key of Object.keys(queries)) pageState.url.searchParams.delete(key);
 		}
 
-		for (const height of heights) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
-		// The default draws no tags; every other state draws their one row, so those are held against each other.
-		const tagged = tops.slice(1);
-		expect(Math.max(...tagged) - Math.min(...tagged), `table tops ${tops}`).toBeLessThanOrEqual(1);
-		expect(tagged[0]! - tops[0]!, `the tag row, table tops ${tops}`).toBeLessThan(70);
+		// The tags share the count's row: one tag fits inside the room the count holds, so
+		// neither it nor a typed name moves the table. Three tags take more of the row than
+		// the count can wrap beside, so that row grows, by less than a row of tags of its own.
+		const [rest, owes, three, name] = heights;
+		for (const height of [rest!, owes!, name!]) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
+		expect(three!, `count line heights ${heights}`).toBeGreaterThanOrEqual(lines - 0.5);
+		for (const top of [tops[1]!, tops[3]!]) expect(Math.abs(top - tops[0]!), `table tops ${tops}`).toBeLessThanOrEqual(1);
+		expect(tops[2]! - tops[0]!, `the three tags' row, table tops ${tops}`).toBeLessThan(70);
 	});
 
 	it('keeps Money and Date where they were when a Doula is chosen, and Date follows Status when Money is left out', async () => {
@@ -547,7 +550,7 @@ describe('the count line’s measure and its held room', () => {
 		await ready();
 
 		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const ruler = document.querySelector<HTMLElement>('.ruler')!;
+		const ruler = document.querySelector<HTMLElement>('.ruler .status')!;
 		const cap = 75 * chOf(status);
 		expect(status.getBoundingClientRect().width, 'the result line').toBeLessThanOrEqual(cap + 0.5);
 		expect(ruler.getBoundingClientRect().width, 'the held wording').toBeLessThanOrEqual(cap + 0.5);
@@ -560,7 +563,7 @@ describe('the count line’s measure and its held room', () => {
 
 		const status = document.querySelector<HTMLElement>('#clients-result')!;
 		const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
-		const needed = linesOf(document.querySelector('.ruler')!);
+		const needed = linesOf(document.querySelector('.ruler .status')!);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeLessThan(needed + 0.5);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeGreaterThan(Math.min(needed, 2) - 0.5);
 	});

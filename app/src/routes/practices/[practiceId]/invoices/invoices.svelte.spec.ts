@@ -109,9 +109,11 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.element(testPage.getByRole('link', { name: paidInvoice.clientName }))
 			.toBeVisible();
 		// The money said once, its state in the Clients list's words: the
-		// open row is past its due day, so it says how late (#2122).
+		// open row is past its due day, so it says how late (#2122). A paid
+		// row's state is its date cell's lead, so its amount stands alone.
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00, paid') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Paid Jul 4, 2026') })).toBeVisible();
 	});
 
 	it('reads an open Invoice that is not yet late as owed', async () => {
@@ -120,11 +122,14 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, owed') })).toBeVisible();
 	});
 
+	// T6: the row link already says the reference, so the table's cell says
+	// only how it was billed, and the reference is heard once.
 	it('says how each Invoice was billed, beside its reference', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: heard('INV-0042, billed By hand') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('DC-0092, billed through Stripe') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Billed By hand') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Billed through Stripe') }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Billed By hand') })).toHaveTextContent('INV-0042');
 	});
 
 	// T6: the table is named, described by the result line, and two
@@ -160,8 +165,8 @@ describe('the Practice-wide invoice list (#265)', () => {
 		const totals = testPage.getByRole('definition');
 		await expect.element(totals.nth(0)).toHaveTextContent('$6,300.00 on 2 Invoices');
 		await expect.element(totals.nth(2)).toHaveTextContent('$2,500.00');
-		await expect.element(totals.nth(3)).toHaveTextContent('$1,250.50 to Clients');
-		await expect.element(testPage.getByRole('term').nth(3)).toHaveTextContent('Of that, returned');
+		await expect.element(totals.nth(3)).toHaveTextContent('$1,250.50');
+		await expect.element(testPage.getByRole('term').nth(3)).toHaveTextContent('Of that, refunded');
 	});
 
 	// #2225: the BFF says a payment is on its way, and the row says so.

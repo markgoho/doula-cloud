@@ -56,7 +56,7 @@ interface SetupOptions {
 	withHeldSwitch?: boolean;
 	// One removable tag, as the Clients list draws its selected filters.
 	withApplied?: boolean;
-	holdsAppliedRow?: boolean;
+	appliedRuler?: string;
 	foldsFieldsOnly?: boolean;
 	withFields?: boolean;
 	status?: string;
@@ -84,7 +84,7 @@ async function setup({
 	withSwitches = false,
 	withHeldSwitch = false,
 	withApplied = false,
-	holdsAppliedRow = false,
+	appliedRuler,
 	foldsFieldsOnly = false,
 	withFields = true,
 	status = 'Showing 2 scheduled visits.',
@@ -101,6 +101,7 @@ async function setup({
 		legend: 'Narrow the schedule',
 		status,
 		statusRuler,
+		appliedRuler,
 		empty,
 		clearHref,
 		activeLabels,
@@ -109,7 +110,6 @@ async function setup({
 		foldsFieldsOnly,
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
-		holdsAppliedRow,
 		folded: withFolded ? fromField() : undefined,
 		children: withFields ? (withFolded ? nameField() : fromField()) : undefined
 	});
@@ -477,7 +477,8 @@ describe('FilterBar that folds only its fields', () => {
 
 	it('reserves two lines for the count, or what the longest wording it is given takes at the bar’s width', async () => {
 		const lineHeight = () => Number(getComputedStyle(page.getByRole('status').element()).lineHeight.replace('px', ''));
-		const reserved = () => page.getByRole('status').element().parentElement!.getBoundingClientRect().height;
+		// The line's row, and the row's box that holds it and the unseen ruler.
+		const reserved = () => page.getByRole('status').element().parentElement!.parentElement!.getBoundingClientRect().height;
 		const longest = 'Showing the first 25 of Kimiko Nakashima’s active Clients.';
 		const { rerender } = await setup({ foldsFieldsOnly: true, withSwitches: true, withFolded: true });
 		expect(reserved()).toBeGreaterThan(lineHeight() * 1.5);
@@ -506,13 +507,22 @@ describe('FilterBar that folds only its fields', () => {
 		expect(status.parentElement!.getBoundingClientRect().height, 'reserved to match').toBeCloseTo(status.getBoundingClientRect().height, 0);
 	});
 
-	it('lists the applied filters above the result line, and draws no list when it is given none', async () => {
+	it('lists the applied filters on the result line\'s row, before the line', async () => {
 		await setup({ withApplied: true });
 
 		const tags = page.getByRole('list', { name: 'Applied filters' });
 		await expect.element(tags.getByRole('link', { name: 'Remove filter: Who owe money' })).toBeVisible();
-		expect(tags.element().getBoundingClientRect().bottom).toBeLessThanOrEqual(statusBox().top);
-		expect(tags.element().getBoundingClientRect().top).toBeGreaterThan(applyBox().bottom);
+		const box = tags.element().getBoundingClientRect();
+		expect(box.right).toBeLessThanOrEqual(statusBox().left);
+		expect(box.bottom).toBeGreaterThan(statusBox().top);
+		expect(box.top).toBeGreaterThan(applyBox().bottom);
+	});
+
+	it('takes the result line under the tags where the row cannot hold both, as on a phone', async () => {
+		await setup({ withApplied: true, width: 320, status: 'Showing the first 25 of 40 Invoices, earliest payment due first.' });
+
+		const box = page.getByRole('list', { name: 'Applied filters' }).element().getBoundingClientRect();
+		expect(statusBox().top).toBeGreaterThanOrEqual(box.bottom);
 	});
 
 	it('draws no list of applied filters while none is given', async () => {
@@ -521,24 +531,24 @@ describe('FilterBar that folds only its fields', () => {
 		await expect.element(page.getByRole('list', { name: 'Applied filters' })).not.toBeInTheDocument();
 	});
 
-	it('holds the applied row unseen with holdsAppliedRow, so applying a filter moves neither Apply nor the result line', async () => {
-		await setup({ foldsFieldsOnly: true, holdsAppliedRow: true });
+	it.each([WIDE, 320])('holds one tag\'s room with appliedRuler, so applying a filter moves neither Apply nor what is under the bar, at %ipx', async (width) => {
+		const status = 'Showing the first 25 of 40 Invoices, earliest payment due first.';
+		const held = { foldsFieldsOnly: true, statusRuler: status, appliedRuler: 'Who owe money', status, width };
+		const formBottom = () => page.getByRole('button', { name: 'Apply' }).element().closest('form')!.getBoundingClientRect().bottom;
+		await setup(held);
 		const apply = applyBox();
-		const status = statusBox();
+		const bottom = formBottom();
 		await expect.element(page.getByRole('list', { name: 'Applied filters' })).not.toBeInTheDocument();
-		await expect.element(page.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+		// The held tag is unseen: no role query reaches it.
+		await expect.element(page.getByRole('link', { name: 'Remove filter: Who owe money' })).not.toBeInTheDocument();
+		expect(apply.top).toBeLessThan(statusBox().top);
 
 		cleanup();
-		await setup({ foldsFieldsOnly: true, holdsAppliedRow: true, withApplied: true, clearHref: '/practices/practice-1/schedule' });
+		await setup({ ...held, withApplied: true, clearHref: '/practices/practice-1/schedule' });
 
-		const tags = page.getByRole('list', { name: 'Applied filters' });
-		const clear = page.getByRole('link', { name: 'Clear filters' });
-		await expect.element(clear).toBeVisible();
-		// "Clear filters" ends the tags' row rather than following Apply.
-		expect(clear.element().getBoundingClientRect().top).toBeGreaterThan(applyBox().bottom);
-		expect(clear.element().getBoundingClientRect().left).toBeGreaterThan(tags.element().getBoundingClientRect().right);
+		await expect.element(page.getByRole('link', { name: 'Remove filter: Who owe money' })).toBeVisible();
 		expect(applyBox().top).toBe(apply.top);
-		expect(statusBox().top).toBe(status.top);
+		expect(Math.abs(formBottom() - bottom)).toBeLessThanOrEqual(0.5);
 	});
 
 	it('draws no fold when the bar has no fields', async () => {
