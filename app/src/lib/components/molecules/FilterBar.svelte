@@ -587,8 +587,8 @@
 			}
 		}
 
-		/* A status line, not prose: the bar's whole width, so the longest wording
-		   takes one line wherever the bar can hold it, and every list holds the same. */
+		/* A status line, not prose: it wraps at the bar's whole width, so the longest
+		   wording takes one line wherever the bar can hold it, and every list holds the same. */
 		.status {
 			margin: 0;
 			/* One line's height even while empty, so the list does not move when
@@ -597,6 +597,12 @@
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-meta-size);
 			line-height: var(--text-meta-leading);
+		}
+
+		/* The line's own box hugs its sentence, so its focus ring does; the
+		   ruler keeps the bar's width, which is where the sentence wraps. */
+		p.status:not(.visually-hidden) {
+			inline-size: fit-content;
 		}
 
 		/* Focus lands here after a filter is applied (`focusStatus`). */

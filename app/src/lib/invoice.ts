@@ -818,14 +818,16 @@ export function invoiceStateWord(
 /** What a Staff list's Money cell says after an Invoice's amount, and the
  * badge it takes, if any (`MoneyAmount`): the Clients list and the Invoices
  * list say one Invoice alike. A paid Invoice some of which went back says
- * how much, "$300.00 refunded", where the reader knows it, so the rows
- * that say refunded add up to "Of that, refunded". */
+ * it was paid and how much went back, "paid, $300.00 refunded", so the rows
+ * that say refunded add up to "Of that, refunded"; `refund` is that second
+ * fact alone, for a card whose date line already says "Paid". */
 export function invoiceMoneyState(
 	invoice: InvoiceStanding & { refundedCents?: number }
-): { word: string; variant?: 'warning' | 'error' } {
+): { word: string; variant?: 'warning' | 'error'; refund?: string } {
 	const refunded = invoice.refundedCents ?? 0;
 	if (invoice.status === 'paid' && !invoice.paymentProcessing && refunded > 0) {
-		return { word: `${formatAmount(refunded)} refunded` };
+		const refund = `${formatAmount(refunded)} refunded`;
+		return { word: `paid, ${refund}`, refund };
 	}
 	return { word: invoiceStateWord(invoice), variant: invoiceStateBadge(invoice) };
 }

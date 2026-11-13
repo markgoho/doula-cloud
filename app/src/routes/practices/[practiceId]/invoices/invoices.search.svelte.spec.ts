@@ -16,7 +16,7 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
-import { data, fixture, narrowedToOverdue } from './page.fixture.js';
+import { data, fixture, narrowedToOverdue, typical } from './page.fixture.js';
 import { apiFetchWithSession, goto, pageState } from '#testing/routePage.js';
 
 vi.mock('$app/state', () => import('#testing/routePage.js'));
@@ -46,12 +46,13 @@ interface SetupOptions {
 	search?: string;
 	url?: string;
 	read?: PracticeInvoiceListData | undefined;
+	width?: number;
 }
 
-async function setupSearch({ search = '', url = fixture.url, read = data }: SetupOptions = {}) {
+async function setupSearch({ search = '', url = fixture.url, read = data, width = 1440 }: SetupOptions = {}) {
 	pageState.url = new URL(url);
 	pageState.state = search ? { invoicesSearch: search } : {};
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(width, 900);
 	return render(Page, { data: read });
 }
 
@@ -244,7 +245,7 @@ describe('the state said once (DESIGN.md, "Money is said once")', () => {
 	it('says a refunded Invoice beside its amount and its paid day, and an overdue one in its badge', async () => {
 		await setupSearch();
 
-		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*\$1,250\.50 refunded$/ });
+		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*paid, \$1,250\.50 refunded$/ });
 		const overdue = testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ });
 		await expect.element(paid).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: /^Paid Jul 4, 2026$/ }).last()).toBeVisible();
@@ -277,5 +278,68 @@ describe('the state said once (DESIGN.md, "Money is said once")', () => {
 		const voided = testPage.getByRole('cell', { name: /,\s*void$/ });
 		await expect.element(voided).toBeVisible();
 		expect(voided.element().querySelector('svg')).toBeNull();
+	});
+});
+
+// C4 (#2746): every column starts, and the amounts end, at one place whichever
+// rows a view or a search shows -- a four-figure amount in one, none in another.
+const typicalBook = typical.props!.data as PracticeInvoiceListData;
+// The longest state a row can say, "paid, $1,500.00 refunded", on one paid row.
+const book: PracticeInvoiceListData = {
+	...typicalBook,
+	items: typicalBook.items.map((invoice, index) => (index === 1 ? { ...invoice, refundedCents: invoice.amountCents } : invoice))
+};
+const views = [
+	{ name: 'all', url: fixture.url, search: '', items: book.items, view: 'all' },
+	{ name: 'unpaid', url: `${fixture.url}?show=unpaid`, search: '', items: book.items.filter((invoice) => invoice.status === 'open'), view: 'unpaid' },
+	{ name: 'overdue', url: narrowedToOverdue.url!, search: '', items: book.items.filter((invoice) => invoice.daysOverdue > 0), view: 'overdue' },
+	{ name: '"Falk"', url: fixture.url, search: 'Falk', items: book.items.filter((invoice) => invoice.clientName.includes('Falk')), view: 'all' },
+	{ name: '"DC-0015"', url: fixture.url, search: 'DC-0015', items: book.items.filter((invoice) => invoice.reference === 'DC-0015'), view: 'all' }
+] as const;
+
+// Where each column starts and where the amounts end, once the table is drawn.
+async function columnEdges(label: string): Promise<number[]> {
+	await expect.element(testPage.getByRole('table')).toBeVisible();
+	await document.fonts.ready;
+	expect(testPage.getByRole('row').elements().length, `${label} shows rows`).toBeGreaterThan(1);
+	const starts = testPage.getByRole('columnheader').elements().map((header) => Math.round(header.getBoundingClientRect().left));	// querySelector, case 2: the amount's own box, inside a cell a screen reader hears whole.
+	const table = testPage.getByRole('table').element();
+	const ends = new Set([...table.querySelectorAll(':scope > tbody .amount')].map((amount) => Math.round(amount.getBoundingClientRect().right)));
+	expect(ends.size, `amounts end on one edge in ${label}`).toBe(1);
+	for (const row of table.querySelectorAll(':scope > tbody > tr')) {
+		expect(row.getBoundingClientRect().height, `a row's height in ${label}`).toBeCloseTo(40, 0);
+	}
+	// Round 6's finding (#2746): a two-word Client name stays on one line.
+	for (const name of testPage.getByRole('rowheader').getByRole('link').elements()) {
+		expect(name.getClientRects(), `${name.textContent} on one line in ${label}`).toHaveLength(1);
+	}
+	return [...starts, ...ends];
+}
+
+// C4 (#2746, #2849): every column starts, and the amounts end, at one place
+// whichever rows a view, a search or Load more shows -- a four-figure amount
+// in one, only a three-figure one in another, a short name in a third.
+describe('the columns across views (#2849)', () => {
+	it.each([1280, 1440, 1920, 2560])('holds every column and the amounts’ edge still, every row 40px, at a %ipx frame', async (width) => {
+		const placed: Record<string, number[]> = {};
+		for (const { name, url, search, items, view } of views) {
+			const read = { ...book, items: [...items], view };
+			apiFetchWithSession.mockResolvedValue(jsonResponse(read));
+			await setupSearch({ search, url, read, width });
+			placed[name] = await columnEdges(name);
+			cleanup();
+		}
+
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...book, items: book.items.slice(4) }));
+		await setupSearch({ read: { ...book, items: book.items.slice(0, 4), hasMore: true, nextCursor: 'cursor-1' }, width });
+		const firstPage = await columnEdges('the first page');
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await expect.element(testPage.getByRole('link', { name: book.items.at(-1)!.clientName })).toBeVisible();
+		placed['the first page'] = firstPage;
+		placed['after Load more'] = await columnEdges('after Load more');
+
+		for (const [name, edges] of Object.entries(placed)) {
+			expect(edges, `${name} against all`).toStrictEqual(placed.all);
+		}
 	});
 });

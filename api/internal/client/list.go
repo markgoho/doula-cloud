@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/invoicestatus"
 	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/pagecursor"
+	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicetimezone"
@@ -142,6 +143,11 @@ type OpenEngagement struct {
 	// the rule every Staff read of an Invoice uses (payments'
 	// paymentProcessingExpr). Set beside InvoiceStatus and gated with it.
 	PaymentProcessing *bool `json:"paymentProcessing,omitempty"`
+	// RefundedCents (#2849) is how much of the Invoice InvoiceStatus names
+	// has gone back to the Client, the figure the Invoices list's row
+	// carries, so a paid line says it was paid and how much went back.
+	// Set beside InvoiceStatus and gated with it.
+	RefundedCents *int64 `json:"refundedCents,omitempty"`
 
 	// FeeCents is the Reader's own agreed fee (ADR-0008's
 	// engagement_attachments.fee_amount_cents), set only when the Reader
@@ -593,6 +599,7 @@ type rawOpenEngagement struct {
 	invoiceAmountCents sql.NullInt64
 	invoiceDueAt       sql.NullTime
 	paymentProcessing  sql.NullBool
+	refundedCents      sql.NullInt64
 	feeCents           sql.NullInt64
 }
 
@@ -675,6 +682,11 @@ const doulaNameSeparator = "\x1f"
 // e.due_date, added for the list's Due column, is a column of the Engagement
 // row the plan already reads, so the plan is unchanged (re-run 2026-11-08:
 // same nodes, total cost 17,322, no JIT section).
+// #2849 added inv.refunded_cents, a scalar subquery over the Invoice's
+// Refunds: one Bitmap Heap Scan on payments per line, by
+// payments_refunds_by_target and payments_invoice_id_idx (re-run
+// 2026-11-13 in WSL: total cost 18,028, no JIT section; 8.8 ms execution,
+// 452 shared buffers).
 // The zone the count needs is one primary-key read of practices
 // (practicetimezone.Load) per request, made only for a reader shown
 // Invoices.
@@ -685,7 +697,7 @@ const openEngagementRollupQueryTemplate = `
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.state = 'granted'),
-	       inv.status, inv.amount_cents, inv.due_at, inv.payment_processing, att.fee_amount_cents
+	       inv.status, inv.amount_cents, inv.due_at, inv.payment_processing, inv.refunded_cents, att.fee_amount_cents
 	FROM engagements e
 	LEFT JOIN LATERAL (
 	    -- At most one Contract row per Engagement, because there can be
@@ -720,7 +732,9 @@ const openEngagementRollupQueryTemplate = `
 	    -- newest Invoice of any other status (paid, void, uncollectible,
 	    -- or draft) once nothing is outstanding.
 	    SELECT i.status, i.amount_cents, i.due_at,
-	           ` + invoicestatus.PaymentOnItsWayExpr + ` AS payment_processing
+	           ` + invoicestatus.PaymentOnItsWayExpr + ` AS payment_processing,
+	           (SELECT ` + paymentstanding.RefundedSumExpr + ` FROM payments pt
+	             WHERE pt.invoice_id = i.id AND ` + paymentstanding.IsRefundExpr + `) AS refunded_cents
 	    FROM invoices i
 	    WHERE i.contract_id = ct.id
 	    ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
@@ -783,7 +797,7 @@ func fetchOpenEngagements(ctx context.Context, tx *sql.Tx, clientIDs []string, s
 		if err := rows.Scan(
 			&raw.clientID, &raw.engagementID, &raw.kind, &raw.engagementStatus, &raw.dueDate,
 			&raw.birthOutcome, &raw.pregnancyEndedOn, &raw.contractStatus,
-			&raw.doulaNames, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.feeCents,
+			&raw.doulaNames, &raw.invoiceStatus, &raw.invoiceAmountCents, &raw.invoiceDueAt, &raw.paymentProcessing, &raw.refundedCents, &raw.feeCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan open engagement: %w", err)
@@ -843,6 +857,8 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 			late := overdue.Days(status, processing, raw.invoiceDueAt.Time, days.now, days.zone)
 			oe.DaysOverdue = &late
 			oe.PaymentProcessing = &processing
+			refunded := raw.refundedCents.Int64
+			oe.RefundedCents = &refunded
 		}
 		if raw.invoiceAmountCents.Valid {
 			amount := raw.invoiceAmountCents.Int64

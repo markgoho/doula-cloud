@@ -63,7 +63,7 @@ export const data: PracticeInvoiceListData = {
 			raisedOn: '2026-07-01',
 			paidOn: '2026-07-04',
 			// #271: the Stripe rail's own reference, so this fixture's two
-			// rows realize both billing-mode states the Reference cell
+			// rows realize both billing-mode states the Invoice cell
 			// renders.
 			reference: 'DC-0092',
 			billingMode: 'stripe',

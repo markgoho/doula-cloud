@@ -1631,6 +1631,8 @@ describe('the Money column', () => {
 		['a late Invoice', { daysOverdue: 12 }, '12 days overdue'],
 		['a payment on its way', { paymentProcessing: true }, 'payment on its way'],
 		['a paid Invoice', { invoiceStatus: 'paid', daysOverdue: 0 }, 'paid'],
+		// #2849: as the Invoices list says it, through the one `invoiceMoneyState`.
+		['a partly refunded Invoice', { invoiceStatus: 'paid', daysOverdue: 0, refundedCents: 30_000 }, String.raw`paid, \$300\.00 refunded`],
 		['a void Invoice', { invoiceStatus: 'void', daysOverdue: 0 }, 'void'],
 		['a written-off Invoice', { invoiceStatus: 'uncollectible', daysOverdue: 0 }, 'written off']
 	])('reads %s as "%s"', async (_name, line, text) => {
