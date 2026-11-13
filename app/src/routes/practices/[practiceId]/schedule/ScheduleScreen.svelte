@@ -140,10 +140,11 @@
 	]);
 
 	function engagementHref(visit: ScheduledVisit): string {
-		return resolve('/practices/[practiceId]/engagements/[engagementId]', {
+		const engagement = resolve('/practices/[practiceId]/engagements/[engagementId]', {
 			practiceId,
 			engagementId: visit.engagementId
 		});
+		return `${engagement}#visit-${visit.visitId}`;
 	}
 </script>
 

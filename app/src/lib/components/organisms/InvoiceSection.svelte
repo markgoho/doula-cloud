@@ -85,6 +85,7 @@
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
+	import { landOnRow } from '#lib/landOnRow.js';
 
 	let {
 		invoices,
@@ -204,11 +205,7 @@
 		}
 		hasLanded = true;
 		const views: DataTableView[] = ['table', 'record'];
-		const shownRow = views
-			.map((view) => document.querySelector<HTMLElement>(`#${CSS.escape(invoiceRowId(invoice, view))}`))
-			.find((row) => row !== null && row.getClientRects().length > 0);
-		shownRow?.scrollIntoView({ block: 'start' });
-		shownRow?.focus({ preventScroll: true });
+		landOnRow(views.map((view) => invoiceRowId(invoice, view)));
 	});
 
 	// No option is selected when the question opens (#1590): a default

@@ -912,14 +912,40 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		// scheduledAt, visit-2 carries none. The expected cell text is built
 		// from the same Date methods formatScheduledVisit itself uses
 		// (dates.spec.ts's own reason) rather than a literal UTC string, so
-		// this passes regardless of the runner's own time zone.
+		// this passes regardless of the runner's own time zone. 2027 is
+		// never the current year, so the year is always printed.
 		const scheduled = new Date('2027-03-15T14:30:00Z');
 		const hour12 = scheduled.getHours() % 12 === 0 ? 12 : scheduled.getHours() % 12;
 		const minute = scheduled.getMinutes().toString().padStart(2, '0');
 		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
-		const expected = `${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
+		const expected = `${scheduled.toLocaleDateString('en-US', { weekday: 'short' })} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
 		await expect.element(testPage.getByRole('rowheader', { name: expected, exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+	});
+
+	it('takes focus on the Visit a Schedule row linked to (#2747)', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/#visit-visit-2');
+			await renderWithFixtureResponder();
+
+			await expect.poll(() => document.activeElement?.id).toBe('visit-row-table-visit-2');
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('leaves focus alone when the linked Visit is not among the Visits', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/#visit-elsewhere');
+			await renderWithFixtureResponder();
+
+			await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+			expect(document.activeElement).toBe(document.body);
+		} finally {
+			pageState.url = original;
+		}
 	});
 
 	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {

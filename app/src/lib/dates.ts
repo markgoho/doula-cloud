@@ -132,15 +132,20 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
  * A Visit's own Date column and per-row summary (#250): "Not yet
  * scheduled" -- plain text, so it is readable at 320px and announced to a
  * screen reader the same as any other cell -- when `value` is absent, or
- * the same day-and-clock treatment `formatActivityTimestamp`'s absolute
- * branch already uses (`formatClock`, this file's own) otherwise. Not
- * relative-under-a-week like that function's own recent-past branches: a
- * Visit's scheduled instant is as often ahead as behind, and "in 3 days"
- * reads oddly beside "Yesterday" for a thing that has not happened yet.
+ * the weekday-led form ADR-0022's 2026-10-24 amendment writes ("Thu Sep 4,
+ * 2:00pm"), the same one `formatPortalVisit` prints for a Visit still to
+ * come. The year joins only when the Visit is not in `now`'s year, so a
+ * Visit from last winter or next spring still says which. Not
+ * relative-under-a-week like `formatActivityTimestamp`'s recent-past
+ * branches: a Visit's scheduled instant is as often ahead as behind, and
+ * "in 3 days" reads oddly beside "Yesterday" for a thing that has not
+ * happened yet. `now` defaults to the real clock and is a parameter only
+ * so a test can pin it.
  */
-export function formatScheduledVisit(value: string | undefined): string {
+export function formatScheduledVisit(value: string | undefined, now: Date = new Date()): string {
 	if (!value) return 'Not yet scheduled';
-	return formatInstantWithClock(value);
+	const date = new Date(value);
+	return formatWeekdayDayClock(date, { withYear: date.getFullYear() !== now.getFullYear() });
 }
 
 /**
@@ -168,8 +173,15 @@ export function formatScheduledVisit(value: string | undefined): string {
 export function formatPortalVisit(value: string, hasHappened: boolean): string {
 	const date = new Date(value);
 	if (hasHappened) return formatDay(date);
+	return formatWeekdayDayClock(date, { withYear: false });
+}
+
+/**
+ * "Thu Sep 4, 2:00pm", or "Thu Sep 4, 2027, 2:00pm" with the year.
+ */
+function formatWeekdayDayClock(date: Date, { withYear }: { withYear: boolean }): string {
 	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-	return `${weekday} ${formatDay(date, { withYear: false })}, ${formatClock(date)}`;
+	return `${weekday} ${formatDay(date, { withYear })}, ${formatClock(date)}`;
 }
 
 /**

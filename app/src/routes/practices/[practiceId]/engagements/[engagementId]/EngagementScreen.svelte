@@ -67,6 +67,7 @@
 	} from '#lib/portalInvite.js';
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
+	import { landOnRow } from '#lib/landOnRow.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import {
@@ -770,6 +771,24 @@
 
 	// The scheduled Visits by date, then the rest (#1999).
 	const sortedVisits = $derived(sortVisits(visits.items));
+
+	// #2747: a Schedule row links here with `#visit-<id>`; its row takes
+	// focus, once, when the Visits arrive.
+	const landOnVisitId = $derived(/^#visit-(.+)$/.exec(page.url.hash)?.[1]);
+	const visitRowId = (visit: Visit, view: DataTableView) => `visit-row-${view}-${visit.visitId}`;
+	let hasLandedOnVisit = false;
+	$effect(() => {
+		if (hasLandedOnVisit || !landOnVisitId || !visitsLoad.hasSettled) {
+			return;
+		}
+		const visit = sortedVisits.find((row) => row.visitId === landOnVisitId);
+		if (!visit) {
+			return;
+		}
+		hasLandedOnVisit = true;
+		const views: DataTableView[] = ['table', 'record'];
+		landOnRow(views.map((view) => visitRowId(visit, view)));
+	});
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
@@ -2809,6 +2828,7 @@
 			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.', wraps: true }
 		]}
 		rows={sortedVisits}
+		rowId={visitRowId}
 		rowActions={{ label: 'Actions', content: visitActions }}
 		hasMore={visits.hasMore}
 		onLoadMore={() => visits.loadMore()}

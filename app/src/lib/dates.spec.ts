@@ -75,12 +75,13 @@ describe('formatScheduledVisit', () => {
 		expect(formatScheduledVisit(value)).toBe(want);
 	});
 
-	it('reads a scheduled instant as a day and a 12-hour clock, in the reader own zone', () => {
-		const iso = local(2027, 3, 15, 14, 30);
-		const expected = new Date(iso);
-		expect(formatScheduledVisit(iso)).toBe(
-			`${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
-		);
+	it.each([
+		['leads with the weekday and drops the year inside the current year', local(2026, 11, 15, 18, 0), 'Sun Nov 15, 6:00pm'],
+		['keeps the year for a Visit in a later year', local(2027, 3, 15, 14, 30), 'Mon Mar 15, 2027, 2:30pm'],
+		['keeps the year for a Visit in an earlier year', local(2025, 12, 31, 0, 5), 'Wed Dec 31, 2025, 12:05am']
+	])('%s', (_name, iso, want) => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(formatScheduledVisit(iso, now)).toBe(want);
 	});
 });
 

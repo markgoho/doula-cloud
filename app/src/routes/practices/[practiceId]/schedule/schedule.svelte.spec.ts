@@ -87,7 +87,7 @@ describe('the Practice-wide schedule (#263)', () => {
 		// the reader's own zone, so the assertion is on the machine-readable
 		// value; `querySelector` because an attribute has no accessible
 		// query of its own.
-		const whenCell = testPage.getByRole('cell', { name: /Sep \d+, 2026/ }).first();
+		const whenCell = testPage.getByRole('cell', { name: /^[A-Z][a-z]{2} Sep \d+, / }).first();
 		await expect.element(whenCell).toBeVisible();
 		expect(whenCell.element().querySelector('time')).toHaveAttribute(
 			'datetime',
@@ -95,12 +95,15 @@ describe('the Practice-wide schedule (#263)', () => {
 		);
 	});
 
-	it('names each row as the way in to the Visit’s Engagement', async () => {
+	it('names each row as the way in to its Visit on the Engagement (#2747)', async () => {
 		await setup();
 
 		await expect
 			.element(testPage.getByRole('link', { name: earlierVisit.clientName }))
-			.toHaveAttribute('href', `/practices/${practiceId}/engagements/${earlierVisit.engagementId}`);
+			.toHaveAttribute(
+				'href',
+				`/practices/${practiceId}/engagements/${earlierVisit.engagementId}#visit-${earlierVisit.visitId}`
+			);
 	});
 
 	it('says an empty result in words rather than rendering a bare table', async () => {
