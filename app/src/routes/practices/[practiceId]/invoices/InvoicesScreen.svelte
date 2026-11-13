@@ -429,9 +429,10 @@
 
 	const NO_PAYMENT_DUE = 'No payment due';
 
+	// Empty with no day, so a card leaves the fact out; the table's cell still says NO_PAYMENT_DUE.
 	function dateText(invoice: PracticeInvoice): string {
 		const line = invoiceDateLine(invoice);
-		return line ? `${line.lead} ${line.day}` : NO_PAYMENT_DUE;
+		return line ? `${line.lead} ${line.day}` : '';
 	}
 
 	/*

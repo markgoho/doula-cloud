@@ -3117,16 +3117,6 @@ describe('the count line in a narrow and a wide bar', () => {
 		expect(count.top).toBeGreaterThanOrEqual(apply.bottom);
 		expect(count.left).toBeLessThanOrEqual(form.left + 1);
 	});
-
-	it('stops at the reading measure instead of running across a wide bar', async () => {
-		await renderListScreen({ width: 1920, height: 900 });
-		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing/);
-
-		const status = testPage.getByRole('status').element();
-		const cap = getComputedStyle(status).maxInlineSize;
-		expect(cap).not.toBe('none');
-		expect(status.getBoundingClientRect().width).toBeLessThanOrEqual(Number(cap.replace('px', '')) + 0.5);
-	});
 });
 
 

@@ -485,8 +485,7 @@
 			white-space: nowrap;
 		}
 
-		/* The count line sits close to the controls it reports on, and is
-		   capped at the reading measure like any sentence. */
+		/* The count line sits close to the controls it reports on. */
 		.dense {
 			gap: var(--space-2);
 		}
@@ -515,14 +514,9 @@
 			align-self: start;
 		}
 
-		/* Two lines tall whatever it says, and no wider than a reading line (75ch), so the
-		   longest count wraps inside its own box and applying a filter never moves the list. */
+		/* Two lines tall whatever it says, so applying a filter never moves the list. */
 		.dense > .count {
 			min-block-size: 2lh;
-		}
-
-		.dense .status {
-			max-inline-size: 75ch;
 		}
 
 		/* With a ruler, the longest wording the count can say, drawn unseen in the same
@@ -573,12 +567,13 @@
 			}
 		}
 
+		/* A status line, not prose: the bar's whole width, so the longest wording
+		   takes one line wherever the bar can hold it, and every list holds the same. */
 		.status {
 			margin: 0;
 			/* One line's height even while empty, so the list does not move when
 			   the count arrives. */
 			min-block-size: 1lh;
-			max-inline-size: var(--measure);
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-meta-size);
 			line-height: var(--text-meta-leading);

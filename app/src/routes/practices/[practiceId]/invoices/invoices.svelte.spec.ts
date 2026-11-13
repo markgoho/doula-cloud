@@ -62,14 +62,14 @@ beforeEach(() => {
 	invalidate.mockReset();
 });
 
-async function setup(page: PracticeInvoiceListData = data) {
+async function setup(page: PracticeInvoiceListData = data, width = 1440) {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
 	// its content floor stacks into below 46rem (#508) -- the same call the
 	// Billing ledger's spec makes for the same reason. What the list says
 	// is asserted here; that it says the same thing in a narrow container
 	// is DataTable's own spec's job.
 	// Above this route's own table floor (#1945, #1981, its +page.svelte), so the <table> renders.
-	await testPage.viewport(1440, 900);
+	await testPage.viewport(width, 900);
 	await render(Page, { data: page });
 }
 
@@ -104,6 +104,17 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 
 		await expect.element(testPage.getByRole('cell', { name: 'No payment due', exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, void') })).toBeVisible();
+	});
+
+	it('leaves the Payment fact off a card with no day, with no dot or dash for it', async () => {
+		await setup({ ...data, items: [{ ...openInvoice, status: 'void', daysOverdue: 0 }, paidInvoice] }, 375);
+
+		const cards = testPage.getByRole('group', { name: 'Invoices', exact: true });
+		await expect.element(cards).toBeVisible();
+		await expect.element(cards.getByText('Jul 4, 2026')).toBeVisible();
+		await expect.element(cards.getByText('No payment due')).not.toBeInTheDocument();
+		expect(cards.element().textContent).not.toContain('—');
+		expect(cards.element().textContent!.match(/Payment:/g), 'the paid card’s fact alone').toHaveLength(1);
 	});
 });
 

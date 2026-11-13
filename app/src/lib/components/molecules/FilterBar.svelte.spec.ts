@@ -386,7 +386,7 @@ describe('FilterBar that folds only its fields', () => {
 		expect(Math.abs(field.bottom - apply.bottom)).toBeLessThan(apply.height);
 	});
 
-	it('holds the controls apart from the result line by the group step, and caps the line at the measure', async () => {
+	it('holds the controls apart from the result line by the group step', async () => {
 		await setup();
 
 		const status = page.getByRole('status').element();
@@ -394,7 +394,6 @@ describe('FilterBar that folds only its fields', () => {
 		// The controls and their result line are two groups (the fieldset and the
 		// line have no accessible role that tells them apart from the form).
 		expect(status.getBoundingClientRect().top - fieldset.getBoundingClientRect().bottom).toBeGreaterThanOrEqual(28);
-		expect(getComputedStyle(status).maxInlineSize).not.toBe('none');
 	});
 
 	it('names the group for a screen reader and does not draw its legend, at any width', async () => {
@@ -486,20 +485,15 @@ describe('FilterBar that folds only its fields', () => {
 		expect(reserved(), 'two lines where it does not').toBeGreaterThan(lineHeight() * 1.5);
 	});
 
-	it('caps the count at 75ch, so a wording longer than that wraps in a bar that could hold it on one line', async () => {
-		const wording = 'Showing the first 25 of Kimiko Nakashima’s active Clients who owe money and have no Contract, soonest due first.';
+	it('holds a wording longer than a reading line on one line where the bar can, and reserves one line for it', async () => {
+		const wording =
+			'Showing the first 99 of Kimiko Nakashima’s active Clients who owe money and have no Contract, soonest due first, then most recently ended.';
 		await setup({ foldsFieldsOnly: true, withSwitches: true, withFolded: true, width: 1920, status: wording, statusRuler: wording });
 		const status = page.getByRole('status').element();
-		const probe = document.createElement('span');
-		probe.style.cssText = `display:inline-block;inline-size:75ch;font-size:${getComputedStyle(status).fontSize}`;
-		status.append(probe);
-		const cap = probe.getBoundingClientRect().width;
-		probe.remove();
 		const lineHeight = Number(getComputedStyle(status).lineHeight.replace('px', ''));
 
-		expect(status.getBoundingClientRect().width).toBeLessThanOrEqual(cap + 0.5);
-		expect(status.getBoundingClientRect().height, 'wrapped').toBeGreaterThan(lineHeight * 1.5);
-		expect(status.parentElement!.getBoundingClientRect().height, 'reserved to match').toBeCloseTo(status.getBoundingClientRect().height, 0);
+		expect(status.getBoundingClientRect().height, 'one line').toBeLessThan(lineHeight * 1.5);
+		expect(status.parentElement!.getBoundingClientRect().height, 'one line reserved').toBeLessThan(lineHeight * 1.5);
 	});
 
 	it.each([WIDE, 320])('lists the applied filters after Apply, on its line and centered on it, at %ipx', async (width) => {
