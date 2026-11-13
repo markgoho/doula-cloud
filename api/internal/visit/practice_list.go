@@ -65,6 +65,11 @@ type PracticeScheduleResponse struct {
 	Items      []ScheduledVisit `json:"items"`
 	NextCursor *string          `json:"nextCursor,omitempty"`
 	HasMore    bool             `json:"hasMore"`
+	// VisitCount (#2867) is every Visit the same narrowing matches -- the
+	// days, the Doula and, for a contractor, her attachments -- not the
+	// page's. Only the first page carries it; a request with a cursor
+	// omits it.
+	VisitCount *int `json:"visitCount,omitempty"`
 }
 
 // scheduleFilter is the narrowed question a caller actually asked: a
@@ -116,16 +121,27 @@ func PracticeScheduleHandler() http.Handler {
 			return
 		}
 
+		ctx := r.Context()
 		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, schedulePageSize,
 			func(after *pagecursor.Cursor) ([]ScheduledVisit, error) {
-				return listScheduledVisits(r.Context(), c.Tx, c.PracticeID, filter, after)
+				return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after)
 			},
 			func(v ScheduledVisit) (time.Time, string) { return v.ScheduledAt, v.VisitID })
 		if !ok {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, PracticeScheduleResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
+		resp := PracticeScheduleResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next}
+		if r.URL.Query().Get("cursor") == "" {
+			count, err := countScheduledVisits(ctx, c.Tx, c.PracticeID, filter)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+			resp.VisitCount = &count
+		}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	})
 }
 
@@ -206,7 +222,12 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 // picked; `$5` is the contractor rule she did not pick, and is NULL for
 // every caller ADR-0008 grants ambient reach.
 const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.family_name, s.id, s.name, v.scheduled_at,
-	       ` + offEngagementBefore + `$6` + offEngagementAfter + `
+	       ` + offEngagementBefore + `$6` + offEngagementAfter + scheduleFromWhere
+
+// scheduleFromWhere is the rows the schedule holds, shared by the page and
+// by the count (#2867), so the total can never be of a different set than
+// the rows. It reads $1 to $5 only.
+const scheduleFromWhere = `
 	  FROM visits v
 	  JOIN engagements e ON e.id = v.engagement_id
 	  JOIN clients cl ON cl.id = e.client_id
@@ -229,6 +250,20 @@ func nullableID(id string) any {
 		return nil
 	}
 	return id
+}
+
+// countScheduledVisits is how many Visits scheduleFromWhere holds for
+// filter, whoever asks: a contractor's count is narrowed by her attachments
+// exactly as her rows are.
+func countScheduledVisits(ctx context.Context, tx *sql.Tx, practiceID string, filter scheduleFilter) (int, error) {
+	var n int
+	err := tx.QueryRowContext(ctx, `SELECT count(*)`+scheduleFromWhere,
+		practiceID, filter.from, filter.to, nullableID(filter.staffID), nullableID(filter.contractorStaffID)).Scan(&n)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("visit: count practice schedule: %w", err)
+	}
+	return n, nil
 }
 
 func listScheduledVisits(

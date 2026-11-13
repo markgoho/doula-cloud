@@ -183,7 +183,7 @@ async function setup(
 			hasMine: Promise.resolve(hasMine),
 			hasAnyClient: Promise.resolve(hasAnyClient),
 			doulas: Promise.resolve(doulas),
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor, timezone: 'America/New_York' }
 		}
 	});
 }
@@ -208,7 +208,7 @@ describe('before the page has taken over', () => {
 					hasMine: Promise.resolve(true),
 					hasAnyClient: Promise.resolve(true),
 					doulas: Promise.resolve([]),
-					session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false }
+					session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 				}
 			}
 		});
@@ -1855,6 +1855,32 @@ describe('a "Load more" already in flight when the filter changes', () => {
 	});
 });
 
+const status = () => testPage.getByRole('status');
+
+describe('the count line says how many there are in all (#2867)', () => {
+	it('says the total while more exist, from the first page only, and the plain line once Load more has shown every Client', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1', clientCount: 2 })
+		);
+		await setupLoadMoreRace();
+		await expect.element(status()).toHaveTextContent('Showing the first 1 of 2 Clients, soonest due first');
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ items: [clients[1]], hasMore: false }));
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(status()).toHaveTextContent('Showing 2 Clients, soonest due first');
+	});
+
+	it('says no total when the page carries none', async () => {
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' })
+		);
+		await setupLoadMoreRace();
+
+		await expect.element(status()).toHaveTextContent('Showing the first 1 Client, soonest due first');
+	});
+});
+
 describe('the Name column', () => {
 	it('is the row header, so a cell is heard against its Client', async () => {
 		await setup();
@@ -2180,7 +2206,7 @@ async function renderListScreen({
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
 			doulas: Promise.resolve(doulas),
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
 }

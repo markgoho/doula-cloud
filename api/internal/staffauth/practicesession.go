@@ -92,6 +92,12 @@ type PracticeSessionResponse struct {
 	// being connected stops nobody paying a Practice that bills by hand,
 	// so the Invoices list says so only where card payment is the rail.
 	BillingMode string `json:"billingMode,omitempty"`
+	// Timezone is practices.timezone, the IANA zone the Practice keeps its
+	// calendar days in (ADR-0036). It rides here so a screen that shows a
+	// Visit's day reads it in the Practice's zone from the first frame
+	// (#2867), with no read of its own. The stored name, which the write
+	// side already checked.
+	Timezone string `json:"timezone"`
 }
 
 // hasClientsQuery names practice_id itself rather than leaving the
@@ -104,8 +110,8 @@ const hasClientsQuery = `SELECT EXISTS (SELECT 1 FROM clients WHERE practice_id 
 const hasOtherDoulasQuery = `SELECT EXISTS (SELECT 1 FROM practice_memberships WHERE practice_id = $1 AND staff_id <> $2 AND 'doula' = ANY(roles))`
 
 // practiceQuery's third column is the billing mode, empty while none is
-// chosen.
-const practiceQuery = `SELECT name, ` + cardpayments.ClientsCanPayExpr + `, COALESCE(billing_mode::text, '') FROM practices WHERE id = $1`
+// chosen; its fourth is the Practice's timezone.
+const practiceQuery = `SELECT name, ` + cardpayments.ClientsCanPayExpr + `, COALESCE(billing_mode::text, ''), timezone FROM practices WHERE id = $1`
 
 // PracticeSessionHandler answers GET .../session: which Practice, which
 // roles, which employment type. Moved from routes_practice.go by #836 --
@@ -117,8 +123,8 @@ func PracticeSessionHandler() http.Handler {
 
 		var name string
 		var clientsCanPay bool
-		var billingMode string
-		if err := tx.QueryRowContext(r.Context(), practiceQuery, practiceID).Scan(&name, &clientsCanPay, &billingMode); err != nil {
+		var billingMode, timezone string
+		if err := tx.QueryRowContext(r.Context(), practiceQuery, practiceID).Scan(&name, &clientsCanPay, &billingMode, &timezone); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -151,6 +157,7 @@ func PracticeSessionHandler() http.Handler {
 			HasOtherDoulas:  hasOtherDoulas,
 			ClientsCanPay:   clientsCanPay,
 			BillingMode:     billingMode,
+			Timezone:        timezone,
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	})

@@ -134,7 +134,7 @@ export function practiceSession(
 	// other fixture's session stays the shape it was.
 	const factor = secondFactor === undefined ? {} : { secondFactor };
 	return {
-		session: { practiceId: 'practice-1', staffId, practiceName, roles, isContractor: false, ...factor }
+		session: { practiceId: 'practice-1', staffId, practiceName, roles, isContractor: false, timezone: 'America/New_York', ...factor }
 	};
 }
 

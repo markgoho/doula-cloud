@@ -6,7 +6,7 @@ You are an independent grader of one screen of DoulaCloud, <screen>. You have NO
 
 Read only inside `<root>`.
 
-Before you read the surface brief: having read only this brief and the rubric's jobs, and having looked at the screen, write down every thing you expected to be able to do on a screen of this kind and could not, each with the product or design system that taught you to expect it (a sortable column, a search, a jump to a date, a day's heading, an export, and so on). Only then read the surface brief.
+Before you read the surface brief: having read only this brief and the rubric's jobs, and having looked at the screen, write down every thing you expected to be able to do on a screen of this kind and could not, each with the product or design system that taught you to expect it. Only then read the surface brief.
 
 Read first (your only standard):
 - Usability (/40): `<root>/.impeccable/rubrics/<rubric>`
@@ -42,6 +42,6 @@ Return EXACTLY:
 2. Tasks T1–T8: pass/fail, actions, evidence.
 3. Craft table: C1–C5 | 0–4 | failed checks | evidence. Total /20.
 4. Findings: every failed check from both rubrics, ranked by how much it hurts a real person's job (craft findings ranked below usability ones unless they hurt reading), each with a concrete fix.
-5. Expected and missing: the list you wrote before reading the surface brief, each item with where the expectation comes from; then, having read the brief's Category baseline, mark each item built, declined (quote the reason), or not in the baseline.
+5. Expected and missing: the list you wrote before reading the surface brief, each item with where the expectation comes from; then, having read the brief's Category baseline, mark each item built, declined (quote the reason, and say whether it holds for a reader that product has trained), or not in the baseline.
 
 Do not edit files. Do not spawn agents. Run plain single shell commands only. Budget about 30 minutes.

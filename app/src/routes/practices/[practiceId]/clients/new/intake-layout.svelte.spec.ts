@@ -42,7 +42,7 @@ async function setup({ isContractor = false, search = '' }: SetupOptions = {}) {
 		// with this layout's own gate, the way SvelteKit does at runtime.
 		data: {
 			isContractor,
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Test Practice', roles: [], isContractor }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Test Practice', roles: [], isContractor, timezone: 'America/New_York' }
 		},
 		children: createRawSnippet(() => ({ render: () => '<p>the name question</p>' }))
 	});

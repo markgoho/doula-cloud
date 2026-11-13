@@ -60,7 +60,8 @@ const sessionStub = {
 	staffId: 'staff-1',
 	practiceName: 'Riverside Doula Collective',
 	roles: [],
-	isContractor: false
+	isContractor: false,
+	timezone: 'America/New_York'
 };
 // What the section of the Practice's own questions says while it holds
 // none (#2142).

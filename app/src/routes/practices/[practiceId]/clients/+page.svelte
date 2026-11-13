@@ -455,10 +455,17 @@ import type { PageProps as PageProperties } from './$types';
 	// it does not.
 	const longestSummary = $derived(
 		[
-			clientsResultSummary(99, true, false, false, true, true, {
-				doulaName: doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? ''
-			}),
-			clientsResultSummary(99, true, false, true, true, true)
+			clientsResultSummary(
+				99,
+				true,
+				false,
+				false,
+				true,
+				true,
+				{ doulaName: doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '' },
+				9999
+			),
+			clientsResultSummary(99, true, false, true, true, true, {}, 9999)
 		].toSorted((a, b) => b.length - a.length)[0]
 	);
 
@@ -466,6 +473,8 @@ import type { PageProps as PageProperties } from './$types';
 	// still answer to the last one, so the count line and the empty state never
 	// describe rows that are not there.
 	let shown = $state.raw(appliedView());
+	// The first page's total for what is shown (#2867); later pages carry none.
+	let shownTotal = $state<number>();
 	const shownDoulaName = $derived(doulaNameOf(shown.doula));
 	const summary = $derived(
 		isDoulaUnknown
@@ -477,7 +486,8 @@ import type { PageProps as PageProperties } from './$types';
 			shown.showMine,
 			shown.showOwing,
 			shown.showNoContract,
-			{ doulaName: shownDoulaName, name: shown.name }
+			{ doulaName: shownDoulaName, name: shown.name },
+			shownTotal
 		)
 	);
 
@@ -760,6 +770,7 @@ import type { PageProps as PageProperties } from './$types';
 			// the same filters, so the row she came from is there to land on.
 			const wanted = pagesToRestore(untrack(() => page.state.clientsPages));
 			let first = await loadClients(apiFetchWithSession, page.params.practiceId!, view);
+			const total = first.clientCount;
 			let pages = 1;
 			while (pages < wanted && first.hasMore && first.nextCursor) {
 				const next = await loadClients(apiFetchWithSession, page.params.practiceId!, { ...view, cursor: first.nextCursor });
@@ -772,6 +783,7 @@ import type { PageProps as PageProperties } from './$types';
 			pagesLoaded = pages;
 			loadedKey = JSON.stringify(view);
 			shown = view;
+			shownTotal = total;
 			isDoulaUnknown = false;
 			isLoaded = true;
 			isRefreshing = false;
@@ -786,6 +798,7 @@ import type { PageProps as PageProperties } from './$types';
 				pagesLoaded = 1;
 				loadedKey = JSON.stringify(view);
 				shown = view;
+				shownTotal = undefined;
 				isDoulaUnknown = true;
 				isLoaded = true;
 				isRefreshing = false;

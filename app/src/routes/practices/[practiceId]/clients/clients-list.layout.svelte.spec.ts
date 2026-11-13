@@ -131,7 +131,7 @@ async function renderListScreen({
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
 			doulas: Promise.resolve(doulas),
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
 }

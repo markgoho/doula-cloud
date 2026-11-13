@@ -18,18 +18,22 @@
 
 	interface Properties {
 		at?: string;
+		/**
+		The Practice's zone (ADR-0036): the day and the clock are read in it, never the reader's.
+		*/
+		timeZone: string;
 		isTracked?: boolean;
 	}
 
-	let { at, isTracked = false }: Properties = $props();
+	let { at, timeZone, isTracked = false }: Properties = $props();
 
-	const parts = $derived(at ? scheduledVisitParts(at) : undefined);
+	const parts = $derived(at ? scheduledVisitParts(at, timeZone) : undefined);
 </script>
 
 {#if parts}
 	<time class="when" class:tracked={isTracked} datetime={at}><span class="day">{parts.day}</span> <span class="clock">{parts.clock}</span></time>
 {:else}
-	{formatScheduledVisit(at)}
+	{formatScheduledVisit(at, timeZone)}
 {/if}
 
 <style>

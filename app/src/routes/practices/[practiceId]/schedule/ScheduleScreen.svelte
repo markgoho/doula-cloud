@@ -21,6 +21,7 @@
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
+	import { readerTimeZone } from '#lib/zonedTime.js';
 	import {
 		DEFAULT_SCHEDULE_DAYS,
 		SHORT_SCHEDULE_DAYS,
@@ -28,12 +29,14 @@
 		loadPracticeSchedule,
 		scheduleDaysOf,
 		scheduleDaysTag,
+		scheduleDayGroup,
 		scheduleEmptyNextStep,
 		scheduleHref,
 		scheduleRangeErrors,
 		scheduleResultRuler,
 		scheduleResultSummary,
 		scheduleViewFromParameters,
+		scheduleZoneNote,
 		withDefaultDays,
 		type ScheduleDaysChoice,
 		type ScheduledVisit,
@@ -89,6 +92,8 @@
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! }));
 	const session = $derived((page.data as { session: PracticeSession }).session);
+	// The Practice's own zone (ADR-0036): every day and time on this screen is read in it, never the reader's.
+	const timeZone = $derived(session.timezone);
 	const canMine = $derived(canNarrowToMine(session));
 	// The picker's gate is the roster read's (`+page.ts`), so it holds its
 	// place before the Doulas land.
@@ -102,6 +107,16 @@
 	);
 	const read = $derived(data);
 	const viewKey = (of: ScheduleView) => scheduleHref('', of);
+
+	/*
+	 * The instant "Today" is read from: the landed read's own, so a heading and
+	 * the days cannot disagree, and a fresh one when the tab comes back to the
+	 * front, so a heading left open past midnight does not keep saying Today.
+	 */
+	let now = $state(untrack(() => read?.now) ?? new Date());
+	function refreshNow() {
+		if (document.visibilityState === 'visible') now = new Date();
+	}
 
 	const doulas = $derived(read?.doulas ?? []);
 	const doulaNameOf = (id: string) => doulas.find((doula) => doula.value === id)?.label ?? UNKNOWN_DOULA;
@@ -192,6 +207,7 @@
 		if (!landed) return;
 		untrack(() => {
 			schedule.reset(landed.page);
+			now = landed.now;
 			pagesLoaded = 1;
 			if (heldReturn) void restoreReturn(heldReturn);
 		});
@@ -211,7 +227,7 @@
 
 	function seedDrafts() {
 		draftChoice = view.chosen ? 'choose' : (view.preset === SHORT_SCHEDULE_DAYS ? '7' : '30');
-		const shown = view.chosen ?? scheduleDaysOf(view).days!;
+		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
 		toValue = shown.to;
 		isMineChecked = view.isMine;
@@ -238,7 +254,11 @@
 	// Picking "Choose days" starts its fields on the days the choice before it showed.
 	function chooseDays(choice: ScheduleDaysChoice) {
 		if (choice === 'choose' && draftChoice !== 'choose') {
-			const shown = scheduleDaysOf({ ...view, chosen: undefined, preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS }).days!;
+			const shown = scheduleDaysOf(
+				{ ...view, chosen: undefined, preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS },
+				timeZone,
+				now
+			).days!;
 			fromValue = shown.from;
 			toValue = shown.to;
 		}
@@ -292,8 +312,8 @@
 		const tags: AppliedTag[] = [];
 		const without = (change: Partial<ScheduleView>) => scheduleHref(basePath, { ...view, ...change });
 		if (view.chosen) {
-			const days = scheduleDaysOf(view).days;
-			if (days) tags.push({ text: scheduleDaysTag(days), href: scheduleHref(basePath, withDefaultDays(view)) });
+			const days = scheduleDaysOf(view, timeZone, now).days;
+			if (days) tags.push({ text: scheduleDaysTag(days, timeZone, now), href: scheduleHref(basePath, withDefaultDays(view)) });
 		} else if (view.preset === SHORT_SCHEDULE_DAYS) {
 			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)) });
 		}
@@ -317,14 +337,21 @@
 		const shown = read.view;
 		const isMine = shown.isMine;
 		const isPicked = shown.doula !== '' && !(isMine && shown.doula === session.staffId);
-		return scheduleResultSummary(schedule.items.length, schedule.hasMore, read.filters, {
-			isMine,
-			doulaName: isPicked ? doulaNameOf(shown.doula) : undefined
-		});
+		return scheduleResultSummary(
+			schedule.items.length,
+			schedule.hasMore,
+			read.filters,
+			timeZone,
+			{ isMine, doulaName: isPicked ? doulaNameOf(shown.doula) : undefined },
+			now,
+			read.page.visitCount
+		);
 	});
 	const resultRuler = $derived(
 		scheduleResultRuler(doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '')
 	);
+	// Said once, under the result line, only to a reader whose own zone reads these times differently.
+	const zoneNote = $derived(scheduleZoneNote(timeZone, readerTimeZone(), now));
 	const isBusy = $derived(isApplying || (read !== undefined && viewKey(read.view) !== viewKey(view) && !hasReadFailed));
 	const isEmpty = $derived(read !== undefined && !read.rangeErrors && schedule.items.length === 0);
 
@@ -366,7 +393,7 @@
 	 */
 	const columns = [
 		{ label: 'Client', accessor: (visit: ScheduledVisit) => visit.clientName, grows: true },
-		{ label: 'When', accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt), content: whenCell },
+		{ label: 'When', accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: whenCell },
 		{
 			label: 'Doula',
 			accessor: (visit: ScheduledVisit) => visitDoulaText(visit.staffName, visit.isOffEngagement),
@@ -383,11 +410,11 @@
 	}
 
 	// Two Visits of one Client are two links a list of links tells apart.
-	const rowLinkLabel = (visit: ScheduledVisit) => `${visit.clientName}, ${formatScheduledVisit(visit.scheduledAt)}`;
+	const rowLinkLabel = (visit: ScheduledVisit) => `${visit.clientName}, ${formatScheduledVisit(visit.scheduledAt, timeZone)}`;
 </script>
 
 {#snippet whenCell(visit: ScheduledVisit, tableView: DataTableView)}
-	<VisitWhen at={visit.scheduledAt} isTracked={tableView === 'table'} />
+	<VisitWhen at={visit.scheduledAt} {timeZone} isTracked={tableView === 'table'} />
 {/snippet}
 
 {#snippet doulaCell(visit: ScheduledVisit, tableView: DataTableView)}
@@ -420,6 +447,7 @@
 			legend="Choose which Visits to show"
 			status={hasReadFailed ? '' : resultSummary}
 			statusRuler={resultRuler}
+			statusNote={hasReadFailed ? undefined : zoneNote}
 			statusId={RESULT_ID}
 			empty={isEmpty}
 			clearHref={isScheduleNarrowed(view) ? basePath : undefined}
@@ -501,6 +529,8 @@
 						describedBy={RESULT_ID}
 						columnWidths="one-line"
 						recordLayout="compact"
+						rowGroup={(visit) => scheduleDayGroup(visit.scheduledAt, timeZone, now)}
+						groupHeadingLevel={2}
 						{isBusy}
 					/>
 				</div>
@@ -510,6 +540,8 @@
 		{/if}
 	</stack-l>
 {/snippet}
+
+<svelte:document onvisibilitychange={refreshNow} />
 
 <ListPage title="Schedule" {content} />
 
@@ -540,7 +572,7 @@
 
 		/* The Doula's track: a long name with the "No longer on this work" badge, so
 		   the table is as wide with one Doula's Visits as with all of them. */
-		.schedule-table :global(.table-view :is(th, td):last-child) {
+		.schedule-table :global(.table-view tr:not(.group-heading) > :is(th, td):last-child) {
 			min-inline-size: 42ch;
 		}
 

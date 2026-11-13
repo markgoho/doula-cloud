@@ -11,6 +11,8 @@
  * where it belongs.
  */
 
+import { partsIn } from './zonedTime.js';
+
 /*
  * Every screen that prints a date prints it through this file (#1958):
  * `dates.usage.spec.ts` fails the build on a `toLocaleDateString`,
@@ -142,9 +144,13 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
  * happened yet. `now` defaults to the real clock and is a parameter only
  * so a test can pin it.
  */
-export function formatScheduledVisit(value: string | undefined, now: Date = new Date()): string {
+export function formatScheduledVisit(
+	value: string | undefined,
+	timeZone: string,
+	now: Date = new Date()
+): string {
 	if (!value) return 'Not yet scheduled';
-	const { day, clock } = scheduledVisitParts(value, now);
+	const { day, clock } = scheduledVisitParts(value, timeZone, now);
 	return `${day} ${clock}`;
 }
 
@@ -154,22 +160,31 @@ export function formatScheduledVisit(value: string | undefined, now: Date = new 
  * comma stays with the day, so the halves read as the one phrase when joined
  * by a space.
  */
-export function scheduledVisitParts(value: string, now: Date = new Date()): { day: string; clock: string } {
-	const date = new Date(value);
+export function scheduledVisitParts(
+	value: string,
+	timeZone: string,
+	now: Date = new Date()
+): { day: string; clock: string } {
+	const at = partsIn(new Date(value), timeZone);
+	const year = at.year === partsIn(now, timeZone).year ? '' : `, ${at.year}`;
 	return {
-		day: `${formatWeekdayDay(date, { withYear: date.getFullYear() !== now.getFullYear() })},`,
-		clock: formatClock(date)
+		day: `${at.weekday} ${at.month} ${at.day}${year},`,
+		clock: clockText(at.hour, at.minute)
 	};
 }
 
 /**
  * A calendar day, `YYYY-MM-DD`, with its weekday: "Fri Nov 13", and "Fri Nov
- * 13, 2027" when it is not `now`'s year. The Schedule's result line and its
- * applied days say a day this way, the way a Visit's own day is said.
+ * 13, 2027" when it is not the year `now` is in, in `timeZone`. The
+ * Schedule's result line and its applied days say a day this way, the way a
+ * Visit's own day is said. A day has no zone of its own; `timeZone` says only
+ * which year is this one.
  */
-export function formatCalendarWeekdayDay(value: string, now: Date = new Date()): string {
+export function formatCalendarWeekdayDay(value: string, timeZone: string, now: Date = new Date()): string {
 	const [year, month, day] = value.split('-').map(Number);
-	return formatWeekdayDay(new Date(year!, month! - 1, day!), { withYear: year !== now.getFullYear() });
+	const at = partsIn(new Date(Date.UTC(year!, month! - 1, day!, 12)), 'UTC');
+	const isYearShown = year !== partsIn(now, timeZone).year;
+	return `${at.weekday} ${at.month} ${at.day}${isYearShown ? `, ${year}` : ''}`;
 }
 
 /**
@@ -252,9 +267,12 @@ function formatDay(date: Date, { withYear = true } = {}): string {
  * always two digits, hour never zero-padded and never 0 (noon and
  * midnight are both 12, per the 12-hour clock's own convention). */
 function formatClock(date: Date): string {
-	const hours24 = date.getHours();
+	return clockText(date.getHours(), date.getMinutes());
+}
+
+function clockText(hours24: number, minuteOfHour: number): string {
 	const suffix = hours24 < 12 ? 'am' : 'pm';
 	const hours = hours24 % 12 === 0 ? 12 : hours24 % 12;
-	const minutes = date.getMinutes().toString().padStart(2, '0');
+	const minutes = minuteOfHour.toString().padStart(2, '0');
 	return `${hours}:${minutes}${suffix}`;
 }

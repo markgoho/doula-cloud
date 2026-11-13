@@ -54,7 +54,8 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 export const data: SchedulePageData = {
 	page: schedulePage,
 	view: { preset: 30, isMine: false, doula: '' },
-	filters: { from: '2026-09-07', to: '2026-10-06' },
+	filters: { from: '2026-09-07', to: '2026-10-06', timeZone: 'America/New_York' },
+	now: new Date('2026-09-07T13:00:00Z'),
 	isRosterUnavailable: false,
 	doulas: [
 		{ value: 'staff-1', label: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },

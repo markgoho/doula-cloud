@@ -153,7 +153,8 @@ describe('practiceSession', () => {
 				staffId: 'staff-1',
 				practiceName: 'Riverside Doula Collective',
 				roles: ['owner', 'doula'],
-				isContractor: false
+				isContractor: false,
+				timezone: 'America/New_York'
 			}
 		});
 	});
@@ -165,7 +166,8 @@ describe('practiceSession', () => {
 				staffId: 'staff-1',
 				practiceName: 'Hilltop Doulas',
 				roles: ['owner'],
-				isContractor: false
+				isContractor: false,
+				timezone: 'America/New_York'
 			}
 		});
 	});
@@ -177,7 +179,8 @@ describe('practiceSession', () => {
 				staffId: 'staff-2',
 				practiceName: 'Riverside Doula Collective',
 				roles: ['doula'],
-				isContractor: false
+				isContractor: false,
+				timezone: 'America/New_York'
 			}
 		});
 	});

@@ -21,6 +21,8 @@ const (
 	fromParameter  = "from"
 	toParameter    = "to"
 	staffParameter = "staffId"
+	// cursorParameter is the page cursor's query key.
+	cursorParameter = "cursor"
 )
 
 // scheduleURL is the Practice-wide schedule route with whatever narrowing
@@ -193,7 +195,7 @@ func TestPracticeSchedule_RefusesMalformedNarrowing(t *testing.T) {
 		{"empty range", window(f.base, f.base)},
 		{"inverted range", window(f.base, f.base.Add(-time.Hour))},
 		{"non-uuid staffId", url.Values{staffParameter: {notAUUID}}},
-		{"undecodable cursor", url.Values{"cursor": {"not!valid!base64!"}}},
+		{"undecodable cursor", url.Values{cursorParameter: {"not!valid!base64!"}}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -288,12 +290,11 @@ func TestPracticeSchedule_PagesSoonestFirst(t *testing.T) {
 		t.Fatalf("first page order = %v, want %v", visitIDs(first), seeded[:30])
 	}
 
-	second := e.readSchedule(url.Values{"cursor": {*first.NextCursor}})
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
+	second := e.readSchedule(url.Values{cursorParameter: {*first.NextCursor}})
+	if got := visitIDs(second); !slices.Equal(got, seeded[30:]) {
+		t.Fatalf("second page = %v, want %v", got, seeded[30:])
 	}
-	if second.Items[0].VisitID != seeded[30] {
-		t.Fatalf("second page = %q, want %q", second.Items[0].VisitID, seeded[30])
+	if second.HasMore || second.NextCursor != nil {
+		t.Fatalf("the last page says more follow: hasMore=%v, cursor=%v", second.HasMore, second.NextCursor)
 	}
 }
