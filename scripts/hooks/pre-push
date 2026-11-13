@@ -1,0 +1,10 @@
+#!/bin/sh
+# Pre-push hook for doula-cloud. See docs/testing/gates.md.
+
+bun run dupes:check || exit 1
+
+changed_go=$(git diff --name-only origin/trunk...HEAD -- 'api/*.go')
+if [ -n "$changed_go" ]; then
+    echo "Running the API message gate (api/internal/apierr)..." >&2
+    go -C api test ./internal/apierr/ || exit 1
+fi
