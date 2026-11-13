@@ -126,8 +126,11 @@ describe('invoiceMoneyState (DESIGN.md, "Money is said once")', () => {
 		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, refundedCents: 0 })).toEqual({ word: 'paid', variant: undefined });
 	});
 
-	it('says how much of a paid Invoice went back, as a plain word', () => {
-		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, refundedCents: 30_000 })).toEqual({ word: '$300.00 refunded' });
+	it('says a partly refunded Invoice was paid and how much went back, as plain words', () => {
+		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, refundedCents: 30_000 })).toEqual({
+			word: 'paid, $300.00 refunded',
+			refund: '$300.00 refunded'
+		});
 	});
 
 	it('says a payment on its way before a refund', () => {

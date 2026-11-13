@@ -83,6 +83,9 @@ export interface OpenEngagement {
 	/** Whether a payment on that Invoice is on its way (#2225) -- a bank
 	 * debit, for days -- present wherever `invoiceStatus` is. */
 	paymentProcessing?: boolean;
+	/** How much of that Invoice has gone back to the Client (#2849), present
+	 * wherever `invoiceStatus` is. */
+	refundedCents?: number;
 	/** The reader's own agreed fee (ADR-0008) -- present only when she is
 	 * a contractor Doula attached to this Engagement. */
 	feeCents?: number;

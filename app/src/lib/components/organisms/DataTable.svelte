@@ -765,6 +765,18 @@
 			box-shadow: inset 0 calc(-1 * var(--border-thin)) 0 var(--color-outline-variant);
 		}
 
+		/* Two stuck cells meet on a fractional pixel, which each paints only in
+		   part, so the rows beneath showed through as a rule. Each cell's tint
+		   reaches back over that pixel, above the hairline. */
+		.table-view > thead th + th::before {
+			content: '';
+			position: absolute;
+			inset-block: 0 var(--border-thin);
+			inset-inline-start: calc(-1 * var(--border-thin));
+			inline-size: var(--border-thin);
+			background-color: var(--color-surface-container);
+		}
+
 		/* Forced colors drop the shadow, so the rule under the stuck header is
 		   a border there, in the system's own text color. */
 		@media (forced-colors: active) {

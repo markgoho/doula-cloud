@@ -1531,7 +1531,7 @@ func TestListHandler_OpenEngagementsRollup_EmployeeDoulaSeesInvoiceAndMoney(t *t
 	if len(line.DoulaNames) != 1 {
 		t.Fatalf("doula names = %q, want the attached Doula's name", line.DoulaNames)
 	}
-	if line.InvoiceStatus == nil || *line.InvoiceStatus != "paid" {
+	if line.InvoiceStatus == nil || *line.InvoiceStatus != paidStatus {
 		t.Fatalf("invoice status = %v, want \"paid\" -- an employee Doula reads it now", line.InvoiceStatus)
 	}
 	if line.InvoiceAmountCents == nil || *line.InvoiceAmountCents != 75000 {

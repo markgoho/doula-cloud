@@ -122,6 +122,8 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 		// H2, H8 (#2746): a card has no "Payment" heading over the day, so its date line says paid, and its headline does not say it again.
 		await expect.element(cards.getByText('Paid', { exact: true })).toBeVisible();
 		expect(cards.element().textContent!.match(/paid/gi)).toHaveLength(1);
+		// #2849: a partly refunded card keeps the refund after its amount, its date line saying paid.
+		await expect.element(cards.getByText(/^,\s*\$1,250\.50 refunded$/)).toBeVisible();
 		await expect.element(cards.getByText('No payment due')).not.toBeInTheDocument();
 		expect(cards.element().textContent).not.toContain('—');
 		expect(cards.element().textContent!.match(/Payment:/g), 'the paid card’s fact alone').toHaveLength(1);
@@ -165,7 +167,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 	it('says how much of a paid Invoice was refunded, once, beside its amount', async () => {
 		await setup();
 
-		const cell = testPage.getByRole('cell', { name: heard('$2,500.00, $1,250.50 refunded') });
+		const cell = testPage.getByRole('cell', { name: heard('$2,500.00, paid, $1,250.50 refunded') });
 		await expect.element(cell).toBeVisible();
 		await expect.element(testPage.getByRole('definition').nth(3)).toHaveTextContent('$1,250.50');
 		const row = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element();
@@ -178,7 +180,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, owed') })).toBeVisible();
 	});
 
-	// T6 (WCAG 1.3.1): the cell under "Reference" says the reference, then the
+	// T6 (WCAG 1.3.1): the cell under "Invoice" says the reference, then the
 	// care and how it was billed. C1 (#2746): the care is the Engagement's kind,
 	// in the Clients list's words.
 	it('says the reference, the care each Invoice bills for and how it was billed', async () => {

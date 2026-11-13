@@ -289,6 +289,7 @@ describe('DataTable.svelte', () => {
 			});
 
 			await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+			await document.fonts.ready;
 			const table = container.querySelector('table')!.getBoundingClientRect();
 			// A wide frame's room is left after the table, never spread between a name and its status.
 			expect(table.width).toBeLessThan(WIDE[0] / 2);

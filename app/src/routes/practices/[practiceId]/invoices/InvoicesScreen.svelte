@@ -413,6 +413,14 @@
 
 	const NO_PAYMENT_DUE = 'No payment due';
 
+	// H8: a card whose date line says "Paid" gives the amount alone, or the refund alone, so paid is said once.
+	function moneyState(invoice: PracticeInvoice, view: DataTableView) {
+		const state = invoiceMoneyState(invoice);
+		if (view !== 'record' || invoiceDateLine(invoice)?.lead !== 'Paid') return state;
+		if (state.refund) return { word: state.refund };
+		return state.word === 'paid' ? undefined : state;
+	}
+
 	// Empty with no day, so a card leaves the fact out; the table's cell still says NO_PAYMENT_DUE.
 	function dateText(invoice: PracticeInvoice): string {
 		const line = invoiceDateLine(invoice);
@@ -438,7 +446,7 @@
 		{
 			// #271: a by-hand Invoice's own per-Practice sequence, or Stripe's
 			// own `number` -- a check "for invoice ___" is matched against this.
-			label: 'Reference',
+			label: 'Invoice',
 			accessor: (invoice: PracticeInvoice) =>
 				`${invoice.reference}, ${kindLabel(invoice.engagementKind)}${billedSpoken(invoice)}${billedLabel(invoice)}`,
 			content: referenceCell
@@ -468,15 +476,12 @@
 	const rowLinkLabel = (invoice: PracticeInvoice) => `${invoice.clientName}, ${invoice.reference}`;
 </script>
 
-<!-- H8: a paid card's date line says "Paid" with its day, so its headline gives the amount alone and paid is said once. -->
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
-	{@const state = invoiceMoneyState(invoice)}
-	{@const isPaidOnDateLine = view === 'record' && state.word === 'paid' && invoiceDateLine(invoice)?.lead === 'Paid'}
-	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={isPaidOnDateLine ? undefined : state} isTracked={view === 'table'} />
+	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={moneyState(invoice, view)} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
-	<!-- The reference is said here too, so the cell under "Reference" holds it (WCAG 1.3.1), though the row link says it as well. -->
+	<!-- The reference is said here too, so the cell under "Invoice" holds it (WCAG 1.3.1), though the row link says it as well. -->
 	<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 {/snippet}
 
@@ -690,21 +695,25 @@
 		   answer of 2026-10-25 on #1981. #2746 cut its eight columns to five,
 		   and the floor check measured the five at 997px on 2026-11-12 in WSL's
 		   Linux/Chromium (it was 1201px with eight), so the floor moved down to
-		   62.3rem. The care kind in the Reference cell (#2746) took it to 1084px,
+		   62.3rem. The care kind in the Invoice cell (#2746) took it to 1084px,
 		   measured the same day on the demo Practice with "Postpartum" on every
 		   row, so it was 67.8rem. Holding the Money column still across views
-		   (a state track and Reference, Sent and Payment columns as wide as the
+		   (a state track and Invoice, Sent and Payment columns as wide as the
 		   longest each can say) took it to 1135px the same day, so it was 71rem.
 		   The table stopped filling its frame (#2739, `columnWidths="one-line"`)
-		   and the floor check measured 1123px on 2026-11-13, so it is 70.2rem:
-		   the held columns, not the fill, are what this width is.
+		   and the floor check measured 1123px on 2026-11-13, so it was 70.2rem.
+		   Holding the Money column at a four-figure amount, so no view moves
+		   it, took it to 1126px the same day, so it was 70.4rem. A 16ch
+		   Client track (#2849) took it to 1136px, so it is 71rem: the held
+		   columns, not the fill, are what this width is.
 		   `DataTable.svelte`'s floor comment says why the floor is the route's own. */
 		.invoices-table {
 			container: invoices-table / inline-size;
 			--data-table-cell-inset: var(--space-2);
-			/* The Client column's track, the Clients list's Name track (a
-			   long two-word name), so the Money starts at one place in every view. */
-			--data-table-grows-track: 15ch;
+			/* The Client column's track, a long two-word name ("Hannah Sorensen"
+			   outran 15ch by 2px at a 1440px window), so the Money starts at one
+			   place in every view. */
+			--data-table-grows-track: 16ch;
 		}
 
 		.invoices-table > :global(*) {
@@ -713,17 +722,22 @@
 			--data-table-records-display: grid;
 		}
 
-		@container invoices-table (min-width: 70.2rem) {
+		@container invoices-table (min-width: 71rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
 			}
 		}
 
-		/* Reference, Sent and Payment (`columns`' third to fifth) are each as wide
-		   as the longest value they can say, "INV-0000 · Postpartum · By hand" and
-		   "Payment due Nov 30, 2026", whatever rows are shown, so the Money
-		   column's edge is the same in every view. */
+		/* Money, Invoice, Sent and Payment (`columns`' second to fifth) are each
+		   as wide as the longest value they can say, a four-figure amount and
+		   its state's track, "INV-0000 · Postpartum · By hand" and "Payment due
+		   Nov 30, 2026", whatever rows are shown, so every column starts and the
+		   amounts end at one place in every view. */
+		.invoices-table :global(thead th:nth-child(2)) {
+			min-inline-size: calc(8ch + var(--space-1) + var(--money-state-track) + 2 * var(--data-table-cell-inset));
+		}
+
 		.invoices-table :global(thead th:nth-child(3)) {
 			min-inline-size: calc(27ch + 2 * var(--data-table-cell-inset));
 		}

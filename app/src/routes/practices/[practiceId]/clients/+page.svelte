@@ -513,7 +513,8 @@ import type { PageProps as PageProperties } from './$types';
 		return {
 			status: line.invoiceStatus ?? '',
 			daysOverdue: line.daysOverdue ?? 0,
-			paymentProcessing: line.paymentProcessing ?? false
+			paymentProcessing: line.paymentProcessing ?? false,
+			refundedCents: line.refundedCents ?? 0
 		};
 	}
 
