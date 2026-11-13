@@ -179,7 +179,7 @@
 	The one exception is a Practice name long enough to wrap in the
 	switcher, which grows the bar when it arrives (#1573) -- a name drawn
 	over the page would be worse than the page moving down once. The parts that need an answer from the BFF -- the person's
-	avatar, the Practice switcher, and the four admin-only nav items --
+	avatar, the Practice switcher, and the admin-only nav items --
 	arrive into a bar that is already there.
 -->
 <StaffTopBar

@@ -177,11 +177,11 @@ describe('the nav', () => {
 	);
 
 	/*
-	 * The drawing (#431) shows an Owner's bar. `GET .../invoices`,
-	 * `GET .../contracts/awaiting-signature`, `GET .../billing` and
-	 * `GET .../staff` are all `ownerAndAdmin` on the BFF, so offering a
-	 * Doula those four would be a promise the endpoint refuses -- the same
-	 * rule #423 applied to the landing page's rail.
+	 * The drawing (#431) shows an Owner's bar. The Contracts screen reads
+	 * `.../contracts/void-requests`, beside `GET .../billing` and
+	 * `GET .../staff`, all `ownerAndAdmin` on the BFF, so offering a Doula
+	 * those three would be a promise the endpoint refuses -- the same rule
+	 * #423 applied to the landing page's rail.
 	 */
 	it.each(['Contracts', 'Credits', 'Staff'])('hides %s from a Doula', async (label) => {
 		await setup({ roles: ['doula'] });
