@@ -11,7 +11,7 @@ Scope: the Staff app, second surface, the Practice-wide Invoices list (#2746). M
 
 THESIS: The category standard, executed at the craft level of Linear, Stripe Dashboard and GOV.UK services (ADR-0063): the familiar arrangement with nothing out of place. The Invoices list is the Clients list's sibling and reads as the same product: same title, filter bar, result line and table, with money in place of care.
 
-OWN-WORLD: The Staff world as `DESIGN.md` records it. One blue for links and the primary action. Filled state badges that mean one thing app-wide: amber is owed, red is overdue or failed, blue is a payment on its way, green is paid. Tabular figures for every amount and date; amounts end on one edge.
+OWN-WORLD: The Staff world as `DESIGN.md` records it. One blue for links and the primary action. Filled state badges only where a state needs chasing: amber is owed, red is overdue with its days; payment on its way, paid, void and written off are plain words on a list, and a paid row says it once, in its date cell (DESIGN.md, "Money is said once"). Tabular figures for every amount and date; amounts end on one edge.
 
 STORY: An owner or office manager opens Invoices, reads what Clients owe and how much of it is late before reading a row, narrows to the Invoices to chase in two actions, opens the one a check came in for, and trusts the totals because every row under them agrees.
 

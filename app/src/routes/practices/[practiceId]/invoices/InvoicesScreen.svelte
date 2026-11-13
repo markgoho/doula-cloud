@@ -16,6 +16,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
+	import { kindLabel } from '#lib/engagementRequest.js';
 	import {
 		cardPaymentsWait,
 		formatAmount,
@@ -387,7 +388,9 @@
 	});
 
 	// #271: local and Stripe Invoices share one book, so the rail is said per
-	// row, beside the reference it decides the shape of.
+	// row, beside the reference it decides the shape of. The care it bills
+	// for sits between them (#2746), so two Invoices of one Client for
+	// different Engagements read apart.
 	const billedLabel = (invoice: PracticeInvoice) => (invoice.billingMode === 'by_hand' ? 'By hand' : 'Stripe');
 	const billedSpoken = (invoice: PracticeInvoice) => (invoice.billingMode === 'by_hand' ? ', billed ' : ', billed through ');
 
@@ -419,13 +422,14 @@
 			// #271: a by-hand Invoice's own per-Practice sequence, or Stripe's
 			// own `number` -- a check "for invoice ___" is matched against this.
 			label: 'Reference',
-			accessor: (invoice: PracticeInvoice) => `${invoice.reference}${billedSpoken(invoice)}${billedLabel(invoice)}`,
+			accessor: (invoice: PracticeInvoice) =>
+				`${invoice.reference}, ${kindLabel(invoice.engagementKind)}${billedSpoken(invoice)}${billedLabel(invoice)}`,
 			content: referenceCell
 		},
 		{
-			// #2146: the day raised, in the Practice's zone -- the Raised day
+			// #2146: the day raised, in the Practice's zone -- the Sent day
 			// the Engagement's own Invoices section shows.
-			label: 'Raised',
+			label: 'Sent',
 			accessor: (invoice: PracticeInvoice) => formatCalendarDay(invoice.raisedOn),
 			content: raisedCell
 		},
@@ -454,11 +458,12 @@
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice, view: DataTableView)}
-	<!-- The table's row link already says the reference (`rowLinkLabel`), so its cell says only how it was billed; a card says both. -->
+	<!-- The table's row link already says the reference (`rowLinkLabel`), so its cell says only the care and how it was billed; a card says all three. -->
+	{@const care = kindLabel(invoice.engagementKind)}
 	{#if view === 'table'}
-		<span class="no-break"><span aria-hidden="true">{invoice.reference}</span><span class="visually-hidden">{invoice.billingMode === 'by_hand' ? 'Billed ' : 'Billed through '}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+		<span class="no-break"><span aria-hidden="true">{invoice.reference}<span class="separator">·</span></span><span class="lead">{care}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 	{:else}
-		<span class="no-break">{invoice.reference}<span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+		<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{care}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 	{/if}
 {/snippet}
 
@@ -469,7 +474,7 @@
 
 {#snippet raisedCell(invoice: PracticeInvoice, view: DataTableView)}
 	<!-- A card's day says its kind where the table's header does not stand over it. -->
-	<span class="no-break">{#if view === 'record'}<span class="lead" aria-hidden="true">Raised&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time></span>
+	<span class="no-break">{#if view === 'record'}<span class="lead" aria-hidden="true">Sent&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time></span>
 {/snippet}
 
 {#snippet total(row: { figure: string; note: string })}
@@ -658,8 +663,10 @@
 		   answer of 2026-10-25 on #1981. #2746 cut its eight columns to five,
 		   and the floor check measured the five at 997px on 2026-11-12 in WSL's
 		   Linux/Chromium (it was 1201px with eight), so the floor moved down to
-		   62.3rem. `DataTable.svelte`'s floor comment says why the floor is the
-		   route's own. */
+		   62.3rem. The care kind in the Reference cell (#2746) took it to 1084px,
+		   measured the same day on the demo Practice with "Postpartum" on every
+		   row, so it is 67.8rem. `DataTable.svelte`'s floor comment says why the
+		   floor is the route's own. */
 		.invoices-table {
 			container: invoices-table / inline-size;
 			/* The Money column's right edge, written once: the amounts end a
@@ -677,7 +684,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 62.3rem) {
+		@container invoices-table (min-width: 67.8rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;

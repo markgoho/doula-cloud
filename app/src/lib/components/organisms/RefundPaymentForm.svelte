@@ -239,7 +239,7 @@
 			rows={isCardPayment
 				? [
 						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
-						{ label: 'Returned by', value: 'Stripe, to the card that paid' }
+						{ label: 'Refunded by', value: 'Stripe, to the card that paid' }
 					]
 				: [
 						{ label: 'Amount to return', value: formatAmount(reviewedCents) },

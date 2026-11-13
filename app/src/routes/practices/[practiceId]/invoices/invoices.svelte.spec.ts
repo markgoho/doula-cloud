@@ -81,10 +81,12 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 
 		await expect.element(testPage.getByRole('cell', { name: 'Payment due Aug 31, 2026', exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
-		// The paid row's Raised day, which an instant read in a zone behind
+		// The paid row's Sent day, which an instant read in a zone behind
 		// UTC would have put on Jun 30.
 		const paidRow = testPage.getByRole('row').filter({ hasText: 'DC-0092' });
 		await expect.element(paidRow.getByRole('cell', { name: 'Jul 1, 2026', exact: true })).toBeVisible();
+		// H2 (#2746): an office's word for that day.
+		await expect.element(testPage.getByRole('columnheader', { name: 'Sent', exact: true })).toBeVisible();
 	});
 
 	it('says no day for an Invoice nobody will pay', async () => {
@@ -123,13 +125,14 @@ describe('the Practice-wide invoice list (#265)', () => {
 	});
 
 	// T6: the row link already says the reference, so the table's cell says
-	// only how it was billed, and the reference is heard once.
-	it('says how each Invoice was billed, beside its reference', async () => {
+	// only the care and how it was billed, and the reference is heard once.
+	// C1 (#2746): the care is the Engagement's kind, in the Clients list's words.
+	it('says the care each Invoice bills for and how it was billed, beside its reference', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: heard('Billed By hand') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('Billed through Stripe') }).first()).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('Billed By hand') })).toHaveTextContent('INV-0042');
+		await expect.element(testPage.getByRole('cell', { name: heard('Postpartum, billed By hand') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Birth, billed through Stripe') }).first()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Postpartum, billed By hand') })).toHaveTextContent('INV-0042');
 	});
 
 	// T6: the table is named, described by the result line, and two

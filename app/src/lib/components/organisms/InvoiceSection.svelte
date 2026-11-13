@@ -591,12 +591,12 @@
 	 * against, then the day it was raised, the amount, the status as a
 	 * Badge, the day it was paid, and the money returned on it. A Paid
 	 * Invoice stays Paid after a Refund, as Stripe's own does (#1009), so
-	 * Returned is where that money is said at all. A blank cell is left
+	 * Refunded is where that money is said at all. A blank cell is left
 	 * out of a card.
 	 */
 	const invoiceColumns = [
 		{ label: 'Invoice', accessor: (invoice: Invoice) => invoice.reference },
-		{ label: 'Raised', accessor: (invoice: Invoice) => formatCalendarDay(invoice.raisedOn) },
+		{ label: 'Sent', accessor: (invoice: Invoice) => formatCalendarDay(invoice.raisedOn) },
 		{ label: 'Amount', accessor: (invoice: Invoice) => formatAmount(invoice.amountCents), numeric: true },
 		{ label: 'Status', accessor: (invoice: Invoice) => invoiceRowStatusLabel(invoice), content: invoiceStatus },
 		{ label: 'Paid', accessor: (invoice: Invoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '') },
@@ -607,7 +607,7 @@
 				invoice.activePaymentMethod ? paymentMethodLabels[invoice.activePaymentMethod] : ''
 		},
 		{
-			label: 'Returned',
+			label: 'Refunded',
 			accessor: (invoice: Invoice) => (invoice.refundedCents > 0 ? formatAmount(invoice.refundedCents) : ''),
 			numeric: true
 		},
@@ -626,7 +626,7 @@
 	 * was paid. No column holds money, because her rows hold none.
 	 */
 	const contractorInvoiceColumns = [
-		{ label: 'Raised', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.raisedOn) },
+		{ label: 'Sent', accessor: (invoice: ContractorInvoice) => formatCalendarDay(invoice.raisedOn) },
 		{
 			label: 'Status',
 			accessor: (invoice: ContractorInvoice) => invoiceRowStatusLabel(invoice),

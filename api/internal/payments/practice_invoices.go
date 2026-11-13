@@ -37,14 +37,18 @@ import (
 // -- the Contract's merge field and the Stripe Invoice itself -- not to a
 // staff-facing list.
 type PracticeInvoiceView struct {
-	ID           string    `json:"id"`
-	EngagementID string    `json:"engagementId"`
-	ContractID   string    `json:"contractId"`
-	ClientName   string    `json:"clientName"`
-	Status       string    `json:"status"`
-	AmountCents  int64     `json:"amountCents"`
-	Currency     string    `json:"currency"`
-	CreatedAt    time.Time `json:"createdAt"`
+	ID           string `json:"id"`
+	EngagementID string `json:"engagementId"`
+	ContractID   string `json:"contractId"`
+	ClientName   string `json:"clientName"`
+	// EngagementKind (#2746) is the care the Invoice bills for, birth or
+	// postpartum, so the list reads as a doula Practice's book and two
+	// Invoices of one Client for different Engagements read apart.
+	EngagementKind string    `json:"engagementKind"`
+	Status         string    `json:"status"`
+	AmountCents    int64     `json:"amountCents"`
+	Currency       string    `json:"currency"`
+	CreatedAt      time.Time `json:"createdAt"`
 	// PaidOn and DueOn (#1965) are the same two calendar days InvoiceView
 	// carries, in the Practice's zone, for the same reasons.
 	PaidOn *string `json:"paidOn,omitempty"`
@@ -295,7 +299,7 @@ func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.C
 // activePaymentJoin is the per-Engagement list's own (invoice.go): the
 // covering Payment's kind is what says whether paid_at holds a typed day
 // or Stripe's instant (#1965, invoicePaidOn).
-const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name, cl.family_name,
+const practiceInvoiceColumns = `SELECT i.id, e.id, i.contract_id, cl.given_name, cl.preferred_name, cl.family_name, e.kind,
 		i.status, i.amount_cents, i.currency, i.created_at, i.paid_at, i.due_at, i.reference, i.stripe_invoice_id, ap.kind, ` + paymentProcessingExpr + `
 	FROM invoices i
 	JOIN contracts c ON c.id = i.contract_id
@@ -497,7 +501,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q 
 		var paidAt sql.NullTime
 		var dueAt time.Time
 		var stripeInvoiceID, activePaymentKind sql.NullString
-		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName,
+		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName, &it.EngagementKind,
 			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, nil, fmt.Errorf("payments: scan practice invoice row: %w", err)

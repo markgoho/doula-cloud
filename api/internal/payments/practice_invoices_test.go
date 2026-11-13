@@ -42,7 +42,7 @@ func (e *env) practiceInvoices(query ...string) payments.PracticeInvoicesRespons
 func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T) {
 	e := newEnv(t)
 	engagementA, contractA := e.contractWithStatus("draft", fixture.NewClient(fixture.ClientName("Ada Client")))
-	bea := fixture.Engagement(t, e.DB, e.Practice, fixture.NewClient(fixture.ClientName("Bea Client")))
+	bea := fixture.Engagement(t, e.DB, e.Practice, fixture.NewClient(fixture.ClientName("Bea Client")), fixture.Kind(fixture.KindPostpartum))
 	// #2114: a list of Clients names each in full, so the preferred name
 	// is followed by the family name.
 	testdb.NameClient(t, e.DB, bea.Client.ID, "Bea", "Okafor")
@@ -64,6 +64,10 @@ func TestGetPracticeInvoicesHandler_ListsEveryEngagementNewestFirst(t *testing.T
 	}
 	if out.Items[0].EngagementID != bea.ID || out.Items[1].EngagementID != engagementA {
 		t.Fatalf("engagement ids = [%q %q], want [%q %q]", out.Items[0].EngagementID, out.Items[1].EngagementID, bea.ID, engagementA)
+	}
+	// #2746: each row says the care it bills for, read in the same join.
+	if out.Items[0].EngagementKind != fixture.KindPostpartum || out.Items[1].EngagementKind != fixture.KindBirth {
+		t.Fatalf("engagement kinds = [%q %q], want [postpartum birth]", out.Items[0].EngagementKind, out.Items[1].EngagementKind)
 	}
 	if out.HasMore {
 		t.Fatal("hasMore = true, want false")

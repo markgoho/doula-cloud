@@ -31,6 +31,8 @@ export const data: PracticeInvoiceListData = {
 			engagementId: 'eng-1',
 			contractId: 'contract-1',
 			clientName: 'Anne-Marie Ochieng-Whitfield',
+			// #2746: the longer of the two kinds, on the row with the most to say.
+			engagementKind: 'postpartum',
 			status: 'open',
 			amountCents: 450_000,
 			currency: 'usd',
@@ -52,6 +54,7 @@ export const data: PracticeInvoiceListData = {
 			contractId: 'contract-2',
 			clientName:
 				'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
+			engagementKind: 'birth',
 			status: 'paid',
 			amountCents: 250_000,
 			currency: 'usd',
@@ -75,6 +78,7 @@ export const data: PracticeInvoiceListData = {
 			engagementId: 'eng-3',
 			contractId: 'contract-3',
 			clientName: 'Imani Brooks',
+			engagementKind: 'birth',
 			status: 'open',
 			amountCents: 180_000,
 			currency: 'usd',
@@ -151,6 +155,7 @@ export const typical: RouteVariant<RouteParameters> = {
 					engagementId: `eng-${index + 1}`,
 					contractId: `contract-${index + 1}`,
 					clientName: person.name,
+					engagementKind: index % 3 === 2 ? ('postpartum' as const) : ('birth' as const),
 					status: isPaid ? 'paid' : 'open',
 					amountCents: index % 3 === 2 ? 90_000 : 150_000,
 					currency: 'usd',

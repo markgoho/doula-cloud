@@ -43,7 +43,7 @@ export interface Invoice {
 	/** The day this Invoice was raised (#2146), `YYYY-MM-DD`, in the
 	 * Practice's own timezone: the same day a contractor's row carries as
 	 * `ContractorInvoice.raisedOn`, so every Staff reader of one Invoice
-	 * reads one Raised day. */
+	 * reads one Sent day. */
 	raisedOn: string;
 	/** The Payment currently covering this Invoice (#945), if any --
 	 * present only while status is 'paid' via a Payment nothing has
@@ -132,6 +132,7 @@ export type BillingMode = 'stripe' | 'by_hand';
 export interface PracticeInvoice extends Omit<Invoice, 'refundedCents' | 'refundableCents' | 'reversible'> {
 	engagementId: string;
 	clientName: string;
+	engagementKind: 'birth' | 'postpartum';
 }
 
 /** A page of the Practice-wide Invoice list, with the whole book's
