@@ -76,7 +76,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['on_call_narrowing_changed', 'Doulas on call for Amara changed', 'Doulas on call for the Client changed'],
 	['on_call_rule_changed', 'On-call rule for Amara changed', 'On-call rule for the Client changed'],
 	['payment_recorded', 'Payment from Amara recorded', 'Payment from the Client recorded'],
-	['payment_refunded', 'Money returned to Amara', 'Money returned to the Client'],
+	['payment_refunded', 'Refund to Amara recorded', 'Refund to the Client recorded'],
 	['payment_reversed', 'Payment from Amara removed', 'Payment from the Client removed'],
 	['payment_terms_changed', 'Payment terms changed', 'Payment terms changed'],
 	['portal_account_linked', "Care added to Amara's login", "Care added to the Client's login"],

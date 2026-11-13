@@ -106,7 +106,7 @@ type InvoiceView struct {
 	// and 0 when there is nothing to return. Reversible is whether
 	// TransitionReversePayment and ActReversePayment both admit reversing
 	// it. The routes ask the same two declarations, so a screen that offers
-	// "Return money" and "Reverse payment" from these offers exactly what
+	// "Refund payment" and "Reverse payment" from these offers exactly what
 	// the routes would take (paymentActsOpen).
 	RefundableCents int64 `json:"refundableCents"`
 	Reversible      bool  `json:"reversible"`

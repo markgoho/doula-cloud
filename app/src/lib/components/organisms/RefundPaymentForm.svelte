@@ -19,7 +19,7 @@
 	 *   account bears it -- #1009's criterion -- and the amount she typed is
 	 *   never adjusted to make up for it.
 	 *
-	 * The amount is hers to type, up to what is left to return: a Practice
+	 * The amount is hers to type, up to what is left to refund: a Practice
 	 * that keeps a canceled Engagement's first two visits returns the rest.
 	 * The Invoice stays 'paid' either way, and this form never says
 	 * otherwise.
@@ -64,7 +64,7 @@
 	} = $props();
 
 	const isCardPayment = $derived(invoice.activePaymentKind === 'stripe');
-	/** What is left to return on the Payment, as the BFF's refund route
+	/** What is left to refund on the Payment, as the BFF's refund route
 	 * bounds it (Invoice.refundableCents). */
 	const remainingCents = $derived(invoice.refundableCents);
 
@@ -131,15 +131,15 @@
 		resetErrors();
 		const cents = amountCents();
 		if (cents === undefined) {
-			amountError = 'Enter an amount to return greater than $0.00';
+			amountError = 'Enter an amount to refund greater than $0.00';
 			return;
 		}
 		if (cents > remainingCents) {
-			amountError = `Amount to return must be ${formatAmount(remainingCents)} or less`;
+			amountError = `Amount to refund must be ${formatAmount(remainingCents)} or less`;
 			return;
 		}
 		if (!isCardPayment && method === undefined) {
-			methodError = 'Select how the money was returned';
+			methodError = 'Select how the money was refunded';
 			return;
 		}
 		if (!isCardPayment && method === 'other' && note.trim() === '') {
@@ -164,7 +164,7 @@
 				return;
 			}
 		}
-		error = error_ instanceof Error ? error_.message : 'Failed to return this money';
+		error = error_ instanceof Error ? error_.message : 'Failed to refund this payment';
 	}
 
 	async function confirm() {
@@ -185,8 +185,8 @@
 	}
 </script>
 
-<section aria-label="Return money to the Client">
-	<Heading level={3} text="Return money from a payment of {formatAmount(invoice.amountCents)}" />
+<section aria-label="Refund payment">
+	<Heading level={3} text="Refund a payment of {formatAmount(invoice.amountCents)}" />
 	<!-- Above the step switch, as on InvoiceSection's payment form: an
 	     untargeted refusal leaves the review step on screen, and it has to
 	     show there too. One region for the whole form. -->
@@ -197,8 +197,8 @@
 		<StackedForm onSubmit={review}>
 			<LabeledField
 				id={amountFieldId}
-				label="Amount to return (USD)"
-				hint="Up to {formatAmount(remainingCents)} is left to return on this payment."
+				label="Amount to refund (USD)"
+				hint="Up to {formatAmount(remainingCents)} is left to refund on this payment."
 				error={amountError || undefined}
 				width={10}
 			>
@@ -220,7 +220,7 @@
 			</LabeledField>
 			{#if !isCardPayment}
 				<PaymentMethodFields
-					legend="How was the money returned?"
+					legend="How was the money refunded?"
 					methodName={methodName}
 					{method}
 					onMethodChange={(value) => (method = value)}
@@ -238,11 +238,11 @@
 		<SummaryList
 			rows={isCardPayment
 				? [
-						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
+						{ label: 'Amount to refund', value: formatAmount(reviewedCents) },
 						{ label: 'Refunded by', value: 'Stripe, to the card that paid' }
 					]
 				: [
-						{ label: 'Amount to return', value: formatAmount(reviewedCents) },
+						{ label: 'Amount to refund', value: formatAmount(reviewedCents) },
 						{ label: 'Method', value: paymentMethodLabels[method!] },
 						{ label: 'Note', value: note.trim() === '' ? '—' : note }
 					]}
@@ -250,7 +250,7 @@
 		{#if isCardPayment}
 			<WarningText message={stripeRefundFeeWarning} />
 		{/if}
-		<Button label="Confirm and return money" onClick={confirm} loading={isSubmitting} />
+		<Button label="Confirm and refund" onClick={confirm} loading={isSubmitting} />
 		<Button label="Change" variant="secondary" onClick={() => (step = 'form')} />
 	{/if}
 </section>

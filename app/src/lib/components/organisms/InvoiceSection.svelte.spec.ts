@@ -729,7 +729,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByLabelText('Check').click();
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await expect.element(page.getByText(/recorded: check/)).not.toBeInTheDocument();
 
 			await page.getByRole('button', { name: 'Cancel' }).click();
@@ -1243,18 +1243,18 @@ describe('InvoiceSection.svelte', () => {
 		});
 	});
 
-	describe('return money to the Client (#1009)', () => {
-		it('offers Return money on a paid Invoice on either rail, and Reverse payment only on the by-hand one', async () => {
+	describe('refund payment to the Client (#1009)', () => {
+		it('offers Refund payment on a paid Invoice on either rail, and Reverse payment only on the by-hand one', async () => {
 			await setup({ invoices: [invoicePaidByCard, invoicePaidByHand], isOwnerOrAdmin: true });
 
-			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(2);
+			expect(page.getByRole('button', { name: 'Refund payment' }).all()).toHaveLength(2);
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(1);
 		});
 
-		it('hides Return money from anyone but Owner or Admin', async () => {
+		it('hides Refund payment from anyone but Owner or Admin', async () => {
 			await setup({ invoices: [invoicePaidByCard, invoicePaidByHand], isOwnerOrAdmin: false });
 
-			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
+			expect(page.getByRole('button', { name: 'Refund payment' }).all()).toHaveLength(0);
 		});
 
 		it('says how much went back on a partly refunded Invoice, keeps it Paid, and stops offering Reverse payment', async () => {
@@ -1269,11 +1269,11 @@ describe('InvoiceSection.svelte', () => {
 			await expect.element(invoiceFact('$100.00')).toBeVisible();
 			await expect.element(page.getByRole('term').filter({ hasText: 'Refunded' })).toBeVisible();
 			await expect.element(invoiceFact('Paid')).toBeVisible();
-			await expect.element(page.getByRole('button', { name: 'Return money' })).toBeVisible();
+			await expect.element(page.getByRole('button', { name: 'Refund payment' })).toBeVisible();
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
 		});
 
-		it('stops offering Return money once everything has gone back', async () => {
+		it('stops offering Refund payment once everything has gone back', async () => {
 			const fullyRefunded: Invoice = {
 				...invoicePaidByHand,
 				refundedCents: invoicePaidByHand.amountCents,
@@ -1283,55 +1283,55 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [fullyRefunded], isOwnerOrAdmin: true });
 
 			await expect.element(invoiceTitle(fullyRefunded.reference)).toBeVisible();
-			expect(page.getByRole('button', { name: 'Return money' }).all()).toHaveLength(0);
+			expect(page.getByRole('button', { name: 'Refund payment' }).all()).toHaveLength(0);
 		});
 
 		it('calls onRefundPayment with the Invoice id, Payment id, and what was entered, then closes the form', async () => {
 			const { onRefundPayment } = await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true });
 
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await page.getByRole('radio', { name: 'Check' }).click();
-			await page.getByLabelText('Amount to return (USD)').fill('100');
+			await page.getByLabelText('Amount to refund (USD)').fill('100');
 			await page.getByRole('button', { name: 'Continue' }).click();
-			await page.getByRole('button', { name: 'Confirm and return money' }).click();
+			await page.getByRole('button', { name: 'Confirm and refund' }).click();
 
 			expect(onRefundPayment).toHaveBeenCalledWith(invoicePaidByHand.id, invoicePaidByHand.activePaymentId, {
 				amountCents: 10_000,
 				method: 'check',
 				note: undefined
 			});
-			await expect.element(page.getByRole('region', { name: 'Return money to the Client' })).not.toBeInTheDocument();
+			await expect.element(page.getByRole('region', { name: 'Refund payment' })).not.toBeInTheDocument();
 		});
 
 		it('keeps the form open and shows why when onRefundPayment throws', async () => {
-			const onRefundPayment = vi.fn().mockRejectedValue(new Error('That is more than is left to return on this Payment.'));
+			const onRefundPayment = vi.fn().mockRejectedValue(new Error('That is more than is left to refund on this Payment.'));
 			await setup({ invoices: [invoicePaidByHand], isOwnerOrAdmin: true, onRefundPayment });
 
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await page.getByRole('radio', { name: 'Check' }).click();
-			await page.getByLabelText('Amount to return (USD)').fill('100');
+			await page.getByLabelText('Amount to refund (USD)').fill('100');
 			await page.getByRole('button', { name: 'Continue' }).click();
-			await page.getByRole('button', { name: 'Confirm and return money' }).click();
+			await page.getByRole('button', { name: 'Confirm and refund' }).click();
 
-			await expect.element(page.getByText('That is more than is left to return on this Payment.')).toBeVisible();
+			await expect.element(page.getByText('That is more than is left to refund on this Payment.')).toBeVisible();
 		});
 
-		it('keeps one form open at a time across Return money, Reverse payment, and Record payment', async () => {
+		it('keeps one form open at a time across Refund payment, Reverse payment, and Record payment', async () => {
 			const openByHand: Invoice = { ...invoiceOpen, id: 'inv-5', billingMode: 'by_hand', reference: 'INV-0005' };
 			await setup({ invoices: [openByHand, invoicePaidByHand], isOwnerOrAdmin: true });
-			const refundForm = page.getByRole('region', { name: 'Return money to the Client' });
+			const refundForm = page.getByRole('region', { name: 'Refund payment' });
 
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await expect.element(refundForm).toBeVisible();
 
 			await page.getByRole('button', { name: 'Reverse payment' }).click();
 			await expect.element(refundForm).not.toBeInTheDocument();
 
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await page.getByRole('button', { name: 'Record payment' }).click();
 			await expect.element(refundForm).not.toBeInTheDocument();
 
-			await page.getByRole('button', { name: 'Return money' }).click();
+			await page.getByRole('button', { name: 'Refund payment' }).click();
 			await page.getByRole('button', { name: 'Cancel' }).click();
 			await expect.element(refundForm).not.toBeInTheDocument();
 		});
@@ -1457,7 +1457,7 @@ describe('InvoiceSection.svelte landing on a linked Invoice (#2240)', () => {
 		});
 		await expect.poll(() => isFocusOn('INV-0003')).toBe(true);
 
-		const returnMoney = page.getByRole('button', { name: 'Return money' });
+		const returnMoney = page.getByRole('button', { name: 'Refund payment' });
 		(returnMoney.element() as HTMLElement).focus();
 		await rerender({ invoices: [{ ...invoicePaidByHand }] });
 

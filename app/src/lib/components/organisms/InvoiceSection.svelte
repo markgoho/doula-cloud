@@ -136,7 +136,7 @@
 		 * Engagement that has a due date can (#2828). */
 		engagementKind: string;
 		engagementDueDate?: string;
-		/** Gates Record payment/Void/Write off/Reverse payment/Return money -- ADR-0008's
+		/** Gates Record payment/Void/Write off/Reverse payment/Refund payment -- ADR-0008's
 		 * Contract-money write row, Owner and Admin only. Also who is linked
 		 * to Getting paid while Stripe cannot take a card (#2200): its
 		 * Connect status read is the same Owner-and-Admin pair. */
@@ -582,7 +582,7 @@
 	}
 
 	/**
-	Whether any money is still left to return on a paid Invoice.
+	Whether any money is still left to refund on a paid Invoice.
 	*/
 	/*
 	 * The Invoices as a table (#2059, #2146), in the drawing's order: the
@@ -725,7 +725,7 @@
 		{@const activePaymentId = invoice.activePaymentId}
 		{#if invoice.refundableCents > 0}
 			<Button
-				label="Return money"
+				label="Refund payment"
 				variant="secondary"
 				size="sm"
 				{describedBy}

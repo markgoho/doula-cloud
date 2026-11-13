@@ -67,7 +67,7 @@ export interface Invoice {
 	refundedCents: number;
 	/** How much may still be returned against activePaymentId, and 0 when
 	 * nothing may: the BFF asks the same Invoice transition and Payment act
-	 * its refund route asks, so "Return money" is offered exactly when the
+	 * its refund route asks, so "Refund payment" is offered exactly when the
 	 * route would take it, and the form caps the amount here. */
 	refundableCents: number;
 	/** Whether activePaymentId may be reversed, by the same declarations
@@ -563,7 +563,7 @@ export const stripeRefundFeeWarning =
  * Against a Stripe-backed Invoice this issues a credit note at Stripe
  * first, and a Stripe refusal (502) saves nothing. Refused (409) when the
  * Invoice is not 'paid', when paymentId was reversed, or when the amount
- * is more than is left to return on it. */
+ * is more than is left to refund on it. */
 export async function refundPayment(
 	fetcher: Fetcher,
 	practiceId: string,

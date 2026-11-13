@@ -29,7 +29,7 @@ const (
 // MsgInvoiceNotPaidForRefund refuses a Refund against an Invoice that is
 // not 'paid' (#1009): nothing was settled, so nothing can go back.
 // Separate from MsgInvoiceNotPaid, whose wording names reversing.
-const MsgInvoiceNotPaidForRefund = "This Invoice is not paid, so there is no money to return."
+const MsgInvoiceNotPaidForRefund = "This Invoice is not paid, so there is no money to refund."
 
 // MsgPaymentNotRefundable refuses a Refund target that is not a Payment
 // belonging to :invoiceId -- a Payment this Invoice never had, or a row
@@ -40,11 +40,11 @@ const MsgPaymentNotRefundable = "This Payment cannot be refunded."
 // MsgReversedPaymentCannotBeRefunded refuses a Refund against a Payment
 // that has been reversed (#945): a reversal says that money never
 // arrived, so there is none to return.
-const MsgReversedPaymentCannotBeRefunded = "This Payment was reversed, so there is no money to return against it."
+const MsgReversedPaymentCannotBeRefunded = "This Payment was reversed, so there is no money to refund against it."
 
 // MsgRefundExceedsPayment refuses a Refund larger than what its target
 // Payment still covers after every earlier Refund against it.
-const MsgRefundExceedsPayment = "That is more than is left to return on this Payment."
+const MsgRefundExceedsPayment = "That is more than is left to refund on this Payment."
 
 // MsgStripeRefundFailed is what a caller sees when Stripe refuses the
 // credit note -- the fail-closed rule MsgStripePayOutOfBandFailed already
@@ -70,7 +70,7 @@ type RefundPaymentRequest struct {
 }
 
 // resolveRefundTarget is lockPaymentFor for ActRefundPayment, plus the
-// act's amount bound: a Refund of more than is left to return on the
+// act's amount bound: a Refund of more than is left to refund on the
 // Payment is refused with MsgRefundExceedsPayment. Under the Payment's
 // row lock, so two concurrent Refunds against one Payment serialize and
 // the second reads the first's row; 00175's trigger holds the same bound
@@ -103,7 +103,7 @@ func validateRefundMethod(w http.ResponseWriter, req RefundPaymentRequest, targe
 	if !validPaymentMethods[req.Method] {
 		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 			`method must be "check", "bank_transfer", "cash", or "other"`,
-			map[string]string{fieldMethod: "Select how the money was returned"})
+			map[string]string{fieldMethod: "Select how the money was refunded"})
 		return false
 	}
 	if req.Method == PaymentMethodOther && req.Note == "" {
@@ -153,7 +153,7 @@ func PostRefundPaymentHandler(client Client) http.Handler {
 		if req.AmountCents <= 0 {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument,
 				"amountCents must be greater than zero",
-				map[string]string{"amountCents": "Enter an amount to return greater than $0.00"})
+				map[string]string{"amountCents": "Enter an amount to refund greater than $0.00"})
 			return
 		}
 

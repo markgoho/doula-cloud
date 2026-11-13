@@ -504,7 +504,7 @@ describe('refundPayment', () => {
 				{
 					code: 'invalid_argument',
 					message: 'amountCents must be greater than zero',
-					details: { amountCents: 'Enter an amount to return greater than $0.00' }
+					details: { amountCents: 'Enter an amount to refund greater than $0.00' }
 				},
 				400
 			)
@@ -514,7 +514,7 @@ describe('refundPayment', () => {
 
 		await expect(rejection).rejects.toBeInstanceOf(RefusalError);
 		await expect(rejection).rejects.toMatchObject({
-			details: { amountCents: 'Enter an amount to return greater than $0.00' }
+			details: { amountCents: 'Enter an amount to refund greater than $0.00' }
 		});
 	});
 });

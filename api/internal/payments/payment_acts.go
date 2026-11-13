@@ -146,7 +146,7 @@ type lockedPayment struct {
 	refundedCents int64
 }
 
-// refundable is how much is left to return on the Payment.
+// refundable is how much is left to refund on the Payment.
 func (p lockedPayment) refundable() int64 { return p.amountCents - p.refundedCents }
 
 // lockPaymentFor locks :paymentId's row FOR UPDATE, scoped to :invoiceId

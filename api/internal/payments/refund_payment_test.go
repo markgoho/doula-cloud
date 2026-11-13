@@ -308,7 +308,7 @@ func TestPostRefundPaymentHandler_DoulaForbidden(t *testing.T) {
 }
 
 // TestPostRefundPaymentHandler_AdminAllowed proves the other half of the
-// gate: an Admin, not only an Owner, may return money.
+// gate: an Admin, not only an Owner, may refund payment.
 func TestPostRefundPaymentHandler_AdminAllowed(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Admin()))
 	_, invoiceID, paymentID := e.paidByHandInvoice()
