@@ -21,7 +21,7 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 
 ## Category baseline
 
-Decided 2026-11-13 (#2866). Where the conventions were learned: Stripe Dashboard's payments, invoices and customers lists; Linear's issue lists and Display menu; the GOV.UK Design System; the MOJ Design System's sortable table and "filter a list" patterns; Google Calendar's Schedule view; Calendly's and Acuity's upcoming lists. Only MOJ's sortable-table page was read on 2026-11-13; the rest is from memory. The test for a sortable column: a column is a sort when the reader wants the extremes of a range; it is a filter or a search when the reader wants every row of one value. An order the BFF does not serve is never drawn by sorting loaded rows in the browser: the list loads 30 rows at a time from a cursor.
+Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). Read on 2026-11-13: Linear's display options page (https://linear.app/docs/display-options) says "Ordering is allowed in most list views and lets you order issues", by status, priority, last created, last updated, due date and more, and "You can also reverse the sort order", beside its filters and grouping. Stripe's dashboard search page (https://docs.stripe.com/dashboard/search) says list views show "column headings, some of which provide sorting options". The MOJ Design System's sortable table (https://design-patterns.service.justice.gov.uk/components/sortable-table/) says "Use this component when sorting is needed to help find data within a large table of data", combined with the filter pattern. GOV.UK's table component has no sort. Still unread: Stripe's own Payments, Invoices and Customers lists' default order and column editor; Google Calendar's Schedule view grouping events under a heading per day (its help page says only "To find a list of all your events or tasks by day, choose Schedule"); Calendly's and Acuity's lists. An order the BFF does not serve is never drawn by sorting loaded rows in the browser: the list loads 30 rows at a time from a cursor.
 
 | Convention | Verdict | Reason |
 | --- | --- | --- |
@@ -34,15 +34,13 @@ Decided 2026-11-13 (#2866). Where the conventions were learned: Stripe Dashboard
 | Keyboard shortcuts | Declined | no job on record; T7 is met by Tab and "Skip to results" |
 | A list-level export, print or copy | Declined | Settings exports the whole Practice; no job for a list's CSV |
 | Row actions without opening the record | Declined | H5; the Engagement holds Record payment, one action from the row |
-| Sort by Sent | Have it | "All" is newest first |
-| Sort by Payment due | Have it | "Unpaid" orders by earliest payment due first and "Overdue" by longest overdue first (T2) |
-| Sort by amount | Declined | no job on record chases the largest first; "Unpaid" and the totals answer how much |
+| A reader-chosen order (sent, payment due, amount; each either way) | Build (#2869) | Linear and Stripe give the reader a chosen order beside the filters; each view's own order stays its default ("All" newest first, "Unpaid" earliest due first, "Overdue" longest overdue first) |
 | The order said to assistive technology (`aria-sort`) | Build (#2867) | the view orders by a column a screen reader is not told |
 | Search by reference or Client | Have it | "Reference or Client" (T4; #1829) |
 | A total count | Have it | the four totals, and the whole in the result line while more exist ("the first 30 of 35") |
 | Date navigation, grouping, a calendar view, relative days | Declined | a book of Invoices is not read by day; the two days in a row are facts of the row |
 | Time zone shown | Declined | days only, no times |
 
-If an order is ever built: a `FilterBar` control that exists at every width with its value in the address, the ordering column's `th` mirroring it with `aria-sort`, and the BFF serving it with a cursor tied to that order. A header-only button vanishes in the record cards at 320px (ADR-0024).
+The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict and DESIGN.md
