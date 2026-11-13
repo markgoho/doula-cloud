@@ -132,15 +132,44 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
  * A Visit's own Date column and per-row summary (#250): "Not yet
  * scheduled" -- plain text, so it is readable at 320px and announced to a
  * screen reader the same as any other cell -- when `value` is absent, or
- * the same day-and-clock treatment `formatActivityTimestamp`'s absolute
- * branch already uses (`formatClock`, this file's own) otherwise. Not
- * relative-under-a-week like that function's own recent-past branches: a
- * Visit's scheduled instant is as often ahead as behind, and "in 3 days"
- * reads oddly beside "Yesterday" for a thing that has not happened yet.
+ * the weekday-led form ADR-0022's 2026-10-24 amendment writes ("Thu Sep 4,
+ * 2:00pm"), the same one `formatPortalVisit` prints for a Visit still to
+ * come. The year joins only when the Visit is not in `now`'s year, so a
+ * Visit from last winter or next spring still says which. Not
+ * relative-under-a-week like `formatActivityTimestamp`'s recent-past
+ * branches: a Visit's scheduled instant is as often ahead as behind, and
+ * "in 3 days" reads oddly beside "Yesterday" for a thing that has not
+ * happened yet. `now` defaults to the real clock and is a parameter only
+ * so a test can pin it.
  */
-export function formatScheduledVisit(value: string | undefined): string {
+export function formatScheduledVisit(value: string | undefined, now: Date = new Date()): string {
 	if (!value) return 'Not yet scheduled';
-	return formatInstantWithClock(value);
+	const { day, clock } = scheduledVisitParts(value, now);
+	return `${day} ${clock}`;
+}
+
+/**
+ * The two halves of `formatScheduledVisit`'s words, for a cell that sets the
+ * day and the clock in tracks of their own: "Thu Sep 4," and "2:00pm". The
+ * comma stays with the day, so the halves read as the one phrase when joined
+ * by a space.
+ */
+export function scheduledVisitParts(value: string, now: Date = new Date()): { day: string; clock: string } {
+	const date = new Date(value);
+	return {
+		day: `${formatWeekdayDay(date, { withYear: date.getFullYear() !== now.getFullYear() })},`,
+		clock: formatClock(date)
+	};
+}
+
+/**
+ * A calendar day, `YYYY-MM-DD`, with its weekday: "Fri Nov 13", and "Fri Nov
+ * 13, 2027" when it is not `now`'s year. The Schedule's result line and its
+ * applied days say a day this way, the way a Visit's own day is said.
+ */
+export function formatCalendarWeekdayDay(value: string, now: Date = new Date()): string {
+	const [year, month, day] = value.split('-').map(Number);
+	return formatWeekdayDay(new Date(year!, month! - 1, day!), { withYear: year !== now.getFullYear() });
 }
 
 /**
@@ -168,8 +197,22 @@ export function formatScheduledVisit(value: string | undefined): string {
 export function formatPortalVisit(value: string, hasHappened: boolean): string {
 	const date = new Date(value);
 	if (hasHappened) return formatDay(date);
+	return formatWeekdayDayClock(date, { withYear: false });
+}
+
+/**
+ * "Thu Sep 4, 2:00pm", or "Thu Sep 4, 2027, 2:00pm" with the year.
+ */
+function formatWeekdayDayClock(date: Date, { withYear }: { withYear: boolean }): string {
+	return `${formatWeekdayDay(date, { withYear })}, ${formatClock(date)}`;
+}
+
+/**
+ * "Thu Sep 4", or "Thu Sep 4, 2027" with the year.
+ */
+function formatWeekdayDay(date: Date, { withYear }: { withYear: boolean }): string {
 	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-	return `${weekday} ${formatDay(date, { withYear: false })}, ${formatClock(date)}`;
+	return `${weekday} ${formatDay(date, { withYear })}`;
 }
 
 /**

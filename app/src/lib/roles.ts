@@ -172,6 +172,17 @@ export function isAmbientContractor(session: RoleSession): boolean {
 }
 
 /**
+ * Whether a list of Visits or Clients is offered "Mine": she holds the
+ * doula role, is not an ambient contractor (whose list is already only
+ * hers), and another Doula holds the role at this Practice (#2675), since
+ * with one Doula every Visit is hers. The Schedule reads it; the Clients
+ * list draws the same rule with a Client count added.
+ */
+export function canNarrowToMine(session: RoleSession & { hasOtherDoulas?: boolean }): boolean {
+	return isDoula(session) && !isAmbientContractor(session) && session.hasOtherDoulas !== false;
+}
+
+/**
  * Whether a person holds all three roles, which is what signup gives the
  * person who sets a Practice up.
  */

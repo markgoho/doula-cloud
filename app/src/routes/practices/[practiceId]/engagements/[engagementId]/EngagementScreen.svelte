@@ -67,6 +67,7 @@
 	} from '#lib/portalInvite.js';
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
+	import { landOnRow } from '#lib/landOnRow.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import {
@@ -144,6 +145,8 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
+	import VisitDoula from '#lib/components/molecules/VisitDoula.svelte';
+	import VisitWhen from '#lib/components/molecules/VisitWhen.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
@@ -770,6 +773,33 @@
 
 	// The scheduled Visits by date, then the rest (#1999).
 	const sortedVisits = $derived(sortVisits(visits.items));
+
+	// #2747: a Schedule row links here with `#visit-<id>`; its row takes
+	// focus, once, when the Visits arrive.
+	const landOnVisitId = $derived(/^#visit-(.+)$/.exec(page.url.hash)?.[1]);
+	const visitRowId = (visit: Visit, view: DataTableView) => `visit-row-${view}-${visit.visitId}`;
+	const MAX_ARRIVAL_PAGES = 20;
+	let arrivalPagesRead = 0;
+	let hasLandedOnVisit = false;
+	$effect(() => {
+		if (hasLandedOnVisit || !landOnVisitId || !visitsLoad.hasSettled) {
+			return;
+		}
+		const visit = sortedVisits.find((row) => row.visitId === landOnVisitId);
+		if (!visit) {
+			// A Visit past the first page: read on, a page at a time, until it
+			// is there or the Visits run out. The cap stops a link that names
+			// a Visit this Engagement does not hold from reading them all.
+			if (visits.hasMore && !visits.isLoadingMore && !visits.loadMoreError && arrivalPagesRead < MAX_ARRIVAL_PAGES) {
+				arrivalPagesRead += 1;
+				void visits.loadMore();
+			}
+			return;
+		}
+		hasLandedOnVisit = true;
+		const views: DataTableView[] = ['table', 'record'];
+		landOnRow(views.map((view) => visitRowId(visit, view)));
+	});
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
@@ -2560,6 +2590,14 @@
 	{/if}
 {/snippet}
 
+{#snippet visitWhenCell(visit: Visit, view: DataTableView)}
+	<VisitWhen at={visit.scheduledAt} isTracked={view === 'table'} />
+{/snippet}
+
+{#snippet visitDoulaCell(visit: Visit, view: DataTableView)}
+	<VisitDoula name={visit.staffName} isOffEngagement={visit.isOffEngagement} isTracked={view === 'table'} />
+{/snippet}
+
 {#snippet visitActions(visit: Visit, view: DataTableView)}
 	<!--
 		#1999: a row holds its facts and the one action that opens its
@@ -2798,9 +2836,13 @@
 	{:else}
 	<DataTable
 		columns={[
-			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt), content: visitWhenCell },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
-			{ label: 'Doula', accessor: (visit: Visit) => visitDoulaText(visit.staffName, visit.isOffEngagement) },
+			{
+				label: 'Doula',
+				accessor: (visit: Visit) => visitDoulaText(visit.staffName, visit.isOffEngagement),
+				content: visitDoulaCell
+			},
 			// #2091: a note is a Doula's prose beside four facts, so it takes
 			// the room they leave and wraps there. The table's floor is then the
 			// facts beside the note's longest word, 615px on the typical screen in
@@ -2809,6 +2851,7 @@
 			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.', wraps: true }
 		]}
 		rows={sortedVisits}
+		rowId={visitRowId}
 		rowActions={{ label: 'Actions', content: visitActions }}
 		hasMore={visits.hasMore}
 		onLoadMore={() => visits.loadMore()}

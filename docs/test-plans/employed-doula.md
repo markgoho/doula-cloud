@@ -87,7 +87,7 @@ She is the negative-permission Persona, so half this plan is the [Permission bou
 
 | Step | Action | Expected result | Mark |
 | --- | --- | --- | --- |
-| 7.1 | Add a Visit | **Add a Visit** in the Visits section asks only "Scheduled date and time (optional)", with **Save Visit** and **Cancel**; "Your Visit is added." and a row: Date, Type, Doula (her), Notes, **Change** | `manual` |
+| 7.1 | Add a Visit | **Add a Visit** in the Visits section asks only "Scheduled date and time (optional)", with **Save Visit** and **Cancel**; "Your Visit is added." and a row: When, Type, Doula (her), Notes, **Change** | `manual` |
 | 7.1-a | Record when the Visit was | The date and time are asked at **Add a Visit** and printed on the row ([MO-G1](https://github.com/markgoho/doula-cloud/issues/250), closed) | `manual` |
 | 7.1-b | Record which of the three kinds it was — prenatal, birth, postpartum | Not chosen: the row's Type is worked out from when the Visit falls against the pregnancy-end date (#954), so a Visit before the due date reads Prenatal ([PR-G6](https://github.com/markgoho/doula-cloud/issues/281), closed) | `manual` |
 | 7.1-c | Record what was covered, for "what was I told last time" | Notes are Staff-only and written through the row's **Change**, after the Visit is added; the row prints them (#888; [MO-G2](https://github.com/markgoho/doula-cloud/issues/251), closed) | `manual` |

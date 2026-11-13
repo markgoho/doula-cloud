@@ -1,0 +1,43 @@
+# Schedule: what a 4 means
+
+A heuristic scores 4 only when **every** check under it passes, each with evidence a grader can point to: a screenshot, a measured value, the accessible text, or a walk's act log. A check with no evidence fails. 3 = one check fails, 2 = two, 1 = three or more, 0 = the heuristic's core job is absent.
+
+Graders are three independent agents per round. None sees an earlier score, this branch's commits, or another grader's output. The score per heuristic is the median of the three.
+
+Seed: the demo Practice under `dev:full` (Rooted Birth Collective, 14 doulas, 30+ Clients, 40 or more scheduled Visits in the next 30 days across the month, some earlier in the last week, two booked Visits whose Doula was taken off the Engagement, one of them past the first page, one Doula with two Visits on one day). Widths: 1440px, 1280px, 768px, 375px; 200% zoom at 1280px.
+
+## The jobs
+
+Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`, `docs/test-plans`), not research (ADR-0045). The records name the jobs; the action budgets are ours.
+
+- **T1 Renata, this week's cover:** from arriving on Schedule, narrow to the next seven days in ≤ 2 actions, and see only those days' Visits and which Doula holds each, without opening an Engagement. The number of Visits shown and whether more exist are stated. (`personas/practice-owner.md:11`, `journeys/practice-owner.md:197`, `test-plans/practice-owner.md:131`)
+- **T2 Renata or Dee, a Doula is ill:** Renata's "Priya is ill. Move her Thursday to Jo." See only Priya's Visits, find the one on a named weekday without working the weekday out from a date, and in 1 action from its row open its Engagement with that Visit's row and its Reassign control in view at 1280×800. Narrowing takes ≤ 2 actions. Coming back restores the narrowing and the position. (`journeys/practice-owner.md:120`, `journeys/practice-owner.md:130`, `test-plans/non-doula-admin.md:167`)
+- **T3 Dee, keep the calendar honest:** within the days shown, find every booked Visit whose Doula is no longer on its Engagement, so each can be reassigned. ≤ 2 actions, without reading every row's Doula; the row says it in words. The seed holds two, one of them past the first page. (`personas/non-doula-admin.md:11`, `GLOSSARY.md:43`, #2596)
+- **T4 Priya, phone (375px), where she has to be:** signed in as Priya, an employed Doula with no Owner or Admin role (walked as her by `persona-walker`, never judged from Renata's session), see only her own Visits, with her next one on the first screen (375×740). ≤ 2 actions. The BFF gives her every Visit at the Practice (ADR-0006) and takes a Staff id from any role; the narrowing is the "Mine" the Clients list offers a Doula (#2624). (`personas/employed-doula.md:13`, `personas/employed-doula.md:17`)
+- **T5 Maya, phone (375px), today:** on arriving, the first screen (375×740) holds the next Visit whole: its day with its weekday, its time, the Client and the Doula. Walked on Rooted's book, which stands in for hers. (`personas/solo-birth-doula.md:11`, `personas/solo-birth-doula.md:13`)
+- **T6 Screen reader:** a row reads as the Client, then the day and time, then the Doula, each under its column's name and with audible separators, and a Doula who is no longer on the Engagement is said in words. The table's purpose and count are announced. Two Visits of one Client have links a list of links tells apart.
+- **T7 Keyboard:** every filter and every row is reachable, with a visible focus ring. Tabbing through every control from the title to row 1 takes ≤ 6 stops, and "Skip to results" takes ≤ 2.
+- **T8 Failure:** with the BFF refusing the list, the screen says what happened in Voice-rule words, the narrowing is kept, and "Try again" recovers. A refused "load more" keeps the rows already shown.
+
+## Heuristic checks
+
+1. **Visibility of system status:** loading shows a skeleton within 300ms and nothing moves when the rows land. Every filter change visibly changes the list or says that nothing matched. The count line states how many Visits are shown and whether more exist (the BFF gives no total), the days, the Doula when narrowed, and the order. Load more states progress.
+2. **Match with the real world:** every label is a word a doula or an office manager uses. Every day and time reads as ADR-0022's 2026-10-24 amendment writes a Visit's ("Thu Sep 4, 2:00pm"), with the year only when it is not this one. A Doula who is no longer on the Engagement is said in the words the Engagement page says it in (`NO_LONGER_ON_THIS_ENGAGEMENT`, `app/src/lib/engagementDetail.ts`; #2660).
+3. **User control and freedom:** every filter is in the address (back, reload and share keep it). Any filter can be cleared in one action, and one action returns to the days the screen opens on. Leaving for an Engagement and coming back restores the filter and position.
+4. **Consistency and standards:** title, intro, filter bar, result line and table, the pieces this screen shares with the Clients list and the Invoices list, are the same components in the same place (measured: same title x/size, same filter bar arrangement, same result line, same table header and row style). Applied filters are tags as on those lists. A Visit's day and time read the same here as on its Engagement, by one shared formatter. Badge colors and words mean what they mean on the other lists.
+5. **Error prevention:** a range that can never match (To before From) is not sent, or is answered in place beside the field, never by a full error page. A reader is offered only the narrowing the BFF will serve them: a contractor Doula sees only Visits on Engagements she holds a granted Attachment to, and no control lists the roster to a reader the BFF refuses it. Nothing on the list changes a Visit in one press.
+6. **Recognition rather than recall:** the order is stated and serves the job. Filters are visible, not hidden in menus. A named day's Visits are found without working a weekday out from a date: every row's day starts with its weekday, at one x in every row. Each row says, without opening it, the Client, the day and time, and who holds it; a row that needs someone to act (its Doula is off the Engagement) carries the warning Badge beside its words, so it is found by scanning the column.
+7. **Flexibility and efficiency:** T1, T2, T3, T4 and T5 each pass within their action budgets. On the seed, the next seven days' Visits are all on page one, or one narrowing shows them with no Load more.
+8. **Aesthetic and minimalist design:** amber only on the warning Badge of a row that needs someone to act, never a row or cell tint (DESIGN.md, One Meaning Per Hue); no red. Table rows have equal rhythm (row heights within 4px of each other); record cards keep one field order. No element on the page carries no information, no fact appears twice within one table row, and the order is stated once on the page. At 1280×800 and at 375×740, row 1 (Client, day and time, Doula) is wholly on the first screen, under the title and the filters.
+9. **Error recovery:** T8 passes. A filter with no results says so and offers the way back to the days the screen opens on.
+10. **Help and documentation:** every filter's effect is clear from its label, including whether the To day is included. The screen says which days it shows when no one has chosen any. The empty state for each filter says what was looked for and what to do. No term needs a glossary.
+
+## Cross-cutting (each failure costs a point from the heuristic named)
+
+- 320px and 200% zoom: no horizontal page scroll, every control usable (4, 7).
+- WCAG 2.2 AA: contrast, focus not obscured, target size 24px (4, 7).
+- The constraints hold: ADR-0021 GOV.UK patterns, ADR-0022 dates carry the exact instant in a `<time>`, ADR-0024 intrinsic layout (no viewport queries), the Voice rules (4, 2).
+
+## Changes to this rubric
+
+None yet.

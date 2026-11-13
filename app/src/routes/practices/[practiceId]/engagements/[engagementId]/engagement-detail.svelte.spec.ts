@@ -899,8 +899,18 @@ describe('the Activity ledger section (#486)', () => {
 	});
 });
 
+const arrivalVisit = (visitId: string) => ({
+	visitId,
+	staffId: 'staff-1',
+	staffName: 'Lena Vasquez',
+	createdAt: '2026-09-01T15:00:00Z',
+	scheduledAt: '2026-09-02T15:00:00Z',
+	type: 'prenatal',
+	isOffEngagement: false
+});
+
 // #250: a Visit's own scheduled date, distinct from createdAt.
-describe('the Visits section Date column and schedule control (#250)', () => {
+describe('the Visits section When column and schedule control (#250)', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
@@ -912,14 +922,72 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		// scheduledAt, visit-2 carries none. The expected cell text is built
 		// from the same Date methods formatScheduledVisit itself uses
 		// (dates.spec.ts's own reason) rather than a literal UTC string, so
-		// this passes regardless of the runner's own time zone.
+		// this passes regardless of the runner's own time zone. 2027 is
+		// never the current year, so the year is always printed.
 		const scheduled = new Date('2027-03-15T14:30:00Z');
 		const hour12 = scheduled.getHours() % 12 === 0 ? 12 : scheduled.getHours() % 12;
 		const minute = scheduled.getMinutes().toString().padStart(2, '0');
 		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
-		const expected = `${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
+		const expected = `${scheduled.toLocaleDateString('en-US', { weekday: 'short' })} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
 		await expect.element(testPage.getByRole('rowheader', { name: expected, exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+	});
+
+	it('heads the day column "When", as the Schedule does', async () => {
+		await renderWithFixtureResponder();
+
+		const visits = testPage.getByLabelText('Visits');
+		await expect.element(visits.getByRole('columnheader', { name: 'When' })).toBeVisible();
+		expect(visits.getByRole('columnheader', { name: 'Date' }).elements()).toHaveLength(0);
+	});
+
+	it('takes focus on the Visit a Schedule row linked to (#2747)', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/#visit-visit-2');
+			await renderWithFixtureResponder();
+
+			await expect.poll(() => document.activeElement?.id).toBe('visit-row-table-visit-2');
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('reads on, a page at a time, to a Visit past the first page, and takes focus on it', async () => {
+		const original = pageState.url;
+		const requested: string[] = [];
+		try {
+			pageState.url = new URL('https://example.test/#visit-visit-9');
+			await renderWithFixtureResponder((path) => {
+				if (!path.includes('/visits')) return;
+				requested.push(path);
+				return Promise.resolve(
+					jsonResponse(
+						path.includes('cursor=c1')
+							? { items: [arrivalVisit('visit-9')], hasMore: false }
+							: { items: [arrivalVisit('visit-8')], hasMore: true, nextCursor: 'c1' }
+					)
+				);
+			});
+
+			await expect.poll(() => document.activeElement?.id).toBe('visit-row-table-visit-9');
+			expect(requested).toHaveLength(2);
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('leaves focus alone when the linked Visit is not among the Visits', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/#visit-elsewhere');
+			await renderWithFixtureResponder();
+
+			await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+			expect(document.activeElement).toBe(document.body);
+		} finally {
+			pageState.url = original;
+		}
 	});
 
 	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {

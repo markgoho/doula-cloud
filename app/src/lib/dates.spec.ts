@@ -3,12 +3,14 @@ import {
 	formatActivityTimestamp,
 	formatCalendarDay,
 	formatCalendarMonth,
+	formatCalendarWeekdayDay,
 	formatInstant,
 	formatInstantWithClock,
 	formatInstantWithSeconds,
 	formatPostpartum,
 	formatPortalVisit,
 	formatScheduledVisit,
+	scheduledVisitParts,
 	toDatetimeLocalValue
 } from './dates.js';
 
@@ -75,12 +77,29 @@ describe('formatScheduledVisit', () => {
 		expect(formatScheduledVisit(value)).toBe(want);
 	});
 
-	it('reads a scheduled instant as a day and a 12-hour clock, in the reader own zone', () => {
-		const iso = local(2027, 3, 15, 14, 30);
-		const expected = new Date(iso);
-		expect(formatScheduledVisit(iso)).toBe(
-			`${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, ${expected.getFullYear()}, ${expected.getHours() % 12 === 0 ? 12 : expected.getHours() % 12}:${expected.getMinutes().toString().padStart(2, '0')}${expected.getHours() < 12 ? 'am' : 'pm'}`
-		);
+	it.each([
+		['leads with the weekday and drops the year inside the current year', local(2026, 11, 15, 18, 0), 'Sun Nov 15, 6:00pm'],
+		['keeps the year for a Visit in a later year', local(2027, 3, 15, 14, 30), 'Mon Mar 15, 2027, 2:30pm'],
+		['keeps the year for a Visit in an earlier year', local(2025, 12, 31, 0, 5), 'Wed Dec 31, 2025, 12:05am']
+	])('%s', (_name, iso, want) => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(formatScheduledVisit(iso, now)).toBe(want);
+	});
+});
+
+describe('scheduledVisitParts', () => {
+	it('splits the Visit’s words into its day, comma kept, and its clock', () => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(scheduledVisitParts(local(2026, 11, 15, 18, 0), now)).toEqual({ day: 'Sun Nov 15,', clock: '6:00pm' });
+		expect(scheduledVisitParts(local(2027, 3, 15, 14, 30), now)).toEqual({ day: 'Mon Mar 15, 2027,', clock: '2:30pm' });
+	});
+});
+
+describe('formatCalendarWeekdayDay', () => {
+	it('reads a calendar day as its own parts with its weekday, the year only when it is not this one', () => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(formatCalendarWeekdayDay('2026-11-13', now)).toBe('Fri Nov 13');
+		expect(formatCalendarWeekdayDay('2027-01-02', now)).toBe('Sat Jan 2, 2027');
 	});
 });
 

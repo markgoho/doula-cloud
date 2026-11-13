@@ -126,6 +126,7 @@ export class PaginatedList<Item> {
 	 * ran.
 	 */
 	#generation = 0;
+	#inFlight: Promise<void> | undefined;
 	/**
 	 * Whether a page has ever landed. True from construction for the
 	 * ordinary path, because the route's `load` already fetched the first
@@ -206,6 +207,27 @@ export class PaginatedList<Item> {
 		}
 	}
 
+	async #loadNext(): Promise<void> {
+		const generation = this.#generation;
+		this.loadMoreError = '';
+		this.isLoadingMore = true;
+		try {
+			let next: CursorPage<Item>;
+			do {
+				next = await this.#loadPage(this.#cursor);
+				if (generation !== this.#generation) return;
+				this.#cursor = next.nextCursor ?? '';
+				this.hasMore = next.hasMore;
+			} while (next.items.length === 0 && this.hasMore);
+			this.items = [...this.items, ...next.items];
+		} catch (error_) {
+			if (generation !== this.#generation) return;
+			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
+		} finally {
+			if (generation === this.#generation) this.isLoadingMore = false;
+		}
+	}
+
 	/**
 	 * The rows, or `undefined` while none has landed. See
 	 * `DeferredPaginatedList`, which is the only view that exposes it.
@@ -278,26 +300,19 @@ export class PaginatedList<Item> {
 	 * combination is exactly the empty-message-plus-Load-more
 	 * contradiction `DataTable` cannot render sanely.
 	 */
-	async loadMore(): Promise<void> {
-		if (!this.hasMore || this.isLoadingMore) return;
+	loadMore(): Promise<void> {
+		if (!this.hasMore || this.isLoadingMore) return Promise.resolve();
+		const run = this.#loadNext();
+		this.#inFlight = run;
+		return run;
+	}
 
-		const generation = this.#generation;
-		this.loadMoreError = '';
-		this.isLoadingMore = true;
-		try {
-			let next: CursorPage<Item>;
-			do {
-				next = await this.#loadPage(this.#cursor);
-				if (generation !== this.#generation) return;
-				this.#cursor = next.nextCursor ?? '';
-				this.hasMore = next.hasMore;
-			} while (next.items.length === 0 && this.hasMore);
-			this.items = [...this.items, ...next.items];
-		} catch (error_) {
-			if (generation !== this.#generation) return;
-			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
-		} finally {
-			if (generation === this.#generation) this.isLoadingMore = false;
-		}
+	/**
+	 * The `loadMore` still running, or `undefined`: what tells a call that
+	 * added nothing because a load was in flight from one that added nothing
+	 * because the list ran out.
+	 */
+	get inFlight(): Promise<void> | undefined {
+		return this.isLoadingMore ? this.#inFlight : undefined;
 	}
 }

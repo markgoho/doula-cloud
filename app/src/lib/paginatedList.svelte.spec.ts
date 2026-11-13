@@ -86,6 +86,21 @@ describe('PaginatedList', () => {
 		expect(list.isLoadingMore).toBe(false);
 	});
 
+	it('hands the load in flight to a caller who must wait for it, and none once it has landed or been abandoned', async () => {
+		const held = Promise.withResolvers<CursorPage<string>>();
+		const list = listOf(page(['a'], 'cursor-1'), vi.fn().mockReturnValue(held.promise));
+		expect(list.inFlight).toBeUndefined();
+
+		const running = list.loadMore();
+
+		expect(list.inFlight).toBe(running);
+		list.abandon();
+		expect(list.inFlight).toBeUndefined();
+		held.resolve(page(['b']));
+		await running;
+		expect(list.inFlight).toBeUndefined();
+	});
+
 	it("surfaces a thrown Error's own message", async () => {
 		const list = listOf(
 			page(['a'], 'cursor-1'),
