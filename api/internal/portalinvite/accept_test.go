@@ -52,6 +52,7 @@ func TestAcceptInviteHandler_Refusals(t *testing.T) {
 		body    string
 		token   string
 		expired bool
+		noEmail bool
 		want    int
 		code    apierr.Code
 	}{
@@ -72,6 +73,12 @@ func TestAcceptInviteHandler_Refusals(t *testing.T) {
 			// expired is derived from the clock, never stored).
 			name: "an expired invitation", expired: true, want: http.StatusGone, code: apierr.CodeLinkUnusable,
 		},
+		{
+			// #2845: ADR-0017 relaxed clients.email, so a Client may have no
+			// address to make a sign-in address from. A caller holding the
+			// token is refused with a 409, not a 500 from scanning NULL.
+			name: "a Client with no email on file", noEmail: true, want: http.StatusConflict, code: apierr.CodeLinkUnusable,
+		},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -79,6 +86,11 @@ func TestAcceptInviteHandler_Refusals(t *testing.T) {
 			token, clientID := c.token, ""
 			if c.expired {
 				clientID, token = seedPendingPortalInviteExpiringAt(t, s.DB, time.Now().Add(-time.Minute))
+			}
+			if c.noEmail {
+				practiceID, _ := testdb.SeedStaffAtNewPractice(t, s.DB, "no-email-owner", []string{doulaRole}, "employee")
+				clientID, _ = testdb.SeedNamedEngagement(t, s.DB, practiceID, "No Email Client", "")
+				token = insertPendingPortalInvite(t, s.DB, clientID, time.Now().Add(7*24*time.Hour))
 			}
 			var resp *http.Response
 			if c.body != "" {
@@ -94,13 +106,22 @@ func TestAcceptInviteHandler_Refusals(t *testing.T) {
 					t.Errorf("code = %q, want %q", got, c.code)
 				}
 			}
-			if c.expired {
+			if c.expired || c.noEmail {
 				identityUID, storedToken := portalUserRow(t, s.DB, clientID)
 				if identityUID.Valid {
-					t.Errorf("expected identity_uid to remain unset for an expired invite, got %q", identityUID.String)
+					t.Errorf("expected identity_uid to remain unset for a refused invite, got %q", identityUID.String)
 				}
 				if storedToken.String != token {
 					t.Errorf("expected invite_token to remain %q, got %q", token, storedToken.String)
+				}
+			}
+			if c.noEmail {
+				var accounts, entries int
+				if err := s.DB.Admin.QueryRowContext(t.Context(), `SELECT (SELECT count(*) FROM portal_accounts), (SELECT count(*) FROM activity WHERE subject_id IN (SELECT id FROM engagements WHERE client_id = $1))`, clientID).Scan(&accounts, &entries); err != nil {
+					t.Fatalf("count rows: %v", err)
+				}
+				if accounts != 0 || entries != 0 {
+					t.Errorf("a refused accept wrote %d Portal Accounts and %d Activity entries, want none", accounts, entries)
 				}
 			}
 		})
