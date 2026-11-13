@@ -34,22 +34,20 @@
 	 * announced (#2015). It is hidden with a class rather than removed, so
 	 * the live region exists before its text changes.
 	 *
-	 * Apply follows the fields and "Clear filters" follows Apply. The link's
-	 * box is always there: while no filter is on it is drawn hidden
-	 * (`visibility: hidden`, so it holds its space and is out of the tab order
-	 * and the accessibility tree), so Apply sits in the same place whether or
-	 * not the link is shown. A bar with switches gives them a row above the
-	 * fields, and a switch the route does not draw right now but marks
-	 * `data-holds-space` keeps its box the same way. The count has a row of its
-	 * own under the controls and keeps its height while it is empty; the applied
-	 * filters' tags share that row, before the count, and a bar given
-	 * `appliedRuler` reserves the row's height for one tag beside the longest
-	 * count. So applying a filter never moves Apply, and applying one filter
-	 * moves the list under the bar only where its tag needs more room than the
-	 * count holds and no `appliedRuler` reserves it.
+	 * Apply follows the fields, the applied filters' tags follow Apply, and
+	 * "Clear filters" follows the tags, each wrapping on its own: a tag sits
+	 * in the room already empty beside Apply and takes a line under it only
+	 * where that room runs out, and nothing is held empty for it. Apply comes
+	 * first, so a tag or the link never moves it. A bar with switches gives
+	 * them a row above the fields, and a switch the route does not draw right
+	 * now but marks `data-holds-space` keeps its box. The count has a row of
+	 * its own under the controls and keeps its height while it is empty.
 	 *
- * With `foldsFieldsOnly`, `children` stay in view at every width and only
-	 * `folded` folds; Apply and "Clear filters" are one item of the row.
+	 * With `foldsFieldsOnly`, `children` stay in view at every width and only
+	 * `folded` folds, and "Clear filters" is drawn only while it is given. The
+	 * bar that folds whole keeps the link's box while no filter is on, drawn
+	 * hidden (`visibility: hidden`, out of the tab order and the accessibility
+	 * tree).
 	 *
 	 * In a narrow column the controls fold behind a native `<details>`
 	 * ("Filters", or "Filters: Only my Clients" / "Filters: 2 on" given
@@ -101,8 +99,9 @@
 		empty?: boolean;
 		/**
 		 * Where "Clear filters" goes: the list with nothing applied. Given
-		 * only while a filter is on. The link follows Apply, so Apply sits
-		 * in the same place whether or not it is there.
+		 * only while a filter is on. The link follows the tags, so Apply sits
+		 * in the same place whether or not it is there; beside exactly one tag
+		 * it is not drawn (`appliedCount`).
 		 */
 		clearHref?: string;
 		/**
@@ -126,19 +125,17 @@
 		 */
 		statusRuler?: string;
 		/**
-		 * With `statusRuler`: the longest single applied tag, drawn unseen before the
-		 * ruler's wording, so the row reserves one tag's box at rest and applying one
-		 * filter or removing it moves nothing under the bar. For a list whose first row
-		 * has to stay put whatever is applied: the Invoices list (#2746). The Clients
-		 * list gives none, since a phone's first screen there has no tag's room to spare.
-		 */
-		appliedRuler?: string;
-		/**
 		 * The filters that are on, as GOV.UK's "selected filters": one `<li>` for
-		 * each, a removable tag, drawn on the result line's row before the line.
-		 * Given only while a filter is on.
+		 * each, a removable tag, drawn after Apply on its row, in the room the row
+		 * leaves beside it. Given only while a filter is on.
 		 */
 		applied?: Snippet;
+		/**
+		 * How many tags `applied` draws. Beside exactly one, its × does what
+		 * "Clear filters" would, so the link is drawn only beside two or more, or
+		 * while a filter is on that draws no tag (`clearHref` with none).
+		 */
+		appliedCount?: number;
 		/**
 		 * Switches that sit in a row of their own above the fields, so a
 		 * switch drawn or hidden never moves a field or Apply.
@@ -182,8 +179,8 @@
 		activeLabels = [],
 		statusId = `filter-bar-status-${uid}`,
 		statusRuler,
-		appliedRuler,
 		applied,
+		appliedCount = 0,
 		switches,
 		foldsFieldsOnly = false,
 		isBusy = false,
@@ -197,6 +194,8 @@
 		if (activeLabels.length === 1) return `${noun}: ${activeLabels[0]}`;
 		return `${noun}: ${activeLabels.length} on`;
 	});
+
+	const clearTo = $derived(appliedCount === 1 ? undefined : clearHref);
 
 	let statusLine = $state<HTMLParagraphElement>();
 
@@ -215,31 +214,32 @@
 	let isOpen = $state(false);
 </script>
 
-{#snippet clear()}
-	<!-- Always a box, so Apply does not move when the link comes or goes. Without
-	     `clearHref` it is drawn hidden: out of sight, out of the tab order and
-	     out of the accessibility tree, holding only its space. -->
-	<span class="clear" class:reserve={!clearHref} inert={!clearHref}>
-		<Link href={clearHref ?? action} label="Clear filters" />
-	</span>
-{/snippet}
-
-{#snippet result()}
-	<div class="count" class:ruled={statusRuler !== undefined}>
-		<div class="line">
+{#snippet selected(isHeld: boolean)}
+	{#if applied || clearTo || isHeld}
+		<div class="selected">
 			{#if applied}
 				<ul class="applied" aria-label="Applied filters">
 					{@render applied()}
 				</ul>
 			{/if}
-			<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
+			<!-- With `isHeld` (the bar that folds whole), always a box, drawn hidden while
+			     no filter is on: out of sight, out of the tab order and out of the
+			     accessibility tree, holding only its space. -->
+			{#if clearTo || isHeld}
+				<span class="clear" class:reserve={!clearTo} inert={!clearTo}>
+					<Link href={clearTo ?? action} label="Clear filters" />
+				</span>
+			{/if}
 		</div>
+	{/if}
+{/snippet}
+
+{#snippet result()}
+	<div class="count" class:ruled={statusRuler !== undefined}>
+		<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
 		{#if statusRuler !== undefined}
-			<!-- The longest tag and wording, unseen, out of the tab order and the accessibility tree. -->
-			<div class="line ruler" aria-hidden="true" inert>
-				{#if appliedRuler}<span class="applied"><Link href={action} label={appliedRuler} variant="chip" icon="x" /></span>{/if}
-				<span class="status">{statusRuler}</span>
-			</div>
+			<!-- The longest wording, unseen, out of the tab order and the accessibility tree. -->
+			<span class="status ruler" aria-hidden="true" inert>{statusRuler}</span>
 		{/if}
 	</div>
 {/snippet}
@@ -277,12 +277,11 @@
 							{@render folded()}
 						</details>
 					{/if}
-					<!-- One item of the row, so Apply and "Clear filters" wrap together
-					     and Apply keeps the width of its words in a narrow bar. -->
-					<div class="actions">
-						<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
-						{@render clear()}
-					</div>
+					<!-- The tags follow Apply in the room the row has left beside it, and
+					     wrap under it only where that room runs out: nothing is held for
+					     them, and Apply comes first, so a tag never moves it. -->
+					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
+					{@render selected(false)}
 				</cluster-l>
 			</stack-l>
 		</fieldset>
@@ -300,7 +299,7 @@
 				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
 					{@render children?.()}
 					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
-					{@render clear()}
+					{@render selected(true)}
 				</cluster-l>
 			</stack-l>
 		</fieldset>
@@ -420,18 +419,31 @@
 			display: none;
 		}
 
-		/* Apply and "Clear filters" share a line whatever the room, centered
-		   on one another. Apply fills a narrow container as a screen's own
-		   action does (Button.svelte); here it is one control among several
-		   in a bar, so it keeps the width of its words. */
-		.actions {
-			display: flex;
-			align-items: center;
-			gap: var(--space-related);
+		/* Apply fills a narrow container as a screen's own action does
+		   (Button.svelte); here it is one control among several in a bar, so
+		   it keeps the width of its words. */
+		.dense .fields > :global(button.fills-narrow) {
+			inline-size: auto;
 		}
 
-		.actions :global(button.fills-narrow) {
-			inline-size: auto;
+		/* The tags and "Clear filters" share Apply's line only where all of them
+		   fit on it, so they never make that line taller and Apply stays put;
+		   otherwise they take the line under it, wrapping among themselves. */
+		.selected,
+		.applied {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1) var(--space-2);
+		}
+
+		/* The tags and "Clear filters" are as tall as Apply (a medium button: a line,
+		   its block padding and border, or the target floor) and centered in that
+		   height, so on Apply's line they read as one row with it. */
+		.dense :is(.applied, .clear) {
+			display: flex;
+			align-items: center;
+			min-block-size: max(var(--hit-target-min), calc(1lh + 2 * (var(--space-2) + var(--border-thin))));
 		}
 
 		.fold::details-content {
@@ -461,11 +473,7 @@
 			gap: var(--space-2);
 		}
 
-		/* The tags wrap on their own and sit with the controls they report on. */
 		.applied {
-			display: flex;
-			flex-wrap: wrap;
-			gap: var(--space-1) var(--space-2);
 			margin: 0;
 			padding: 0;
 			list-style: none;
@@ -489,21 +497,6 @@
 			align-self: start;
 		}
 
-		/* The tags, then the count, wrapping: the count shares the tags' line where
-		   the rest of it holds a sentence, and takes a line of its own under them
-		   where it does not, as on a phone. */
-		.line {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-1) var(--space-2);
-			min-inline-size: 0;
-		}
-
-		.line > .status {
-			flex: 1 1 30ch;
-		}
-
 		/* Two lines tall whatever it says, and no wider than a reading line (75ch), so the
 		   longest count wraps inside its own box and applying a filter never moves the list. */
 		.dense > .count {
@@ -514,24 +507,15 @@
 			max-inline-size: 75ch;
 		}
 
-		/* With a ruler, the longest wording the count can say (after the longest tag, given
-		   one), drawn unseen in the same box: the box takes what those take at this width, the
-		   wording up to two lines, with no width query. */
+		/* With a ruler, the longest wording the count can say, drawn unseen in the same
+		   box: the box takes what it takes at this width, up to two lines, with no width
+		   query. */
 		.dense > .count.ruled {
 			min-block-size: 1lh;
 		}
 
 		.ruler {
 			visibility: hidden;
-		}
-
-		/* What the box reserves and the count does not take lies above the
-		   count, so the count sits the related step from the list it counts. */
-		.ruled > .line:not(.ruler) {
-			align-self: end;
-		}
-
-		.ruler > .status {
 			max-block-size: 2lh;
 			overflow: hidden;
 		}

@@ -392,10 +392,12 @@ describe('the columns between filter states', () => {
 		expect(Object.keys(states.noContract)).not.toContain('Money');
 	});
 
+	// At 1024px the fields leave Apply's line no room for a tag and "Clear filters", so
+	// one filter's take the line under it.
 	it.each([
-		[1280, 2],
-		[1024, 2]
-	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines) => {
+		[1280, 2, 1],
+		[1024, 2, 1]
+	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines, oneFilter) => {
 		const tops: number[] = [];
 		const heights: number[] = [];
 		const states = [
@@ -416,14 +418,14 @@ describe('the columns between filter states', () => {
 			for (const key of Object.keys(queries)) pageState.url.searchParams.delete(key);
 		}
 
-		// The tags share the count's row: one tag fits inside the room the count holds, so
-		// neither it nor a typed name moves the table. Three tags take more of the row than
-		// the count can wrap beside, so that row grows, by less than a row of tags of its own.
+		// The tags follow Apply in the room beside it: one tag fits there, so neither it nor
+		// a typed name moves the table. Three tags and "Clear filters" take more than that
+		// room, so they wrap under Apply and the table moves by those lines, nothing held for them.
 		const [rest, owes, three, name] = heights;
 		for (const height of [rest!, owes!, name!]) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
 		expect(three!, `count line heights ${heights}`).toBeGreaterThanOrEqual(lines - 0.5);
-		for (const top of [tops[1]!, tops[3]!]) expect(Math.abs(top - tops[0]!), `table tops ${tops}`).toBeLessThanOrEqual(1);
-		expect(tops[2]! - tops[0]!, `the three tags' row, table tops ${tops}`).toBeLessThan(70);
+		for (const top of [tops[1]!, tops[3]!]) expect(Math.abs(top - tops[0]!), `table tops ${tops}`).toBeLessThanOrEqual(oneFilter);
+		expect(tops[2]! - tops[0]!, `the three tags' lines, table tops ${tops}`).toBeLessThan(100);
 	});
 
 	it('keeps Money and Date where they were when a Doula is chosen, and Date follows Status when Money is left out', async () => {
@@ -551,7 +553,7 @@ describe('the count line’s measure and its held room', () => {
 		await ready();
 
 		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const ruler = document.querySelector<HTMLElement>('.ruler .status')!;
+		const ruler = document.querySelector<HTMLElement>('.ruler')!;
 		const cap = 75 * chOf(status);
 		expect(status.getBoundingClientRect().width, 'the result line').toBeLessThanOrEqual(cap + 0.5);
 		expect(ruler.getBoundingClientRect().width, 'the held wording').toBeLessThanOrEqual(cap + 0.5);
@@ -564,7 +566,7 @@ describe('the count line’s measure and its held room', () => {
 
 		const status = document.querySelector<HTMLElement>('#clients-result')!;
 		const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
-		const needed = linesOf(document.querySelector('.ruler .status')!);
+		const needed = linesOf(document.querySelector('.ruler')!);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeLessThan(needed + 0.5);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeGreaterThan(Math.min(needed, 2) - 0.5);
 	});

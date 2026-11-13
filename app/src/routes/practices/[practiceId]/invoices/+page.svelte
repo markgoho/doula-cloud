@@ -23,5 +23,5 @@
 {#if invoices.failure && !isRetryable}
 	<FailedRead kind={invoices.failure} />
 {:else}
-	<InvoicesScreen data={invoices.value} hasReadFailed={isRetryable} onRetry={retry} />
+	<InvoicesScreen data={invoices.value} isReading={invoices.isPending} hasReadFailed={isRetryable} onRetry={retry} />
 {/if}

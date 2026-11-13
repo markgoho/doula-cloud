@@ -56,10 +56,13 @@
 	 */
 	let {
 		data,
+		isReading = false,
 		hasReadFailed = false,
 		onRetry = async () => {}
 	}: {
 		data?: PracticeInvoiceListData;
+		// The page's read is running, so `data` is still the one before it.
+		isReading?: boolean;
 		// The page's read failed in a way that may work a second time
 		// (`+page.svelte`); `onRetry` runs it again.
 		hasReadFailed?: boolean;
@@ -151,17 +154,28 @@
 	 * many pages again under the same view and search, then puts her where
 	 * she was, with focus on that row. SvelteKit's own scroll restore runs
 	 * before the rows have landed, so it cannot reach that far.
+	 *
+	 * The place is held until the read for this entry lands, since a read
+	 * still running would reset the list under it. A read that fails, or any
+	 * move before it lands, drops it, and a move while its pages load stops
+	 * it short of scrolling: it is never put on another view's rows.
 	 */
 	let pagesLoaded = 1;
 	let heldReturn: ListReturn | undefined;
+	let navigations = 0;
 	keepListReturn({
 		id: 'invoices-list',
 		pagesLoaded: () => pagesLoaded,
 		rowOf: (to) => (to.hash.startsWith('#invoice-') ? to.hash.slice('#invoice-'.length) : undefined),
 		restore: (back) => {
+			if (readFailure) return;
 			heldReturn = back;
-			if (book && isSameKey(shown, wanted)) void restoreReturn(back);
+			if (!isReadPending && book && isSameKey(shown, wanted)) void restoreReturn(back);
 		}
+	});
+	beforeNavigate(() => {
+		heldReturn = undefined;
+		navigations += 1;
 	});
 
 	async function didLoadMore(): Promise<boolean> {
@@ -176,8 +190,10 @@
 	// table's stuck header (#2839); `nearest` moves it clear only if it does.
 	async function restoreReturn(back: ListReturn) {
 		heldReturn = undefined;
-		while (pagesLoaded < back.pages && (await didLoadMore()));
+		const at = navigations;
+		while (at === navigations && pagesLoaded < back.pages && (await didLoadMore()));
 		await tick();
+		if (at !== navigations) return;
 		window.scrollTo(0, back.scrollY);
 		const link = back.rowId ? rowLink(back.rowId) : undefined;
 		link?.focus({ preventScroll: true });
@@ -209,6 +225,7 @@
 
 	// A searched read, the latest asked for winning.
 	let latestSearch = 0;
+	let isSearching = $state(false);
 	$effect(() => {
 		const key = wanted;
 		if (key.search === '') return;
@@ -216,13 +233,23 @@
 		untrack(() => void readSearch(key, thisSearch));
 	});
 	async function readSearch(key: ReadKey, thisSearch: number) {
+		isSearching = true;
 		try {
 			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search);
 			if (thisSearch === latestSearch) adopt(first, key);
 		} catch {
-			if (thisSearch === latestSearch) failedKey = key;
+			if (thisSearch === latestSearch) {
+				failedKey = key;
+				heldReturn = undefined;
+			}
+		} finally {
+			if (thisSearch === latestSearch) isSearching = false;
 		}
 	}
+	const isReadPending = $derived(appliedSearch === '' ? isReading : isSearching);
+	$effect(() => {
+		if (hasReadFailed) heldReturn = undefined;
+	});
 	const hasSearchFailed = $derived(isSameKey(failedKey, wanted) && !isSameKey(shown, wanted));
 	// The page's own read stands for the list only while no search is applied.
 	const readFailure = $derived(
@@ -340,8 +367,8 @@
 	 * The GOV.UK "selected filters": one removable tag for the view and one
 	 * for the search, each a link to the list minus that one. The search is in
 	 * no address, so removing the view hands it on in the history entry's
-	 * state, and removing the search hands on an empty one. "Clear filters"
-	 * is drawn only beside two tags: beside one, its × does the same.
+	 * state, and removing the search hands on an empty one. FilterBar draws
+	 * "Clear filters" only beside two tags: beside one, its × does the same.
 	 */
 	type AppliedTag = { text: string; href: string; search: string };
 	const appliedTags = $derived.by(() => {
@@ -574,11 +601,11 @@
 				legend="Choose which Invoices to show"
 				status={readFailure ? '' : resultSummary}
 				statusRuler={INVOICES_RESULT_RULER}
-				appliedRuler={VIEW_OPTIONS.map((option) => option.tag).toSorted((a, b) => b.length - a.length)[0]}
 				statusId={RESULT_ID}
 				empty={shown !== undefined && invoices.items.length === 0}
-				clearHref={appliedTags.length > 1 ? invoicesHref : undefined}
+				clearHref={appliedTags.length > 0 ? invoicesHref : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
+				appliedCount={appliedTags.length}
 				foldsFieldsOnly
 				{isBusy}
 			>

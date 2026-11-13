@@ -986,6 +986,7 @@ describe('the filter bar\'s layout', () => {
 	// fields (Name, Doula, "Mine"), Apply and "Clear filters". Order, not pixels, is asserted.
 	it('puts the switches above the fields, Name before Doula, Apply then "Clear filters" last', async () => {
 		historyState.clientsName = 'Camille';
+		pageState.url.searchParams.set('all', 'true');
 		await setup(undefined, { isDoula: true, doulas });
 
 		const switchBoxes = [
@@ -1183,18 +1184,31 @@ describe('"Clear filters"', () => {
 		['owes', 'true'],
 		['noContract', 'true'],
 		['doula', 'staff-kimiko']
-	])('is drawn once the address names `%s`, and leads to the bare Clients list', async (name, value) => {
+	])('is not drawn beside the one tag for `%s`, whose × leads to the bare Clients list', async (name, value) => {
 		pageState.url.searchParams.set(name, value);
 
 		await setup(undefined, { isDoula: true, doulas });
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Clear filters' }))
+			.element(testPage.getByRole('link', { name: /^Remove filter: / }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
 	});
 
-	it('is drawn once a name is applied, and leads to the bare Clients list', async () => {
+	it('is not drawn beside an applied name alone, whose × leads to the bare Clients list', async () => {
 		historyState.clientsName = 'Camille';
+
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: /^Remove filter: Name/ }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+	});
+
+	it('is drawn beside two tags, and leads to the bare Clients list', async () => {
+		historyState.clientsName = 'Camille';
+		pageState.url.searchParams.set('owes', 'true');
 
 		await setup();
 
@@ -2066,15 +2080,15 @@ describe('the filters that could never match', () => {
 describe('an empty result', () => {
 	// The bar's own link is in view at every width, so the message does not
 	// offer it a second time; it says what was looked for and what widens it.
-	it('offers the bar\'s one "Clear filters", not a second beside the message', async () => {
+	it('offers the bar\'s one way out, not a second beside the message', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 
 		await setup(nobody);
 
-		const clear = testPage.getByRole('link', { name: 'Clear filters' });
-		await expect.element(clear).toBeVisible();
-		await expect.element(clear).toHaveAttribute('href', `/practices/${practiceId}/clients`);
-		expect(clear.elements()).toHaveLength(1);
+		const out = testPage.getByRole('link', { name: 'Remove filter: Who owe money' });
+		await expect.element(out).toBeVisible();
+		await expect.element(out).toHaveAttribute('href', `/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByText('No Client owes money. Clear the filters to widen the list.').first())
 			.toBeVisible();
@@ -2228,24 +2242,24 @@ describe('the list at a phone’s width', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Tell us what you think.' })).toBeVisible();
 	});
 
-	it('puts Apply and "Clear filters" on one row, with Apply no wider than its words', async () => {
+	it('puts Apply and the one tag on one row, with Apply no wider than its words', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		await renderListScreen({ width: 375, height: 740 });
 
 		const apply = rectOf(testPage.getByRole('button', { name: 'Apply' }));
-		const clear = rectOf(testPage.getByRole('link', { name: 'Clear filters' }).first());
+		const tag = rectOf(testPage.getByRole('link', { name: 'Remove filter: Who owe money' }));
 		expect(apply.width).toBeLessThan(375 / 2);
-		expect(Math.abs(apply.top + apply.height / 2 - (clear.top + clear.height / 2))).toBeLessThanOrEqual(1);
-		expect(clear.left).toBeGreaterThan(apply.right);
+		expect(Math.abs(apply.top + apply.height / 2 - (tag.top + tag.height / 2))).toBeLessThanOrEqual(1);
+		expect(tag.left).toBeGreaterThan(apply.right);
 	});
 
-	it('centers the words of "Clear filters" on the words of Apply', async () => {
+	it('centers the words of the tag on the words of Apply', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		await renderListScreen({ width: 375, height: 740 });
 
 		const apply = testPage.getByRole('button', { name: 'Apply' }).element();
-		const clear = testPage.getByRole('link', { name: 'Clear filters' }).first().element();
-		expect(Math.abs(centerOfWords(apply) - centerOfWords(clear))).toBeLessThanOrEqual(1);
+		const tag = testPage.getByRole('link', { name: 'Remove filter: Who owe money' }).element();
+		expect(Math.abs(centerOfWords(apply) - centerOfWords(tag))).toBeLessThanOrEqual(1);
 	});
 
 	it('reads a record as the name, the status, then the due date and the Doula with their labels', async () => {
@@ -2377,8 +2391,9 @@ describe('the rows of a typical page', () => {
 });
 
 // A person reaching for Apply finds it where it was: the bar is the same
-// arrangement whatever is applied, so neither Apply nor the table moves. The
-// tags share the count's row, before it, inside the room the count holds.
+// arrangement whatever is applied, so Apply never moves. The tags follow Apply
+// in the room beside it, where one filter's fit and the table holds still; two
+// filters' take a line under Apply, and the table moves by that line.
 const states: [string, () => void][] = [
 	['default', () => {}],
 	['owes', () => pageState.url.searchParams.set('owes', 'true')],
@@ -2419,15 +2434,16 @@ describe('the filter bar between filter states', () => {
 			const here = measured[index]!;
 			expect(Math.abs(here.applyLeft - baseline!.applyLeft), `${name}: Apply x`).toBeLessThanOrEqual(0.5);
 			expect(Math.abs(here.applyTop - baseline!.applyTop), `${name}: Apply y`).toBeLessThanOrEqual(0.5);
-			expect(Math.abs(here.tableTop - baseline!.tableTop), `${name}: table top`).toBeLessThanOrEqual(0.5);
+			const tagLines = name === 'a Name and a Doula' ? 70 : 0.5;
+			expect(Math.abs(here.tableTop - baseline!.tableTop), `${name}: table top`).toBeLessThanOrEqual(tagLines);
 		}
 	});
 
-	it('holds the space of "Clear filters" and "Also show…" while hiding them from the tab order and the accessibility tree', async () => {
+	it('holds the space of "Also show…" while hiding it from the tab order and the accessibility tree', async () => {
 		pageState.url.searchParams.set('doula', kimiko.value);
 		await renderListScreen({ width: 1440, height: 900 });
 
-		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Remove filter: Doula/ })).toBeVisible();
 		await expect
 			.element(testPage.getByRole('checkbox', { name: 'Also show anyone not yet in care' }))
 			.not.toBeInTheDocument();
@@ -2439,25 +2455,28 @@ describe('the filter bar between filter states', () => {
 		expect(held.hasAttribute('inert')).toBe(true);
 	});
 
-	it('holds the space of "Clear filters" while no filter is on, out of the tab order', async () => {
+	it('holds nothing empty after Apply while no filter is on: the count sits the related step under it', async () => {
 		await renderListScreen({ width: 1440, height: 900 });
 
 		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
 		const apply = rectOf(testPage.getByRole('button', { name: 'Apply' }));
-		const slot = testPage.getByRole('button', { name: 'Apply' }).element().parentElement!.querySelector<HTMLElement>('.clear')!;
-		expect(getComputedStyle(slot).visibility).toBe('hidden');
-		expect(slot.hasAttribute('inert')).toBe(true);
-		expect(slot.getBoundingClientRect().width).toBeGreaterThan(60);
-		expect(slot.getBoundingClientRect().left).toBeGreaterThan(apply.right);
+		expect(rectOf(testPage.getByRole('status')).top - apply.bottom).toBeLessThanOrEqual(12);
 	});
 });
 
 // A state is whole, and the Date column begins after it.
 describe('the Money column’s state', () => {
-	// The typical page, with one payment on its way: the longest state words.
+	// The typical page, with one payment on its way, the longest plain state words, a
+	// written-off Invoice and one 120 days overdue, the widest red badges.
+	const latest = {
+		3: { invoiceStatus: 'open', invoiceAmountCents: 150_000, paymentProcessing: true },
+		4: { invoiceStatus: 'uncollectible', daysOverdue: 0 },
+		5: { invoiceStatus: 'open', daysOverdue: 120 }
+	} as const;
 	const withClearing = seedLikeClients.map((client, index) => {
 		const [line] = client.openEngagements ?? [];
-		return index === 3 && line ? { ...client, openEngagements: [{ ...line, invoiceStatus: 'open', invoiceAmountCents: 150_000, paymentProcessing: true }] } : client;
+		const change = latest[index as keyof typeof latest];
+		return change && line ? { ...client, openEngagements: [{ ...line, ...change }] } : client;
 	});
 
 	it.each([1280, 1440, 1920])('fits its track and ends before the Date column’s text at %ipx', async (width) => {
@@ -2682,7 +2701,7 @@ describe('a Doula in the address that the BFF refuses', () => {
 		await setup(jsonResponse({ error: 'doula must be a staff id' }, 400), { doulas });
 
 		await expect.element(testPage.getByText('That Doula is not in this Practice.').first()).toBeVisible();
-		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', `/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('link', { name: /^Remove filter: Doula/ })).toHaveAttribute('href', `/practices/${practiceId}/clients`);
 		await expect.element(testPage.getByText(/Your Clients did not load/)).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
 	});

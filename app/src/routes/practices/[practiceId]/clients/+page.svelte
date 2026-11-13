@@ -1031,6 +1031,7 @@ import type { PageProps as PageProperties } from './$types';
 				empty={isReady && clients.items.length === 0}
 				clearHref={isFiltered ? clientsPath({}) : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
+				appliedCount={appliedTags.length}
 				foldsFieldsOnly
 				{isBusy}
 				statusId={RESULT_ID}
@@ -1189,7 +1190,7 @@ import type { PageProps as PageProperties } from './$types';
 			/* The Money column's right edge, written once: the amounts end a
 			   state track and a gap before the cell's inset, and the header ends
 			   where they do. */
-			--money-state-track: 19.7ch;
+			--money-state-track: 20ch;
 			--money-state-gap: var(--space-1);
 			/* The room a cell keeps either side, so two columns are two insets apart. */
 			--data-table-cell-inset: var(--space-2);
@@ -1352,9 +1353,10 @@ import type { PageProps as PageProperties } from './$types';
 
 		/* The amount and its state in two tracks, so every amount in the column
 		   ends at the same place whatever the state beside it says. The state
-		   track holds the longest state word ("payment on its way") with room to
-		   spare, and the cell keeps a gap after it, so a state word never touches
-		   the Date column's first letter. */
+		   track holds the widest state it can show, a red "120 days overdue"
+		   badge (210px at 1280px, where the plain "payment on its way" takes
+		   less and the red "written off" badge 147px), and the cell keeps a gap
+		   after it, so a state never touches the Date column's first letter. */
 		.money {
 			/* The state's badge is a pill taller than a line of text by its own block
 			   padding; this margin takes that padding back, so a row with a badge is as
@@ -1393,18 +1395,18 @@ import type { PageProps as PageProperties } from './$types';
 		}
 
 		/* Name and Doula: in a narrow column each takes half of the line, and
-		   where there is room each stops at its own width. Apply wraps under
-		   them only when the line is full. */
+		   where there is room each stands at its own width from the start, so the
+		   applied filters' tags after Apply join the line only where room is left
+		   beside the fields at their full width. Apply wraps under them only when
+		   the line is full. */
 		.field {
-			flex: 1 1 8rem;
-		}
-
-		.name {
-			max-inline-size: 22ch;
+			--field-width: 22ch;
+			flex: 1 1 min(var(--field-width), calc(50% - var(--space-related) / 2));
+			max-inline-size: var(--field-width);
 		}
 
 		.doula {
-			max-inline-size: 34ch;
+			--field-width: 34ch;
 		}
 	}
 </style>

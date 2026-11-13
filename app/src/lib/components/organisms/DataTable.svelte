@@ -735,14 +735,26 @@
 			box-shadow: inset 0 calc(-1 * var(--border-thin)) 0 var(--color-outline-variant);
 		}
 
-		/* WCAG 2.2 Focus Not Obscured: the window's own scrollport starts
-		   below the stuck header, one row and its hairline, so whatever focus
-		   lands on -- a row's link or control by Tab or Shift+Tab, the row
-		   Load more moves to -- is scrolled clear of it. A scroll-margin on
-		   the row is not enough: Chromium leaves a focused element that is
-		   partly in view where it is. */
-		:global(html:has(table.table-view)) {
-			scroll-padding-block-start: calc(var(--row-height) + var(--border-thin));
+		/* Forced colors drop the shadow, so the rule under the stuck header is
+		   a border there, in the system's own text color. */
+		@media (forced-colors: active) {
+			.table-view > thead th::after {
+				content: '';
+				position: absolute;
+				inset-inline: 0;
+				inset-block-end: 0;
+				border-block-end: var(--border-thin) solid CanvasText;
+			}
+		}
+
+		/* WCAG 2.2 Focus Not Obscured: whatever focus lands on in a row -- its
+		   link or control by Tab or Shift+Tab -- keeps one row and its hairline
+		   clear above it, so it scrolls out from under the stuck header. Only on
+		   the table's own targets, so a page whose table is not drawn, and a
+		   jump to an anchor elsewhere, keep their own scroll. */
+		.table-view > tbody > tr :global(:is(a, button, input, select, textarea, [tabindex])),
+		.table-view > tbody > tr[tabindex]:not([id]) {
+			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
 		}
 
 		/* A row hover tint. The row's link stays the one target, and the

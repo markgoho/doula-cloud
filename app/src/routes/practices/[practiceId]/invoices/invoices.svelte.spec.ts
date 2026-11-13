@@ -357,6 +357,71 @@ describe('coming back from an Invoice', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 	});
 
+	it('waits for the read of the entry she came back to, rather than restoring on the rows that read replaces', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		await testPage.viewport(1440, 900);
+		const screen = await render(Page, { data: { ...data, hasMore: true, nextCursor: 'cursor-old' } });
+		await screen.rerender({ isReading: true });
+		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		expect(scrollTo).not.toHaveBeenCalled();
+
+		await screen.rerender({ isReading: false, data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
+
+		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).toHaveFocus();
+		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
+	});
+
+	it('drops the place it holds when the read fails, so a later read lands on the first page', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		await testPage.viewport(1440, 900);
+		const screen = await render(Page, {});
+		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		await screen.rerender({ hasReadFailed: true });
+		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
+
+		await screen.rerender({ hasReadFailed: false, data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
+
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		expect(scrollTo).not.toHaveBeenCalled();
+	});
+
+	it('drops the place it holds when she moves to another view before the read lands', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		await testPage.viewport(1440, 900);
+		const screen = await render(Page, {});
+		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) {
+			leave({ type: 'goto', to: { url: new URL(`https://example.test/practices/${practiceId}/invoices?show=unpaid`) } } as never);
+		}
+
+		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
+
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
+		expect(apiFetchWithSession).not.toHaveBeenCalled();
+		expect(scrollTo).not.toHaveBeenCalled();
+	});
+
+	it('stops short of scrolling when she moves while its pages load', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		const second = Promise.withResolvers<Response>();
+		apiFetchWithSession.mockReturnValue(second.promise);
+		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		await vi.waitFor(() => expect(apiFetchWithSession).toHaveBeenCalled());
+		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) {
+			leave({ type: 'goto', to: { url: new URL(`https://example.test/practices/${practiceId}/invoices?show=unpaid`) } } as never);
+		}
+
+		second.resolve(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+
+		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).toBeVisible();
+		expect(scrollTo).not.toHaveBeenCalled();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).not.toHaveFocus();
+	});
+
 	it('restores at once when the rows had already landed, and names no row for a move off the app', async () => {
 		vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
