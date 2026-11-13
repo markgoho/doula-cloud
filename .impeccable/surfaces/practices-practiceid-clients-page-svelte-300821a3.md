@@ -49,6 +49,7 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Clear all filters | Have it | "Clear filters" beside two or more tags; one tag's × clears it |
 | A next step from an empty result | Have it | the bar's "Clear filters" and each tag's × stay in view at every width, so the empty state offers only a contractor her way in ("How to add Clients of your own"); an empty Name search names itself in the count line |
 | A saved or default view | Declined | the address is the saved view; Linear saves "personal preferences or … the default" (https://linear.app/docs/display-options) |
+| A reader's own Clients first ("Mine" on already for a Doula) | Have it | a Doula who is not an Owner or Admin arrives on `?mine=true` by every link in; the bare address stays the whole Practice (#2870) |
 | Filters kept across visits | Declined | the address and the history keep the view |
 | A count beside each filter option | Declined | each count is another read, and GOV.UK's filters show none |
 | Column resize | Declined | it fights the intrinsic layout (ADR-0024) |

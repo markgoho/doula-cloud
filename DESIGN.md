@@ -325,6 +325,7 @@ The signature component is the activity ledger, on records (see Overview). No li
 
 ### Filter bar
 - **Style:** a plain form above the result line, no box of its own. Checkboxes and Apply stay in view at every width; the text and select fields fold into a disclosure below a 42rem bar. The result line is Secondary Ink at meta size.
+- **Arriving narrowed:** a Doula who is neither Owner nor Admin arrives on the Clients list and the Schedule already narrowed to "Mine", by the link that brought her. The bare address is the whole Practice for every reader, so one shared link is one list, and the "Mine" tag's × or "Clear filters" is one action to it. A "Show only" box takes effect with Apply, because the bar holds typed fields.
 
 ### Navigation
 - **Style:** the Staff top bar is a night-blue wall in both themes (The Night Walls Rule), 60px tall, with Secondary Ink items and the current item's 2px Ink Blue rule on its bottom edge. Below a 61.75rem bar the items move into a narrow sheet, where the current item's rule turns onto the leading edge.

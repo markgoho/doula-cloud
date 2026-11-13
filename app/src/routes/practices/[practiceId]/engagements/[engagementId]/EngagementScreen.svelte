@@ -107,7 +107,7 @@
 		editableValues,
 		type Contract
 	} from '#lib/contract.js';
-	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin, listEntryHref } from '#lib/roles.js';
 	import BirthOutcomeSection from '#lib/components/organisms/BirthOutcomeSection.svelte';
 	import InvoiceSection from '#lib/components/organisms/InvoiceSection.svelte';
 	import {
@@ -220,7 +220,7 @@
 	// #1998: the drawing's "← Clients" back link, to the Practice's
 	// Clients list, where every Engagement is reached from.
 	const clientsHref = $derived(
-		resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })
+		listEntryHref(resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! }), data.session)
 	);
 
 	// #280: the Birth Plan's own address -- a reading and taking-away
