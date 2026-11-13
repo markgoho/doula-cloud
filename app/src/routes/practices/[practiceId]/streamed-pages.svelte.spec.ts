@@ -65,7 +65,8 @@ const session: PracticeSession = {
 	staffId: 'staff-1',
 	practiceName: 'Riverside Doula Collective',
 	roles: ['doula'],
-	isContractor: false
+	isContractor: false,
+	timezone: 'America/New_York'
 };
 
 type Landing = { isLoaded: true } | { isLoaded: false; response?: Response };

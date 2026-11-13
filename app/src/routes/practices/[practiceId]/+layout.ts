@@ -63,6 +63,10 @@ export interface PracticeSession {
 	// one. A Practice that bills by hand is paid without Stripe, so the
 	// Invoices list's Notice is for the other two.
 	billingMode?: BillingMode;
+	// #2867 (ADR-0036): practices.timezone, the IANA zone the Practice's
+	// days and times are read in on every screen that shows a Visit. This
+	// load always sets it.
+	timezone: string;
 }
 
 /**
@@ -157,6 +161,7 @@ export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise
 		hasOtherDoulas: boolean;
 		clientsCanPay: boolean;
 		billingMode?: BillingMode;
+		timezone: string;
 	} = await response.json();
 
 	if (body.pendingDeletion && url.pathname !== deleteSettingsPath(params.practiceId)) {
@@ -187,7 +192,8 @@ export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise
 			hasClients: body.hasClients,
 			hasOtherDoulas: body.hasOtherDoulas,
 			clientsCanPay: body.clientsCanPay,
-			billingMode: body.billingMode
+			billingMode: body.billingMode,
+			timezone: body.timezone
 		}
 	};
 };

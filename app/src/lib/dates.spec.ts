@@ -68,38 +68,62 @@ describe('formatActivityTimestamp (ADR-0022)', () => {
 	});
 });
 
-// #250: a Visit's own Date column and per-row summary.
+// #250, #2867: a Visit's own Date column and per-row summary, in the Practice's zone, never the runner's.
+const EASTERN = 'America/New_York';
+const NOW = new Date('2026-11-13T14:00:00Z');
+
 describe('formatScheduledVisit', () => {
 	it.each([
 		[undefined, 'Not yet scheduled'],
 		['', 'Not yet scheduled']
 	])('%s reads as "Not yet scheduled"', (value, want) => {
-		expect(formatScheduledVisit(value)).toBe(want);
+		expect(formatScheduledVisit(value, EASTERN)).toBe(want);
 	});
 
 	it.each([
-		['leads with the weekday and drops the year inside the current year', local(2026, 11, 15, 18, 0), 'Sun Nov 15, 6:00pm'],
-		['keeps the year for a Visit in a later year', local(2027, 3, 15, 14, 30), 'Mon Mar 15, 2027, 2:30pm'],
-		['keeps the year for a Visit in an earlier year', local(2025, 12, 31, 0, 5), 'Wed Dec 31, 2025, 12:05am']
+		['leads with the weekday and drops the year inside the current year', '2026-11-15T23:00:00Z', 'Sun Nov 15, 6:00pm'],
+		['keeps the year for a Visit in a later year', '2027-03-15T18:30:00Z', 'Mon Mar 15, 2027, 2:30pm'],
+		['keeps the year for a Visit in an earlier year', '2025-12-31T05:05:00Z', 'Wed Dec 31, 2025, 12:05am']
 	])('%s', (_name, iso, want) => {
-		const now = new Date(2026, 10, 13, 9, 0);
-		expect(formatScheduledVisit(iso, now)).toBe(want);
+		expect(formatScheduledVisit(iso, EASTERN, NOW)).toBe(want);
+	});
+
+	it('reads one Visit the same in the Practice zone whatever the reader zone is', () => {
+		const iso = '2026-11-14T04:30:00Z';
+		expect(formatScheduledVisit(iso, EASTERN, NOW)).toBe('Fri Nov 13, 11:30pm');
+		expect(formatScheduledVisit(iso, 'America/Denver', NOW)).toBe('Fri Nov 13, 9:30pm');
+		expect(formatScheduledVisit(iso, 'Asia/Tokyo', NOW)).toBe('Sat Nov 14, 1:30pm');
+		expect(formatScheduledVisit(iso, 'UTC', NOW)).toBe('Sat Nov 14, 4:30am');
 	});
 });
 
 describe('scheduledVisitParts', () => {
 	it('splits the Visit’s words into its day, comma kept, and its clock', () => {
-		const now = new Date(2026, 10, 13, 9, 0);
-		expect(scheduledVisitParts(local(2026, 11, 15, 18, 0), now)).toEqual({ day: 'Sun Nov 15,', clock: '6:00pm' });
-		expect(scheduledVisitParts(local(2027, 3, 15, 14, 30), now)).toEqual({ day: 'Mon Mar 15, 2027,', clock: '2:30pm' });
+		expect(scheduledVisitParts('2026-11-15T23:00:00Z', EASTERN, NOW)).toEqual({ day: 'Sun Nov 15,', clock: '6:00pm' });
+		expect(scheduledVisitParts('2027-03-15T18:30:00Z', EASTERN, NOW)).toEqual({
+			day: 'Mon Mar 15, 2027,',
+			clock: '2:30pm'
+		});
+	});
+
+	it('decides which year is this one in the Practice zone', () => {
+		const lateNewYearsEve = new Date('2027-01-01T03:00:00Z');
+		expect(scheduledVisitParts('2026-12-31T10:00:00Z', EASTERN, lateNewYearsEve).day).toBe('Thu Dec 31,');
+		expect(scheduledVisitParts('2026-12-31T10:00:00Z', 'Asia/Tokyo', lateNewYearsEve).day).toBe('Thu Dec 31, 2026,');
 	});
 });
 
 describe('formatCalendarWeekdayDay', () => {
 	it('reads a calendar day as its own parts with its weekday, the year only when it is not this one', () => {
-		const now = new Date(2026, 10, 13, 9, 0);
-		expect(formatCalendarWeekdayDay('2026-11-13', now)).toBe('Fri Nov 13');
-		expect(formatCalendarWeekdayDay('2027-01-02', now)).toBe('Sat Jan 2, 2027');
+		expect(formatCalendarWeekdayDay('2026-11-13', EASTERN, NOW)).toBe('Fri Nov 13');
+		expect(formatCalendarWeekdayDay('2027-01-02', EASTERN, NOW)).toBe('Sat Jan 2, 2027');
+	});
+
+	it('says a day the same in any zone, and the year by the Practice zone', () => {
+		const newYear = new Date('2026-12-31T20:00:00Z');
+		expect(formatCalendarWeekdayDay('2026-11-13', 'Asia/Tokyo', NOW)).toBe('Fri Nov 13');
+		expect(formatCalendarWeekdayDay('2027-01-02', EASTERN, newYear)).toBe('Sat Jan 2, 2027');
+		expect(formatCalendarWeekdayDay('2027-01-02', 'Asia/Tokyo', newYear)).toBe('Sat Jan 2');
 	});
 });
 

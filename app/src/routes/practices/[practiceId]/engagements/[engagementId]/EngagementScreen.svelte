@@ -203,6 +203,8 @@
 	// contract.ts's downloadSignedContractPdf hits the real endpoint,
 	// which refuses a contractor on its own.
 	const isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(data.session));
+	// A Visit's day and time are the Practice's own (ADR-0036), here as on the Schedule.
+	const visitTimeZone = $derived(data.session.timezone);
 	const canReadContractMoney = $derived(!isAmbientContractor(data.session));
 
 	// InvoiceSection's Owner branch (#270): only an Owner gets the link to
@@ -2175,7 +2177,7 @@
 		openVisitForm();
 		await loadVisits();
 		const which = visit.scheduledAt
-			? `The Visit on ${formatScheduledVisit(visit.scheduledAt)}`
+			? `The Visit on ${formatScheduledVisit(visit.scheduledAt, visitTimeZone)}`
 			: 'The Visit that is not yet scheduled';
 		// #2436: who was emailed, never that anyone knows: an email can be
 		// sent and still not be read.
@@ -2591,7 +2593,7 @@
 {/snippet}
 
 {#snippet visitWhenCell(visit: Visit, view: DataTableView)}
-	<VisitWhen at={visit.scheduledAt} isTracked={view === 'table'} />
+	<VisitWhen at={visit.scheduledAt} timeZone={visitTimeZone} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet visitDoulaCell(visit: Visit, view: DataTableView)}
@@ -2606,7 +2608,7 @@
 		tree is asking.
 	-->
 	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
-		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt)}</span
+		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt, visitTimeZone)}</span
 	>
 	<cluster-l space="var(--space-3)">
 		<Button
@@ -2707,7 +2709,7 @@
 		<Heading
 			level={3}
 			text={visit.scheduledAt
-				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt)}`
+				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt, visitTimeZone)}`
 				: `${act} the Visit for ${visit.staffName}, not yet scheduled`}
 			focusOnAppearing
 		/>
@@ -2836,7 +2838,7 @@
 	{:else}
 	<DataTable
 		columns={[
-			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt), content: visitWhenCell },
+			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt, visitTimeZone), content: visitWhenCell },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 			{
 				label: 'Doula',

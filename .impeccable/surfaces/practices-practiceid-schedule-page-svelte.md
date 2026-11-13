@@ -53,7 +53,7 @@ Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). 
 | Grouping by person | Declined | the Doula select does it |
 | A week or month calendar beside the list | Later (#330) | a Visit has no length or end time, so no grid can be drawn |
 | A total count | Have it | while more exist the result line says "the first 30 of 42 Visits", the count of the days and Doula chosen, which the first page carries (#2867) |
-| Time zone shown | Declined | one Practice's Staff share a zone; times are the reader's own; the 7 and 30 day windows are the reader's days |
+| Time zone shown | Have it | days and times are the Practice's (ADR-0036), and a reader in another zone is told so once under the result line (#2867) |
 | Search by name or reference | Declined | as "Search by Client" |
 
 The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).

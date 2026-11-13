@@ -183,7 +183,7 @@ async function setup(
 			hasMine: Promise.resolve(hasMine),
 			hasAnyClient: Promise.resolve(hasAnyClient),
 			doulas: Promise.resolve(doulas),
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor, timezone: 'America/New_York' }
 		}
 	});
 }
@@ -208,7 +208,7 @@ describe('before the page has taken over', () => {
 					hasMine: Promise.resolve(true),
 					hasAnyClient: Promise.resolve(true),
 					doulas: Promise.resolve([]),
-					session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false }
+					session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 				}
 			}
 		});
@@ -2206,7 +2206,7 @@ async function renderListScreen({
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
 			doulas: Promise.resolve(doulas),
-			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false }
+			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
 }

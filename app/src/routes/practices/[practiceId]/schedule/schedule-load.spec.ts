@@ -46,7 +46,7 @@ const depends = vi.fn<(...keys: string[]) => void>();
 
 /** The `load` argument, with the Membership `practices/[practiceId]/
  * +layout.ts` already resolved and whatever narrowing the URL carries. */
-function loadEvent(search = '', roles: string[] = ['owner'], hasOtherDoulas = true) {
+function loadEvent(search = '', roles: string[] = ['owner'], hasOtherDoulas = true, timezone = 'America/New_York') {
 	const event = {
 		params: { practiceId: 'practice-1' },
 		url: new URL(`https://example.test/practices/practice-1/schedule${search}`),
@@ -58,7 +58,8 @@ function loadEvent(search = '', roles: string[] = ['owner'], hasOtherDoulas = tr
 				practiceName: 'Riverside Doula Collective',
 				roles,
 				isContractor: false,
-				hasOtherDoulas
+				hasOtherDoulas,
+				timezone
 			}
 		})
 	};
@@ -69,7 +70,7 @@ const scheduleCalls = (fetchMock: ReturnType<typeof setup>['fetchMock']) =>
 	fetchMock.mock.calls.filter(([path]) => !path.includes('/staff'));
 
 beforeEach(() => {
-	vi.useFakeTimers({ toFake: ['Date'], now: new Date(2026, 9, 2, 9, 0) });
+	vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T13:00:00Z') });
 });
 
 afterEach(() => {
@@ -91,10 +92,10 @@ describe('schedule/+page.ts load', () => {
 		expect(url.pathname).toBe('/api/practices/practice-1/visits');
 		// The reader named two days; `to` reaches the START of the 20th, so
 		// the whole of the 19th is inside the window.
-		expect(new Date(url.searchParams.get('from')!)).toEqual(new Date(2026, 8, 12));
-		expect(new Date(url.searchParams.get('to')!)).toEqual(new Date(2026, 8, 20));
+		expect(url.searchParams.get('from')).toBe('2026-09-12T04:00:00.000Z');
+		expect(url.searchParams.get('to')).toBe('2026-09-20T04:00:00.000Z');
 		expect(url.searchParams.get('staffId')).toBe('staff-1');
-		expect(result.filters).toEqual({ from: '2026-09-12', to: '2026-09-19', staffId: 'staff-1' });
+		expect(result.filters).toEqual({ from: '2026-09-12', to: '2026-09-19', timeZone: 'America/New_York', staffId: 'staff-1' });
 		expect(result.now).toBeInstanceOf(Date);
 		expect(result.page).toEqual(emptyPage);
 	});
@@ -106,9 +107,24 @@ describe('schedule/+page.ts load', () => {
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent()));
 
 		const url = new URL(fetchMock.mock.calls[0][0], 'https://example.test');
-		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-10-31', staffId: undefined });
-		expect(new Date(url.searchParams.get('from')!)).toEqual(new Date(2026, 9, 2));
-		expect(new Date(url.searchParams.get('to')!)).toEqual(new Date(2026, 10, 1));
+		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-10-31', timeZone: 'America/New_York', staffId: undefined });
+		expect(url.searchParams.get('from')).toBe('2026-10-02T04:00:00.000Z');
+		expect(url.searchParams.get('to')).toBe('2026-11-01T04:00:00.000Z');
+	});
+
+	it('opens on the Practice’s today, not the runner’s, and sends the instants of the Practice’s days (#2867)', async () => {
+		vi.setSystemTime(new Date('2026-10-02T20:00:00Z'));
+		const { fetchMock } = setup(200, emptyPage);
+
+		const eastern = await loadedValue<SchedulePageData>(await load(loadEvent('?days=7')));
+		const tokyo = await loadedValue<SchedulePageData>(await load(loadEvent('?days=7', ['owner'], true, 'Asia/Tokyo')));
+
+		expect(eastern.filters).toMatchObject({ from: '2026-10-02', to: '2026-10-08' });
+		expect(tokyo.filters).toMatchObject({ from: '2026-10-03', to: '2026-10-09', timeZone: 'Asia/Tokyo' });
+		const sent = (call: number) => new URL(fetchMock.mock.calls[call][0], 'https://example.test').searchParams;
+		expect(sent(0).get('from')).toBe('2026-10-02T04:00:00.000Z');
+		expect(sent(2).get('from')).toBe('2026-10-02T15:00:00.000Z');
+		expect(sent(2).get('to')).toBe('2026-10-09T15:00:00.000Z');
 	});
 
 	it('reads the next seven days from days=7', async () => {
@@ -154,7 +170,7 @@ describe('schedule/+page.ts load', () => {
 
 		expect(result.rangeErrors).toEqual({ to: 'Choose a To day that is the same as the From day or later.' });
 		expect(result.page).toEqual(emptyPage);
-		expect(result.filters).toEqual({ from: '', to: '' });
+		expect(result.filters).toEqual({ from: '', to: '', timeZone: 'America/New_York' });
 		expect(scheduleCalls(fetchMock)).toHaveLength(0);
 	});
 

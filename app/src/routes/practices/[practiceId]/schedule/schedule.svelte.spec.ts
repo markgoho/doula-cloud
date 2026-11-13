@@ -17,6 +17,7 @@ import { practiceSession, toPageState } from '../../../routeFixture.js';
 import { data, fixture, schedulePage } from './page.fixture.js';
 import type { SchedulePageData } from './+page.js';
 import { pageState } from '#testing/routePage.js';
+import { inReaderZone } from '#lib/testZone.js';
 import { afterNavigate, beforeNavigate, goto, snapshot } from '$app/navigation';
 
 /*
@@ -144,7 +145,7 @@ describe('each day’s Visits under a heading (#2867)', () => {
 		await setup();
 
 		expect(headingCount('Sat Sep 12')).toBe(2);
-		expect(headingCount('Sat Sep 19')).toBe(2);
+		expect(headingCount('Fri Sep 18')).toBe(2);
 		expect(headingCount('Mon Jan 4, 2027')).toBe(2);
 		await expect.element(testPage.getByRole('table', { name: 'Visits' }).getByRole('row').first()).toBeVisible();
 	});
@@ -216,7 +217,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days first, keeping Mine, from an empty Mine view of other days', async () => {
 		setAddress('?days=7&mine=true');
-		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '' }, { from: '2026-09-07', to: '2026-09-13', staffId: 'staff-1' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', staffId: 'staff-1' }) });
 
 		await expect.element(testPage.getByText('You have no Visits from Mon Sep 7 to Sun Sep 13.').first()).toBeVisible();
 		await expect
@@ -226,7 +227,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days from an empty view of other days with nobody narrowed', async () => {
 		setAddress('?days=7');
-		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '' }, { from: '2026-09-07', to: '2026-09-13' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' }) });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
@@ -247,7 +248,7 @@ describe('the result line, the empty state and the way back', () => {
 		await setup({
 			data: emptyData(
 				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '' },
-				{ from: '2026-09-14', to: '2026-09-14' }
+				{ from: '2026-09-14', to: '2026-09-14', timeZone: 'America/New_York' }
 			)
 		});
 
@@ -384,7 +385,7 @@ describe('the narrowing', () => {
 				...data,
 				page: { items: [], hasMore: false },
 				view: { preset: 30, chosen: { from: '2026-09-19', to: '2026-09-12' }, isMine: false, doula: '' },
-				filters: { from: '', to: '' },
+				filters: { from: '', to: '', timeZone: 'America/New_York' },
 				rangeErrors: { to: 'Choose a To day that is the same as the From day or later.' }
 			}
 		});
@@ -780,5 +781,55 @@ describe('the Visits’ days and clocks', () => {
 		expect(new Set(clockEdges(false)).size).toBe(1);
 		// A day that carries a year runs past the day's track, the one exception.
 		expect(clockEdges(true).length).toBeGreaterThan(0);
+	});
+});
+
+const ZONE_NOTE = "Times are in this Practice's time zone, Eastern Time.";
+const whenOf = (visit: { scheduledAt: string }) =>
+	testPage.getByRole('cell').elements().find((cell) => cell.querySelector('time')?.getAttribute('datetime') === visit.scheduledAt)!.textContent;
+
+describe('the Practice’s own days and times, whatever zone the reader is in (#2867)', () => {
+	describe('a reader in Tokyo', () => {
+		inReaderZone('Asia/Tokyo');
+
+		it('reads each Visit’s day and time in the Practice’s zone and is told which zone it is', async () => {
+			await setup();
+
+			await expect.element(testPage.getByText(ZONE_NOTE)).toBeVisible();
+			expect(whenOf(earlierVisit)).toBe('Sat Sep 12, 10:30am');
+			expect(whenOf(laterVisit)).toBe('Fri Sep 18, 10:05pm');
+			expect(headingCount('Fri Sep 18')).toBe(2);
+		});
+
+		it('says the zone once, as plain text that is no stop in the tab order', async () => {
+			await setup();
+
+			const note = testPage.getByText(ZONE_NOTE);
+			expect(note.elements()).toHaveLength(1);
+			expect(note.element().closest('a, button, [tabindex]')).toBeNull();
+		});
+	});
+
+	describe('a reader in Denver', () => {
+		inReaderZone('America/Denver');
+
+		it('reads the same words as the Practice and is told the zone', async () => {
+			await setup();
+
+			await expect.element(testPage.getByText(ZONE_NOTE)).toBeVisible();
+			expect(whenOf(laterVisit)).toBe('Fri Sep 18, 10:05pm');
+		});
+	});
+
+	describe('a reader in the Practice’s own zone', () => {
+		inReaderZone('America/New_York');
+
+		it('adds nothing', async () => {
+			await setup();
+
+			await expect.element(testPage.getByRole('table', { name: 'Visits' })).toBeVisible();
+			expect(testPage.getByText(/time zone/).elements()).toHaveLength(0);
+			expect(whenOf(laterVisit)).toBe('Fri Sep 18, 10:05pm');
+		});
 	});
 });

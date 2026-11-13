@@ -28,6 +28,7 @@ import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staf
 import type { PortalAccessState, PortalInviteDelivery } from '#lib/portalInvite.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
 import { pageState } from '#testing/routePage.js';
+import { inReaderZone } from '#lib/testZone.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -911,6 +912,7 @@ const arrivalVisit = (visitId: string) => ({
 
 // #250: a Visit's own scheduled date, distinct from createdAt.
 describe('the Visits section When column and schedule control (#250)', () => {
+	inReaderZone('Asia/Tokyo');
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
@@ -919,17 +921,11 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		await renderWithFixtureResponder();
 
 		// The fixture's own two rows (page.fixture.ts): visit-1 carries
-		// scheduledAt, visit-2 carries none. The expected cell text is built
-		// from the same Date methods formatScheduledVisit itself uses
-		// (dates.spec.ts's own reason) rather than a literal UTC string, so
-		// this passes regardless of the runner's own time zone. 2027 is
-		// never the current year, so the year is always printed.
-		const scheduled = new Date('2027-03-15T14:30:00Z');
-		const hour12 = scheduled.getHours() % 12 === 0 ? 12 : scheduled.getHours() % 12;
-		const minute = scheduled.getMinutes().toString().padStart(2, '0');
-		const suffix = scheduled.getHours() < 12 ? 'am' : 'pm';
-		const expected = `${scheduled.toLocaleDateString('en-US', { weekday: 'short' })} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
-		await expect.element(testPage.getByRole('rowheader', { name: expected, exact: true })).toBeVisible();
+		// scheduledAt, visit-2 carries none. The Practice's zone is New York
+		// (EDT on this day) and the reader is in Tokyo (#2867): the cell
+		// reads the Practice's day and clock, 10:30am, not Tokyo's 11:30pm.
+		// 2027 is never the current year, so the year is always printed.
+		await expect.element(testPage.getByRole('rowheader', { name: 'Mon Mar 15, 2027, 10:30am', exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
 	});
 

@@ -136,6 +136,26 @@ func TestPracticeSessionHandler_BillingMode(t *testing.T) {
 	}
 }
 
+// TestPracticeSessionHandler_Timezone proves Timezone (#2867) is
+// practices.timezone as stored, for every caller, and follows a change of it.
+func TestPracticeSessionHandler_Timezone(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner(), fixture.Doula()))
+	doula := e.As(e.Colleague(fixture.Doula()))
+
+	if got := e.practiceSession().Timezone; got != "America/New_York" {
+		t.Fatalf("timezone = %q, want America/New_York", got)
+	}
+
+	testdb.SetPracticeTimezone(t, e.DB, e.Practice.ID, "Asia/Tokyo")
+
+	if got := e.practiceSession().Timezone; got != "Asia/Tokyo" {
+		t.Fatalf("timezone = %q after the change, want Asia/Tokyo", got)
+	}
+	if got := e.practiceSessionAs(doula).Timezone; got != "Asia/Tokyo" {
+		t.Fatalf("timezone = %q for a Doula, want the Practice's Asia/Tokyo", got)
+	}
+}
+
 // TestPracticeSessionHandler_EmployeeNotContractor proves IsContractor
 // reads false for an employee Membership, not just true for a
 // contractor.

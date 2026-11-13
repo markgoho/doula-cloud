@@ -125,6 +125,13 @@
 		 */
 		statusRuler?: string;
 		/**
+		 * One more plain line of meta text directly under the result line, said only
+		 * when there is something to say (the Schedule's time zone, when it is not the
+		 * reader's). Not a control and not in the status region; when it is absent
+		 * nothing is drawn and nothing is held.
+		 */
+		statusNote?: string;
+		/**
 		 * The filters that are on, as GOV.UK's "selected filters": one `<li>` for
 		 * each, a removable tag, drawn after Apply on its row, in the room the row
 		 * leaves beside it. Given only while a filter is on.
@@ -180,6 +187,7 @@
 		activeLabels = [],
 		statusId = `filter-bar-status-${uid}`,
 		statusRuler,
+		statusNote,
 		applied,
 		appliedCount = 0,
 		switches,
@@ -243,6 +251,9 @@
 			<span class="status ruler" aria-hidden="true" inert>{statusRuler}</span>
 		{/if}
 	</div>
+	{#if statusNote}
+		<p class="status note">{statusNote}</p>
+	{/if}
 {/snippet}
 
 <!-- stacked-form:ignore: #2026 -- the one GET narrowing form. Its fields sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->

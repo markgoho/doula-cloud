@@ -416,7 +416,8 @@ export const session = {
 	// never the ambient contractor ADR-0008 confines. The rule for who is
 	// attached without an Offer confines that same contractor and no
 	// other (#1625), so this reader may put herself on an Engagement.
-	isContractor: true
+	isContractor: true,
+	timezone: 'America/New_York'
 };
 
 /*

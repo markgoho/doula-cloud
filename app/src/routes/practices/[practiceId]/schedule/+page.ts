@@ -79,11 +79,12 @@ export const load: PageLoad = async ({
 		isOwnerOrAdmin(session) ? undefined : { staffId: session.staffId }
 	);
 	const now = new Date();
-	const read = scheduleDaysOf(view, now);
+	const timeZone = session.timezone;
+	const read = scheduleDaysOf(view, timeZone, now);
 	const whose = scheduleStaffId(view, session.staffId);
 	const filters: ResolvedScheduleFilters = read.days
-		? { ...read.days, staffId: whose.staffId }
-		: { from: '', to: '' };
+		? { ...read.days, timeZone, staffId: whose.staffId }
+		: { from: '', to: '', timeZone };
 	const isReadable = read.days !== undefined && !whose.isEmpty;
 	const schedule: Promise<StreamedRead<SchedulePage>> = isReadable
 		? streamRead<SchedulePage>(practiceSchedulePath(params.practiceId, filters), fetch)
