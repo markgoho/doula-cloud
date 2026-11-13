@@ -33,16 +33,16 @@ async function setup(invoice: Invoice, onConfirm = vi.fn<(input: RefundPaymentIn
 	return { onConfirm, onCancel };
 }
 
-const amountField = () => page.getByLabelText('Amount to return (USD)');
+const amountField = () => page.getByLabelText('Amount to refund (USD)');
 const continueButton = () => page.getByRole('button', { name: 'Continue' });
-const confirmButton = () => page.getByRole('button', { name: 'Confirm and return money' });
+const confirmButton = () => page.getByRole('button', { name: 'Confirm and refund' });
 const checkOption = () => page.getByRole('radio', { name: 'Check' });
 
 describe('RefundPaymentForm', () => {
-	it('says how much is left to return, net of earlier Refunds', async () => {
+	it('says how much is left to refund, net of earlier Refunds', async () => {
 		await setup(byHand);
 
-		await expect.element(page.getByText('Up to $300.00 is left to return on this payment.')).toBeVisible();
+		await expect.element(page.getByText('Up to $300.00 is left to refund on this payment.')).toBeVisible();
 	});
 
 	describe('a Payment recorded by hand', () => {
@@ -80,11 +80,11 @@ describe('RefundPaymentForm', () => {
 
 			await expect.element(page.getByRole('heading', { name: 'There is a problem' })).toBeVisible();
 			await expect
-				.element(page.getByRole('link', { name: 'Select how the money was returned' }))
+				.element(page.getByRole('link', { name: 'Select how the money was refunded' }))
 				.toHaveAttribute('href', '#refund-payment-method-check');
 			await expect
-				.element(page.getByRole('group', { name: 'How was the money returned?' }))
-				.toHaveTextContent('Select how the money was returned');
+				.element(page.getByRole('group', { name: 'How was the money refunded?' }))
+				.toHaveTextContent('Select how the money was refunded');
 			expect(confirmButton().all()).toHaveLength(0);
 			expect(onConfirm).not.toHaveBeenCalled();
 		});
@@ -140,18 +140,18 @@ describe('RefundPaymentForm', () => {
 				await amountField().fill(typed);
 				await continueButton().click();
 
-				await expect.element(page.getByText('Enter an amount to return greater than $0.00').first()).toBeVisible();
+				await expect.element(page.getByText('Enter an amount to refund greater than $0.00').first()).toBeVisible();
 				await expect.element(amountField()).toHaveAttribute('aria-invalid', 'true');
 			});
 		}
 
-		it('refuses more than is left to return', async () => {
+		it('refuses more than is left to refund', async () => {
 			await setup(byHand);
 
 			await amountField().fill('300.01');
 			await continueButton().click();
 
-			await expect.element(page.getByText('Amount to return must be $300.00 or less').first()).toBeVisible();
+			await expect.element(page.getByText('Amount to refund must be $300.00 or less').first()).toBeVisible();
 		});
 	});
 
@@ -161,7 +161,7 @@ describe('RefundPaymentForm', () => {
 				.fn<(input: RefundPaymentInput) => Promise<void>>()
 				.mockRejectedValue(
 					new RefusalError('amountCents must be greater than zero', {
-						amountCents: 'Enter an amount to return greater than $0.00'
+						amountCents: 'Enter an amount to refund greater than $0.00'
 					})
 				);
 			await setup(byHand, onConfirm);
@@ -173,14 +173,14 @@ describe('RefundPaymentForm', () => {
 
 			await expect.element(amountField()).toHaveAttribute('aria-invalid', 'true');
 			await expect
-				.element(page.getByRole('link', { name: 'Enter an amount to return greater than $0.00' }))
+				.element(page.getByRole('link', { name: 'Enter an amount to refund greater than $0.00' }))
 				.toHaveAttribute('href', '#refund-payment-amount');
 		});
 
 		it('reads a method refusal back onto the question and into the summary', async () => {
 			const onConfirm = vi.fn<(input: RefundPaymentInput) => Promise<void>>().mockRejectedValue(
 				new RefusalError('method must be "check", "bank_transfer", "cash", or "other"', {
-					method: 'Select how the money was returned'
+					method: 'Select how the money was refunded'
 				})
 			);
 			await setup(byHand, onConfirm);
@@ -191,7 +191,7 @@ describe('RefundPaymentForm', () => {
 			await confirmButton().click();
 
 			await expect
-				.element(page.getByRole('link', { name: 'Select how the money was returned' }))
+				.element(page.getByRole('link', { name: 'Select how the money was refunded' }))
 				.toHaveAttribute('href', '#refund-payment-method-check');
 		});
 
@@ -232,7 +232,7 @@ describe('RefundPaymentForm', () => {
 			await continueButton().click();
 			await confirmButton().click();
 
-			await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to return this money');
+			await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to refund this payment');
 		});
 	});
 

@@ -115,7 +115,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	invoice_payment_processing: (name) => `Payment from ${client(name)} on its way`,
 	payment_recorded: (name) => `Payment from ${client(name)} recorded`,
 	payment_reversed: (name) => `Payment from ${client(name)} removed`,
-	payment_refunded: (name) => `Money returned to ${client(name)}`,
+	payment_refunded: (name) => `Refund to ${client(name)} recorded`,
 	invoice_voided: (name) => `Invoice for ${client(name)} voided`,
 	invoice_written_off: (name) => `Invoice for ${client(name)} written off`,
 	// Stripe would not finalize the draft while it was being raised, so it

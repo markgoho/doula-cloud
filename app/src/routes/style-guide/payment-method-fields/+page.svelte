@@ -23,11 +23,11 @@
 
 <StackedForm onSubmit={(event) => event.preventDefault()}>
 	<PaymentMethodFields
-		legend="How was the money returned?"
+		legend="How was the money refunded?"
 		methodName="demo-method"
 		{method}
 		onMethodChange={(value) => (method = value)}
-		methodError={isRefused ? 'Select how the money was returned' : undefined}
+		methodError={isRefused ? 'Select how the money was refunded' : undefined}
 		noteFieldId="demo-note"
 		{note}
 		onNoteInput={(value) => (note = value)}

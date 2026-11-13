@@ -60,8 +60,8 @@
 	/*
 	 * #1009: an Owner's view once money has gone back -- a partly refunded
 	 * by-hand Invoice, whose row carries the returned figure beside "Paid"
-	 * and still offers Return money but no longer Reverse payment, beside a
-	 * card-paid one that offers Return money alone. The widest figure again:
+	 * and still offers Refund payment but no longer Reverse payment, beside a
+	 * card-paid one that offers Refund payment alone. The widest figure again:
 	 * most of a four-figure package returned, to the cent.
 	 */
 	const refundedInvoices: Invoice[] = [
