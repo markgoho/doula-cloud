@@ -211,10 +211,14 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
-	var email, practiceID string
+	var email sql.NullString
+	var practiceID string
 	if err := tx.QueryRowContext(ctx, `SELECT email, practice_id FROM clients WHERE id = $1`, clientID).Scan(&email, &practiceID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- clientID came from a row this same tx just read
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
+	}
+	if !email.Valid || email.String == "" {
+		return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodeLinkUnusable, "this invitation can't be used -- ask your practice for help"
 	}
 
 	// The most recent Engagement is the one an activity entry names when a
@@ -255,7 +259,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 
-	signInAddress := staffauth.NormalizeAddress(email)
+	signInAddress := staffauth.NormalizeAddress(email.String)
 	if _, err := tx.ExecContext(ctx,
 		`INSERT INTO portal_accounts (identifier, sign_in_address) VALUES ($1, $2)`,
 		identifier, signInAddress,
