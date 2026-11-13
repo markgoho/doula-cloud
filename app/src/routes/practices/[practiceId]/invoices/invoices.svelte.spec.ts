@@ -81,7 +81,7 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 	it('shows a paid Invoice on the day the BFF sent, month first', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Paid Jul 4, 2026', exact: true })).toBeVisible();
 	});
 
 	it('shows the due day the BFF sent while it can be paid, and the lateness it counted with the amount', async () => {
@@ -92,7 +92,7 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 		// The paid row's Sent day, which an instant read in a zone behind
 		// UTC would have put on Jun 30.
 		const paidRow = testPage.getByRole('row').filter({ hasText: 'DC-0092' });
-		await expect.element(paidRow.getByRole('cell', { name: 'Jul 1, 2026', exact: true })).toBeVisible();
+		await expect.element(paidRow.getByRole('cell', { name: 'Sent Jul 1, 2026', exact: true })).toBeVisible();
 		// H2 (#2746): an office's word for that day.
 		await expect.element(testPage.getByRole('columnheader', { name: 'Sent', exact: true })).toBeVisible();
 		// ADR-0015: no bare "due" over the column, the pregnancy's word.
@@ -112,6 +112,9 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 		const cards = testPage.getByRole('group', { name: 'Invoices', exact: true });
 		await expect.element(cards).toBeVisible();
 		await expect.element(cards.getByText('Jul 4, 2026')).toBeVisible();
+		// H2, H8 (#2746): a card has no "Payment" heading over the day, so its date line says paid, and its headline does not say it again.
+		await expect.element(cards.getByText('Paid', { exact: true })).toBeVisible();
+		expect(cards.element().textContent!.match(/paid/gi)).toHaveLength(1);
 		await expect.element(cards.getByText('No payment due')).not.toBeInTheDocument();
 		expect(cards.element().textContent).not.toContain('—');
 		expect(cards.element().textContent!.match(/Payment:/g), 'the paid card’s fact alone').toHaveLength(1);
@@ -133,18 +136,22 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 		// The money said once, its state in the Clients list's words: the
 		// open row is past its due day, so it says how late (#2122). A paid
-		// row says paid in its Money cell, so its Payment cell says the day alone.
+		// row says paid in its Money cell, and its Payment cell names the day's kind.
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true }).last()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Paid Jul 4, 2026', exact: true }).last()).toBeVisible();
 	});
 
-	// H4, H8 (#2746): as the Clients list says it, and "paid" is said once in the row.
-	it('says a paid row is paid beside its amount, as the Clients list does, and once', async () => {
+	// H4, H8, T6 (#2746): as the Clients list says it; "paid" is seen once in the row, and a row read whole hears each day's kind.
+	it('says a paid row is paid beside its amount, as the Clients list does, and shows it once', async () => {
 		await setup({ ...data, items: [{ ...paidInvoice, refundedCents: 0 }] });
 
 		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00, paid') })).toBeVisible();
-		const row = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element();
-		expect(row.textContent!.match(/paid/gi)).toHaveLength(1);
+		await expect.element(testPage.getByRole('cell', { name: 'Paid Jul 4, 2026', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Sent Jul 1, 2026', exact: true })).toBeVisible();
+		// querySelector, case 2: the drawn row, less the words only a screen reader hears.
+		const seen = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element().cloneNode(true) as Element;
+		for (const hidden of seen.querySelectorAll('.visually-hidden')) hidden.remove();
+		expect(seen.textContent!.match(/paid/gi)).toHaveLength(1);
 	});
 
 	// H2, H4 (#2746): the rows that say refunded add up to "Of that, refunded".

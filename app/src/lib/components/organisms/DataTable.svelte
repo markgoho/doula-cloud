@@ -125,7 +125,8 @@
 		 * Every other column keeps its content's width on one line. This one
 		 * is at least its track (`--data-table-grows-track` on an ancestor, a
 		 * width the route measures its busiest value at), so the columns after
-		 * it start at one place whichever rows are shown, and it wraps only
+		 * it start at one place whichever rows are shown; a longer value takes
+		 * its own one-line width while the frame has room, and wraps only
 		 * where the frame is too narrow for the table. Read only by that
 		 * layout. One per table.
 		 */
@@ -629,15 +630,30 @@
 		   chose, so the table stops where its columns are satisfied and a
 		   wide frame leaves its room after the table, not between a name and
 		   its amount. Every column but `grows` keeps its value on one line;
-		   that one holds its track as its least width (a header cell's width
-		   is its column's floor), so the columns after it start at one place
-		   in every filter state, and it alone wraps where the frame runs out. */
+		   that one is as wide as its track or its longest value on one line,
+		   whichever is wider, so the columns after it start at one place in
+		   every filter state, and it alone wraps, only where the frame runs
+		   out. The track is an empty grid in the header cell, whose
+		   `minmax(0, track)` counts toward the column's one-line width and
+		   not its least one: a width set on the cell itself would replace the
+		   one-line width (a two-word name wrapped beside an empty frame), and
+		   a least width would push the table past a narrow frame. The track
+		   is the whole cell's width, so the grid is the track less the cell's
+		   inline padding. */
 		.table-view.one-line :is(th, td):not(.grows) {
 			white-space: nowrap;
 		}
 
-		.table-view.one-line th.grows {
-			inline-size: var(--data-table-grows-track, auto);
+		.table-view.one-line th.grows::after {
+			--grows-padding: calc(2 * var(--data-table-cell-inset, var(--space-3)));
+
+			content: '';
+			display: grid;
+			grid-template-columns: minmax(0, calc(var(--data-table-grows-track, 0ch) - var(--grows-padding)));
+		}
+
+		.table-view.one-line th.grows:first-child::after {
+			--grows-padding: var(--data-table-cell-inset, var(--space-3));
 		}
 
 		/* Rows that are about to be replaced (`isBusy`) dim a little, so a

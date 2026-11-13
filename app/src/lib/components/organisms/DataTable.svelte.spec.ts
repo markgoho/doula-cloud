@@ -305,6 +305,29 @@ describe('DataTable.svelte', () => {
 		}
 	});
 
+	it('keeps a growing value longer than its track on one line while the frame has room', async () => {
+		document.body.style.setProperty('--data-table-grows-track', '5ch');
+		try {
+			await setup({
+				columns: [
+					{ label: 'Status', accessor: (row: Row) => row.status },
+					{ label: 'Name', accessor: (row: Row) => row.name, grows: true }
+				],
+				columnWidths: 'one-line',
+				caption: 'People'
+			});
+
+			await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+			for (const cell of page.getByRole('cell').elements()) {
+				const range = document.createRange();
+				range.selectNodeContents(cell);
+				expect(range.getClientRects()).toHaveLength(1);
+			}
+		} finally {
+			document.body.style.removeProperty('--data-table-grows-track');
+		}
+	});
+
 	it('moves no column left of the growing one when a column right of it is left out of a one-line table', async () => {
 		const oneLine = [
 			{ label: 'Name', accessor: (row: Row) => row.name },

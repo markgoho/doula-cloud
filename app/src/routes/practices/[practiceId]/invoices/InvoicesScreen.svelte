@@ -416,18 +416,10 @@
 
 	const NO_PAYMENT_DUE = 'No payment due';
 
-	/*
-	 * The Payment cell's lead, which a paid row leaves out: its Money cell has
-	 * said "paid" (H8), so the cell says the day under its "Payment" heading,
-	 * and a screen reader hears "paid" once. An unpaid row keeps "Payment
-	 * due", never a bare "due" (ADR-0015).
-	 */
-	const dateLead = (line: NonNullable<ReturnType<typeof invoiceDateLine>>) => (line.lead === 'Paid' ? '' : line.lead);
-
 	// Empty with no day, so a card leaves the fact out; the table's cell still says NO_PAYMENT_DUE.
 	function dateText(invoice: PracticeInvoice): string {
 		const line = invoiceDateLine(invoice);
-		return line ? `${dateLead(line)} ${line.day}`.trim() : '';
+		return line ? `${line.lead} ${line.day}` : '';
 	}
 
 	/*
@@ -479,8 +471,11 @@
 	const rowLinkLabel = (invoice: PracticeInvoice) => `${invoice.clientName}, ${invoice.reference}`;
 </script>
 
+<!-- H8: a paid card's date line says "Paid" with its day, so its headline gives the amount alone and paid is said once. -->
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
-	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={invoiceMoneyState(invoice)} isTracked={view === 'table'} />
+	{@const state = invoiceMoneyState(invoice)}
+	{@const isPaidOnDateLine = view === 'record' && state.word === 'paid' && invoiceDateLine(invoice)?.lead === 'Paid'}
+	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={isPaidOnDateLine ? undefined : state} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
@@ -488,14 +483,16 @@
 	<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 {/snippet}
 
+<!-- In the table a paid row's "Paid" is heard and not seen: its Money cell shows "paid" under the "Payment" heading (H8), and a row read whole still says the day's kind. A card has no heading, so it shows it. An unpaid row keeps "Payment due", never a bare "due" (ADR-0015). -->
 {#snippet dateCell(invoice: PracticeInvoice, view: DataTableView)}
 	{@const line = invoiceDateLine(invoice)}
-	{#if line}<span class="date" class:tracked={view === 'table'}><span class="lead">{dateLead(line)}</span> <time datetime={line.on}>{line.day}</time></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_PAYMENT_DUE}</span>{/if}
+	{@const isLeadHeard = view === 'table' && line?.lead === 'Paid'}
+	{#if line}<span class="date" class:tracked={view === 'table'}><span class="lead">{#if isLeadHeard}<span class="visually-hidden">{line.lead}</span>{:else}{line.lead}{/if}</span> <time datetime={line.on}>{line.day}</time></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_PAYMENT_DUE}</span>{/if}
 {/snippet}
 
 {#snippet raisedCell(invoice: PracticeInvoice, view: DataTableView)}
-	<!-- A card's day says its kind where the table's header does not stand over it. -->
-	<span class="no-break">{#if view === 'record'}<span class="lead" aria-hidden="true">Sent&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time></span>
+	<!-- The day says its kind: seen on a card, where no header stands over it, and heard in the table, so a row read whole says it. -->
+	<span class="no-break">{#if view === 'record'}<span class="lead" aria-hidden="true">Sent&nbsp;</span>{:else}<span class="visually-hidden">Sent&nbsp;</span>{/if}<time datetime={invoice.raisedOn}>{formatCalendarDay(invoice.raisedOn)}</time></span>
 {/snippet}
 
 {#snippet total(row: { figure: string; note: string })}
@@ -708,7 +705,7 @@
 		.invoices-table {
 			container: invoices-table / inline-size;
 			--data-table-cell-inset: var(--space-2);
-			/* The Client column's least width, the Clients list's Name track (a
+			/* The Client column's track, the Clients list's Name track (a
 			   long two-word name), so the Money starts at one place in every view. */
 			--data-table-grows-track: 15ch;
 		}
@@ -779,7 +776,8 @@
 		   it where the bar holds all three (30rem: the field, Apply and the
 		   "Overdue Invoices" tag). Where it does not, the field narrows to share
 		   its line with Apply alone, so a phone's first screen keeps that line
-		   for the list, and an applied tag takes the line under them. */
+		   for the list, and an applied tag takes the line under them. There
+		   the box takes the room Apply leaves, so Apply sits one gap after it. */
 		.search {
 			flex: 1 1 11rem;
 			max-inline-size: max-content;
@@ -788,6 +786,10 @@
 		@container filter-bar (max-width: 30rem) {
 			.search {
 				flex-basis: 60%;
+				max-inline-size: none;
+			}
+
+			.search :global(input) {
 				max-inline-size: none;
 			}
 		}

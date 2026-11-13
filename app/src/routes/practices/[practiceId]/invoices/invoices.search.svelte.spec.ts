@@ -243,13 +243,13 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 });
 
 describe('the state said once (DESIGN.md, "Money is said once")', () => {
-	it('says a refunded Invoice beside its amount and its paid day alone, and an overdue one in its badge', async () => {
+	it('says a refunded Invoice beside its amount and its paid day, and an overdue one in its badge', async () => {
 		await setupSearch();
 
 		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*\$1,250\.50 refunded$/ });
 		const overdue = testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ });
 		await expect.element(paid).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: /^Jul 4, 2026$/ }).last()).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: /^Paid Jul 4, 2026$/ }).last()).toBeVisible();
 		await expect.element(overdue).toBeVisible();
 		// querySelector, case 2: a badge's icon is drawn and not announced, so
 		// only the drawn tree tells a badge from a plain word.
