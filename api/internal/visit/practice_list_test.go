@@ -291,11 +291,10 @@ func TestPracticeSchedule_PagesSoonestFirst(t *testing.T) {
 	}
 
 	second := e.readSchedule(url.Values{cursorParameter: {*first.NextCursor}})
-	if len(second.Items) != 1 || second.HasMore || second.NextCursor != nil {
-		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
-			len(second.Items), second.HasMore, second.NextCursor)
+	if got := visitIDs(second); !slices.Equal(got, seeded[30:]) {
+		t.Fatalf("second page = %v, want %v", got, seeded[30:])
 	}
-	if second.Items[0].VisitID != seeded[30] {
-		t.Fatalf("second page = %q, want %q", second.Items[0].VisitID, seeded[30])
+	if second.HasMore || second.NextCursor != nil {
+		t.Fatalf("the last page says more follow: hasMore=%v, cursor=%v", second.HasMore, second.NextCursor)
 	}
 }
