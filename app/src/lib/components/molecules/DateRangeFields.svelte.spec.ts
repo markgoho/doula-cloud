@@ -31,6 +31,27 @@ describe('DateRangeFields', () => {
 		await expect.element(page.getByLabelText('From')).toHaveValue('2026-10-26');
 	});
 
+	it('draws no hint and no error unless it is given them', async () => {
+		await setup();
+
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
+		await expect.element(page.getByLabelText('To')).not.toHaveAccessibleDescription('This day is included.');
+	});
+
+	it('says the To hint and each error beside its own box', async () => {
+		await render(DateRangeFields, {
+			from: '',
+			to: '2026-11-25',
+			fromError: 'Enter a From day',
+			toError: 'Choose a later To day.',
+			toHint: 'This day is included.'
+		});
+
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('This day is included. Choose a later To day.');
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Enter a From day');
+		await expect.element(page.getByLabelText('To')).toBeInvalid();
+	});
+
 	it('takes a new From the same way', async () => {
 		await setup();
 

@@ -1,4 +1,5 @@
 import { beforeNavigate, snapshot } from '$app/navigation';
+import { tick } from 'svelte';
 
 /*
  * Coming back to a paged list (#2746, T3): the list keeps how many pages it
@@ -23,6 +24,29 @@ export function putListBack(back: ListReturn, rowLink: (rowId: string) => HTMLEl
 	const link = back.rowId ? rowLink(back.rowId) : undefined;
 	link?.focus({ preventScroll: true });
 	link?.scrollIntoView({ block: 'nearest' });
+}
+
+/**
+ * Reads a list as many pages again as it held when she left, then puts it
+ * back where it was (`putListBack`). `navigations` counts the moves the list
+ * has seen since, so a move while its pages load stops it short of
+ * scrolling: it is never put on another view's rows. `loadMore` answers
+ * whether it added any, so the pages running out ends the reading.
+ */
+export async function restoreList(
+	back: ListReturn,
+	list: {
+		pagesLoaded: () => number;
+		navigations: () => number;
+		loadMore: () => Promise<boolean>;
+		rowLink: (rowId: string) => HTMLElement | undefined;
+	}
+): Promise<void> {
+	const at = list.navigations();
+	while (at === list.navigations() && list.pagesLoaded() < back.pages && (await list.loadMore()));
+	await tick();
+	if (at !== list.navigations()) return;
+	putListBack(back, list.rowLink);
 }
 
 export interface ListReturn {

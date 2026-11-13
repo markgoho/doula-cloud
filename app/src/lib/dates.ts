@@ -144,8 +144,32 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
  */
 export function formatScheduledVisit(value: string | undefined, now: Date = new Date()): string {
 	if (!value) return 'Not yet scheduled';
+	const { day, clock } = scheduledVisitParts(value, now);
+	return `${day} ${clock}`;
+}
+
+/**
+ * The two halves of `formatScheduledVisit`'s words, for a cell that sets the
+ * day and the clock in tracks of their own: "Thu Sep 4," and "2:00pm". The
+ * comma stays with the day, so the halves read as the one phrase when joined
+ * by a space.
+ */
+export function scheduledVisitParts(value: string, now: Date = new Date()): { day: string; clock: string } {
 	const date = new Date(value);
-	return formatWeekdayDayClock(date, { withYear: date.getFullYear() !== now.getFullYear() });
+	return {
+		day: `${formatWeekdayDay(date, { withYear: date.getFullYear() !== now.getFullYear() })},`,
+		clock: formatClock(date)
+	};
+}
+
+/**
+ * A calendar day, `YYYY-MM-DD`, with its weekday: "Fri Nov 13", and "Fri Nov
+ * 13, 2027" when it is not `now`'s year. The Schedule's result line and its
+ * applied days say a day this way, the way a Visit's own day is said.
+ */
+export function formatCalendarWeekdayDay(value: string, now: Date = new Date()): string {
+	const [year, month, day] = value.split('-').map(Number);
+	return formatWeekdayDay(new Date(year!, month! - 1, day!), { withYear: year !== now.getFullYear() });
 }
 
 /**
@@ -180,8 +204,15 @@ export function formatPortalVisit(value: string, hasHappened: boolean): string {
  * "Thu Sep 4, 2:00pm", or "Thu Sep 4, 2027, 2:00pm" with the year.
  */
 function formatWeekdayDayClock(date: Date, { withYear }: { withYear: boolean }): string {
+	return `${formatWeekdayDay(date, { withYear })}, ${formatClock(date)}`;
+}
+
+/**
+ * "Thu Sep 4", or "Thu Sep 4, 2027" with the year.
+ */
+function formatWeekdayDay(date: Date, { withYear }: { withYear: boolean }): string {
 	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-	return `${weekday} ${formatDay(date, { withYear })}, ${formatClock(date)}`;
+	return `${weekday} ${formatDay(date, { withYear })}`;
 }
 
 /**

@@ -5,6 +5,7 @@ import {
 	isOwner,
 	isOwnerOrAdmin,
 	isAmbientContractor,
+	canNarrowToMine,
 	ROLE_LABELS,
 	EMPLOYMENT_TYPE_LABELS,
 	roleLabel,
@@ -56,6 +57,22 @@ describe('isOwnerOrAdmin', () => {
 
 	it('is false with no roles at all', () => {
 		expect(isOwnerOrAdmin(session([]))).toBe(false);
+	});
+});
+
+describe('canNarrowToMine', () => {
+	it('is offered to a Doula who is not a contractor, where another Doula holds the role', () => {
+		expect(canNarrowToMine(session(['doula']))).toBe(true);
+		expect(canNarrowToMine(session(['owner', 'doula']))).toBe(true);
+	});
+
+	it('is not offered to a reader who holds no doula role, or whose list is already only hers', () => {
+		expect(canNarrowToMine(session(['admin']))).toBe(false);
+		expect(canNarrowToMine(session(['doula'], true))).toBe(false);
+	});
+
+	it('is not offered at a Practice with one Doula, since every Visit is hers', () => {
+		expect(canNarrowToMine({ ...session(['doula']), hasOtherDoulas: false })).toBe(false);
 	});
 });
 

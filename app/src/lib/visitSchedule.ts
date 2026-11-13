@@ -16,10 +16,14 @@
  * shared link mean a different week in a different zone, and reading the
  * day as UTC midnight would move it by one for every reader behind UTC
  * (dates.ts's own opening note).
+ *
+ * A bare address is the next 30 days; `?days=7` is the next seven, counted
+ * from the day the link is opened; `?from=&to=` is two chosen days.
  */
 import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
+import { formatCalendarWeekdayDay } from './dates.js';
 
 /** One row of the Practice-wide schedule -- mirrors the Go BFF's
  * ScheduledVisit (api/internal/visit/practice_list.go). `scheduledAt` is
@@ -39,20 +43,16 @@ export interface ScheduledVisit {
 	isOffEngagement: boolean;
 }
 
-/** The narrowing a reader chose, in the shape the URL carries it: two
- * calendar days and, optionally, one Doula. Every field is optional
- * because a bare URL is a valid one -- `defaultScheduleRange` supplies
- * the days the screen then shows in its own controls. */
-export interface ScheduleFilters {
-	from?: string;
-	to?: string;
-	staffId?: string;
-}
-
 /** How many days ahead the screen looks when the reader has named no
- * range -- the same window the BFF defaults to, named here so the two
- * cannot silently disagree about what "no filter" shows. */
+ * range, and the window On call opens on. */
 export const DEFAULT_SCHEDULE_DAYS = 30;
+
+/**
+The other preset the "Days" choice offers.
+*/
+export const SHORT_SCHEDULE_DAYS = 7;
+
+export type ScheduleDaysChoice = '7' | '30' | 'choose';
 
 function padTwoDigits(n: number): string {
 	return n.toString().padStart(2, '0');
@@ -76,20 +76,19 @@ export function addDays(day: string, days: number): string {
 	return toDateInputValue(date);
 }
 
-/** The days the screen shows when the URL names none: today through
- * today plus the default window. `now` is injectable so a test does not
- * have to reason about the wall clock. */
-export function defaultScheduleRange(now: Date = new Date()): { from: string; to: string } {
-	const from = toDateInputValue(now);
-	return { from, to: addDays(from, DEFAULT_SCHEDULE_DAYS) };
-}
-
 /** Midnight at the start of a `YYYY-MM-DD` day, in the reader's zone --
  * the day's own parts, never `new Date(day)`, which parses a bare date
  * string as UTC. */
 function startOfLocalDay(day: string): Date {
 	const [year, month, date] = day.split('-').map(Number);
 	return new Date(year, month - 1, date);
+}
+
+/**
+Whether a string is a real calendar day in `YYYY-MM-DD` form.
+*/
+export function isCalendarDay(value: string): boolean {
+	return /^\d{4}-\d{2}-\d{2}$/.test(value) && toDateInputValue(startOfLocalDay(value)) === value;
 }
 
 /** The instants the BFF's half-open range takes, for a pair of calendar
@@ -103,45 +102,138 @@ export function toInstantRange(from: string, to: string): { from: string; to: st
 	};
 }
 
-/** Reads the narrowing off a URL's search parameters, falling back to
- * the default window for a day the URL does not name. The screen's
- * controls and its fetch both read this, so what is shown and what was
- * asked for can never drift apart. */
-export function scheduleFiltersFromParameters(
-	parameters: Pick<URLSearchParams, 'get'>,
-	now: Date = new Date()
-): ResolvedScheduleFilters {
-	const fallback = defaultScheduleRange(now);
+/** What the address says, before any day is worked out: a preset or two
+ * typed days, and whose Visits. */
+export interface ScheduleView {
+	/**
+	The preset, used while no days are chosen.
+	*/
+	preset: typeof SHORT_SCHEDULE_DAYS | typeof DEFAULT_SCHEDULE_DAYS;
+	/**
+	The days the address carries, as typed: either may be empty or not a day.
+	*/
+	chosen?: { from: string; to: string };
+	/**
+	The reader's own Visits.
+	*/
+	isMine: boolean;
+	/**
+	One Doula's Visits: a Staff id, or empty.
+	*/
+	doula: string;
+}
+
+/**
+The two days a view reads, once they are both days and in order.
+*/
+export interface ScheduleDays {
+	from: string;
+	to: string;
+}
+
+export interface ScheduleRangeErrors {
+	from?: string;
+	to?: string;
+}
+
+export const ENTER_FROM_DAY = 'Enter a From day';
+export const ENTER_TO_DAY = 'Enter a To day';
+export const TO_BEFORE_FROM = 'Choose a To day that is the same as the From day or later.';
+
+/**
+Why two typed days cannot be a range, in the words each field says.
+*/
+export function scheduleRangeErrors(from: string, to: string): ScheduleRangeErrors {
+	const errors: ScheduleRangeErrors = {};
+	if (!isCalendarDay(from)) errors.from = ENTER_FROM_DAY;
+	if (!isCalendarDay(to)) errors.to = ENTER_TO_DAY;
+	else if (!errors.from && to < from) errors.to = TO_BEFORE_FROM;
+	return errors;
+}
+
+/** Reads the narrowing off a URL's search parameters. `canMine` is whether
+ * this reader is offered "Mine" at all; an address cannot give her what
+ * the screen does not. Days beside `from` or `to` are ignored, and a
+ * `days` that is not one of the presets is the default. */
+export function scheduleViewFromParameters(
+	parameters: Pick<URLSearchParams, 'get' | 'has'>,
+	canMine: boolean
+): ScheduleView {
+	const hasChosen = parameters.has('from') || parameters.has('to');
 	return {
-		from: parameters.get('from') ?? fallback.from,
-		to: parameters.get('to') ?? fallback.to,
-		staffId: parameters.get('staffId') ?? undefined
+		preset: parameters.get('days') === String(SHORT_SCHEDULE_DAYS) ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
+		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
+		isMine: canMine && parameters.get('mine') === 'true',
+		doula: parameters.get('doula') ?? ''
 	};
 }
 
-/** The narrowing once the default window has filled the gaps a bare URL
- * leaves: two calendar days that are always present, and the Doula only
- * if one was chosen. The href builder, the BFF path and the loader all
- * take this one shape, so none of them can be handed a half-decided
- * range. */
-export type ResolvedScheduleFilters = Required<Pick<ScheduleFilters, 'from' | 'to'>> &
-	Pick<ScheduleFilters, 'staffId'>;
-
-/** The screen's own URL for a narrowing -- what the browser's address bar
- * holds, and what a shared link carries. Only the parts a reader actually
- * chose are written, so an unnarrowed schedule stays a clean path. */
-export function scheduleHref(
-	basePath: string,
-	filters: ScheduleFilters,
+/** The days a view reads: a preset of N days is today through today plus
+ * N - 1, the last day included. Chosen days that are not a range carry
+ * their errors instead. */
+export function scheduleDaysOf(
+	view: ScheduleView,
 	now: Date = new Date()
-): string {
-	const fallback = defaultScheduleRange(now);
+): { days: ScheduleDays; errors?: undefined } | { days?: undefined; errors: ScheduleRangeErrors } {
+	if (view.chosen) {
+		const errors = scheduleRangeErrors(view.chosen.from, view.chosen.to);
+		return Object.keys(errors).length > 0 ? { errors } : { days: view.chosen };
+	}
+	const from = toDateInputValue(now);
+	return { days: { from, to: addDays(from, view.preset - 1) } };
+}
+
+/** The screen's own URL for a view -- what the browser's address bar
+ * holds, and what a shared link carries. Only what a reader chose is
+ * written, so the default stays a clean path and `days=30` is never
+ * written. */
+export function scheduleHref(basePath: string, view: ScheduleView): string {
 	const parameters = new URLSearchParams();
-	if (filters.from && filters.from !== fallback.from) parameters.set('from', filters.from);
-	if (filters.to && filters.to !== fallback.to) parameters.set('to', filters.to);
-	if (filters.staffId) parameters.set('staffId', filters.staffId);
+	if (view.chosen) {
+		parameters.set('from', view.chosen.from);
+		parameters.set('to', view.chosen.to);
+	} else if (view.preset === SHORT_SCHEDULE_DAYS) {
+		parameters.set('days', String(SHORT_SCHEDULE_DAYS));
+	}
+	if (view.isMine) parameters.set('mine', 'true');
+	if (view.doula) parameters.set('doula', view.doula);
 	const query = parameters.toString();
 	return query ? `${basePath}?${query}` : basePath;
+}
+
+/** The view with nothing narrowed beyond what is named, for the default
+ * days: what a "Show the next 30 days" link goes to. */
+export function withDefaultDays(view: ScheduleView): ScheduleView {
+	return { ...view, preset: DEFAULT_SCHEDULE_DAYS, chosen: undefined };
+}
+
+/**
+Whether the address names anything beyond the default days.
+*/
+export function isScheduleNarrowed(view: ScheduleView): boolean {
+	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '';
+}
+
+/** Whose Visits the BFF is asked for. It takes one Staff id; "Mine" and a
+ * different Doula are two narrowings that no Visit meets, so that is an
+ * empty list and no read. */
+export function scheduleStaffId(
+	view: ScheduleView,
+	ownStaffId: string | undefined
+): { staffId?: string; isEmpty: boolean } {
+	if (!view.isMine) return { staffId: view.doula || undefined, isEmpty: false };
+	if (view.doula && view.doula !== ownStaffId) return { isEmpty: true };
+	return { staffId: ownStaffId, isEmpty: false };
+}
+
+/** The narrowing once the days are known: two calendar days that are
+ * always present, and the Doula only if one was chosen. The BFF path and
+ * the loader take this one shape, so neither can be handed a half-decided
+ * range. */
+export interface ResolvedScheduleFilters {
+	from: string;
+	to: string;
+	staffId?: string;
 }
 
 /** The BFF path for one page of the schedule, with the calendar days
@@ -159,9 +251,7 @@ export function practiceSchedulePath(
 }
 
 /** Loads one page of the Practice's schedule. Throws with the response
- * body text on a non-2xx response; the route's `load` maps status codes
- * to SvelteKit errors before calling this, so a throw here is only ever
- * an unexpected failure. */
+ * body text on a non-2xx response. */
 export async function loadPracticeSchedule(
 	fetcher: Fetcher,
 	practiceId: string,
@@ -175,13 +265,57 @@ export async function loadPracticeSchedule(
 	return response.json();
 }
 
-/** What the result count says out loud, for the live region that
- * announces it. Words rather than a bare number, because "0" alone is
- * the thing a screen reader reads as nothing having happened. The
- * endpoint answers `hasMore` rather than a total, so this never claims a
- * total it was not given. */
-export function scheduleResultSummary(count: number, hasMore: boolean): string {
-	if (count === 0) return 'No scheduled visits in this range.';
-	const visits = count === 1 ? '1 scheduled visit' : `${count} scheduled visits`;
-	return hasMore ? `Showing the first ${visits}.` : `Showing ${visits}.`;
+/**
+The applied tag for chosen days: "Days: Tue Nov 10 to Thu Nov 19".
+*/
+export function scheduleDaysTag(days: ScheduleDays, now: Date = new Date()): string {
+	return `Days: ${formatCalendarWeekdayDay(days.from, now)} to ${formatCalendarWeekdayDay(days.to, now)}`;
+}
+
+export interface ScheduleWho {
+	/**
+	The picked Doula's name, when one is.
+	*/
+	doulaName?: string;
+	/**
+	The reader's own Visits are asked for.
+	*/
+	isMine?: boolean;
+}
+
+/** What the result line says: the count, whether more exist (the BFF
+ * gives no total), the days, whose, and the order. */
+export function scheduleResultSummary(
+	count: number,
+	hasMore: boolean,
+	days: ScheduleDays,
+	who: ScheduleWho = {},
+	now: Date = new Date()
+): string {
+	const span = `from ${formatCalendarWeekdayDay(days.from, now)} to ${formatCalendarWeekdayDay(days.to, now)}`;
+	if (count === 0) {
+		if (who.isMine && who.doulaName) return `No Visits for ${who.doulaName} that are also yours ${span}.`;
+		if (who.isMine) return `You have no Visits ${span}.`;
+		if (who.doulaName) return `No Visits for ${who.doulaName} ${span}.`;
+		return `No Visits ${span}.`;
+	}
+	const visits = count === 1 ? 'Visit' : 'Visits';
+	const whose = who.isMine ? 'of your' : (who.doulaName ? `of ${who.doulaName}'s` : '');
+	const amount = hasMore ? `the first ${count}` : String(count);
+	const what = whose ? `${amount} ${whose} ${visits}` : `${amount} ${visits}`;
+	const ordered = hasMore || count > 1 ? ', soonest first' : '';
+	return `Showing ${what} ${span}${ordered}.`;
+}
+
+/** The longest wording the result line can say, for the room the filter bar
+ * holds for it so the list does not move between results. Days with a year
+ * are the longest a day is said. */
+export function scheduleResultRuler(longestDoulaName: string): string {
+	const days = { from: '2000-09-29', to: '2000-12-29' };
+	const now = new Date(1999, 0, 1);
+	return [
+		scheduleResultSummary(999, true, days, { doulaName: longestDoulaName }, now),
+		scheduleResultSummary(999, true, days, { isMine: true }, now),
+		scheduleResultSummary(0, false, days, { isMine: true, doulaName: longestDoulaName }, now)
+	].toSorted((a, b) => b.length - a.length)[0];
 }

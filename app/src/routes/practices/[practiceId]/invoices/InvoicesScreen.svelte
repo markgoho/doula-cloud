@@ -8,10 +8,10 @@
 	 * filter a `FilterBar` and the book a `DataTable`, the pieces the
 	 * Clients list is built from (#2746).
 	 */
-	import { tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
-	import { keepListReturn, putListBack, type ListReturn } from '#lib/listReturn.js';
+	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -190,11 +190,12 @@
 	// table's stuck header (#2839); `nearest` moves it clear only if it does.
 	async function restoreReturn(back: ListReturn) {
 		heldReturn = undefined;
-		const at = navigations;
-		while (at === navigations && pagesLoaded < back.pages && (await didLoadMore()));
-		await tick();
-		if (at !== navigations) return;
-		putListBack(back, rowLink);
+		await restoreList(back, {
+			pagesLoaded: () => pagesLoaded,
+			navigations: () => navigations,
+			loadMore: didLoadMore,
+			rowLink
+		});
 	}
 
 	const rowDomId = (invoiceId: string, view: DataTableView) => `invoice-row-${invoiceId}-${view}`;

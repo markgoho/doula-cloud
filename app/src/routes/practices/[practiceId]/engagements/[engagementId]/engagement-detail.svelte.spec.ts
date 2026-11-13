@@ -899,6 +899,16 @@ describe('the Activity ledger section (#486)', () => {
 	});
 });
 
+const arrivalVisit = (visitId: string) => ({
+	visitId,
+	staffId: 'staff-1',
+	staffName: 'Lena Vasquez',
+	createdAt: '2026-09-01T15:00:00Z',
+	scheduledAt: '2026-09-02T15:00:00Z',
+	type: 'prenatal',
+	isOffEngagement: false
+});
+
 // #250: a Visit's own scheduled date, distinct from createdAt.
 describe('the Visits section Date column and schedule control (#250)', () => {
 	beforeEach(() => {
@@ -930,6 +940,30 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 			await renderWithFixtureResponder();
 
 			await expect.poll(() => document.activeElement?.id).toBe('visit-row-table-visit-2');
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('reads on, a page at a time, to a Visit past the first page, and takes focus on it', async () => {
+		const original = pageState.url;
+		const requested: string[] = [];
+		try {
+			pageState.url = new URL('https://example.test/#visit-visit-9');
+			await renderWithFixtureResponder((path) => {
+				if (!path.includes('/visits')) return;
+				requested.push(path);
+				return Promise.resolve(
+					jsonResponse(
+						path.includes('cursor=c1')
+							? { items: [arrivalVisit('visit-9')], hasMore: false }
+							: { items: [arrivalVisit('visit-8')], hasMore: true, nextCursor: 'c1' }
+					)
+				);
+			});
+
+			await expect.poll(() => document.activeElement?.id).toBe('visit-row-table-visit-9');
+			expect(requested).toHaveLength(2);
 		} finally {
 			pageState.url = original;
 		}

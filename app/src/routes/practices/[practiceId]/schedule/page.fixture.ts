@@ -36,6 +36,16 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 			staffName: 'Bo Ng',
 			scheduledAt: '2026-09-19T02:05:00Z',
 			isOffEngagement: false
+		},
+		// The state that needs someone to act, in a later year so its day says the year too.
+		{
+			visitId: 'visit-3',
+			engagementId: 'eng-3',
+			clientName: 'Dara Quinn',
+			staffId: 'staff-2',
+			staffName: 'Bo Ng',
+			scheduledAt: '2027-01-04T10:30:00Z',
+			isOffEngagement: true
 		}
 	],
 	hasMore: false
@@ -43,7 +53,9 @@ export const schedulePage: CursorPage<ScheduledVisit> = {
 
 export const data: SchedulePageData = {
 	page: schedulePage,
-	filters: { from: '2026-09-07', to: '2026-10-07' },
+	view: { preset: 30, isMine: false, doula: '' },
+	filters: { from: '2026-09-07', to: '2026-10-06' },
+	isRosterUnavailable: false,
 	doulas: [
 		{ value: 'staff-1', label: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },
 		{ value: 'staff-2', label: 'Bo Ng' }
@@ -96,11 +108,14 @@ export const fixture: RouteFixture<RouteParameters> = {
 	variants: [typical, loading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
-	// The narrowing `data.filters` was read under: the screen's controls
-	// read it off the URL (#2255).
-	url: 'https://example.test/practices/practice-1/schedule?from=2026-09-07&to=2026-10-07',
-	// An Owner, so the Doula picker the roster read feeds is offered.
-	pageData: practiceSession(['owner']),
+	// The narrowing `data.view` was read under: the screen's controls
+	// read it off the URL (#2255). Bare, the next 30 days.
+	url: 'https://example.test/practices/practice-1/schedule',
+	// An Owner who is also a Doula at a Practice with another, so the Doula
+	// picker the roster read feeds and "Mine" are both offered.
+	pageData: {
+		session: { ...practiceSession(['owner', 'doula']).session, hasOtherDoulas: true }
+	},
 	props: { data },
 	// The route takes its first page from `load` rather than from a fetch,
 	// so the screen is on the page as soon as it renders; the heading is

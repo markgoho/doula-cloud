@@ -3,12 +3,14 @@ import {
 	formatActivityTimestamp,
 	formatCalendarDay,
 	formatCalendarMonth,
+	formatCalendarWeekdayDay,
 	formatInstant,
 	formatInstantWithClock,
 	formatInstantWithSeconds,
 	formatPostpartum,
 	formatPortalVisit,
 	formatScheduledVisit,
+	scheduledVisitParts,
 	toDatetimeLocalValue
 } from './dates.js';
 
@@ -82,6 +84,22 @@ describe('formatScheduledVisit', () => {
 	])('%s', (_name, iso, want) => {
 		const now = new Date(2026, 10, 13, 9, 0);
 		expect(formatScheduledVisit(iso, now)).toBe(want);
+	});
+});
+
+describe('scheduledVisitParts', () => {
+	it('splits the Visit’s words into its day, comma kept, and its clock', () => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(scheduledVisitParts(local(2026, 11, 15, 18, 0), now)).toEqual({ day: 'Sun Nov 15,', clock: '6:00pm' });
+		expect(scheduledVisitParts(local(2027, 3, 15, 14, 30), now)).toEqual({ day: 'Mon Mar 15, 2027,', clock: '2:30pm' });
+	});
+});
+
+describe('formatCalendarWeekdayDay', () => {
+	it('reads a calendar day as its own parts with its weekday, the year only when it is not this one', () => {
+		const now = new Date(2026, 10, 13, 9, 0);
+		expect(formatCalendarWeekdayDay('2026-11-13', now)).toBe('Fri Nov 13');
+		expect(formatCalendarWeekdayDay('2027-01-02', now)).toBe('Sat Jan 2, 2027');
 	});
 });
 
