@@ -218,7 +218,7 @@ func acceptInvite(r *http.Request, tx *sql.Tx, inviteToken string) (result accep
 		return acceptResult{}, "", "", false, http.StatusInternalServerError, apierr.CodeInternal, apierr.MsgInternalError
 	}
 	if !email.Valid || email.String == "" {
-		return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodeLinkUnusable, "this invitation can't be used -- ask your practice for help"
+		return acceptResult{}, "", "", false, http.StatusConflict, apierr.CodeLinkUnusable, "This invitation can't be used -- ask your practice for help"
 	}
 
 	// The most recent Engagement is the one an activity entry names when a
