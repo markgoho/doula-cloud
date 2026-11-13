@@ -136,6 +136,52 @@ describe('the Practice-wide schedule (#263)', () => {
 	});
 });
 
+// The heading is drawn once in the table and once above the cards, both always in the document.
+const headingCount = (text: string) => testPage.getByText(text, { exact: true }).elements().length;
+
+describe('each day’s Visits under a heading (#2867)', () => {
+	it('says each day, with its weekday, over that day’s Visits', async () => {
+		await setup();
+
+		expect(headingCount('Sat Sep 12')).toBe(2);
+		expect(headingCount('Sat Sep 19')).toBe(2);
+		expect(headingCount('Mon Jan 4, 2027')).toBe(2);
+		await expect.element(testPage.getByRole('table', { name: 'Visits' }).getByRole('row').first()).toBeVisible();
+	});
+
+	it('says Today and Tomorrow from the instant the days were read at', async () => {
+		await setup({ data: { ...data, now: new Date(2026, 8, 11, 9, 0) } });
+
+		expect(headingCount('Tomorrow, Sat Sep 12')).toBe(2);
+		expect(headingCount('Today, Sat Sep 12')).toBe(0);
+
+		await setup({ data: { ...data, now: new Date(2026, 8, 12, 9, 0) } });
+
+		expect(headingCount('Today, Sat Sep 12')).toBeGreaterThan(0);
+	});
+
+	it('says Today again from the new day when the tab comes back to the front', async () => {
+		await setup();
+		expect(headingCount('Today, Sat Sep 12')).toBe(0);
+
+		vi.setSystemTime(new Date(2026, 8, 12, 9, 0));
+		document.dispatchEvent(new Event('visibilitychange'));
+
+		await expect.poll(() => headingCount('Today, Sat Sep 12')).toBe(2);
+	});
+
+	it('keeps the heading it has while the tab is hidden', async () => {
+		await setup();
+		vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
+
+		vi.setSystemTime(new Date(2026, 8, 12, 9, 0));
+		document.dispatchEvent(new Event('visibilitychange'));
+
+		expect(headingCount('Today, Sat Sep 12')).toBe(0);
+		expect(headingCount('Sat Sep 12')).toBe(2);
+	});
+});
+
 describe('a booked Visit whose Doula was taken off (#2596)', () => {
 	it('reads "No longer on this work" after her name, in words, as a badge', async () => {
 		await setup();

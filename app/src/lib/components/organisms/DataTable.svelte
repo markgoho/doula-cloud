@@ -262,6 +262,23 @@
 		 * `aria-busy` on the table and on the record view's group.
 		 */
 		isBusy?: boolean;
+		/**
+		 * Draws a heading over each run of consecutive rows that share a key
+		 * (the Schedule's days). Rows are never reordered or regrouped: a key
+		 * that comes back after another one is a second heading, and a run
+		 * that continues onto a later page stays under its one heading. In
+		 * the table each run is its own `<tbody>` opened by a heading row,
+		 * one `<th scope="rowgroup">` across every column at the row height;
+		 * in the record view the heading sits above its cards. Absent, the
+		 * table is one `<tbody>` and nothing is drawn.
+		 */
+		rowGroup?: (row: T) => { key: string; label: string };
+		/**
+		 * The heading level of a group's heading in the record view, which
+		 * only the page can know. The table's own heading row is a row group
+		 * header and has no level.
+		 */
+		groupHeadingLevel?: 2 | 3;
 	}
 
 	let {
@@ -284,8 +301,41 @@
 		caption,
 		describedBy,
 		hasRowHeader = true,
-		isBusy = false
+		isBusy = false,
+		rowGroup,
+		groupHeadingLevel = 2
 	}: Properties<T> = $props();
+
+	interface Entry<T> {
+		row: T;
+		index: number;
+		opensGroup: boolean;
+	}
+
+	interface Group<T> {
+		start: number;
+		key?: string;
+		label?: string;
+		entries: Entry<T>[];
+	}
+
+	/*
+	 * Runs of consecutive rows with the same key, each row keeping its place
+	 * in `rows`. Without `rowGroup` the rows are one run with no heading.
+	 */
+	const groups = $derived.by(() => {
+		const runs: Group<T>[] = [];
+		for (const [index, row] of rows.entries()) {
+			const group = rowGroup?.(row);
+			let run = runs.at(-1);
+			if (!run || (group && group.key !== run.key)) {
+				run = { start: index, key: group?.key, label: group?.label, entries: [] };
+				runs.push(run);
+			}
+			run.entries.push({ row, index, opensGroup: group !== undefined && run.entries.length === 0 });
+		}
+		return runs;
+	});
 
 	/*
 	 * Where focus goes after "Load more" (#2105): to the first row it
@@ -314,8 +364,9 @@
 		}
 		firstNewRowIndex = undefined;
 		// Both trees hold the row; the container query displays one.
+		const at = `[data-row-index="${CSS.escape(String(index))}"]`;
 		const candidates = frame!.querySelectorAll<HTMLElement>(
-			`.table-view > tbody > tr:nth-child(${index + 1}), .record-view > .record:nth-child(${index + 1})`
+			`.table-view > tbody > tr${at}, .record-view > .record${at}`
 		);
 		for (const candidate of candidates) {
 			if (!candidate.checkVisibility()) continue;
@@ -436,9 +487,20 @@
 					{/if}
 				</tr>
 			</thead>
+			{#each groups as group (group.start)}
 			<tbody>
-				{#each rows as row, index (index)}
-					<tr id={rowId?.(row, 'table')} tabindex={rowId ? -1 : undefined}>
+				{#if group.label !== undefined}
+					<tr class="group-heading">
+						<th scope="rowgroup" colspan={columns.length + (rowActions ? 1 : 0)}>{group.label}</th>
+					</tr>
+				{/if}
+				{#each group.entries as { row, index, opensGroup } (index)}
+					<tr
+						id={rowId?.(row, 'table')}
+						tabindex={rowId ? -1 : undefined}
+						data-row-index={index}
+						class:opens-group={opensGroup}
+					>
 						{#each columns as column, columnIndex (column.label)}
 							<!-- `content` has no counterpart on the record view's
 							     own `<dd>` below, and that asymmetry is deliberate:
@@ -466,6 +528,7 @@
 					</tr>
 				{/each}
 			</tbody>
+			{/each}
 		</table>
 
 		<!--
@@ -481,7 +544,11 @@
 		     built against and the test suite -- a real div doesn't have that
 		     failure mode. -->
 		<div class="record-view" role={caption ? 'group' : undefined} aria-label={caption} aria-describedby={describedBy} aria-busy={isBusy}>
-			{#each rows as row, index (index)}
+			{#each groups as group (group.start)}
+			{#if group.label !== undefined}
+				<svelte:element this={`h${groupHeadingLevel}`} class="group-title">{group.label}</svelte:element>
+			{/if}
+			{#each group.entries as { row, index } (index)}
 				<!-- Each record is a card (#2022): its first column as the
 				     title, the thing a reader finds a record by (Serial
 				     Position), the rest as `SummaryList` rows (#2021), and its
@@ -493,7 +560,7 @@
 				<!-- The tabindex is only ever -1, which the check cannot see
 				     through the condition. -->
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div class="record" id={rowId?.(row, 'record')} tabindex={rowId ? -1 : undefined}>
+				<div class="record" id={rowId?.(row, 'record')} tabindex={rowId ? -1 : undefined} data-row-index={index}>
 					<div class="record-title">{@render cell(columns[0]!, 0, row, 'record')}</div>
 					{#if fields.length > 0 && recordLayout === 'compact'}
 						<!-- The first field is the line under the title; the rest share
@@ -544,6 +611,7 @@
 						</cluster-l>
 					{/if}
 				</div>
+			{/each}
 			{/each}
 		</div>
 	{/if}
@@ -799,9 +867,34 @@
 			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
 		}
 
+		/* A row that opens a group keeps its heading row clear as well. */
+		.table-view > tbody > tr.opens-group :global(:is(a, button, input, select, textarea, [tabindex])),
+		.table-view > tbody > tr.opens-group[tabindex] {
+			scroll-margin-block-start: calc(2 * var(--row-height) + var(--border-thin));
+		}
+
+		/* A group's heading row: the row height and rule, no tint, so it is never mistaken for the header or a hover. */
+		.group-heading th {
+			color: var(--color-on-surface);
+			font-weight: var(--font-weight-semibold);
+		}
+
+		.group-title {
+			margin: 0;
+			grid-column: 1 / -1;
+			color: var(--color-on-surface);
+			font-size: var(--text-body-sm-size);
+			font-weight: var(--font-weight-semibold);
+			line-height: var(--text-body-sm-leading);
+		}
+
+		.group-title:not(:first-child) {
+			margin-block-start: var(--space-related);
+		}
+
 		/* A row hover tint. The row's link stays the one target, and the
 		   tint is never the only cue for anything. */
-		tbody tr:hover > :is(td, th) {
+		tbody tr:not(.group-heading):hover > :is(td, th) {
 			background-color: var(--color-surface-container);
 		}
 

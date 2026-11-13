@@ -95,6 +95,7 @@ describe('schedule/+page.ts load', () => {
 		expect(new Date(url.searchParams.get('to')!)).toEqual(new Date(2026, 8, 20));
 		expect(url.searchParams.get('staffId')).toBe('staff-1');
 		expect(result.filters).toEqual({ from: '2026-09-12', to: '2026-09-19', staffId: 'staff-1' });
+		expect(result.now).toBeInstanceOf(Date);
 		expect(result.page).toEqual(emptyPage);
 	});
 

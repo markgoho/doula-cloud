@@ -280,6 +280,20 @@ export function scheduleDaysTag(days: ScheduleDays, now: Date = new Date()): str
 }
 
 /**
+ * The day heading a Visit sits under, in the reader's zone: "Today, Fri Nov
+ * 13", "Tomorrow, Sat Nov 14", then the day as a row writes it, "Sun Nov 15".
+ * `key` is the calendar day, so a day that spans two pages is one heading.
+ */
+export function scheduleDayGroup(scheduledAt: string, now: Date): { key: string; label: string } {
+	const key = toDateInputValue(new Date(scheduledAt));
+	const today = toDateInputValue(now);
+	const day = formatCalendarWeekdayDay(key, now);
+	if (key === today) return { key, label: `Today, ${day}` };
+	if (key === addDays(today, 1)) return { key, label: `Tomorrow, ${day}` };
+	return { key, label: day };
+}
+
+/**
  * A day held whole on one line: its spaces do not break, so a line wraps
  * between days and never inside one.
  */

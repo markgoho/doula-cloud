@@ -9,6 +9,7 @@ import {
 	practiceSchedulePath,
 	scheduleDaysOf,
 	scheduleDaysTag,
+	scheduleDayGroup,
 	scheduleEmptyNextStep,
 	scheduleHref,
 	scheduleRangeErrors,
@@ -433,6 +434,32 @@ describe('scheduleResultSummary', () => {
 		expect(say(0, false, { isMine: true, doulaName: 'Priya Raman' })).toBe(
 			'No Visits for Priya Raman that are also yours from Fri Nov 13 to Thu Nov 19.'
 		);
+	});
+});
+
+const at = (year: number, month: number, date: number, hour = 14) =>
+	new Date(year, month - 1, date, hour).toISOString();
+
+describe('scheduleDayGroup (#2867)', () => {
+	const now = localDay(2026, 11, 13);
+
+	it('says Today and Tomorrow with the day, and any other day as a row writes it', () => {
+		expect(scheduleDayGroup(at(2026, 11, 13), now)).toEqual({ key: '2026-11-13', label: 'Today, Fri Nov 13' });
+		expect(scheduleDayGroup(at(2026, 11, 14), now)).toEqual({ key: '2026-11-14', label: 'Tomorrow, Sat Nov 14' });
+		expect(scheduleDayGroup(at(2026, 11, 15), now)).toEqual({ key: '2026-11-15', label: 'Sun Nov 15' });
+	});
+
+	it('says the year only when the day is not this one', () => {
+		expect(scheduleDayGroup(at(2027, 1, 4), now).label).toBe('Mon Jan 4, 2027');
+	});
+
+	it('keys two Visits of one day alike, whatever the hour, and a past day as a plain day', () => {
+		expect(scheduleDayGroup(at(2026, 11, 15, 1), now).key).toBe(scheduleDayGroup(at(2026, 11, 15, 23), now).key);
+		expect(scheduleDayGroup(at(2026, 11, 12), now).label).toBe('Thu Nov 12');
+	});
+
+	it('reads Tomorrow across a month end', () => {
+		expect(scheduleDayGroup(at(2026, 12, 1), localDay(2026, 11, 30)).label).toBe('Tomorrow, Tue Dec 1');
 	});
 });
 

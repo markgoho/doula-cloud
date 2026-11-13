@@ -21,7 +21,7 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 
 ## Where this screen differs from the climbed lists, and why
 
-- **The order is time, and the weekday leads.** The Clients and Invoices lists are books a reader narrows; the Schedule is read forward from now, and "her Thursday" is the unit (`journeys/practice-owner.md:120`). A Visit's day reads as ADR-0022's 2026-10-24 amendment writes it ("Thu Sep 4, 2:00pm"), here and on the Engagement, by one formatter in `app/src/lib/dates.ts`. A day's Visits sit under that day's heading (#2867); the rows under it are the same height.
+- **The order is time, and the weekday leads.** The Clients and Invoices lists are books a reader narrows; the Schedule is read forward from now, and "her Thursday" is the unit (`journeys/practice-owner.md:120`). A Visit's day reads as ADR-0022's 2026-10-24 amendment writes it ("Thu Sep 4, 2:00pm"), here and on the Engagement, by one formatter in `app/src/lib/dates.ts`. Rows stay rows: `DataTable` groups them under a day's heading row and adds no other kind, and every row, the heading included, is the row height (DESIGN.md).
 - **A three-column list keeps its content measure.** Its table is narrower than the siblings' five-column tables, and the Doula track is held so the table is the same width in every filter state (DESIGN.md, Data table: a table stops where its columns are satisfied).
 - **The narrowing always has a range.** A bare address means "Next 30 days", today and the 29 days after it (`visitSchedule.ts`), so "no filter" on this screen is the default range, and the way back from an empty result is to that range, not to "everything".
 - **No Client's name is filtered here.** The address carries days and a Staff id only, so #1829 does not bind; nothing is added that would put a name in a URL.
@@ -48,8 +48,8 @@ Decided 2026-11-13 (#2866); the sort verdict was reversed the same day (#2869). 
 | Sort by Doula or by Client | Declined | every row of one Doula or one Client is a narrowing; the Doula select and "Mine" do it (T2, T4), and the Clients list's Name search and the Engagement do the Client |
 | Search by Client | Declined | the Clients list's Name search and the Engagement's Visits do it; a search here would be a POST kept by history, as on the siblings (#1829) |
 | Date navigation | Have it | "Next 7 days", "Next 30 days", "Choose days"; previous and next week declined: "Choose days" does it within the Tab budget |
-| Grouping by day, with a today marker | Build (#2867) | the category's schedule view; T5 and `personas/employed-doula.md:17` |
-| Relative days ("Today", "Tomorrow") | Build, in the day heading (#2867) | the cell keeps `VisitWhen` so the Schedule and the Engagement read the same; ADR-0022's "relative under seven days" is the ledger's rule for past entries |
+| Grouping by day, with a today marker | Have it | a heading row per day over its Visits, "Today, Fri Nov 13" marking today (#2867); T5 and `personas/employed-doula.md:17` |
+| Relative days ("Today", "Tomorrow") | Have it | "Today" and "Tomorrow" lead the day heading (#2867); the cell keeps `VisitWhen` so the Schedule and the Engagement read the same; ADR-0022's "relative under seven days" is the ledger's rule for past entries |
 | Grouping by person | Declined | the Doula select does it |
 | A week or month calendar beside the list | Later (#330) | a Visit has no length or end time, so no grid can be drawn |
 | A total count | Build (#2867) | the result line says "the first 30 Visits" and no total, where the Invoices list says "the first 30 of 35"; the BFF answers a page and whether more exist, so the count of the days chosen is a new figure on the read. Declining it because the endpoint lacks it would be declining it because it is work |

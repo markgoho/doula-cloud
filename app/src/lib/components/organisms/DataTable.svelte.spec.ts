@@ -1343,3 +1343,99 @@ describe('the record view (#508, ADR-0024)', () => {
 		expect(onRemove).toHaveBeenCalledExactlyOnceWith(rows[1]);
 	});
 });
+
+describe('rows grouped under a heading (#2867)', () => {
+	const grouped: Row[] = [
+		{ name: 'Ada Lovelace', status: 'Active' },
+		{ name: 'Grace Hopper', status: 'Active' },
+		{ name: 'Katherine Johnson', status: 'Inactive' },
+		{ name: 'Dorothy Vaughan', status: 'Active' }
+	];
+	const rowGroup = (row: Row) => ({ key: row.status, label: `${row.status} Clients` });
+
+	async function setupGrouped(properties: Record<string, unknown> = {}) {
+		await page.viewport(...WIDE);
+		return render(DataTable<Row>, { columns, rows: grouped, emptyMessage: 'None.', rowGroup, ...properties });
+	}
+
+	it('draws one tbody per run of rows, opened by a row group header across every column', async () => {
+		const { container } = await setupGrouped();
+
+		const bodies = [...container.querySelectorAll(':scope .table-view > tbody')];
+		expect(bodies.map((body) => body.querySelectorAll('tr').length)).toEqual([3, 2, 2]);
+		const headings = [...container.querySelectorAll(':scope .table-view th[scope="rowgroup"]')];
+		expect(headings.map((heading) => heading.textContent)).toEqual([
+			'Active Clients',
+			'Inactive Clients',
+			'Active Clients'
+		]);
+		expect(headings.every((heading) => heading.getAttribute('colspan') === '2')).toBe(true);
+		await expect.element(page.elementLocator(headings[1]!)).toBeVisible();
+	});
+
+	it('spans the actions column too', async () => {
+		const { container } = await setupGrouped({
+			rowActions: { label: 'Actions', content: removeActionSnippet(() => {}) }
+		});
+
+		expect(container.querySelector(':scope .table-view th[scope="rowgroup"]')).toHaveAttribute('colspan', '3');
+	});
+
+	it('draws no heading and one tbody when no rowGroup is given', async () => {
+		const { container } = await setupGrouped({ rowGroup: undefined });
+
+		expect(container.querySelectorAll(':scope .table-view > tbody')).toHaveLength(1);
+		expect(container.querySelector(':scope .group-heading')).toBeNull();
+		expect(container.querySelector(':scope .group-title')).toBeNull();
+	});
+
+	it('keeps a run under its one heading when a later page continues it, and moves focus to the first new row', async () => {
+		const added: Row = { name: 'Mary Jackson', status: 'Active' };
+		const onLoadMore = vi.fn();
+		const first = grouped.slice(0, 2);
+		const { rerender, container } = await setupGrouped({ rows: first, hasMore: true, onLoadMore });
+		onLoadMore.mockImplementation(() => void rerender({ rows: [...first, added], hasMore: false }));
+
+		await page.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.poll(() => document.activeElement?.textContent).toContain('Mary Jackson');
+		expect(container.querySelectorAll(':scope .table-view .group-heading')).toHaveLength(1);
+		expect(document.activeElement).toHaveAttribute('data-row-index', '2');
+	});
+
+	it('moves focus to a new row that opens a group', async () => {
+		const added: Row = { name: 'Mary Jackson', status: 'Inactive' };
+		const onLoadMore = vi.fn();
+		const first = grouped.slice(0, 2);
+		const { rerender, container } = await setupGrouped({ rows: first, hasMore: true, onLoadMore });
+		onLoadMore.mockImplementation(() => void rerender({ rows: [...first, added], hasMore: false }));
+
+		await page.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.poll(() => document.activeElement?.textContent).toContain('Mary Jackson');
+		expect(container.querySelectorAll(':scope .table-view .group-heading')).toHaveLength(2);
+		expect(document.activeElement).toHaveClass('opens-group');
+	});
+
+	it('draws each heading above its cards in the record view at the level the page passes', async () => {
+		const { container } = await setupGrouped({ groupHeadingLevel: 3 });
+		await page.viewport(...NARROW);
+
+		const recordView = container.querySelector('.record-view')!;
+		const headings = [...recordView.querySelectorAll(':scope > h3')];
+		expect(headings.map((heading) => heading.textContent)).toEqual([
+			'Active Clients',
+			'Inactive Clients',
+			'Active Clients'
+		]);
+		expect(recordView.querySelectorAll(':scope > .record')).toHaveLength(4);
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Inactive Clients' })).toBeVisible();
+	});
+
+	it('draws the record view headings as level 2 by default', async () => {
+		await setupGrouped();
+		await page.viewport(...NARROW);
+
+		await expect.element(page.getByRole('heading', { level: 2, name: 'Inactive Clients' })).toBeVisible();
+	});
+});

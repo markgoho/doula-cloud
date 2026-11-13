@@ -55,6 +55,7 @@ export const data: SchedulePageData = {
 	page: schedulePage,
 	view: { preset: 30, isMine: false, doula: '' },
 	filters: { from: '2026-09-07', to: '2026-10-06' },
+	now: new Date(2026, 8, 7, 9, 0),
 	isRosterUnavailable: false,
 	doulas: [
 		{ value: 'staff-1', label: 'Persephone Vandermeulen-Achterberg, CD(DONA)' },

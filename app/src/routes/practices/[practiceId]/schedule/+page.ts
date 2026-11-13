@@ -29,6 +29,10 @@ export interface SchedulePageData {
 	 */
 	filters: ResolvedScheduleFilters;
 	/**
+	The instant the days were worked out from, so a heading's "Today" and the days cannot disagree.
+	*/
+	now: Date;
+	/**
 	Why the address's days are not a range, per field.
 	*/
 	rangeErrors?: ScheduleRangeErrors;
@@ -75,7 +79,8 @@ export const load: PageLoad = async ({
 		canNarrowToMine(session),
 		isOwnerOrAdmin(session) ? undefined : { staffId: session.staffId }
 	);
-	const read = scheduleDaysOf(view);
+	const now = new Date();
+	const read = scheduleDaysOf(view, now);
 	const whose = scheduleStaffId(view, session.staffId);
 	const filters: ResolvedScheduleFilters = read.days
 		? { ...read.days, staffId: whose.staffId }
@@ -90,7 +95,7 @@ export const load: PageLoad = async ({
 	const joined = async (): Promise<StreamedRead<SchedulePageData>> => {
 		const [landed, doulas] = await Promise.all([schedule, roster]);
 		if (!landed.isLoaded) return landed;
-		return { isLoaded: true, value: { page: landed.value, view, filters, rangeErrors: read.errors, ...doulas } };
+		return { isLoaded: true, value: { page: landed.value, view, filters, now, rangeErrors: read.errors, ...doulas } };
 	};
 	return { read: joined() };
 };
