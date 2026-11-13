@@ -42,6 +42,19 @@ func seedClientInvoiceDue(t *testing.T, db *testdb.DB, practiceID, contractID st
 	}
 }
 
+// onlyLine lists practiceID's Clients as uid at overdueNow and returns the
+// one open line it holds.
+func onlyLine(t *testing.T, db *testdb.DB, uid, practiceID string) client.OpenEngagement {
+	t.Helper()
+	srv, session := newServerAt(t, db, uid, overdueNow)
+	defer srv.Close()
+	list, _ := listAt(t, srv, session, practiceID)
+	if len(list.Items) != 1 || len(list.Items[0].OpenEngagements) != 1 {
+		t.Fatalf("list = %+v, want one line", list.Items)
+	}
+	return list.Items[0].OpenEngagements[0]
+}
+
 func listAt(t *testing.T, srv *httptest.Server, session, practiceID string) (client.ListResponse, string) {
 	t.Helper()
 	resp := authedGet(t, session, srv.URL+"/api/practices/"+practiceID+"/clients?all=true")
@@ -139,14 +152,7 @@ func TestListHandler_OpenEngagementsRollup_PaymentOnItsWay(t *testing.T) {
 		t.Fatalf("mark payment processing: %v", err)
 	}
 
-	srv, session := newServerAt(t, db, ownerUID, overdueNow)
-	defer srv.Close()
-	list, _ := listAt(t, srv, session, practiceID)
-
-	if len(list.Items) != 1 || len(list.Items[0].OpenEngagements) != 1 {
-		t.Fatalf("list = %+v, want one line", list.Items)
-	}
-	if got := list.Items[0].OpenEngagements[0].PaymentProcessing; got == nil || !*got {
+	if got := onlyLine(t, db, ownerUID, practiceID).PaymentProcessing; got == nil || !*got {
 		t.Fatalf("paymentProcessing = %v, want true", got)
 	}
 }

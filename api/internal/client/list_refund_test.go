@@ -36,13 +36,7 @@ func TestListHandler_OpenEngagementsRollup_RefundedCents(t *testing.T) {
 		t.Fatalf("seed refund: %v", err)
 	}
 
-	srv, session := newServerAt(t, db, ownerUID, overdueNow)
-	defer srv.Close()
-	list, _ := listAt(t, srv, session, practiceID)
-	if len(list.Items) != 1 || len(list.Items[0].OpenEngagements) != 1 {
-		t.Fatalf("list = %+v, want one line", list.Items)
-	}
-	line := list.Items[0].OpenEngagements[0]
+	line := onlyLine(t, db, ownerUID, practiceID)
 	if line.InvoiceStatus == nil || *line.InvoiceStatus != paidStatus {
 		t.Fatalf("invoiceStatus = %v, want paid", line.InvoiceStatus)
 	}
