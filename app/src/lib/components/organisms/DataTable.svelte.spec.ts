@@ -1169,7 +1169,7 @@ describe('the record view (#508, ADR-0024)', () => {
 		await page.viewport(...WIDE);
 		const host = document.createElement('div');
 		host.style.setProperty('--data-table-table-display', 'none');
-		host.style.setProperty('--data-table-records-display', 'block');
+		host.style.setProperty('--data-table-records-display', 'grid');
 		document.body.append(host);
 		try {
 			const { container } = await render(
@@ -1179,9 +1179,61 @@ describe('the record view (#508, ADR-0024)', () => {
 			);
 
 			expect(getComputedStyle(container.querySelector('.table-view')!).display).toBe('none');
-			expect(getComputedStyle(container.querySelector('.record-view')!).display).toBe('block');
+			expect(getComputedStyle(container.querySelector('.record-view')!).display).toBe('grid');
 		} finally {
 			host.remove();
+		}
+	});
+
+	/*
+	 * #2842: between a card's width and the table's floor the records sit
+	 * in as many columns as the frame holds. The DOM stays the list's
+	 * order, so each record comes after the one before it reading across
+	 * and then down, and Tab follows the same order.
+	 */
+	it('lays records out in two columns in a frame that holds two, in list order', async () => {
+		await page.viewport(...WIDE);
+		const parent = document.createElement('div');
+		parent.style.inlineSize = '800px';
+		document.body.append(parent);
+		try {
+			const four: Row[] = ['Ada', 'Grace', 'Katherine', 'Margaret'].map((name) => ({ name, status: 'Active' }));
+			const { container } = await render(
+				DataTable<Row>,
+				{ columns, rows: four, emptyMessage: 'No records yet.' },
+				{ baseElement: parent }
+			);
+			const records = [...container.querySelectorAll<HTMLElement>(':scope .record-view .record')];
+			const rects = records.map((record) => record.getBoundingClientRect());
+
+			expect(records.map((record) => record.querySelector('.record-title')?.textContent)).toEqual(['Ada', 'Grace', 'Katherine', 'Margaret']);
+			expect(rects[1]!.top).toBe(rects[0]!.top);
+			expect(rects[1]!.left).toBeGreaterThan(rects[0]!.right - 1);
+			expect(rects[2]!.top).toBeGreaterThan(rects[0]!.bottom - 1);
+			expect(rects[2]!.left).toBe(rects[0]!.left);
+			expect(rects[3]!.left).toBe(rects[1]!.left);
+		} finally {
+			parent.remove();
+		}
+	});
+
+	it('keeps one column of records in a frame that holds one', async () => {
+		await page.viewport(...WIDE);
+		const parent = document.createElement('div');
+		parent.style.inlineSize = '320px';
+		document.body.append(parent);
+		try {
+			const { container } = await render(
+				DataTable<Row>,
+				{ columns, rows, emptyMessage: 'No records yet.' },
+				{ baseElement: parent }
+			);
+			const [first, second] = [...container.querySelectorAll<HTMLElement>(':scope .record-view .record')].map((record) => record.getBoundingClientRect());
+
+			expect(second!.left).toBe(first!.left);
+			expect(second!.top).toBeGreaterThan(first!.bottom - 1);
+		} finally {
+			parent.remove();
 		}
 	});
 
