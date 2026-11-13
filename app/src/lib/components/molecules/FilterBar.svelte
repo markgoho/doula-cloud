@@ -525,6 +525,12 @@
 			visibility: hidden;
 		}
 
+		/* What the box reserves and the count does not take lies above the
+		   count, so the count sits the related step from the list it counts. */
+		.ruled > .line:not(.ruler) {
+			align-self: end;
+		}
+
 		.ruler > .status {
 			max-block-size: 2lh;
 			overflow: hidden;

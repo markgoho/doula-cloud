@@ -497,11 +497,12 @@
 						{#if rest.length > 0}
 							<div class="compact-meta">
 								{#each rest as field, index (field.label)}
-									<!-- The dot rides at the end of the field before it, so a line
-									     that wraps ends on a dot and never starts with one. -->
+									<!-- The dot hangs in the gap before its field, so a field that
+									     starts a line takes its dot past the line's start, where it is
+									     clipped: no line starts or ends on one. -->
 									<span class="compact-field">
 										<span class="visually-hidden">{`${field.label}: `}</span>
-										{@render cell(field.column, field.columnIndex, row, view)}{#if index < rest.length - 1}<span class="compact-separator" aria-hidden="true">·</span>{/if}
+										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}{@render cell(field.column, field.columnIndex, row, view)}
 									</span>
 								{/each}
 							</div>
@@ -1009,17 +1010,31 @@
 			font-variant-numeric: tabular-nums;
 		}
 
-		/* The fields run on as one line of text and wrap where a line runs
-		   out, between words, so a short field fills the end of the line a
-		   long one left (#2746). A caller that wants one field to a line
-		   makes the line a column (the Clients list). */
+		/* The fields run on as one line and wrap between fields, so a short
+		   field fills the end of the line a long one left (#2746). Each dot
+		   sits in the gap before its field; a field that starts a line puts
+		   its dot past the line's start, which the clip hides; only that
+		   edge is clipped, so a field too long for its line still shows. A
+		   caller that wants one field to a line makes the line a column (the
+		   Clients list). */
 		.compact-meta {
+			display: flex;
+			flex-wrap: wrap;
+			column-gap: var(--space-3);
+			clip-path: inset(-100vmax -100vmax -100vmax 0);
 			color: var(--color-on-surface-variant);
 			overflow-wrap: anywhere;
 		}
 
+		.compact-field {
+			min-inline-size: 0;
+		}
+
 		.compact-separator {
-			padding-inline-start: var(--space-1);
+			display: inline-block;
+			inline-size: var(--space-3);
+			margin-inline-start: calc(-1 * var(--space-3));
+			text-align: center;
 		}
 
 		/* The last row's hairline is the card's edge's job. */

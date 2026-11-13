@@ -340,7 +340,8 @@
 	 * The GOV.UK "selected filters": one removable tag for the view and one
 	 * for the search, each a link to the list minus that one. The search is in
 	 * no address, so removing the view hands it on in the history entry's
-	 * state, and removing the search hands on an empty one.
+	 * state, and removing the search hands on an empty one. "Clear filters"
+	 * is drawn only beside two tags: beside one, its × does the same.
 	 */
 	type AppliedTag = { text: string; href: string; search: string };
 	const appliedTags = $derived.by(() => {
@@ -576,7 +577,7 @@
 				appliedRuler={VIEW_OPTIONS.map((option) => option.tag).toSorted((a, b) => b.length - a.length)[0]}
 				statusId={RESULT_ID}
 				empty={shown !== undefined && invoices.items.length === 0}
-				clearHref={appliedTags.length > 0 ? invoicesHref : undefined}
+				clearHref={appliedTags.length > 1 ? invoicesHref : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
 				foldsFieldsOnly
 				{isBusy}
@@ -655,6 +656,14 @@
 			display: flex;
 			flex-wrap: wrap;
 			gap: 0 var(--space-5);
+			container-type: inline-size;
+		}
+
+		/* The body size against the totals' own width, which is the bar's and
+		   the list's, so the totals are the list's body step and not the page
+		   frame's, whose width takes in the gutters. */
+		.totals > :global(*) {
+			font-size: var(--text-body-size);
 		}
 
 		.totals :global(dt) {

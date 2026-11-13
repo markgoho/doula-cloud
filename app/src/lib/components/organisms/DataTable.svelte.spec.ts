@@ -371,6 +371,29 @@ describe('DataTable.svelte', () => {
 		expect(metas[0]!.textContent).toContain('Priya Raman');
 	});
 
+	it('never ends or starts a compact record’s wrapped line on a dot', async () => {
+		const days = ['Sent', 'Paid', 'Due'].map((label) => ({ label, accessor: () => `${label} Nov 12, 2026` }));
+		await setup({ columns: [...columns, ...days], recordLayout: 'compact', caption: 'People' });
+		await page.viewport(...NARROW);
+
+		// No accessible signal: the dots are aria-hidden, and where each is drawn is the fact.
+		const meta = page.getByRole('group', { name: 'People' }).element().querySelector<HTMLElement>('.compact-meta')!;
+		const fields = [...meta.children] as HTMLElement[];
+		const tops = new Set(fields.map((field) => Math.round(field.getBoundingClientRect().top)));
+		expect(tops.size, 'the fields wrap to more than one line').toBeGreaterThan(1);
+		expect(tops.size, 'and two of them share a line').toBeLessThan(fields.length);
+		const edge = meta.getBoundingClientRect().left;
+		for (const [index, field] of fields.entries()) {
+			const dot = field.querySelector('[aria-hidden="true"]');
+			if (index === 0) {
+				expect(dot).toBeNull();
+				continue;
+			}
+			const isLineStart = Math.round(field.getBoundingClientRect().top) !== Math.round(fields[index - 1]!.getBoundingClientRect().top);
+			expect(dot!.getBoundingClientRect().right <= edge, `field ${index}'s dot is past the line's start only when the field starts a line`).toBe(isLineStart);
+		}
+	});
+
 	it('marks the table and the record view busy while a newer page is on its way', async () => {
 		await setup({ caption: 'Clients', isBusy: true });
 

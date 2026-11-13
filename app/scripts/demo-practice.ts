@@ -359,6 +359,7 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 		note: 'Check 1042',
 		paidOn: dayAfter(today, -2)
 	});
+	backdateInvoice(paid, 1);
 	await scheduleVisit(request, roster, tessa, priya.staffId, instantAfter(today, 7, 15));
 	await send(request, 'POST', messagesPath(tessa), priya.headers, {
 		body: 'Your check came in, thank you. See you next week.'
@@ -446,13 +447,13 @@ const BOOK_INVOICES: readonly (readonly BookInvoice[])[] = [
 	],
 	[
 		{
-			raisedDaysAgo: 70,
-			paid: { method: 'bank_transfer', daysAgo: 64 },
+			raisedDaysAgo: 42,
+			paid: { method: 'bank_transfer', daysAgo: 37 },
 			after: { refundCents: 30_000, method: 'check', note: 'Two prenatal visits not used' }
 		}
 	],
 	[{ raisedDaysAgo: 38, paid: { method: 'check', note: 'Check 5530', daysAgo: 33 }, after: { reverse: 'The check was returned unpaid by the bank' } }],
-	[{ raisedDaysAgo: 105, after: 'write-off' }],
+	[{ raisedDaysAgo: 65, after: 'write-off' }],
 	[{ share: 0.4, after: 'void' }, { dueInDays: 21 }],
 	[{ share: 1 / 3, raisedDaysAgo: 35, dueInDays: 10 }],
 	[{ raisedDaysAgo: 33 }],
@@ -486,8 +487,9 @@ function isCareFinished(index: number, client: ProvisionedClient): boolean {
 // An agency's Invoice book across the tail (#2746): mostly paid, some owed
 // and not yet due, several overdue by different days, deposits and
 // balances on one Contract, and a refund, a bounced check, a write-off and
-// a void. Not on the two Engagements the Offers are on, nor on finished
-// care. Raised after Priya's three, so INV-0001 to INV-0003 stay hers. A
+// a void, each young enough to be on the list's first page. Not on the two
+// Engagements the Offers are on, nor on finished care. Raised after
+// Priya's three, so INV-0001 to INV-0003 stay hers. A
 // tail Client has no address, and accepting a portal invitation needs one.
 async function seedInvoiceBook(
 	request: APIRequestContext,

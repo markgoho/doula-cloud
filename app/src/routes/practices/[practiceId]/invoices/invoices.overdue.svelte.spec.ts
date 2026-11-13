@@ -113,9 +113,8 @@ describe('the overdue book (#768)', () => {
 
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 2 overdue Invoices, longest overdue first.');
 		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).toBeChecked();
-		await expect
-			.element(testPage.getByRole('link', { name: 'Clear filters' }))
-			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
+		// One way out for one filter: the tag's ×, with no "Clear filters" beside it.
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Remove filter: Overdue Invoices' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
@@ -152,7 +151,7 @@ describe('the overdue book (#768)', () => {
 		pageState.url = new URL(narrowedToOverdue.url!);
 		await setup({ ...data, view: 'overdue', overdueCount: 1 });
 
-		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Overdue Invoices' })).toBeVisible();
 		expect(apply().left).toBe(before.left);
 		expect(apply().top).toBe(before.top);
 		// The tag stands before the line on its row, so the line starts after it.
