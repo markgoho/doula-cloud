@@ -227,7 +227,7 @@
 
 	function seedDrafts() {
 		draftChoice = view.chosen ? 'choose' : (view.preset === SHORT_SCHEDULE_DAYS ? '7' : '30');
-		const shown = view.chosen ?? scheduleDaysOf(view, timeZone).days!;
+		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
 		toValue = shown.to;
 		isMineChecked = view.isMine;
@@ -256,7 +256,8 @@
 		if (choice === 'choose' && draftChoice !== 'choose') {
 			const shown = scheduleDaysOf(
 				{ ...view, chosen: undefined, preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS },
-				timeZone
+				timeZone,
+				now
 			).days!;
 			fromValue = shown.from;
 			toValue = shown.to;
@@ -311,7 +312,7 @@
 		const tags: AppliedTag[] = [];
 		const without = (change: Partial<ScheduleView>) => scheduleHref(basePath, { ...view, ...change });
 		if (view.chosen) {
-			const days = scheduleDaysOf(view, timeZone).days;
+			const days = scheduleDaysOf(view, timeZone, now).days;
 			if (days) tags.push({ text: scheduleDaysTag(days, timeZone, now), href: scheduleHref(basePath, withDefaultDays(view)) });
 		} else if (view.preset === SHORT_SCHEDULE_DAYS) {
 			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)) });

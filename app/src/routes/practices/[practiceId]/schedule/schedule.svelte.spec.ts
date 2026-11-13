@@ -58,7 +58,7 @@ beforeEach(async () => {
 	await testPage.viewport(1440, 900);
 	// The fixture's days are the next 30 from September 7, so "today" is that day.
 	vi.useFakeTimers({ toFake: ['Date'] });
-	vi.setSystemTime(new Date(2026, 8, 7, 9, 0));
+	vi.setSystemTime(new Date('2026-09-07T13:00:00Z'));
 	apiFetchWithSession.mockReset();
 	vi.mocked(goto).mockReset();
 	Object.assign(pageState, toPageState(fixture));
@@ -151,12 +151,12 @@ describe('each day’s Visits under a heading (#2867)', () => {
 	});
 
 	it('says Today and Tomorrow from the instant the days were read at', async () => {
-		await setup({ data: { ...data, now: new Date(2026, 8, 11, 9, 0) } });
+		await setup({ data: { ...data, now: new Date('2026-09-11T13:00:00Z') } });
 
 		expect(headingCount('Tomorrow, Sat Sep 12')).toBe(2);
 		expect(headingCount('Today, Sat Sep 12')).toBe(0);
 
-		await setup({ data: { ...data, now: new Date(2026, 8, 12, 9, 0) } });
+		await setup({ data: { ...data, now: new Date('2026-09-12T13:00:00Z') } });
 
 		expect(headingCount('Today, Sat Sep 12')).toBeGreaterThan(0);
 	});
@@ -165,7 +165,7 @@ describe('each day’s Visits under a heading (#2867)', () => {
 		await setup();
 		expect(headingCount('Today, Sat Sep 12')).toBe(0);
 
-		vi.setSystemTime(new Date(2026, 8, 12, 9, 0));
+		vi.setSystemTime(new Date('2026-09-12T13:00:00Z'));
 		document.dispatchEvent(new Event('visibilitychange'));
 
 		await expect.poll(() => headingCount('Today, Sat Sep 12')).toBe(2);
@@ -175,7 +175,7 @@ describe('each day’s Visits under a heading (#2867)', () => {
 		await setup();
 		vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
 
-		vi.setSystemTime(new Date(2026, 8, 12, 9, 0));
+		vi.setSystemTime(new Date('2026-09-12T13:00:00Z'));
 		document.dispatchEvent(new Event('visibilitychange'));
 
 		expect(headingCount('Today, Sat Sep 12')).toBe(0);
