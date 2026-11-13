@@ -413,6 +413,14 @@
 
 	const NO_PAYMENT_DUE = 'No payment due';
 
+	// H8: a card whose date line says "Paid" gives the amount alone, or the refund alone, so paid is said once.
+	function moneyState(invoice: PracticeInvoice, view: DataTableView) {
+		const state = invoiceMoneyState(invoice);
+		if (view !== 'record' || invoiceDateLine(invoice)?.lead !== 'Paid') return state;
+		if (state.refund) return { word: state.refund };
+		return state.word === 'paid' ? undefined : state;
+	}
+
 	// Empty with no day, so a card leaves the fact out; the table's cell still says NO_PAYMENT_DUE.
 	function dateText(invoice: PracticeInvoice): string {
 		const line = invoiceDateLine(invoice);
@@ -468,11 +476,8 @@
 	const rowLinkLabel = (invoice: PracticeInvoice) => `${invoice.clientName}, ${invoice.reference}`;
 </script>
 
-<!-- H8: a paid card's date line says "Paid" with its day, so its headline gives the amount alone, or the refund alone, and paid is said once. -->
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
-	{@const state = invoiceMoneyState(invoice)}
-	{@const isPaidOnDateLine = view === 'record' && (state.word === 'paid' || !!state.refund) && invoiceDateLine(invoice)?.lead === 'Paid'}
-	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={isPaidOnDateLine ? (state.refund ? { word: state.refund } : undefined) : state} isTracked={view === 'table'} />
+	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={moneyState(invoice, view)} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}

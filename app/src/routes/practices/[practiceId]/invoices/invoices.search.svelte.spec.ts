@@ -302,11 +302,13 @@ async function columnEdges(label: string): Promise<number[]> {
 	await expect.element(testPage.getByRole('table')).toBeVisible();
 	await document.fonts.ready;
 	expect(testPage.getByRole('row').elements().length, `${label} shows rows`).toBeGreaterThan(1);
-	const starts = testPage.getByRole('columnheader').elements().map((header) => Math.round(header.getBoundingClientRect().left));	// querySelector, case 2: the amount's own box, inside a cell a screen reader hears whole.
+	const starts = testPage.getByRole('columnheader').elements().map((header) => Math.round(header.getBoundingClientRect().left));
 	const table = testPage.getByRole('table').element();
+	// querySelector, case 2: the amount's own box, inside a cell a screen reader hears whole.
 	const ends = new Set([...table.querySelectorAll(':scope > tbody .amount')].map((amount) => Math.round(amount.getBoundingClientRect().right)));
 	expect(ends.size, `amounts end on one edge in ${label}`).toBe(1);
-	for (const row of table.querySelectorAll(':scope > tbody > tr')) {
+	const bodyRows = testPage.getByRole('row').filter({ has: testPage.getByRole('rowheader') }).elements();
+	for (const row of bodyRows) {
 		expect(row.getBoundingClientRect().height, `a row's height in ${label}`).toBeCloseTo(40, 0);
 	}
 	// Round 6's finding (#2746): a two-word Client name stays on one line.
