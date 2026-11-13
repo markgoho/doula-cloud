@@ -710,7 +710,7 @@
 		.invoices-table > :global(*) {
 			font-size: var(--text-body-size);
 			--data-table-table-display: none;
-			--data-table-records-display: block;
+			--data-table-records-display: grid;
 		}
 
 		@container invoices-table (min-width: 70.2rem) {

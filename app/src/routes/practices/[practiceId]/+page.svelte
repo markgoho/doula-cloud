@@ -660,7 +660,7 @@
 		.activity-table > :global(*) {
 			font-size: var(--text-body-size);
 			--data-table-table-display: none;
-			--data-table-records-display: block;
+			--data-table-records-display: grid;
 		}
 
 		@container waiting-table (min-width: 25.5rem) {

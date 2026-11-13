@@ -249,7 +249,7 @@
 		.members-table > :global(*) {
 			font-size: var(--text-body-size);
 			--data-table-table-display: none;
-			--data-table-records-display: block;
+			--data-table-records-display: grid;
 		}
 
 		@container members-table (min-width: 68.5rem) {

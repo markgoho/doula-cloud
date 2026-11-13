@@ -691,7 +691,14 @@
 		/* Before the floor's query, which overrides it at the same
 		   specificity by coming later. */
 		.record-view {
-			display: var(--data-table-records-display, block);
+			display: var(--data-table-records-display, grid);
+			grid-template-columns: repeat(auto-fill, minmax(min(100%, 36ch), 1fr));
+			gap: var(--space-group);
+			align-items: start;
+		}
+
+		.record-view:has(.compact-lead) {
+			gap: var(--space-related);
 		}
 
 		/* "Compact rows, airy forms": the brief's Density section fixes a
@@ -939,7 +946,7 @@
 		   a route whose table needs more sets its own floor on these two
 		   properties from its own containment context: below its floor,
 		   `--data-table-table-display: none` and
-		   `--data-table-records-display: block`; at it, `table` and
+		   `--data-table-records-display: grid`; at it, `table` and
 		   `none`, or nothing, which is these defaults. Each such floor is
 		   checked against its route's own fixture by
 		   `route-continuum.svelte.spec.ts`.
@@ -1009,10 +1016,6 @@
 			outline-offset: var(--focus-ring-offset);
 		}
 
-		.record + .record {
-			margin-block-start: var(--space-group);
-		}
-
 		/* The card's title: the subheading step, the brief's "card and
 		   group titles". `anywhere` because a first column can be a
 		   Practice's own words, a pasted URL included (#530). */
@@ -1032,10 +1035,6 @@
 		.record:has(.compact-lead) {
 			gap: var(--space-1);
 			padding: var(--space-3) var(--space-4);
-		}
-
-		.record:has(.compact-lead) + .record {
-			margin-block-start: var(--space-related);
 		}
 
 		.compact-lead,
