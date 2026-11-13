@@ -36,23 +36,6 @@ describe('Badge.svelte', () => {
 		expect(svg).toBeInTheDocument();
 		expect(svg).toHaveAttribute('aria-hidden', 'true');
 	});
-
-	it('draws every variant a different icon, so no two meanings share a glyph (#2843)', async () => {
-		const drawn = new Set<string>();
-		for (const variant of variants) {
-			const { container } = await setup({ variant });
-			drawn.add(container.querySelector('svg')!.getHTML());
-		}
-
-		expect(drawn.size).toBe(variants.length);
-	});
-
-	it("does not draw the remove-filter tag's x on the error variant (#2843)", async () => {
-		const { container } = await setup({ variant: 'error' });
-		const { container: tag } = await render(Icon, { name: 'x', size: 16 });
-
-		expect(container.querySelector('svg')!.getHTML()).not.toBe(tag.querySelector('svg')!.getHTML());
-	});
 });
 
 /*
@@ -91,5 +74,28 @@ describe('text keeps its contrast floor on the tinted background, with no outlin
 				expect(style.borderTopColor, `${variant} outline`).toBe('rgba(0, 0, 0, 0)');
 			}
 		});
+	});
+});
+
+/*
+ * #2843 -- the red badge once led with the "x" a removable filter tag leads
+ * with, so one glyph meant "late" and "remove this" a few lines apart.
+ */
+async function drawnIcon(variant: (typeof variants)[number]) {
+	const { container } = await setup({ variant });
+	return container.querySelector('svg')!.getHTML();
+}
+
+describe('the icon each variant draws (#2843)', () => {
+	it('is a different one for every variant, so no two meanings share a glyph', async () => {
+		const drawn = await Promise.all(variants.map((variant) => drawnIcon(variant)));
+
+		expect(new Set(drawn).size).toBe(variants.length);
+	});
+
+	it("is not the remove-filter tag's x on the error variant", async () => {
+		const { container: tag } = await render(Icon, { name: 'x', size: 16 });
+
+		expect(await drawnIcon('error')).not.toBe(tag.querySelector('svg')!.getHTML());
 	});
 });
