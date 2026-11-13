@@ -35,4 +35,6 @@ The rubric changes only when a check proves wrong about the person's job or cont
 
 ## Closing the climb
 
+Before the last round's score is taken as final, see on the page once what every round judged from specs: with the browser's network off, press "Load more" and apply a filter, and say what the screen does. Then a fresh Opus agent reads the code diff (`git diff origin/trunk...HEAD -- app/src`) for defects, with no word on the scores; the Schedule's review found six small ones no round had. Rebase before either, run the whole gate on the rebased tip, and measure the sibling lists again.
+
 Before `gh pr create`, `git push` runs `scripts/hooks/pre-push` (the duplication check, and the API message gate when Go changed). Run the Go tests for every `api/` package the branch touched as well; the hook leaves those to CI because they start Postgres.
