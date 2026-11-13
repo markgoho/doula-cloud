@@ -16,7 +16,7 @@
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { formatScheduledVisit, scheduledVisitParts } from '#lib/dates.js';
+	import { formatScheduledVisit } from '#lib/dates.js';
 	import { visitDoulaText } from '#lib/engagementDetail.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -52,6 +52,7 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
 	import VisitDoula from '#lib/components/molecules/VisitDoula.svelte';
+	import VisitWhen from '#lib/components/molecules/VisitWhen.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeSession } from '../+layout.js';
@@ -365,9 +366,6 @@
 		}
 	];
 
-	// The day's track is as wide as the longest day among the rows loaded, so every clock ends on one edge.
-	const dayTrack = $derived(Math.max(...schedule.items.map((visit) => scheduledVisitParts(visit.scheduledAt).day.length)));
-
 	function engagementHref(visit: ScheduledVisit): string {
 		const engagement = resolve('/practices/[practiceId]/engagements/[engagementId]', {
 			practiceId,
@@ -381,11 +379,7 @@
 </script>
 
 {#snippet whenCell(visit: ScheduledVisit, tableView: DataTableView)}
-	{@const parts = scheduledVisitParts(visit.scheduledAt)}
-	<!-- In the table the tracks separate the day and the clock, so the comma is read and not drawn. -->
-	<time class="when" class:tracked={tableView === 'table'} datetime={visit.scheduledAt}
-		>{#if tableView === 'table'}<span class="day">{parts.day.slice(0, -1)}<span class="visually-hidden">,</span></span>{:else}<span class="day">{parts.day}</span>{/if} <span class="clock">{parts.clock}</span></time
-	>
+	<VisitWhen at={visit.scheduledAt} isTracked={tableView === 'table'} />
 {/snippet}
 
 {#snippet doulaCell(visit: ScheduledVisit, tableView: DataTableView)}
@@ -481,7 +475,7 @@
 			</stack-l>
 		{:else if read}
 			{#if !read.rangeErrors}
-				<div class="schedule-table" style:--when-day-track={`${schedule.items.length > 0 ? dayTrack : 0}ch`}>
+				<div class="schedule-table">
 					<DataTable
 						{columns}
 						rows={schedule.items}
@@ -530,31 +524,22 @@
 
 		/* The Client's track, the Clients list's Name track (a long two-word name). */
 		.schedule-table {
-			--data-table-grows-track: 15ch;
+			/* The room a cell keeps either side, as on the Clients and Invoices lists. */
+			--data-table-cell-inset: var(--space-2);
+			/* The Client's track: the longest name the seed holds, so no narrowing is the one a name widens. */
+			--data-table-grows-track: 15.2ch;
+		}
+
+		/* The Doula's track: a long name with the "No longer on this work" badge, so
+		   the table is as wide with one Doula's Visits as with all of them. */
+		.schedule-table :global(.table-view :is(th, td):last-child) {
+			min-inline-size: 42ch;
 		}
 
 		/* Visits are a list in time order, so below the table they are one card
 		   to a line, read down and never across, as the Clients list's are. */
 		.schedule-table :global(.record-view) {
 			grid-template-columns: minmax(0, 1fr);
-		}
-
-		/* The day and the clock in two tracks in the table: every day starts
-		   at one place, and every clock ends on one edge, whatever the day. */
-		.when {
-			white-space: nowrap;
-			font-variant-numeric: tabular-nums;
-		}
-
-		.when.tracked .day {
-			display: inline-block;
-			min-inline-size: var(--when-day-track);
-		}
-
-		.when.tracked .clock {
-			display: inline-block;
-			min-inline-size: 7ch;
-			text-align: end;
 		}
 	}
 </style>

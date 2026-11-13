@@ -46,7 +46,7 @@ describe('DateRangeFields', () => {
 		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Both days are included.');
 	});
 
-	it('says the pair hint and each error beside its own box', async () => {
+	it('says each error once for the pair, under the hint, and joins them to both boxes', async () => {
 		await render(DateRangeFields, {
 			from: '',
 			to: '2026-11-25',
@@ -55,8 +55,34 @@ describe('DateRangeFields', () => {
 			hint: 'Both days are included.'
 		});
 
-		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Both days are included. Choose a later To day.');
-		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Both days are included. Enter a From day');
+		const description = 'Both days are included. Enter a From day Choose a later To day.';
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription(description);
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription(description);
+		await expect.element(page.getByLabelText('From')).toBeInvalid();
+		await expect.element(page.getByLabelText('To')).toBeInvalid();
+		expect(page.getByRole('alert').elements()).toHaveLength(2);
+	});
+
+	it('marks only the box at fault, and draws one error when both say the same', async () => {
+		await render(DateRangeFields, {
+			from: '2026-11-25',
+			to: '2026-11-10',
+			toError: 'Choose a To day that is the same as the From day or later.'
+		});
+
+		await expect.element(page.getByLabelText('To')).toBeInvalid();
+		await expect.element(page.getByLabelText('From')).toBeValid();
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription(
+			'Choose a To day that is the same as the From day or later.'
+		);
+		expect(page.getByRole('alert').elements()).toHaveLength(1);
+	});
+
+	it('draws one error when both boxes carry the same words', async () => {
+		await render(DateRangeFields, { from: '', to: '', fromError: 'Enter a day', toError: 'Enter a day' });
+
+		expect(page.getByRole('alert').elements()).toHaveLength(1);
+		await expect.element(page.getByLabelText('From')).toBeInvalid();
 		await expect.element(page.getByLabelText('To')).toBeInvalid();
 	});
 

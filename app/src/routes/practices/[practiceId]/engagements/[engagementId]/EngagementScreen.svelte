@@ -146,6 +146,7 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import PlanInstanceView from '#lib/components/molecules/PlanInstanceView.svelte';
 	import VisitDoula from '#lib/components/molecules/VisitDoula.svelte';
+	import VisitWhen from '#lib/components/molecules/VisitWhen.svelte';
 	import RadioGroup, { radioFieldId } from '#lib/components/molecules/RadioGroup.svelte';
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import DateFields from '#lib/components/molecules/DateFields.svelte';
@@ -2589,6 +2590,10 @@
 	{/if}
 {/snippet}
 
+{#snippet visitWhenCell(visit: Visit, view: DataTableView)}
+	<VisitWhen at={visit.scheduledAt} isTracked={view === 'table'} />
+{/snippet}
+
 {#snippet visitDoulaCell(visit: Visit, view: DataTableView)}
 	<VisitDoula name={visit.staffName} isOffEngagement={visit.isOffEngagement} isTracked={view === 'table'} />
 {/snippet}
@@ -2831,7 +2836,7 @@
 	{:else}
 	<DataTable
 		columns={[
-			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt), content: visitWhenCell },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 			{
 				label: 'Doula',

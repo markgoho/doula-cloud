@@ -6,12 +6,13 @@
 		from: string;
 		to: string;
 		/**
-		 * What is wrong with the From day, beside its box. Absent where the
-		 * screen sends whatever is typed.
+		 * What is wrong with the From day, drawn once for the pair above
+		 * both boxes; the box keeps the red outline. Absent where the screen
+		 * sends whatever is typed.
 		 */
 		fromError?: string;
 		/**
-		 * What is wrong with the To day, beside its box.
+		 * What is wrong with the To day, drawn as `fromError` is.
 		 */
 		toError?: string;
 		/**
@@ -26,21 +27,29 @@
 
 	const generatedId = $props.id();
 	const hintId = `${generatedId}-range-hint`;
-	const describedByWithHint = (describedBy: string | undefined) =>
-		[hint ? hintId : undefined, describedBy].filter(Boolean).join(' ') || undefined;
+	const errorId = `${generatedId}-range-error`;
+	// One message when both days say the same, two when they differ.
+	const errors = $derived([...new Set([fromError, toError].filter((error): error is string => Boolean(error)))]);
+	const errorIds = $derived(errors.map((_, index) => `${errorId}-${index}`));
+	// The hint first, then each error: the order they are read on screen.
+	const describedBy = $derived([hint ? hintId : undefined, ...errorIds].filter(Boolean).join(' ') || undefined);
 </script>
 
 <div class="range">
 	{#if hint}
 		<p id={hintId} class="hint">{hint}</p>
 	{/if}
+	<!-- GOV.UK draws one error for a group of date inputs, above them, under the group's hint. -->
+	{#each errors as error, index (error)}
+		<p id={errorIds[index]} role="alert" class="error">{error}</p>
+	{/each}
 	<div class="pair">
-		<LabeledField label="From" error={fromError}>
-			{#snippet children({ id, describedBy, invalid })}
+		<LabeledField label="From">
+			{#snippet children({ id })}
 				<TextInput
 					{id}
-					describedBy={describedByWithHint(describedBy)}
-					{invalid}
+					{describedBy}
+					invalid={Boolean(fromError)}
 					type="date"
 					name="from"
 					value={from}
@@ -48,12 +57,12 @@
 				/>
 			{/snippet}
 		</LabeledField>
-		<LabeledField label="To" error={toError}>
-			{#snippet children({ id, describedBy, invalid })}
+		<LabeledField label="To">
+			{#snippet children({ id })}
 				<TextInput
 					{id}
-					describedBy={describedByWithHint(describedBy)}
-					{invalid}
+					{describedBy}
+					invalid={Boolean(toError)}
 					type="date"
 					name="to"
 					value={to}
@@ -81,7 +90,6 @@
 			font-size: var(--text-body-sm-size);
 		}
 
-		/* The boxes sit on one baseline of their own, whatever an error above one of them adds. */
 		.pair {
 			display: flex;
 			flex-wrap: wrap;
@@ -89,9 +97,16 @@
 			gap: var(--space-related);
 		}
 
-		/* A message wraps in its own box's width and adds nothing to it, so an
+		/* LabeledField's error, in the same words' color and size. */
+		.error {
+			margin: 0;
+			color: var(--color-error);
+			font-size: var(--text-body-sm-size);
+		}
+
+		/* A message wraps in the pair's width and adds nothing to it, so an
 		   error never widens its column or moves the field beside it. */
-		.pair :global(p[role='alert']),
+		.range > .error,
 		.range > .hint {
 			inline-size: 0;
 			min-inline-size: 100%;

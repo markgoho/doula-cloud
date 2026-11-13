@@ -22,6 +22,7 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 ## Where this screen differs from the climbed lists, and why
 
 - **The order is time, and the weekday leads.** The Clients and Invoices lists are books a reader narrows; the Schedule is read forward from now, and "her Thursday" is the unit (`journeys/practice-owner.md:120`). A Visit's day reads as ADR-0022's 2026-10-24 amendment writes it ("Thu Sep 4, 2:00pm"), here and on the Engagement, by one formatter in `app/src/lib/dates.ts`. Rows stay rows: `DataTable` has no group row and every row is the same height (DESIGN.md).
+- **A three-column list keeps its content measure.** Its table is narrower than the siblings' five-column tables, and the Doula track is held so the table is the same width in every filter state (DESIGN.md, Data table: a table stops where its columns are satisfied).
 - **The narrowing always has a range.** A bare address means today and the next 30 days (`visitSchedule.ts`, `DEFAULT_SCHEDULE_DAYS`), so "no filter" on this screen is the default range, and the way back from an empty result is to that range, not to "everything".
 - **No Client's name is filtered here.** The address carries days and a Staff id only, so #1829 does not bind; nothing is added that would put a name in a URL.
 - **No totals.** The BFF answers a page and `hasMore`, never a count of the whole range.

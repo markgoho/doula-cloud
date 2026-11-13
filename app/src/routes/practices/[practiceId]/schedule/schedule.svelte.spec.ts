@@ -630,14 +630,19 @@ describe('coming back from an Engagement', () => {
 	});
 });
 
+const clockEdges = (isYearDay: boolean) =>
+	testPage
+		.getByRole('cell', { name: /[ap]m$/ })
+		.elements()
+		.filter((cell) => /\d{4},/.test(cell.textContent!) === isYearDay)
+		.map((cell) => Math.round(cell.querySelector('.clock')!.getBoundingClientRect().right));
+
 describe('the Visits’ days and clocks', () => {
 	it('sets the day and the clock in tracks of their own, so every clock ends on one edge', async () => {
 		await setup();
 
-		const clocks = testPage.getByRole('cell', { name: /[ap]m$/ }).elements().map((cell) => {
-			const clock = cell.querySelector('.clock')!;
-			return Math.round(clock.getBoundingClientRect().right);
-		});
-		expect(new Set(clocks).size).toBe(1);
+		expect(new Set(clockEdges(false)).size).toBe(1);
+		// A day that carries a year runs past the day's track, the one exception.
+		expect(clockEdges(true).length).toBeGreaterThan(0);
 	});
 });
