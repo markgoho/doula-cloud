@@ -331,6 +331,12 @@
 			--input-chrome: var(--space-5);
 		}
 
+		/* The browser's own clear glyph is not drawn: a search is cleared by its
+		   applied filter's ×, in this system's icon, or by Escape. */
+		input[type='search']::-webkit-search-cancel-button {
+			appearance: none;
+		}
+
 		/* A native date control lays out its own segments, so it is
 		   capped at its own content width rather than at a guessed
 		   character count. Still under the 100% base, so a 320px column

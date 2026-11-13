@@ -42,6 +42,7 @@
 	import { refreshSessionIfClientsCanPayChanged } from '#lib/clientsCanPaySession.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
+	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -272,6 +273,9 @@
 		shown !== undefined && shown.view === 'all' && shown.search === '' && invoices.items.length === 0
 	);
 
+	// "on 17 Invoices" is one phrase: it wraps whole, after or under its figure.
+	const unbroken = (note: string) => note.replaceAll(' ', '\u{A0}');
+
 	const invoiceCount = (count: number) => `on ${count} ${count === 1 ? 'Invoice' : 'Invoices'}`;
 
 	/*
@@ -307,9 +311,8 @@
 		resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! })
 	);
 
-	// Short on the radios, which sit under the bar's "Choose which Invoices
-	// to show", so on a phone the three and the search take two lines; whole on
-	// the applied tag, which stands alone.
+	// Short on the radios, which follow "Show", so on a phone the three share
+	// a line or two with it; whole on the applied tag, which stands alone.
 	const VIEW_OPTIONS: readonly { value: InvoicesView; label: string; tag: string }[] = [
 		{ value: 'all', label: 'Every Invoice', tag: 'Every Invoice' },
 		{ value: 'unpaid', label: 'Unpaid', tag: 'Unpaid Invoices' },
@@ -395,7 +398,13 @@
 	// The result line's id, which the table is described by.
 	const RESULT_ID = 'invoices-result';
 
-	const everyInvoice = $derived({ label: 'Show every Invoice', href: invoicesHref });
+	// H10: a search that found nothing in a narrowed view is run again over every
+	// Invoice, keeping the text she typed (in history state, never the address).
+	const emptyListAction = $derived.by((): EmptyStateAction => {
+		const search = shown?.search ?? '';
+		if (search === '' || shown?.view === 'all') return { label: 'Show every Invoice', href: invoicesHref };
+		return { label: `Search every Invoice for "${search}"`, onClick: () => void showFilter(invoicesHref, search) };
+	});
 
 	/*
 	 * The money said once (DESIGN.md): the amount and its state, in the
@@ -410,16 +419,6 @@
 		if (invoiceDateLine(invoice)?.lead !== 'Paid' || invoice.paymentProcessing) return invoiceStateWord(invoice);
 		return invoice.refundedCents > 0 ? `${formatAmount(invoice.refundedCents)} refunded` : '';
 	}
-
-	const moneyStateTrack = $derived.by(() => {
-		const widths = new Set(
-			invoices.items.map((invoice) => {
-				const chars = `${stateWord(invoice).length}ch`;
-				return invoiceStateBadge(invoice) ? `calc(${chars} + 1em + var(--space-1) + 2 * var(--space-3))` : chars;
-			})
-		);
-		return widths.size === 0 ? '0ch' : `max(${[...widths].join(', ')})`;
-	});
 
 	// #271: local and Stripe Invoices share one book, so the rail is said per
 	// row, beside the reference it decides the shape of. The care it bills
@@ -492,14 +491,9 @@
 	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state">{#if word}<span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={word} variant={badge} />{:else}{word}{/if}{/if}</span></span>
 {/snippet}
 
-{#snippet referenceCell(invoice: PracticeInvoice, view: DataTableView)}
-	<!-- The table's row link already says the reference (`rowLinkLabel`), so its cell says only the care and how it was billed; a card says all three. -->
-	{@const care = kindLabel(invoice.engagementKind)}
-	{#if view === 'table'}
-		<span class="no-break"><span aria-hidden="true">{invoice.reference}<span class="separator">·</span></span><span class="lead">{care}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
-	{:else}
-		<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{care}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
-	{/if}
+{#snippet referenceCell(invoice: PracticeInvoice)}
+	<!-- The reference is said here too, so the cell under "Reference" holds it (WCAG 1.3.1), though the row link says it as well. -->
+	<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 {/snippet}
 
 {#snippet dateCell(invoice: PracticeInvoice, view: DataTableView)}
@@ -514,9 +508,9 @@
 
 {#snippet total(row: { figure: string; note: string })}
 	{#if book}
-		<span class="figure">{row.figure}</span>{#if row.note}<span class="note">{` ${row.note}`}</span>{/if}
+		<span class="figure">{row.figure}</span>{#if row.note}<span class="note">{` ${unbroken(row.note)}`}</span>{/if}
 	{:else}
-		<span class="figure"><Skeleton variant="text" lines={1} /></span>{#if row.note}<span class="note reserve" aria-hidden="true">{` ${row.note}`}</span>{/if}
+		<span class="figure"><Skeleton variant="text" lines={1} /></span>{#if row.note}<span class="note reserve" aria-hidden="true">{` ${unbroken(row.note)}`}</span>{/if}
 	{/if}
 {/snippet}
 
@@ -609,14 +603,17 @@
 				foldsFieldsOnly
 				{isBusy}
 			>
-				<!-- Beside Apply, wrapping under it only where the row runs out. The bar's legend names the bar: these radios, then the field. -->
-				<RadioGroup
-					name="show"
-					options={VIEW_OPTIONS}
-					value={draftView}
-					onChange={(chosen) => (draftView = chosen)}
-					isInline
-				/>
+				<!-- The Clients list's two rows: the view with its own visible question, then the search and Apply. -->
+				{#snippet switches()}
+					<RadioGroup
+						legend="Show"
+						name="show"
+						options={VIEW_OPTIONS}
+						value={draftView}
+						onChange={(chosen) => (draftView = chosen)}
+						isInline
+					/>
+				{/snippet}
 				{@render searchField()}
 			</FilterBar>
 		{/if}
@@ -628,7 +625,7 @@
 				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
 			</stack-l>
 		{:else if shown}
-			<div class="invoices-table" style:--money-state-track={moneyStateTrack}>
+			<div class="invoices-table">
 				<DataTable
 					{columns}
 					rows={invoices.items}
@@ -642,7 +639,7 @@
 					emptyMessage={isBookEmpty
 						? 'No Invoices yet. One appears here as soon as a Contract is billed.'
 						: resultSummary}
-					emptyAction={isBookEmpty ? undefined : everyInvoice}
+					emptyAction={isBookEmpty ? undefined : emptyListAction}
 					caption="Invoices"
 					describedBy={isBookEmpty ? undefined : RESULT_ID}
 					columnWidths="fill"
@@ -708,15 +705,19 @@
 		   Linux/Chromium (it was 1201px with eight), so the floor moved down to
 		   62.3rem. The care kind in the Reference cell (#2746) took it to 1084px,
 		   measured the same day on the demo Practice with "Postpartum" on every
-		   row, so it is 67.8rem. `DataTable.svelte`'s floor comment says why the
-		   floor is the route's own. */
+		   row, so it was 67.8rem. Holding the Money column still across views
+		   (a state track and Reference, Sent and Payment columns as wide as the
+		   longest each can say) took it to 1135px the same day, so it is 71rem.
+		   `DataTable.svelte`'s floor comment says why the floor is the route's own. */
 		.invoices-table {
 			container: invoices-table / inline-size;
 			/* The Money column's right edge, written once: the amounts end a
 			   state track and a gap before the cell's inset, and the header ends
-			   where they do. The track holds the longest state among the rows
-			   shown (`moneyStateTrack`), so a book with no payment on its way
-			   leaves no hole before Reference. */
+			   where they do. The track holds the longest state this list can say,
+			   a red "NNN days overdue" badge or the plain "payment on its way" and
+			   "$N,NNN.NN refunded", so the amounts keep one edge in every view and
+			   across Load more. */
+			--money-state-track: 20ch;
 			--money-state-gap: var(--space-1);
 			--data-table-cell-inset: var(--space-2);
 		}
@@ -727,11 +728,27 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 67.8rem) {
+		@container invoices-table (min-width: 71rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
 			}
+		}
+
+		/* Reference, Sent and Payment (`columns`' third to fifth) are each as wide
+		   as the longest value they can say, "INV-0000 · Postpartum · By hand" and
+		   "Payment due Nov 30, 2026", whatever rows are shown. The Client takes
+		   the rest, so the Money column's edge is the same in every view. */
+		.invoices-table :global(thead th:nth-child(3)) {
+			min-inline-size: calc(27ch + 2 * var(--data-table-cell-inset));
+		}
+
+		.invoices-table :global(thead th:nth-child(4)) {
+			min-inline-size: calc(11ch + 2 * var(--data-table-cell-inset));
+		}
+
+		.invoices-table :global(thead th:nth-child(5)) {
+			min-inline-size: calc(23ch + 2 * var(--data-table-cell-inset));
 		}
 
 		.invoices-table :global(th.numeric) {
@@ -788,11 +805,21 @@
 			white-space: nowrap;
 		}
 
-		/* The field asks for room for a reference or a short name and takes up to
-		   its own width, so on a phone it shares the radios' last line. */
+		/* The field at its own width, with Apply and an applied view's tag beside
+		   it where the bar holds all three (30rem: the field, Apply and the
+		   "Overdue Invoices" tag). Where it does not, the field takes its own line,
+		   so Apply and the tag share the next one at rest and applied alike, and
+		   applying one view moves nothing. */
 		.search {
 			flex: 1 1 11rem;
 			max-inline-size: max-content;
+		}
+
+		@container filter-bar (max-width: 30rem) {
+			.search {
+				flex-basis: 100%;
+				max-inline-size: none;
+			}
 		}
 	}
 </style>

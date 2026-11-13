@@ -83,9 +83,10 @@
 		/*
 		 * The answers side by side, wrapping onto a further line only where
 		 * the row runs out: GOV.UK's inline radios, for a few short answers.
-		 * The Invoices list's filter (#2746) is the consumer: three views
-		 * beside Apply, where three stacked rows put its first Invoice
-		 * below a phone's first screen. Not for answers with a hint or a
+		 * The Invoices list's filter (#2746) is the consumer: three views on
+		 * the bar's switches row, beside their legend, where three stacked
+		 * rows put its first Invoice below a phone's first screen. Not for
+		 * answers with a hint or a
 		 * conditional reveal, which need the row's width.
 		 */
 		isInline?: boolean;
@@ -98,8 +99,7 @@
 
 {#snippet radios()}
 	{#if isInline}
-		<!-- `choices-inline` names it to a FilterBar, which lets Apply follow the last answer. -->
-		<cluster-l class="inline choices-inline" space="var(--space-related)" align="center">
+		<cluster-l class="inline" space="var(--space-related)" align="center">
 			{@render choices()}
 		</cluster-l>
 	{:else}

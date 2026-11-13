@@ -138,7 +138,9 @@
 		appliedCount?: number;
 		/**
 		 * Switches that sit in a row of their own above the fields, so a
-		 * switch drawn or hidden never moves a field or Apply.
+		 * switch drawn or hidden never moves a field or Apply. A group of them
+		 * is a `<fieldset>` (or a `RadioGroup isInline` with its `legend`) whose
+		 * legend is drawn on the row, before its boxes.
 		 */
 		switches?: Snippet;
 		/**
@@ -161,9 +163,8 @@
 		 */
 		folded?: Snippet;
 		/**
-		 * The fields, each a `LabeledField` with a named control, or a field of
-		 * inline radios (`RadioGroup isInline`, the Invoices list's view). A bar
-		 * of switches alone has none.
+		 * The fields, each a `LabeledField` with a named control. A bar of
+		 * switches alone has none.
 		 */
 		children?: Snippet;
 	}
@@ -401,11 +402,28 @@
 			flex-basis: 100%;
 		}
 
-		/* A field of inline answers (`RadioGroup isInline`, the Invoices list's
-		   view) gives its answers to the row, so Apply follows the last one on
-		   its line instead of taking a line of its own at a phone's width. */
-		.fields > :global(.choices-inline) {
-			display: contents;
+		/* A group of switches (the Clients list's "Show only" boxes, the Invoices
+		   list's "Show" radios) draws its legend on the boxes' own row: floated,
+		   an ordinary box beside them, where a rendered legend takes a line above.
+		   The boxes wrap among themselves beside it. */
+		.switches > :global(fieldset) {
+			margin: 0;
+			padding: 0;
+			border: 0;
+			min-inline-size: 0;
+		}
+
+		.switches > :global(fieldset) > :global(legend) {
+			float: inline-start;
+			display: flex;
+			align-items: center;
+			min-block-size: var(--hit-target-min);
+			padding: 0;
+			margin: 0;
+			margin-inline-end: var(--space-related);
+			font-size: var(--text-label-size);
+			font-weight: var(--font-weight-medium);
+			color: var(--color-on-surface-variant);
 		}
 
 		/* The switches are stacked at a phone's width; each keeps its own

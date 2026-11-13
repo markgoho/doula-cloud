@@ -131,20 +131,19 @@ describe('the overdue book (#768)', () => {
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 4 Invoices, newest first.');
 	});
 
-	// The radios and the search on one line with Apply after them, the count
-	// under them on the left edge, a quiet legend: the Clients list's bar, with
-	// its fields' row holding the radios. The tag follows Apply on its line.
-	it('draws the radios beside Apply, and moves neither Apply nor the count once narrowed', async () => {
+	// H4: the Clients list's bar. The radios on a row of their own after a
+	// visible "Show", then the search with Apply after it, the count under them
+	// on the left edge. The tag follows Apply on its line.
+	it('draws the radios under "Show" on their own row above Apply, and moves neither Apply nor the count once narrowed', async () => {
 		await setup();
 		const apply = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
 		const before = apply();
 		const status = testPage.getByRole('status').element().getBoundingClientRect();
 		const radio = testPage.getByRole('radio', { name: 'Overdue' }).element().getBoundingClientRect();
-		expect(radio.right).toBeLessThanOrEqual(before.left);
-		expect(radio.bottom).toBeGreaterThan(before.top);
+		expect(radio.bottom).toBeLessThanOrEqual(before.top);
 		expect(status.top).toBeGreaterThanOrEqual(before.bottom);
-		const legend = testPage.getByRole('group', { name: 'Choose which Invoices to show' }).element().querySelector('legend')!;
-		expect(legend.getBoundingClientRect().height).toBeLessThanOrEqual(1);
+		await expect.element(testPage.getByRole('group', { name: 'Show', exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Show', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
 
 		cleanup();

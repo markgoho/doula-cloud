@@ -121,6 +121,16 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
 	});
 
+	// H10: in a narrowed view the way out keeps what she typed.
+	it('offers to search every Invoice for the same text when nothing matched in a narrowed view', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [] }));
+		await setupSearch({ search: 'INV-0035', url: narrowedToOverdue.url!, read: { ...data, view: 'overdue' } });
+
+		await testPage.getByRole('button', { name: 'Search every Invoice for "INV-0035"' }).click();
+
+		expect(goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`, { state: { invoicesSearch: 'INV-0035' } });
+	});
+
 	it('keeps the search on every later page', async () => {
 		apiFetchWithSession
 			.mockResolvedValueOnce(jsonResponse({ ...data, items: [overdueInvoice], hasMore: true, nextCursor: 'cursor-1' }))

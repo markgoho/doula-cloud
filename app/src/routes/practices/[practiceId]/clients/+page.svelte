@@ -1044,7 +1044,7 @@ import type { PageProps as PageProperties } from './$types';
 				{#snippet switches()}
 					<!-- One group, so "Clients" is said once, by the page, and each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
 					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- named boxes of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
-					<fieldset class="show-only">
+					<fieldset>
 						<legend>Show only</legend>
 						<div class="show-only-boxes">
 							<LabeledField label="Who owe money" orientation="inline">
@@ -1302,28 +1302,7 @@ import type { PageProps as PageProperties } from './$types';
 			visibility: hidden;
 		}
 
-		/* The group of narrowing boxes with its visible legend on their own row:
-		   a floated legend is an ordinary box beside the boxes, where a rendered
-		   one would take a row above them. */
-		.show-only {
-			margin: 0;
-			padding: 0;
-			border: 0;
-			min-inline-size: 0;
-		}
-
-		.show-only legend {
-			float: inline-start;
-			display: flex;
-			align-items: center;
-			min-block-size: var(--hit-target-min);
-			padding: 0;
-			margin-inline-end: var(--space-related);
-			font-size: var(--text-label-size);
-			font-weight: var(--font-weight-medium);
-			color: var(--color-on-surface-variant);
-		}
-
+		/* The boxes wrap among themselves beside FilterBar's floated legend. */
 		.show-only-boxes {
 			display: flex;
 			flex-wrap: wrap;
