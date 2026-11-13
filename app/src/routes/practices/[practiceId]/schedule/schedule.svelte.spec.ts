@@ -370,6 +370,17 @@ describe('the narrowing', () => {
 		await expect.element(testPage.getByRole('status', { name: 'Loading your schedule' })).toBeVisible();
 	});
 
+	it('draws no Doula tag and does not say "Any Doula" while the Doulas load for a shared link', async () => {
+		setAddress(`?doula=${laterVisit.staffId}`);
+		await setup({});
+
+		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toBeDisabled();
+		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toHaveValue(laterVisit.staffId);
+		await expect.element(testPage.getByRole('option', { name: 'Any Doula' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: /Remove filter: Doula/ })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+	});
+
 	it('leaves the picker waiting when the roster could not be read, and still draws the list', async () => {
 		await setup({ data: { ...data, doulas: [], isRosterUnavailable: true } });
 

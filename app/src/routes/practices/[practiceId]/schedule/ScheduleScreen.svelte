@@ -292,7 +292,7 @@
 			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)) });
 		}
 		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }) });
-		if (view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }) });
+		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }) });
 		return tags;
 	});
 
@@ -339,7 +339,9 @@
 		}
 	}
 
-	const doulaOptions = $derived([{ value: '', label: ANY_DOULA }, ...doulas]);
+	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
+	const isDoulaPending = $derived(!read && view.doula !== '');
+	const doulaOptions = $derived(isDoulaPending ? [{ value: view.doula, label: '' }] : [{ value: '', label: ANY_DOULA }, ...doulas]);
 	const DAYS_OPTIONS: readonly { value: ScheduleDaysChoice; label: string }[] = [
 		{ value: '7', label: `Next ${SHORT_SCHEDULE_DAYS} days` },
 		{ value: '30', label: `Next ${DEFAULT_SCHEDULE_DAYS} days` },
@@ -416,7 +418,7 @@
 			empty={isEmpty}
 			clearHref={isScheduleNarrowed(view) ? basePath : undefined}
 			applied={appliedTags.length > 0 ? applied : undefined}
-			appliedCount={appliedTags.length}
+			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 			foldsFieldsOnly
 			{isBusy}
 		>
