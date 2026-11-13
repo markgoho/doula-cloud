@@ -39,7 +39,7 @@ Decided 2026-11-13 (#2866). Where the conventions were learned: Stripe Dashboard
 | Sort by Money or by Doula | Declined | every Client who owes, or every Client of one Doula, is a narrowing; "Who owe money" and the Doula select do it (T1, T3) |
 | Search by name | Have it | Name (T5; #1829) |
 | Grouping by Doula | Declined | the Doula column and the Doula select |
-| A count | Have it, rows shown only | the result line counts the rows shown and says whether more exist ("Showing the first 30 Clients"); it states no whole-list total, and no verdict has been recorded on one |
+| A total count | Build (#2867) | the result line counts the rows shown and says whether more exist ("Showing the first 30 Clients") and states no total, where the Invoices list says "the first 30 of 35"; an owner who "can no longer hold it in her head" (`personas/practice-owner.md:11`) is owed the whole |
 | Date navigation, a calendar view, relative days | Declined | a roster is not read by day; the Date column says weeks to or since the birth |
 | Time zone shown | Declined | days only, no times |
 
