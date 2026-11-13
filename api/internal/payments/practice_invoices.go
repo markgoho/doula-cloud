@@ -228,7 +228,7 @@ func ListPracticeInvoicesHandler() http.Handler {
 		if req.Cursor != "" {
 			after, err := narrowing.decodeCursor(req.Cursor)
 			if err != nil {
-				apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
+				apierr.WriteError(w, "That page of Invoices is no longer available. Load the list again.", http.StatusBadRequest)
 				return
 			}
 			q.after = &after
