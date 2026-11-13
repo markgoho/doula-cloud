@@ -536,26 +536,25 @@ describe('the focused “Skip to results” link', () => {
 // The distinct lines an unseen wording is drawn on, clipped or not.
 const linesOf = (element: Element) => new Set([...wordsOf(element).getClientRects()].map((box) => Math.round(box.top))).size;
 
+async function measureCountLine(width: number) {
+	await renderListScreen({ width, height: 800 });
+	await ready();
+	const status = document.querySelector<HTMLElement>('#clients-result')!;
+	const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
+	return { held, needed: linesOf(document.querySelector('.ruler')!) };
+}
+
 // The count line is a status line, as wide as the bar, and its held room is what the
 // longest wording takes wrapped at that width, never a line more.
 describe('the count line’s measure and its held room', () => {
 	it.each([1280, 1440, 1920])('holds its longest wording on one line, as the Invoices list holds its own, at %ipx', async (width) => {
-		await renderListScreen({ width, height: 800 });
-		await ready();
-
-		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
-		expect(linesOf(document.querySelector('.ruler')!), 'the longest wording').toBe(1);
+		const { held, needed } = await measureCountLine(width);
+		expect(needed, 'the longest wording').toBe(1);
 		expect(held, 'one line held').toBeLessThan(1.5);
 	});
 
 	it.each([320, 375, 640, 768, 880, 960, 1024, 1100, 1280, 1440, 1920])('holds no more lines than the longest wording takes wrapped, at %ipx', async (width) => {
-		await renderListScreen({ width, height: 800 });
-		await ready();
-
-		const status = document.querySelector<HTMLElement>('#clients-result')!;
-		const held = document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight);
-		const needed = linesOf(document.querySelector('.ruler')!);
+		const { held, needed } = await measureCountLine(width);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeLessThan(needed + 0.5);
 		expect(held, `${held} lines held, ${needed} needed at ${width}px`).toBeGreaterThan(Math.min(needed, 2) - 0.5);
 	});

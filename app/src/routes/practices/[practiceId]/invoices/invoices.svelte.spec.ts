@@ -1,5 +1,5 @@
 import { page as testPage } from 'vitest/browser';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
@@ -56,6 +56,7 @@ function heard(text: string): RegExp {
 	return new RegExp(`^${words.join(String.raw`\s*,?\s*`)}$`);
 }
 const { practiceId } = fixture.params;
+const cleoPage: PracticeInvoiceListData = { ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false };
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
@@ -71,6 +72,12 @@ async function setup(page: PracticeInvoiceListData = data, width = 1440) {
 	// Above this route's own table floor (#1945, #1981, its +page.svelte), so the <table> renders.
 	await testPage.viewport(width, 900);
 	await render(Page, { data: page });
+}
+
+async function loadMoreToCleo() {
+	await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
+	await testPage.getByRole('button', { name: 'Load more' }).click();
+	await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
 }
 
 describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () => {
@@ -270,10 +277,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 			})
 		);
 
-		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
-		await testPage.getByRole('button', { name: 'Load more' }).click();
-
-		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
+		await loadMoreToCleo();
 		await expect
 			.element(testPage.getByRole('link', { name: openInvoice.clientName }))
 			.toBeVisible();
@@ -294,7 +298,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByText('invalid cursor')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: openInvoice.clientName })).toBeVisible();
 
-		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(cleoPage));
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
@@ -341,6 +345,20 @@ const kept = () => vi.mocked(snapshot).mock.calls.at(-1)![0] as {
 	restore: (held: ListReturn) => void;
 };
 
+async function renderHoldingAPlace() {
+	const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+	await testPage.viewport(1440, 900);
+	const screen = await render(Page, {});
+	kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+	return { scrollTo, screen };
+}
+
+async function expectPlaceDropped(scrollTo: MockInstance) {
+	await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
+	expect(apiFetchWithSession).not.toHaveBeenCalled();
+	expect(scrollTo).not.toHaveBeenCalled();
+}
+
 // T3 (#2746): Back from an Invoice puts her on the same rows, where she was.
 describe('coming back from an Invoice', () => {
 	afterEach(() => {
@@ -349,10 +367,8 @@ describe('coming back from an Invoice', () => {
 	});
 
 	it('keeps how many pages were open, how far down she was and the Invoice she left for', async () => {
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
-		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
-		await testPage.getByRole('button', { name: 'Load more' }).click();
-		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
+		apiFetchWithSession.mockResolvedValue(jsonResponse(cleoPage));
+		await loadMoreToCleo();
 
 		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) {
 			leave({ type: 'link', to: { url: new URL(`https://example.test/practices/${practiceId}/engagements/eng-1#invoice-inv-9`) } } as never);
@@ -363,11 +379,8 @@ describe('coming back from an Invoice', () => {
 	});
 
 	it('reads as many pages again, scrolls back, and lands on the row she left from', async () => {
-		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
-		await testPage.viewport(1440, 900);
-		const screen = await render(Page, {});
-		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		apiFetchWithSession.mockResolvedValue(jsonResponse(cleoPage));
+		const { scrollTo, screen } = await renderHoldingAPlace();
 		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
 		const left = testPage.getByRole('link', { name: /^Cleo,/ });
@@ -379,7 +392,7 @@ describe('coming back from an Invoice', () => {
 
 	it('waits for the read of the entry she came back to, rather than restoring on the rows that read replaces', async () => {
 		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		apiFetchWithSession.mockResolvedValue(jsonResponse(cleoPage));
 		await testPage.viewport(1440, 900);
 		const screen = await render(Page, { data: { ...data, hasMore: true, nextCursor: 'cursor-old' } });
 		await screen.rerender({ isReading: true });
@@ -394,34 +407,24 @@ describe('coming back from an Invoice', () => {
 	});
 
 	it('drops the place it holds when the read fails, so a later read lands on the first page', async () => {
-		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
-		await testPage.viewport(1440, 900);
-		const screen = await render(Page, {});
-		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		const { scrollTo, screen } = await renderHoldingAPlace();
 		await screen.rerender({ hasReadFailed: true });
 		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
 
 		await screen.rerender({ hasReadFailed: false, data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
-		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalled();
-		expect(scrollTo).not.toHaveBeenCalled();
+		await expectPlaceDropped(scrollTo);
 	});
 
 	it('drops the place it holds when she moves to another view before the read lands', async () => {
-		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
-		await testPage.viewport(1440, 900);
-		const screen = await render(Page, {});
-		kept().restore({ pages: 2, scrollY: 120, rowId: 'inv-9' });
+		const { scrollTo, screen } = await renderHoldingAPlace();
 		for (const [leave] of vi.mocked(beforeNavigate).mock.calls) {
 			leave({ type: 'goto', to: { url: new URL(`https://example.test/practices/${practiceId}/invoices?show=unpaid`) } } as never);
 		}
 
 		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
-		await expect.element(testPage.getByRole('button', { name: 'Load more' })).toBeVisible();
-		expect(apiFetchWithSession).not.toHaveBeenCalled();
-		expect(scrollTo).not.toHaveBeenCalled();
+		await expectPlaceDropped(scrollTo);
 	});
 
 	it('stops short of scrolling when she moves while its pages load', async () => {
@@ -435,7 +438,7 @@ describe('coming back from an Invoice', () => {
 			leave({ type: 'goto', to: { url: new URL(`https://example.test/practices/${practiceId}/invoices?show=unpaid`) } } as never);
 		}
 
-		second.resolve(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		second.resolve(jsonResponse(cleoPage));
 
 		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).toBeVisible();
 		expect(scrollTo).not.toHaveBeenCalled();
@@ -444,7 +447,7 @@ describe('coming back from an Invoice', () => {
 
 	it('restores at once when the rows had already landed, and names no row for a move off the app', async () => {
 		vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
-		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...openInvoice, id: 'inv-9', clientName: 'Cleo' }], hasMore: false }));
+		apiFetchWithSession.mockResolvedValue(jsonResponse(cleoPage));
 		await setup({ ...data, hasMore: true, nextCursor: 'cursor-1' });
 		kept().restore({ pages: 2, scrollY: 0 });
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();

@@ -17,21 +17,19 @@ import '#lib/styles/app.css';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture, narrowedToOverdue } from './page.fixture.js';
+import { apiFetchWithSession, goto, pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>,
-	state: {} as Record<string, unknown>
+vi.mock('$app/state', () => import('#testing/routePage.js'));
+vi.mock('#lib/api.js', () => import('#testing/routePage.js'));
+vi.mock('$app/navigation', async () => ({
+	...(await import('#testing/routePage.js')),
+	invalidate: vi.fn(),
+	afterNavigate: vi.fn(),
+	beforeNavigate: vi.fn(),
+	replaceState: vi.fn(),
+	snapshot: vi.fn()
 }));
-vi.mock('$app/state', () => ({ page: pageState }));
 if (!customElements.get('center-l')) registerLayoutPrimitives();
-
-const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
-
-const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto, invalidate: vi.fn(), afterNavigate: vi.fn(), beforeNavigate: vi.fn(), replaceState: vi.fn(), snapshot: vi.fn() }));
 
 const { practiceId } = fixture.params;
 const listPath = `/api/practices/${practiceId}/invoices/list`;

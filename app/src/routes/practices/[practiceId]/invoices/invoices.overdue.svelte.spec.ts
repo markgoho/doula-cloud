@@ -19,18 +19,12 @@ import '#lib/styles/app.css';
 import Page from './InvoicesScreen.svelte';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture, narrowedToOverdue } from './page.fixture.js';
+import { apiFetchWithSession, pageState } from '#testing/routePage.js';
 
-const pageState = vi.hoisted(() => ({
-	params: {} as Record<string, string>,
-	url: new URL('https://example.test/'),
-	data: {} as Record<string, unknown>,
-}));
-vi.mock('$app/state', () => ({ page: pageState }));
+vi.mock('$app/state', () => import('#testing/routePage.js'));
+vi.mock('#lib/api.js', () => import('#testing/routePage.js'));
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 Object.assign(pageState, toPageState(fixture));
-
-const apiFetchWithSession = vi.hoisted(() => vi.fn());
-vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
 
 // The route's own `afterNavigate` callback, kept so a spec can play a move to
 // this list (SvelteKit calls it after every navigation, the first load too).

@@ -196,6 +196,19 @@ func (e *env) seedOpenInvoices(n int) (contractID string, invoiceIDs []string) {
 	return contractID, invoiceIDs
 }
 
+func assertFullFirstPage(t *testing.T, first payments.PracticeInvoicesResponse, leadID, lead string) {
+	t.Helper()
+	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
+		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
+	}
+	if len(first.Items) != 30 {
+		t.Fatalf("first page items = %d, want 30", len(first.Items))
+	}
+	if first.Items[0].ID != leadID {
+		t.Fatalf("first page items[0] = %q, want %q (%s)", first.Items[0].ID, leadID, lead)
+	}
+}
+
 // TestGetPracticeInvoicesHandler_PaginatesWithCursor proves a book larger
 // than one page sets hasMore/nextCursor, that the cursor resumes exactly
 // where the first page stopped, and that the totals stay whole-book on
@@ -206,15 +219,7 @@ func TestGetPracticeInvoicesHandler_PaginatesWithCursor(t *testing.T) {
 	_, ids := e.seedOpenInvoices(total)
 
 	first := e.practiceInvoices()
-	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
-		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
-	}
-	if len(first.Items) != 30 {
-		t.Fatalf("first page items = %d, want 30", len(first.Items))
-	}
-	if first.Items[0].ID != ids[total-1] {
-		t.Fatalf("first page items[0] = %q, want %q (newest)", first.Items[0].ID, ids[total-1])
-	}
+	assertFullFirstPage(t, first, ids[total-1], "newest")
 
 	second := e.practiceInvoices("cursor=" + *first.NextCursor)
 	if second.HasMore {
@@ -298,15 +303,7 @@ func TestGetPracticeInvoicesHandler_UnpaidFilterPaginates(t *testing.T) {
 	paidID := seedInvoice(t, e.DB, e.Practice.ID, contractID, "in_unpaid_page_paid", invoiceStatusPaid, 5000, time.Now())
 
 	first := e.practiceInvoices("unpaid=true")
-	if !first.HasMore || first.NextCursor == nil || *first.NextCursor == "" {
-		t.Fatalf("first page hasMore = %v, nextCursor = %v; want true and a cursor", first.HasMore, first.NextCursor)
-	}
-	if len(first.Items) != 30 {
-		t.Fatalf("first page items = %d, want 30", len(first.Items))
-	}
-	if first.Items[0].ID != ids[0] {
-		t.Fatalf("first page items[0] = %q, want %q (payment due first)", first.Items[0].ID, ids[0])
-	}
+	assertFullFirstPage(t, first, ids[0], "payment due first")
 	for _, item := range first.Items {
 		if item.ID == paidID {
 			t.Fatal("first page includes the paid Invoice, want unpaid only")
