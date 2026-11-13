@@ -603,7 +603,6 @@ const SCHEDULE_BOOK: readonly (readonly [string, number, number, number])[] = [
 	['marisol', 15, 18, 30],
 	['bethany', 17, 14, 30],
 	['joss', 18, 25, 0],
-	['kimiko', 20, 16, 0],
 	['rowan', 21, 15, 30],
 	['priya', 23, 14, 0],
 	['renata', 24, 16, 0],
@@ -618,8 +617,9 @@ const SCHEDULE_BOOK: readonly (readonly [string, number, number, number])[] = [
 ];
 
 // The Practice-wide Schedule's book (#2747): a month of Visits across the
-// Doulas, two later today, five in the last week, and one booked Visit whose
-// Doula was then taken off its Engagement (#2596). Only on postpartum care
+// Doulas, two later today, five in the last week, and two booked Visits whose
+// Doula was then taken off their Engagement (#2596), one on the first page of
+// the Schedule and one behind "Load more". Only on postpartum care
 // already active, so no Client's status moves (a Visit on intake care moves
 // it to active, ADR-0015) and no birth's on-call attachments change.
 async function seedScheduleBook(
@@ -629,7 +629,9 @@ async function seedScheduleBook(
 	tail: readonly ProvisionedClient[]
 ): Promise<void> {
 	const active = tail.filter((client, index) => index % 4 !== 0 && !isCareFinished(index, client) && client.kind === 'postpartum');
-	const [takenOff, ...pool] = active;
+	const [takenOff, ...rest] = active;
+	const lateTakenOff = rest.find((client) => client.attachedDoulaSlug !== 'kimiko')!;
+	const pool = rest.filter((client) => client !== lateTakenOff);
 	const engagementPath = (engagementId: string) => `/api/practices/${roster.practiceId}/engagements/${engagementId}`;
 	const staffIds: Record<string, string> = {
 		renata: roster.ownerStaffId,
@@ -653,6 +655,13 @@ async function seedScheduleBook(
 		request,
 		'DELETE',
 		`${engagementPath(takenOff.engagementId)}/attachments/${staffIds[takenOff.attachedDoulaSlug]}`,
+		roster.owner
+	);
+	await visit(lateTakenOff, 'kimiko', instantAt(today, 20, 16, 0));
+	await send(
+		request,
+		'DELETE',
+		`${engagementPath(lateTakenOff.engagementId)}/attachments/${staffIds.kimiko}`,
 		roster.owner
 	);
 }
