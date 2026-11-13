@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
+	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -57,6 +58,10 @@ type ScheduledVisit struct {
 	ScheduledAt  time.Time `json:"scheduledAt"`
 	// IsOffEngagement: see Visit.IsOffEngagement (#2596).
 	IsOffEngagement bool `json:"isOffEngagement"`
+	// Type is DeriveType's own output (type.go), derived in the Practice's
+	// zone as ListHandler's rows are (ADR-0036): prenatal, birth or
+	// postpartum.
+	Type string `json:"type"`
 }
 
 // PracticeScheduleResponse is the standard cursor-pagination envelope from
@@ -124,7 +129,11 @@ func PracticeScheduleHandler() http.Handler {
 		ctx := r.Context()
 		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, schedulePageSize,
 			func(after *pagecursor.Cursor) ([]ScheduledVisit, error) {
-				return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after)
+				zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
+				if err != nil {
+					return nil, err //nolint:wrapcheck // Fetch turns any error into the 500
+				}
+				return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after, zone)
 			},
 			func(v ScheduledVisit) (time.Time, string) { return v.ScheduledAt, v.VisitID })
 		if !ok {
@@ -222,7 +231,7 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 // picked; `$5` is the contractor rule she did not pick, and is NULL for
 // every caller ADR-0008 grants ambient reach.
 const scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.family_name, s.id, s.name, v.scheduled_at,
-	       ` + offEngagementBefore + `$6` + offEngagementAfter + scheduleFromWhere
+	       ` + offEngagementBefore + `$6` + offEngagementAfter + `, e.pregnancy_ended_on::text` + scheduleFromWhere
 
 // scheduleFromWhere is the rows the schedule holds, shared by the page and
 // by the count (#2867), so the total can never be of a different set than
@@ -272,6 +281,7 @@ func listScheduledVisits(
 	practiceID string,
 	filter scheduleFilter,
 	after *pagecursor.Cursor,
+	zone *time.Location,
 ) ([]ScheduledVisit, error) {
 	// Every clause below is a string literal, and the two optional
 	// narrowings ride on NULL-able parameters rather than on placeholders
@@ -306,12 +316,14 @@ func listScheduledVisits(
 		var item ScheduledVisit
 		var givenName string
 		var preferredName, familyName sql.NullString
+		var endedOn *string
 		if err := rows.Scan(&item.VisitID, &item.EngagementID, &givenName, &preferredName, &familyName,
-			&item.StaffID, &item.StaffName, &item.ScheduledAt, &item.IsOffEngagement); err != nil {
+			&item.StaffID, &item.StaffName, &item.ScheduledAt, &item.IsOffEngagement, &endedOn); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("visit: scan practice schedule row: %w", err)
 		}
 		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
+		item.Type = DeriveType(item.ScheduledAt, endedOn, zone)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {
