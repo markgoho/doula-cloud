@@ -47,6 +47,7 @@ interface SetupOptions {
 	isContractor?: boolean;
 	hasPracticeSession?: boolean;
 	hasClients?: boolean;
+	hasOtherDoulas?: boolean;
 	staffSessionRefuses?: boolean;
 	memberships?: { practiceId: string; practiceName: string; roles: string[]; employmentType?: string }[];
 }
@@ -59,6 +60,7 @@ async function setup({
 	isContractor = false,
 	hasPracticeSession = true,
 	hasClients,
+	hasOtherDoulas,
 	staffSessionRefuses = false,
 	memberships = ONE_MEMBERSHIP
 }: SetupOptions = {}) {
@@ -75,7 +77,8 @@ async function setup({
 					practiceName: 'Riverside Doula Collective',
 					roles,
 					isContractor,
-					...(hasClients !== undefined && { hasClients })
+					...(hasClients !== undefined && { hasClients }),
+					...(hasOtherDoulas !== undefined && { hasOtherDoulas })
 				}
 			}
 		: {};
@@ -263,6 +266,33 @@ describe('the nav', () => {
 	 * a Client's own screen still marks Clients -- but /practices/[id]/staff
 	 * must not also light up Overview, which a prefix rule would do.
 	 */
+	it.each([
+		['an employed Doula', ['doula'], false, undefined, true],
+		['a Doula at a Practice with no other Doula', ['doula'], false, false, false],
+		['a contractor Doula', ['doula'], true, undefined, false],
+		['an Owner who is a Doula', ['owner', 'doula'], false, undefined, false],
+		['an Admin', ['admin'], false, undefined, false],
+		['an Owner', ['owner'], false, undefined, false]
+	])('opens Clients and Schedule for %s on Mine: %s', async (_who, roles, isContractor, hasOtherDoulas, onMine) => {
+		await setup({ roles, isContractor, hasOtherDoulas });
+
+		const suffix = onMine ? '?mine=true' : '';
+		await expect
+			.element(page.getByRole('link', { name: 'Clients', exact: true }).first())
+			.toHaveAttribute('href', `/practices/practice-1/clients${suffix}`);
+		await expect
+			.element(page.getByRole('link', { name: 'Schedule', exact: true }).first())
+			.toHaveAttribute('href', `/practices/practice-1/schedule${suffix}`);
+	});
+
+	it('marks Schedule current when the address says Mine', async () => {
+		await setup({ roles: ['doula'], pathname: '/practices/practice-1/schedule?mine=true' });
+
+		await expect
+			.element(page.getByRole('link', { name: 'Schedule', exact: true }).first())
+			.toHaveAttribute('aria-current', 'page');
+	});
+
 	it('does not mark Overview current on a screen below it', async () => {
 		await setup({ pathname: '/practices/practice-1/staff' });
 

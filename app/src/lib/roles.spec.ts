@@ -6,6 +6,8 @@ import {
 	isOwnerOrAdmin,
 	isAmbientContractor,
 	canNarrowToMine,
+	opensOnMine,
+	listEntryHref,
 	ROLE_LABELS,
 	EMPLOYMENT_TYPE_LABELS,
 	roleLabel,
@@ -73,6 +75,24 @@ describe('canNarrowToMine', () => {
 
 	it('is not offered at a Practice with one Doula, since every Visit is hers', () => {
 		expect(canNarrowToMine({ ...session(['doula']), hasOtherDoulas: false })).toBe(false);
+	});
+});
+
+describe('opensOnMine and listEntryHref', () => {
+	it('opens on Mine for a Doula who is neither Owner nor Admin', () => {
+		expect(opensOnMine(session(['doula']))).toBe(true);
+		expect(listEntryHref('/clients', session(['doula']))).toBe('/clients?mine=true');
+	});
+
+	it.each([
+		['an Owner who is a Doula', session(['owner', 'doula'])],
+		['an Admin who is a Doula', session(['admin', 'doula'])],
+		['an Admin', session(['admin'])],
+		['a contractor', session(['doula'], true)],
+		['a Doula with no other Doula', { ...session(['doula']), hasOtherDoulas: false }]
+	])('leaves the bare address for %s', (_who, who) => {
+		expect(opensOnMine(who)).toBe(false);
+		expect(listEntryHref('/clients', who)).toBe('/clients');
 	});
 });
 

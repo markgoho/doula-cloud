@@ -9,7 +9,7 @@
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
-	import { isAmbientContractor, isOwnerOrAdmin } from '#lib/roles.js';
+	import { isAmbientContractor, isOwnerOrAdmin, listEntryHref } from '#lib/roles.js';
 	import { sendStaffFeedback } from '#lib/feedback.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
@@ -66,6 +66,10 @@
 			session?.memberships.find((membership) => membership.practiceId === practiceId)?.employmentType === 'contractor'
 	);
 	const canReadInvoices = $derived(roles !== undefined && !isAmbientContractor({ roles, isContractor }));
+	const listEntry = (path: string) =>
+		roles === undefined
+			? path
+			: listEntryHref(path, { roles, isContractor, hasOtherDoulas: practiceSession?.hasOtherDoulas });
 
 	const navItems = $derived.by((): NavItem[] => {
 		if (practiceId === undefined) return [];
@@ -77,13 +81,13 @@
 		const overview = resolve('/practices/[practiceId]', { practiceId });
 		const items = [
 			{ label: 'Overview', href: overview, current: path === overview },
-			{ label: 'Clients', href: resolve('/practices/[practiceId]/clients', { practiceId }) },
+			{ label: 'Clients', href: listEntry(resolve('/practices/[practiceId]/clients', { practiceId })) },
 			// The Practice-wide schedule (#263). Outside the admin block on
 			// purpose: `GET .../visits` is `anyStaff`, ADR-0008's
 			// Engagements/Visits/Messages row, and a contractor Doula gets a
 			// shorter list rather than a refusal -- so offering it to every
 			// role is a promise the endpoint keeps.
-			{ label: 'Schedule', href: resolve('/practices/[practiceId]/schedule', { practiceId }) },
+			{ label: 'Schedule', href: listEntry(resolve('/practices/[practiceId]/schedule', { practiceId })) },
 			// Who is on call (#1093). Outside the admin block for the same
 			// reason the schedule is: `GET .../on-call` is `anyStaff`, and a
 			// contractor Doula gets the births she is on rather than a
@@ -120,7 +124,7 @@
 		// a Client's own screen still marks Clients as the current section.
 		const marked = items.map((item) => ({
 			...item,
-			current: item.current ?? path.startsWith(item.href)
+			current: item.current ?? path.startsWith(item.href.split('?', 1)[0])
 		}));
 		/*
 		 * #2183 (TB-G10): a Practice with no Client yet is offered only the

@@ -340,6 +340,14 @@ describe('Staff Engagement detail summary', () => {
 			.toHaveAttribute('href', '#messages');
 	});
 
+	it('sends a Doula who is neither Owner nor Admin back to her own Clients', async () => {
+		await render(Page, { data: { ...fixtureDetail, session: sessionFor(['doula']) } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', '/practices/practice-1/clients?mine=true');
+	});
+
 	it('shows the due date under its own label, alongside Created (#538)', async () => {
 		// The fixture's own Engagement (#596) already carries a due date.
 		await setup(fixtureDetail);

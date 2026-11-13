@@ -183,6 +183,28 @@ export function canNarrowToMine(session: RoleSession & { hasOtherDoulas?: boolea
 }
 
 /**
+ * Whether a way in to the Clients list or the Schedule arrives already
+ * narrowed to "Mine" (#2870): a Doula who can narrow and is neither Owner nor
+ * Admin, whose own work is what she opens the list for. The bare address stays
+ * the whole Practice for every reader, so one shared link is one list.
+ */
+// eslint-disable-next-line unicorn/consistent-boolean-name -- named by the design call (#2869)
+export function opensOnMine(session: RoleSession & { hasOtherDoulas?: boolean }): boolean {
+	return canNarrowToMine(session) && !isOwnerOrAdmin(session);
+}
+
+/**
+ * A way in to the Clients list or the Schedule, narrowed to "Mine" for the
+ * reader `opensOnMine` names and left bare for everyone else.
+ */
+export function listEntryHref(
+	path: string,
+	session: RoleSession & { hasOtherDoulas?: boolean }
+): string {
+	return opensOnMine(session) ? `${path}?mine=true` : path;
+}
+
+/**
  * Whether a person holds all three roles, which is what signup gives the
  * person who sets a Practice up.
  */

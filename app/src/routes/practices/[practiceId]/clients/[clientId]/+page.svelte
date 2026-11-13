@@ -6,6 +6,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { firstName, fullName } from '#lib/personName.js';
 	import { heldClientsName } from '#lib/clientsReturn.js';
+	import { listEntryHref } from '#lib/roles.js';
 	import {
 		loadClientDetail,
 		pendingRequests,
@@ -91,7 +92,9 @@
 			.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`);
 		listAddress = kept.length > 0 ? `${clientsListPath}?${kept.join('&')}` : clientsListPath;
 	});
-	const clientsHref = $derived(listAddress || clientsListPath);
+	const clientsHref = $derived(
+		listAddress || (data?.session ? listEntryHref(clientsListPath, data.session) : clientsListPath)
+	);
 
 	// The browser's Back button restores the list's history entry, Name and
 	// all. This link is a new navigation, which would drop the Name, so from

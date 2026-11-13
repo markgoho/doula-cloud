@@ -97,6 +97,7 @@ function changeHrefs(): Map<string, string> {
 
 interface SetupOptions {
 	overrides?: Partial<ClientDetail>;
+	roles?: string[];
 	/** The signed-in Staff member's own id, as `/api/staff/session` would
 	 * report it -- defaults to somebody who made no Request on this
 	 * Client, so the Withdraw button stays absent unless a test opts a
@@ -145,6 +146,7 @@ async function setup({
 	sessionThrows = false,
 	isContractor = false,
 	isOwner = false,
+	roles = [],
 	hasSecondFactor = true,
 	eligibility = { unsettledInvoices: [] },
 	eligibilityStatus = 200,
@@ -167,7 +169,7 @@ async function setup({
 		}
 		return Promise.resolve(jsonResponse({ ...baseDetail, ...overrides }));
 	});
-	return render(Page, { data: { isContractor, isOwner, hasSecondFactor, session: sessionStub } });
+	return render(Page, { data: { isContractor, isOwner, hasSecondFactor, session: { ...sessionStub, roles } } });
 }
 
 // #1710: a save made on another screen lands here, and says what it did.
@@ -647,6 +649,14 @@ describe('client detail hub', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
 			.toHaveAttribute('href', `/practices/${practiceId}/clients`);
+	});
+
+	it('links a Doula back to her own Clients when she did not come from the list', async () => {
+		await setup({ roles: ['doula'] });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Clients', exact: true }))
+			.toHaveAttribute('href', `/practices/${practiceId}/clients?mine=true`);
 	});
 
 	it('links back to the list with the filters it was left with', async () => {
