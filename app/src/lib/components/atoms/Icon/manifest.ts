@@ -6,6 +6,7 @@ export const iconManifest = [
 	'check',
 	'x',
 	'warning',
+	'warning-circle',
 	'info',
 	'arrow-right',
 	'arrow-left',

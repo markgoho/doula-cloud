@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Link from '#lib/components/atoms/Link.svelte';
 </script>
 
 <stack-l space="var(--space-6)">
@@ -19,6 +20,15 @@
 			<Badge variant="warning" label="Taking payments, payouts on hold" />
 			<Badge variant="error" label="Email could not be delivered" />
 			<Badge variant="neutral" label="Draft" />
+		</stack-l>
+	</section>
+
+	<section>
+		<h2>Beside a removable tag</h2>
+		<!-- The error badge's circled exclamation is never the "x" a removable tag leads with: only the tag is a control (#2843). -->
+		<stack-l space="var(--space-4)">
+			<Link href="#overdue" label="Overdue Invoices" variant="chip" icon="x" ariaLabel="Remove filter: Overdue Invoices" />
+			<Badge variant="error" label="62 days overdue" />
 		</stack-l>
 	</section>
 </stack-l>
