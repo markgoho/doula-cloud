@@ -192,6 +192,9 @@ describe('scheduleRangeErrors', () => {
 
 const read = (query: string, canMine = true) => scheduleViewFromParameters(new URLSearchParams(query), canMine);
 
+const withoutPicker = (query: string, canMine = true) =>
+	scheduleViewFromParameters(new URLSearchParams(query), canMine, { staffId: 'staff-1' });
+
 describe('scheduleViewFromParameters', () => {
 	it('is the next 30 days for a bare address', () => {
 		expect(read('')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '' });
@@ -203,6 +206,25 @@ describe('scheduleViewFromParameters', () => {
 			chosen: undefined,
 			isMine: true,
 			doula: 'staff-1'
+		});
+	});
+
+	describe('for a reader not offered the Doula picker', () => {
+		it('reads her own id as Mine, with no Doula', () => {
+			expect(withoutPicker('doula=staff-1')).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: '' });
+		});
+
+		it('ignores any other Doula', () => {
+			expect(withoutPicker('doula=staff-2')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '' });
+		});
+
+		it('keeps Mine from the address, and gives it to nobody who is not offered it', () => {
+			expect(withoutPicker('mine=true&doula=staff-2').isMine).toBe(true);
+			expect(withoutPicker('doula=staff-1', false).isMine).toBe(false);
+		});
+
+		it('never reads an empty id as her own', () => {
+			expect(scheduleViewFromParameters(new URLSearchParams('doula='), true, { staffId: '' }).isMine).toBe(false);
 		});
 	});
 

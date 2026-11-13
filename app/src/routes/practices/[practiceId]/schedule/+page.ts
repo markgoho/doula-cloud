@@ -70,7 +70,11 @@ export const load: PageLoad = async ({
 	// The screen's "Try again" runs this read again.
 	depends(_SCHEDULE_READ);
 	const { session } = await parent();
-	const view = scheduleViewFromParameters(url.searchParams, canNarrowToMine(session));
+	const view = scheduleViewFromParameters(
+		url.searchParams,
+		canNarrowToMine(session),
+		isOwnerOrAdmin(session) ? undefined : { staffId: session.staffId }
+	);
 	const read = scheduleDaysOf(view);
 	const whose = scheduleStaffId(view, session.staffId);
 	const filters: ResolvedScheduleFilters = read.days

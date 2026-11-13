@@ -46,7 +46,7 @@ describe('DateRangeFields', () => {
 		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Both days are included.');
 	});
 
-	it('says each error once for the pair, under the hint, and joins them to both boxes', async () => {
+	it('says each error once for the pair, under the hint, and joins each to its own box only', async () => {
 		await render(DateRangeFields, {
 			from: '',
 			to: '2026-11-25',
@@ -55,9 +55,10 @@ describe('DateRangeFields', () => {
 			hint: 'Both days are included.'
 		});
 
-		const description = 'Both days are included. Enter a From day Choose a later To day.';
-		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription(description);
-		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription(description);
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Both days are included. Enter a From day');
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription(
+			'Both days are included. Choose a later To day.'
+		);
 		await expect.element(page.getByLabelText('From')).toBeInvalid();
 		await expect.element(page.getByLabelText('To')).toBeInvalid();
 		expect(page.getByRole('alert').elements()).toHaveLength(2);
@@ -72,9 +73,10 @@ describe('DateRangeFields', () => {
 
 		await expect.element(page.getByLabelText('To')).toBeInvalid();
 		await expect.element(page.getByLabelText('From')).toBeValid();
-		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription(
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription(
 			'Choose a To day that is the same as the From day or later.'
 		);
+		await expect.element(page.getByLabelText('From')).not.toHaveAttribute('aria-describedby');
 		expect(page.getByRole('alert').elements()).toHaveLength(1);
 	});
 
@@ -84,6 +86,8 @@ describe('DateRangeFields', () => {
 		expect(page.getByRole('alert').elements()).toHaveLength(1);
 		await expect.element(page.getByLabelText('From')).toBeInvalid();
 		await expect.element(page.getByLabelText('To')).toBeInvalid();
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Enter a day');
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Enter a day');
 	});
 
 	it('takes a new From the same way', async () => {

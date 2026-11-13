@@ -9,6 +9,8 @@ export function landOnRow(rowDomIds: readonly string[]): void {
 	const shownRow = rowDomIds
 		.map((id) => document.querySelector<HTMLElement>(`#${CSS.escape(id)}`))
 		.find((row) => row !== null && row.getClientRects().length > 0);
-	shownRow?.scrollIntoView({ block: 'start' });
-	shownRow?.focus({ preventScroll: true });
+	if (!shownRow) return;
+	if (![document.body, shownRow].includes(document.activeElement as HTMLElement)) return;
+	shownRow.scrollIntoView({ block: 'start' });
+	shownRow.focus({ preventScroll: true });
 }

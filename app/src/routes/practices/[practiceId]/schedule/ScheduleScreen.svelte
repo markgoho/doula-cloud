@@ -93,7 +93,13 @@
 	// The picker's gate is the roster read's (`+page.ts`), so it holds its
 	// place before the Doulas land.
 	const isDoulaPickerOffered = $derived(isOwnerOrAdmin(session));
-	const view = $derived(scheduleViewFromParameters(page.url.searchParams, canMine));
+	const view = $derived(
+		scheduleViewFromParameters(
+			page.url.searchParams,
+			canMine,
+			isDoulaPickerOffered ? undefined : { staffId: session.staffId }
+		)
+	);
 	const read = $derived(data);
 	const viewKey = (of: ScheduleView) => scheduleHref('', of);
 
@@ -156,6 +162,7 @@
 			pagesLoaded: () => pagesLoaded,
 			navigations: () => navigations,
 			loadMore: didLoadMore,
+			inFlight: () => schedule.inFlight,
 			rowLink
 		});
 	}
@@ -245,8 +252,7 @@
 		doula: draftDoula
 	});
 
-	// While "Choose days" is on, or the address holds a range.
-	const isChoosingDays = $derived(draftChoice === 'choose' || view.chosen !== undefined);
+	const isChoosingDays = $derived(draftChoice === 'choose');
 
 	let isApplying = $state(false);
 	// A move to another narrowing: a page already being added is abandoned,
@@ -340,7 +346,7 @@
 	}
 
 	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
-	const isDoulaPending = $derived(!read && view.doula !== '');
+	const isDoulaPending = $derived(!read && !hasReadFailed && view.doula !== '');
 	const doulaOptions = $derived(isDoulaPending ? [{ value: view.doula, label: '' }] : [{ value: '', label: ANY_DOULA }, ...doulas]);
 	const DAYS_OPTIONS: readonly { value: ScheduleDaysChoice; label: string }[] = [
 		{ value: '7', label: `Next ${SHORT_SCHEDULE_DAYS} days` },

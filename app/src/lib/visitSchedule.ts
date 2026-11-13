@@ -154,17 +154,23 @@ export function scheduleRangeErrors(from: string, to: string): ScheduleRangeErro
 /** Reads the narrowing off a URL's search parameters. `canMine` is whether
  * this reader is offered "Mine" at all; an address cannot give her what
  * the screen does not. Days beside `from` or `to` are ignored, and a
- * `days` that is not one of the presets is the default. */
+ * `days` that is not one of the presets is the default. A reader who is not
+ * offered the Doula picker (`withoutPicker`, carrying her own Staff id) has
+ * no roster to name anyone: her own id in `doula` is "Mine", any other is
+ * ignored. */
 export function scheduleViewFromParameters(
 	parameters: Pick<URLSearchParams, 'get' | 'has'>,
-	canMine: boolean
+	canMine: boolean,
+	withoutPicker?: { staffId: string | undefined }
 ): ScheduleView {
 	const hasChosen = parameters.has('from') || parameters.has('to');
+	const doula = parameters.get('doula') ?? '';
+	const isOwnDoula = withoutPicker !== undefined && doula !== '' && doula === withoutPicker.staffId;
 	return {
 		preset: parameters.get('days') === String(SHORT_SCHEDULE_DAYS) ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
 		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
-		isMine: canMine && parameters.get('mine') === 'true',
-		doula: parameters.get('doula') ?? ''
+		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
+		doula: withoutPicker ? '' : doula
 	};
 }
 

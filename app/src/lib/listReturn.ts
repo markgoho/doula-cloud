@@ -31,7 +31,9 @@ export function putListBack(back: ListReturn, rowLink: (rowId: string) => HTMLEl
  * back where it was (`putListBack`). `navigations` counts the moves the list
  * has seen since, so a move while its pages load stops it short of
  * scrolling: it is never put on another view's rows. `loadMore` answers
- * whether it added any, so the pages running out ends the reading.
+ * whether it added any, so the pages running out ends the reading. A load
+ * already in flight (`inFlight`, a "Load more" pressed meanwhile) is waited
+ * for, not mistaken for the pages running out.
  */
 export async function restoreList(
 	back: ListReturn,
@@ -39,11 +41,16 @@ export async function restoreList(
 		pagesLoaded: () => number;
 		navigations: () => number;
 		loadMore: () => Promise<boolean>;
+		inFlight: () => Promise<void> | undefined;
 		rowLink: (rowId: string) => HTMLElement | undefined;
 	}
 ): Promise<void> {
 	const at = list.navigations();
-	while (at === list.navigations() && list.pagesLoaded() < back.pages && (await list.loadMore()));
+	while (at === list.navigations() && list.pagesLoaded() < back.pages) {
+		const running = list.inFlight();
+		if (running) await running;
+		else if (!(await list.loadMore())) break;
+	}
 	await tick();
 	if (at !== list.navigations()) return;
 	putListBack(back, list.rowLink);

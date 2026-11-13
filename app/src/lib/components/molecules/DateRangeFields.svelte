@@ -31,8 +31,12 @@
 	// One message when both days say the same, two when they differ.
 	const errors = $derived([...new Set([fromError, toError].filter((error): error is string => Boolean(error)))]);
 	const errorIds = $derived(errors.map((_, index) => `${errorId}-${index}`));
-	// The hint first, then each error: the order they are read on screen.
-	const describedBy = $derived([hint ? hintId : undefined, ...errorIds].filter(Boolean).join(' ') || undefined);
+	// The hint first, then the field's own error: the order they are read on screen.
+	const describedByFor = (error: string | undefined) =>
+		[hint ? hintId : undefined, error ? errorIds[errors.indexOf(error)] : undefined].filter(Boolean).join(' ') ||
+		undefined;
+	const fromDescribedBy = $derived(describedByFor(fromError));
+	const toDescribedBy = $derived(describedByFor(toError));
 </script>
 
 <div class="range">
@@ -48,7 +52,7 @@
 			{#snippet children({ id })}
 				<TextInput
 					{id}
-					{describedBy}
+					describedBy={fromDescribedBy}
 					invalid={Boolean(fromError)}
 					type="date"
 					name="from"
@@ -61,7 +65,7 @@
 			{#snippet children({ id })}
 				<TextInput
 					{id}
-					{describedBy}
+					describedBy={toDescribedBy}
 					invalid={Boolean(toError)}
 					type="date"
 					name="to"

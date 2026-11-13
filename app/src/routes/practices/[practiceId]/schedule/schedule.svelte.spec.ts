@@ -75,6 +75,10 @@ const emptyData = (view = data.view, filters = data.filters): SchedulePageData =
 	page: { items: [], hasMore: false }
 });
 
+const asDoula = () => {
+	pageState.data = { session: { ...practiceSession(['doula']).session, hasOtherDoulas: true } };
+};
+
 const arrived = () => (vi.mocked(afterNavigate).mock.calls.at(-1)![0] as () => void)();
 
 function setup(properties?: Parameters<typeof render<typeof Page>>[1]) {
@@ -398,6 +402,49 @@ describe('the narrowing', () => {
 
 		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toHaveValue(laterVisit.staffId);
 	});
+
+	it('does not hold the Doula pending or count her tag once the read has failed', async () => {
+		setAddress(`?doula=${laterVisit.staffId}`);
+		await setup({ hasReadFailed: true });
+
+		expect(testPage.getByRole('option', { name: 'Any Doula' }).elements()).toHaveLength(1);
+		await expect.element(testPage.getByRole('alert')).toBeVisible();
+	});
+
+	it('drops the From and To fields when the next 7 days is chosen over a range in the address', async () => {
+		setAddress('?from=2026-09-10&to=2026-09-12');
+		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-09-10', to: '2026-09-12' }, isMine: false, doula: '' } } });
+		await expect.element(testPage.getByLabelText('From')).toBeVisible();
+
+		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
+
+		expect(testPage.getByLabelText('From').elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('To', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	describe('for a reader who is not offered the Doula picker', () => {
+		it('reads her own id in the address as Mine', async () => {
+			asDoula();
+			setAddress('?doula=staff-1');
+			await setup({ data: { ...data, doulas: [], view: { preset: 30, isMine: true, doula: '' } } });
+
+			await expect.element(testPage.getByRole('checkbox', { name: 'Mine' })).toBeChecked();
+			await expect.element(testPage.getByRole('link', { name: 'Remove filter: Mine' })).toHaveAttribute(
+				'href',
+				schedulePath
+			);
+			expect(testPage.getByRole('link', { name: /Remove filter: Doula/ }).elements()).toHaveLength(0);
+		});
+
+		it('ignores any other Doula in the address', async () => {
+			asDoula();
+			setAddress(`?doula=${laterVisit.staffId}`);
+			await setup({ data: { ...data, doulas: [] } });
+
+			expect(testPage.getByRole('link', { name: /^Remove filter/ }).elements()).toHaveLength(0);
+			expect(testPage.getByText('Clear filters').elements()).toHaveLength(0);
+		});
+	});
 });
 
 describe('the applied tags', () => {
@@ -584,6 +631,21 @@ describe('coming back from an Engagement', () => {
 
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 80));
 		expect(apiFetchWithSession).toHaveBeenCalledOnce();
+	});
+
+	it('waits for a "Load more" already in flight and carries on to the pages she had open', async () => {
+		const scrollTo = vi.spyOn(globalThis, 'scrollTo').mockImplementation(() => {});
+		const second = Promise.withResolvers<Response>();
+		apiFetchWithSession.mockReturnValueOnce(second.promise).mockResolvedValue(jsonResponse(nextPage));
+		await setup({ data: { ...data, page: morePage } });
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+		kept().restore({ pages: 3, scrollY: 120 });
+
+		second.resolve(jsonResponse({ items: [{ ...laterVisit, visitId: 'visit-8', clientName: 'Dara' }], hasMore: true, nextCursor: 'cursor-2' }));
+
+		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
+		expect(apiFetchWithSession).toHaveBeenCalledTimes(2);
+		await expect.element(testPage.getByRole('link', { name: /^Cleo, / })).toBeVisible();
 	});
 
 	it('waits for the read of the entry she came back to', async () => {

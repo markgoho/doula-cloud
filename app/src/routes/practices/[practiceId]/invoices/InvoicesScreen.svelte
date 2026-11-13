@@ -194,6 +194,7 @@
 			pagesLoaded: () => pagesLoaded,
 			navigations: () => navigations,
 			loadMore: didLoadMore,
+			inFlight: () => invoices.inFlight,
 			rowLink
 		});
 	}
