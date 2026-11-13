@@ -12,6 +12,12 @@
 4. **`.claude/hooks/` and `scripts/` (the repo's own tooling), formatting**: if any `.ts` file in either tree is staged, runs Prettier's `--check` over exactly those staged files, blocking a commit that stages one which is not formatted. See "Formatting: which trees are gated, and by what" below for what the rule is and why these two trees needed a gate of their own.
 5. **`.claude/hooks/` and `scripts/`, typecheck**: still only when a `.ts` file in either tree is staged, runs `tsc --noEmit -p tsconfig.tooling.json` over the whole tooling program, blocking a commit that leaves a type error anywhere in either tree. Unlike step 4, this cannot be scoped to the staged files alone — a type error can live in a file the staged one only imports — so it always typechecks both trees in full rather than a per-file diff. See "Typecheck: which trees are gated, and by what" below for the gate itself and why it is scoped narrower than the repo.
 
+`scripts/hooks/pre-push` runs on every `git push`, from the same absolute `core.hooksPath`:
+1. **Duplication**: `bun run dupes:check`, the CI `format` job's "Check for new duplicated code" step. It reads only the branch's changed files and takes well under a second when none is scanned code.
+2. **The API message gate**: when the branch changes a `.go` file under `api/` against `origin/trunk`, `go -C api test ./internal/apierr/`, which holds `TestMessagesOpenWithACapital` and its ceiling. It needs no database. The rest of the Go suite starts Postgres and stays with CI and with whoever is about to open the PR.
+
+Both are here because PR #2850 passed the pre-commit hook and then failed CI on exactly these two.
+
 The CI jobs are the actual enforcement backstop regardless of whether the local hook is enabled — required PR status checks reject a push that would have failed it (see [`docs/agents/worktree-flow-reference.md`](../agents/worktree-flow-reference.md), "Enforcement").
 
 ## Formatting: which trees are gated, and by what
