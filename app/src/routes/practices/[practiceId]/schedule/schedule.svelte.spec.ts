@@ -98,7 +98,7 @@ describe('the Practice-wide schedule (#263)', () => {
 		// (ADR-0022), so a screen reader, a hover and a copy-paste all get
 		// the real one; `querySelector` because an attribute has no accessible
 		// query of its own.
-		const whenCell = testPage.getByRole('cell', { name: /^[A-Z][a-z]{2} Sep \d+, / }).first();
+		const whenCell = testPage.getByRole('cell', { name: /^[A-Z][a-z]{2} Sep \d+\s*,\s*\d/ }).first();
 		await expect.element(whenCell).toBeVisible();
 		expect(whenCell.element().querySelector('time')).toHaveAttribute('datetime', earlierVisit.scheduledAt);
 	});
@@ -121,14 +121,14 @@ describe('the Practice-wide schedule (#263)', () => {
 
 		const table = testPage.getByRole('table', { name: 'Visits' });
 		await expect.element(table).toBeVisible();
-		await expect.element(table).toHaveAccessibleDescription(/^Showing 3 Visits from Mon Sep 7 to Tue Oct 6, soonest first\.$/);
+		await expect.element(table).toHaveAccessibleDescription(/^Showing 3 Visits from Mon\sSep\s7 to Tue\sOct\s6, soonest first\.$/);
 		expect(testPage.getByText(/^Every Visit this Practice has scheduled/).elements()).toHaveLength(0);
 	});
 
 	it('says a Visit’s year when it is not this one', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: /^Mon Jan 4, 2027, \d+:\d\d[ap]m$/ })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: /^Mon Jan 4, 2027\s*,\s*\d+:\d\d[ap]m$/ })).toBeVisible();
 	});
 });
 
@@ -164,20 +164,45 @@ describe('the result line, the empty state and the way back', () => {
 		expect(testPage.getByRole('table').elements()).toHaveLength(0);
 	});
 
-	it('offers the next 30 days from an empty narrower view, keeping Mine and the Doula', async () => {
+	it('offers every Doula\'s Visits, on the same days, from an empty Mine view', async () => {
 		setAddress('?days=7&mine=true');
 		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '' }, { from: '2026-09-07', to: '2026-09-13', staffId: 'staff-1' }) });
 
 		await expect.element(testPage.getByText('You have no Visits from Mon Sep 7 to Sun Sep 13.').first()).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
-			.toHaveAttribute('href', `${schedulePath}?mine=true`);
+			.element(testPage.getByRole('link', { name: "Show every Doula's Visits" }))
+			.toHaveAttribute('href', `${schedulePath}?days=7`);
 	});
 
-	it('says Visits for a picked Doula, and for Mine beside someone else', async () => {
+	it('offers the next 30 days from an empty view of other days with nobody narrowed', async () => {
+		setAddress('?days=7');
+		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '' }, { from: '2026-09-07', to: '2026-09-13' }) });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
+			.toHaveAttribute('href', schedulePath);
+	});
+
+	it('says Visits for a picked Doula, and offers every Doula\'s on the days it was', async () => {
 		setAddress('?doula=staff-2');
 		await setup({ data: emptyData({ preset: 30, isMine: false, doula: 'staff-2' }) });
 		await expect.element(testPage.getByText('No Visits for Bo Ng from Mon Sep 7 to Tue Oct 6.').first()).toBeVisible();
+		await expect
+			.element(testPage.getByRole('link', { name: "Show every Doula's Visits" }))
+			.toHaveAttribute('href', schedulePath);
+	});
+
+	it('says a one-day range as "on" that day, in the line and the tag', async () => {
+		setAddress('?from=2026-09-14&to=2026-09-14');
+		await setup({
+			data: emptyData(
+				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '' },
+				{ from: '2026-09-14', to: '2026-09-14' }
+			)
+		});
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('No Visits on Mon Sep 14.');
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Days Mon Sep 14' })).toBeVisible();
 	});
 
 	it('names the Doula it does not know, by her place', async () => {
@@ -218,14 +243,14 @@ describe('the narrowing', () => {
 		await expect.element(testPage.getByRole('option', { name: 'Any Doula' })).toBeInTheDocument();
 	});
 
-	it('opens From and To on the days the choice before showed, and says the To day is included', async () => {
+	it('opens From and To on the days the choice before showed, and says both days are included', async () => {
 		await setup();
 
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
 
 		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-09-07');
 		await expect.element(testPage.getByLabelText('To')).toHaveValue('2026-10-06');
-		await expect.element(testPage.getByLabelText('To')).toHaveAccessibleDescription('This day is included.');
+		await expect.element(testPage.getByLabelText('To')).toHaveAccessibleDescription('Both days are included.');
 	});
 
 	it('keeps what was typed when the radio is chosen again', async () => {
@@ -286,7 +311,7 @@ describe('the narrowing', () => {
 
 		await expect
 			.element(testPage.getByLabelText('To'))
-			.toHaveAccessibleDescription('This day is included. Choose a To day that is the same as the From day or later.');
+			.toHaveAccessibleDescription('Both days are included. Choose a To day that is the same as the From day or later.');
 		await expect.element(testPage.getByLabelText('To')).toHaveFocus();
 		expect(goto).not.toHaveBeenCalled();
 	});
@@ -298,7 +323,7 @@ describe('the narrowing', () => {
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
-		await expect.element(testPage.getByLabelText('From')).toHaveAccessibleDescription('Enter a From day');
+		await expect.element(testPage.getByLabelText('From')).toHaveAccessibleDescription('Both days are included. Enter a From day');
 		await expect.element(testPage.getByLabelText('From')).toHaveFocus();
 	});
 
@@ -317,7 +342,7 @@ describe('the narrowing', () => {
 		await expect.element(testPage.getByRole('radio', { name: 'Choose days' })).toBeChecked();
 		await expect
 			.element(testPage.getByLabelText('To'))
-			.toHaveAccessibleDescription('This day is included. Choose a To day that is the same as the From day or later.');
+			.toHaveAccessibleDescription('Both days are included. Choose a To day that is the same as the From day or later.');
 		expect(testPage.getByRole('table').elements()).toHaveLength(0);
 		expect(testPage.getByRole('alert').elements()).toHaveLength(1);
 	});

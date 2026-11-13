@@ -2831,7 +2831,7 @@
 	{:else}
 	<DataTable
 		columns={[
-			{ label: 'Date', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
+			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt) },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 			{
 				label: 'Doula',

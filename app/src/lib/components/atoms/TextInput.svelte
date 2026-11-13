@@ -345,6 +345,12 @@
 			max-inline-size: max-content;
 		}
 
+		/* The browser pads its own field row by a pixel either side, which made a
+		   date box two pixels taller than a text box or a select beside it. */
+		input:is([type='date'], [type='datetime-local'])::-webkit-datetime-edit-fields-wrapper {
+			padding: 0;
+		}
+
 		.joined-field {
 			display: flex;
 			align-items: stretch;

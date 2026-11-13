@@ -28,6 +28,7 @@
 		loadPracticeSchedule,
 		scheduleDaysOf,
 		scheduleDaysTag,
+		scheduleEmptyNextStep,
 		scheduleHref,
 		scheduleRangeErrors,
 		scheduleResultRuler,
@@ -81,7 +82,6 @@
 	const LOAD_FAILED = 'Your schedule did not load. Nothing you saved is lost.';
 	const LOAD_MORE_FAILED = 'More Visits did not load. Nothing you saved is lost. Try again.';
 	const RESULT_ID = 'schedule-result';
-	const DEFAULT_DAYS_LABEL = `Show the next ${DEFAULT_SCHEDULE_DAYS} days`;
 	const ANY_DOULA = 'Any Doula';
 	const UNKNOWN_DOULA = 'that Doula';
 
@@ -321,11 +321,10 @@
 	const isBusy = $derived(isApplying || (read !== undefined && viewKey(read.view) !== viewKey(view) && !hasReadFailed));
 	const isEmpty = $derived(read !== undefined && !read.rangeErrors && schedule.items.length === 0);
 
-	// H10: the way back from an empty result is to the days the screen opens on.
+	// H10: the way on from an empty result, by what narrowed it.
 	const emptyAction = $derived.by((): EmptyStateAction | undefined => {
-		const shown = read?.view;
-		if (!shown || (shown.preset === DEFAULT_SCHEDULE_DAYS && !shown.chosen)) return undefined;
-		return { label: DEFAULT_DAYS_LABEL, href: scheduleHref(basePath, withDefaultDays(shown)) };
+		const step = read ? scheduleEmptyNextStep(read.view) : undefined;
+		return step && { label: step.label, href: scheduleHref(basePath, step.view) };
 	});
 
 	// "Try again" runs the read that failed, under the same narrowing.
@@ -383,7 +382,10 @@
 
 {#snippet whenCell(visit: ScheduledVisit, tableView: DataTableView)}
 	{@const parts = scheduledVisitParts(visit.scheduledAt)}
-	<time class="when" class:tracked={tableView === 'table'} datetime={visit.scheduledAt}><span class="day">{parts.day}</span> <span class="clock">{parts.clock}</span></time>
+	<!-- In the table the tracks separate the day and the clock, so the comma is read and not drawn. -->
+	<time class="when" class:tracked={tableView === 'table'} datetime={visit.scheduledAt}
+		>{#if tableView === 'table'}<span class="day">{parts.day.slice(0, -1)}<span class="visually-hidden">,</span></span>{:else}<span class="day">{parts.day}</span>{/if} <span class="clock">{parts.clock}</span></time
+	>
 {/snippet}
 
 {#snippet doulaCell(visit: ScheduledVisit, tableView: DataTableView)}
@@ -448,7 +450,7 @@
 					bind:to={toValue}
 					fromError={rangeErrors.from}
 					toError={rangeErrors.to}
-					toHint="This day is included."
+					hint="Both days are included."
 				/>
 			{/if}
 			{#if isDoulaPickerOffered}
@@ -529,6 +531,12 @@
 		/* The Client's track, the Clients list's Name track (a long two-word name). */
 		.schedule-table {
 			--data-table-grows-track: 15ch;
+		}
+
+		/* Visits are a list in time order, so below the table they are one card
+		   to a line, read down and never across, as the Clients list's are. */
+		.schedule-table :global(.record-view) {
+			grid-template-columns: minmax(0, 1fr);
 		}
 
 		/* The day and the clock in two tracks in the table: every day starts

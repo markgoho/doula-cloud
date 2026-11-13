@@ -4,10 +4,12 @@ import {
 	addDays,
 	isCalendarDay,
 	isScheduleNarrowed,
+	SHORT_SCHEDULE_DAYS,
 	loadPracticeSchedule,
 	practiceSchedulePath,
 	scheduleDaysOf,
 	scheduleDaysTag,
+	scheduleEmptyNextStep,
 	scheduleHref,
 	scheduleRangeErrors,
 	scheduleResultRuler,
@@ -304,10 +306,77 @@ describe('scheduleDaysTag', () => {
 	});
 });
 
+describe('scheduleDaysTag, one day', () => {
+	it('says a single day once', () => {
+		expect(scheduleDaysTag({ from: '2026-11-16', to: '2026-11-16' }, localDay(2026, 11, 13))).toBe('Days: Mon Nov 16');
+	});
+});
+
+describe('scheduleEmptyNextStep', () => {
+	const opening = view({});
+
+	it('offers every Doula\'s Visits, on the same days, when Mine or a Doula is on', () => {
+		const chosen = { from: '2026-11-16', to: '2026-11-17' };
+		expect(scheduleEmptyNextStep(view({ isMine: true }))).toEqual({
+			label: "Show every Doula's Visits",
+			view: view({ isMine: false, doula: '' })
+		});
+		expect(scheduleEmptyNextStep(view({ doula: 'staff-1', chosen, isMine: true }))).toEqual({
+			label: "Show every Doula's Visits",
+			view: view({ doula: '', chosen, isMine: false })
+		});
+	});
+
+	it('offers the next 30 days when only other days are on', () => {
+		expect(scheduleEmptyNextStep(view({ preset: SHORT_SCHEDULE_DAYS }))?.label).toBe('Show the next 30 days');
+		expect(scheduleEmptyNextStep(view({ chosen: { from: '2027-03-01', to: '2027-03-02' } }))?.view).toEqual(opening);
+	});
+
+	it('offers nothing on the opening days with nothing narrowed', () => {
+		expect(scheduleEmptyNextStep(opening)).toBeUndefined();
+	});
+});
+
+// Each day is held whole with non-breaking spaces; read as a person reads it.
+const plain = (text: string) => text.replaceAll('\u{A0}', ' ');
+
 describe('scheduleResultSummary', () => {
 	const now = localDay(2026, 11, 13);
 	const days = { from: '2026-11-13', to: '2026-11-19' };
-	const say = (count: number, hasMore: boolean, who = {}) => scheduleResultSummary(count, hasMore, days, who, now);
+	const say = (count: number, hasMore: boolean, who = {}) => plain(scheduleResultSummary(count, hasMore, days, who, now));
+
+	it('keeps each day whole on one line, so a line breaks between days and never inside one', () => {
+		const text = scheduleResultSummary(3, false, days, {}, now);
+		expect(text).toContain('Fri Nov 13');
+		expect(text).toContain('Thu Nov 19');
+		expect(scheduleResultSummary(3, false, { from: '2027-03-01', to: '2027-03-02' }, {}, now)).toContain(
+			'Mon Mar 1, 2027'
+		);
+	});
+
+	it('says a one-day range as "on" that day, in every wording', () => {
+		const oneDay = { from: '2026-11-16', to: '2026-11-16' };
+		const sayOn = (count: number, hasMore: boolean, who = {}) =>
+			plain(scheduleResultSummary(count, hasMore, oneDay, who, now));
+		expect(sayOn(4, false)).toBe('Showing 4 Visits on Mon Nov 16, soonest first.');
+		expect(sayOn(0, false)).toBe('No Visits on Mon Nov 16.');
+		expect(sayOn(0, false, { isMine: true })).toBe('You have no Visits on Mon Nov 16.');
+	});
+
+	it('says one Visit with whose first, never "1 of"', () => {
+		expect(say(1, false, { isMine: true })).toBe('Showing your 1 Visit from Fri Nov 13 to Thu Nov 19.');
+		expect(say(1, false, { doulaName: 'Priya Raman' })).toBe(
+			"Showing Priya Raman's 1 Visit from Fri Nov 13 to Thu Nov 19."
+		);
+	});
+
+	it('says a single Visit with more to come as the first, with whose', () => {
+		expect(say(1, true)).toBe('Showing the first Visit from Fri Nov 13 to Thu Nov 19, soonest first.');
+		expect(say(1, true, { isMine: true })).toBe('Showing your first Visit from Fri Nov 13 to Thu Nov 19, soonest first.');
+		expect(say(1, true, { doulaName: 'Priya Raman' })).toBe(
+			"Showing Priya Raman's first Visit from Fri Nov 13 to Thu Nov 19, soonest first."
+		);
+	});
 
 	it('says the count, the days and the order, and that more exist when they do', () => {
 		expect(say(30, true)).toBe('Showing the first 30 Visits from Fri Nov 13 to Thu Nov 19, soonest first.');

@@ -269,7 +269,42 @@ export async function loadPracticeSchedule(
 The applied tag for chosen days: "Days: Tue Nov 10 to Thu Nov 19".
 */
 export function scheduleDaysTag(days: ScheduleDays, now: Date = new Date()): string {
-	return `Days: ${formatCalendarWeekdayDay(days.from, now)} to ${formatCalendarWeekdayDay(days.to, now)}`;
+	const from = formatCalendarWeekdayDay(days.from, now);
+	return days.from === days.to ? `Days: ${from}` : `Days: ${from} to ${formatCalendarWeekdayDay(days.to, now)}`;
+}
+
+/**
+ * A day held whole on one line: its spaces do not break, so a line wraps
+ * between days and never inside one.
+ */
+function wholeDay(day: string, now: Date): string {
+	return formatCalendarWeekdayDay(day, now).replaceAll(' ', '\u{A0}');
+}
+
+/**
+ * Where a sentence says the days are: "from Fri Nov 13 to Sat Dec 12", or
+ * "on Mon Nov 16" when the first day is the last.
+ */
+function scheduleDaysSpan(days: ScheduleDays, now: Date): string {
+	return days.from === days.to
+		? `on ${wholeDay(days.from, now)}`
+		: `from ${wholeDay(days.from, now)} to ${wholeDay(days.to, now)}`;
+}
+
+/**
+ * The action an empty result offers, by what narrowed it: a Doula or Mine
+ * answers with every Doula's Visits on the same days; otherwise days other
+ * than the opening ones answer with those. Nothing where the opening days
+ * are all that is on.
+ */
+export function scheduleEmptyNextStep(
+	view: ScheduleView
+): { label: string; view: ScheduleView } | undefined {
+	if (view.isMine || view.doula) {
+		return { label: "Show every Doula's Visits", view: { ...view, isMine: false, doula: '' } };
+	}
+	if (view.preset === DEFAULT_SCHEDULE_DAYS && !view.chosen) return undefined;
+	return { label: `Show the next ${DEFAULT_SCHEDULE_DAYS} days`, view: withDefaultDays(view) };
 }
 
 export interface ScheduleWho {
@@ -292,18 +327,22 @@ export function scheduleResultSummary(
 	who: ScheduleWho = {},
 	now: Date = new Date()
 ): string {
-	const span = `from ${formatCalendarWeekdayDay(days.from, now)} to ${formatCalendarWeekdayDay(days.to, now)}`;
+	const span = scheduleDaysSpan(days, now);
 	if (count === 0) {
 		if (who.isMine && who.doulaName) return `No Visits for ${who.doulaName} that are also yours ${span}.`;
 		if (who.isMine) return `You have no Visits ${span}.`;
 		if (who.doulaName) return `No Visits for ${who.doulaName} ${span}.`;
 		return `No Visits ${span}.`;
 	}
-	const visits = count === 1 ? 'Visit' : 'Visits';
+	const ordered = hasMore || count > 1 ? ', soonest first' : '';
+	if (count === 1) {
+		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
+		const one = hasMore ? 'first Visit' : '1 Visit';
+		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)} ${span}${ordered}.`;
+	}
 	const whose = who.isMine ? 'of your' : (who.doulaName ? `of ${who.doulaName}'s` : '');
 	const amount = hasMore ? `the first ${count}` : String(count);
-	const what = whose ? `${amount} ${whose} ${visits}` : `${amount} ${visits}`;
-	const ordered = hasMore || count > 1 ? ', soonest first' : '';
+	const what = whose ? `${amount} ${whose} Visits` : `${amount} Visits`;
 	return `Showing ${what} ${span}${ordered}.`;
 }
 

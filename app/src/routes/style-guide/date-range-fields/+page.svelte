@@ -6,7 +6,7 @@
 	}
 
 	export const variants: readonly DemoVariant<Properties>[] = [
-		{ name: 'Date range fields, with a To hint and a refused To day', props: { hasProblem: true } }
+		{ name: 'Date range fields, with a hint and a refused To day', props: { hasProblem: true } }
 	];
 </script>
 
@@ -31,7 +31,7 @@
 		The From and To dates a list narrows by, as two labeled date boxes. They are drawn as siblings
 		so a filter bar lays them out in its own row. A screen that refuses a range gives them
 		<code>toError</code> (and <code>fromError</code>), and one that says whether the last day is part
-		of the range gives them <code>toHint</code>.
+		of the range gives them <code>hint</code>, drawn once above both boxes.
 	</p>
 
 	<FilterBar
@@ -43,7 +43,7 @@
 		<DateRangeFields
 			bind:from
 			bind:to
-			toHint={hasProblem ? 'This day is included.' : undefined}
+			hint={hasProblem ? 'Both days are included.' : undefined}
 			toError={hasProblem ? 'Choose a To day that is the same as the From day or later.' : undefined}
 		/>
 	</FilterBar>

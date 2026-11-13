@@ -910,7 +910,7 @@ const arrivalVisit = (visitId: string) => ({
 });
 
 // #250: a Visit's own scheduled date, distinct from createdAt.
-describe('the Visits section Date column and schedule control (#250)', () => {
+describe('the Visits section When column and schedule control (#250)', () => {
 	beforeEach(() => {
 		apiFetchWithSession.mockReset();
 	});
@@ -931,6 +931,14 @@ describe('the Visits section Date column and schedule control (#250)', () => {
 		const expected = `${scheduled.toLocaleDateString('en-US', { weekday: 'short' })} ${scheduled.toLocaleDateString('en-US', { month: 'short' })} ${scheduled.getDate()}, ${scheduled.getFullYear()}, ${hour12}:${minute}${suffix}`;
 		await expect.element(testPage.getByRole('rowheader', { name: expected, exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
+	});
+
+	it('heads the day column "When", as the Schedule does', async () => {
+		await renderWithFixtureResponder();
+
+		const visits = testPage.getByLabelText('Visits');
+		await expect.element(visits.getByRole('columnheader', { name: 'When' })).toBeVisible();
+		expect(visits.getByRole('columnheader', { name: 'Date' }).elements()).toHaveLength(0);
 	});
 
 	it('takes focus on the Visit a Schedule row linked to (#2747)', async () => {

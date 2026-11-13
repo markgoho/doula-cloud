@@ -35,20 +35,28 @@ describe('DateRangeFields', () => {
 		await setup();
 
 		expect(page.getByRole('alert').elements()).toHaveLength(0);
-		await expect.element(page.getByLabelText('To')).not.toHaveAccessibleDescription('This day is included.');
+		await expect.element(page.getByLabelText('To')).not.toHaveAccessibleDescription('Both days are included.');
 	});
 
-	it('says the To hint and each error beside its own box', async () => {
+	it('draws one hint for the pair and joins it to both boxes', async () => {
+		await render(DateRangeFields, { from: '2026-10-26', to: '2026-11-25', hint: 'Both days are included.' });
+
+		expect(page.getByText('Both days are included.').elements()).toHaveLength(1);
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Both days are included.');
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Both days are included.');
+	});
+
+	it('says the pair hint and each error beside its own box', async () => {
 		await render(DateRangeFields, {
 			from: '',
 			to: '2026-11-25',
 			fromError: 'Enter a From day',
 			toError: 'Choose a later To day.',
-			toHint: 'This day is included.'
+			hint: 'Both days are included.'
 		});
 
-		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('This day is included. Choose a later To day.');
-		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Enter a From day');
+		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Both days are included. Choose a later To day.');
+		await expect.element(page.getByLabelText('From')).toHaveAccessibleDescription('Both days are included. Enter a From day');
 		await expect.element(page.getByLabelText('To')).toBeInvalid();
 	});
 
