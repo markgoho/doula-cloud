@@ -117,8 +117,11 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 
 		await expect.element(testPage.getByText('No Invoice matches "Zelda".', { exact: true }).last()).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: 'Show every Invoice' }))
+			.element(testPage.getByRole('link', { name: 'Show all Invoices' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
+		// H8: heard once, from the live result line; the empty state draws it for sight only.
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'No Invoice matches "Zelda".' })).toBeInTheDocument();
+		expect(testPage.getByRole('paragraph').filter({ hasText: 'No Invoice matches' }).elements()).toHaveLength(0);
 	});
 
 	// H10: in a narrowed view the way out keeps what she typed.
@@ -126,7 +129,7 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [] }));
 		await setupSearch({ search: 'INV-0035', url: narrowedToOverdue.url!, read: { ...data, view: 'overdue' } });
 
-		await testPage.getByRole('button', { name: 'Search every Invoice for "INV-0035"' }).click();
+		await testPage.getByRole('button', { name: 'Search all Invoices for "INV-0035"' }).click();
 
 		expect(goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`, { state: { invoicesSearch: 'INV-0035' } });
 	});
@@ -240,13 +243,13 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 });
 
 describe('the state said once (DESIGN.md, "Money is said once")', () => {
-	it('says a paid Invoice once, by its day paid, and an overdue one in its badge', async () => {
+	it('says a refunded Invoice beside its amount and its paid day alone, and an overdue one in its badge', async () => {
 		await setupSearch();
 
 		const paid = testPage.getByRole('cell', { name: /^\$2,500\.00\s*,\s*\$1,250\.50 refunded$/ });
 		const overdue = testPage.getByRole('cell', { name: /^\$4,500\.00\s*,\s*56 days overdue$/ });
 		await expect.element(paid).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: /^Paid Jul 4, 2026$/ })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: /^Jul 4, 2026$/ }).last()).toBeVisible();
 		await expect.element(overdue).toBeVisible();
 		// querySelector, case 2: a badge's icon is drawn and not announced, so
 		// only the drawn tree tells a badge from a plain word.

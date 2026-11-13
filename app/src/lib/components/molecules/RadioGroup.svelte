@@ -180,9 +180,16 @@
 		 * far to the right of "No Doula yet" select it too. GOV.UK ends
 		 * the target where the text ends.
 		 */
-		/* Inline answers wrap close, each keeping its own target. */
+		/* Inline answers wrap close, each keeping its own target: the label
+		   stands the full target tall whatever size the circle is drawn at (a
+		   filter bar's switches row draws GOV.UK's small one, `FilterBar`). */
 		.inline {
 			row-gap: var(--space-1);
+		}
+
+		.inline .option {
+			min-block-size: var(--hit-target-min);
+			align-items: center;
 		}
 
 		.choice {

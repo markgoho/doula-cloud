@@ -88,7 +88,7 @@ describe('the overdue book (#768)', () => {
 	it('offers every Invoice, unpaid and overdue as one choice, and says what is shown and in what order', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'All', exact: true })).toBeChecked();
 		await expect.element(testPage.getByRole('radio', { name: 'Unpaid' })).not.toBeChecked();
 		await expect.element(testPage.getByRole('radio', { name: 'Overdue' })).not.toBeChecked();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
@@ -170,7 +170,7 @@ describe('the overdue book (#768)', () => {
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices?show=unpaid`, noSearch);
 
-		await testPage.getByRole('radio', { name: 'Every Invoice' }).click();
+		await testPage.getByRole('radio', { name: 'All', exact: true }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 		expect(navigation.goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/invoices`, noSearch);
 	});
@@ -221,7 +221,7 @@ describe('the overdue book (#768)', () => {
 		// The empty state, under the bar; the bar's own status line says the same words for a screen reader only.
 		await expect.element(testPage.getByText(text, { exact: true }).last()).toBeVisible();
 		await expect
-			.element(testPage.getByRole('link', { name: 'Show every Invoice' }))
+			.element(testPage.getByRole('link', { name: 'Show all Invoices' }))
 			.toHaveAttribute('href', `/practices/${practiceId}/invoices`);
 	});
 

@@ -81,7 +81,7 @@ describe('the dates the Practice-wide invoice list prints (#1958, #1965)', () =>
 	it('shows a paid Invoice on the day the BFF sent, month first', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: 'Paid Jul 4, 2026', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true })).toBeVisible();
 	});
 
 	it('shows the due day the BFF sent while it can be paid, and the lateness it counted with the amount', async () => {
@@ -133,15 +133,18 @@ describe('the Practice-wide invoice list (#265)', () => {
 			.toBeVisible();
 		// The money said once, its state in the Clients list's words: the
 		// open row is past its due day, so it says how late (#2122). A paid
-		// row's state is its date cell's lead, so its amount stands alone.
+		// row says paid in its Money cell, so its Payment cell says the day alone.
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, 56 days overdue') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('Paid Jul 4, 2026') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Jul 4, 2026', exact: true }).last()).toBeVisible();
 	});
 
-	it('says a paid row alone by its amount, unless some of it went back', async () => {
+	// H4, H8 (#2746): as the Clients list says it, and "paid" is said once in the row.
+	it('says a paid row is paid beside its amount, as the Clients list does, and once', async () => {
 		await setup({ ...data, items: [{ ...paidInvoice, refundedCents: 0 }] });
 
-		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('$2,500.00, paid') })).toBeVisible();
+		const row = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element();
+		expect(row.textContent!.match(/paid/gi)).toHaveLength(1);
 	});
 
 	// H2, H4 (#2746): the rows that say refunded add up to "Of that, refunded".
@@ -303,7 +306,7 @@ describe('a read that did not land', () => {
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Your Invoices did not load. Nothing you saved is lost.');
 		await expect.element(testPage.getByRole('status', { name: 'Loading your Invoices' })).not.toBeInTheDocument();
-		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeVisible();
+		await expect.element(testPage.getByRole('radio', { name: 'All', exact: true })).toBeVisible();
 
 		const tryAgain = testPage.getByRole('button', { name: 'Try again' });
 		await tryAgain.click();
@@ -465,7 +468,7 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 		await setupLoading();
 
 		await expect.element(testPage.getByText('Clients owe')).toBeVisible();
-		await expect.element(testPage.getByRole('radio', { name: 'Every Invoice' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'All', exact: true })).toBeChecked();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(testPage.getByRole('status', { name: 'Loading your invoices' })).toBeVisible();
 	});

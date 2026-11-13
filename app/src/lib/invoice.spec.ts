@@ -8,6 +8,7 @@ import {
 	formatAmount,
 	invoiceRowStatusLabel,
 	invoiceRowStatusVariant,
+	invoiceMoneyState,
 	invoicesResultSummary,
 	invoiceStateBadge,
 	invoiceStatusLabel,
@@ -115,6 +116,22 @@ describe('loadPracticeInvoices with a search (#2746, #1829)', () => {
 		await loadPracticeInvoices(fetcher, 'practice-1', undefined, 'all', '0012');
 
 		expect(JSON.parse((fetcher.mock.calls[0]![1] as RequestInit).body as string)).toEqual({ view: 'all', search: '0012', cursor: '' });
+	});
+});
+
+describe('invoiceMoneyState (DESIGN.md, "Money is said once")', () => {
+	it('says one Invoice alike on both lists: its word, with the badge it takes', () => {
+		expect(invoiceMoneyState({ status: 'open', daysOverdue: 12 })).toEqual({ word: '12 days overdue', variant: 'error' });
+		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0 })).toEqual({ word: 'paid', variant: undefined });
+		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, refundedCents: 0 })).toEqual({ word: 'paid', variant: undefined });
+	});
+
+	it('says how much of a paid Invoice went back, as a plain word', () => {
+		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, refundedCents: 30_000 })).toEqual({ word: '$300.00 refunded' });
+	});
+
+	it('says a payment on its way before a refund', () => {
+		expect(invoiceMoneyState({ status: 'paid', daysOverdue: 0, paymentProcessing: true, refundedCents: 30_000 }).word).toBe('payment on its way');
 	});
 });
 

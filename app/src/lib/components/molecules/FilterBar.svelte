@@ -427,9 +427,29 @@
 		}
 
 		/* The switches are stacked at a phone's width; each keeps its own
-		   target, so the rows sit close. */
+		   target, so the rows sit close. Every choice control in the row is
+		   GOV.UK's small size, its pattern for a filter beside results: a 24px
+		   box or circle and a tighter gap to its words, read by `Checkbox`,
+		   `RadioGroup` and `LabeledField` through the choice tokens, so no route
+		   picks a size. */
 		.switches {
+			--choice-size: calc(var(--control-height) * 0.6);
+			--choice-gap: var(--space-2);
 			row-gap: var(--space-1);
+		}
+
+		/* A small box keeps the full target: its row and its label stand the
+		   target tall, the box centered in it. */
+		.switches :global(.inline-row) {
+			grid-template-rows: minmax(var(--hit-target-min), auto);
+			align-items: center;
+		}
+
+		.switches :global(.inline-row > label) {
+			align-self: stretch;
+			display: flex;
+			align-items: center;
+			padding-block: 0;
 		}
 
 		/* Where the switches are stacked, a switch that is not drawn leaves no row. */

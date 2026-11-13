@@ -121,11 +121,13 @@
 		 */
 		wraps?: boolean;
 		/**
-		 * The one column of a `columnWidths="fill"` table that takes the room
-		 * the others leave. Every other column keeps its content's width on
-		 * one line, so a column starts where its own values make it start and
-		 * a filter that leaves a column out gives that room to this one. Read
-		 * only by that layout. One per table.
+		 * The one column of a `columnWidths="one-line"` table that may wrap.
+		 * Every other column keeps its content's width on one line. This one
+		 * is at least its track (`--data-table-grows-track` on an ancestor, a
+		 * width the route measures its busiest value at), so the columns after
+		 * it start at one place whichever rows are shown, and it wraps only
+		 * where the frame is too narrow for the table. Read only by that
+		 * layout. One per table.
 		 */
 		grows?: boolean;
 	}
@@ -184,6 +186,13 @@
 		emptyMessage: string;
 		emptyAction?: EmptyStateAction;
 		/**
+		 * False where the list's own live result line (`FilterBar`'s status,
+		 * hidden from sight while the list is empty) says `emptyMessage`
+		 * word for word: the line is then read there and drawn here, never
+		 * heard twice (`EmptyState`'s `isMessageSpoken`).
+		 */
+		isEmptyMessageSpoken?: boolean;
+		/**
 		 * Wraps the whole table in a closed-by-default `Details` (#1520),
 		 * named by this string -- the Client portal's own placement for the
 		 * activity ledger (brief.md's #433 amendment: "behind a closed
@@ -201,14 +210,15 @@
 		 * the content does not decide, for sibling tables of the same
 		 * columns read one under the next -- the portal's three Invoice
 		 * sections -- so a column starts at the same place in each (Law of
-		 * Similarity). `fill` takes the frame's width, up to a ceiling, for one
-		 * list a reader filters again and again: the Clients list, whose columns
-		 * moved sideways with every result under `content`. Every column but the
-		 * one marked `grows` is as wide as its longest value, and that one takes
-		 * the rest, so no column is sized by a guess at what it will hold. It
+		 * Similarity). `one-line` is for a list a reader filters again and
+		 * again (the Clients and Invoices lists, whose columns moved sideways
+		 * with every result under `content`): every column but the one marked
+		 * `grows` keeps its longest value on one line, that one holds its
+		 * track, and the table stops where its columns are satisfied, never
+		 * stretched across a wide frame, so a row's facts stay together. It
 		 * changes the table only; the record view is already one card width.
 		 */
-		columnWidths?: 'content' | 'even' | 'fill';
+		columnWidths?: 'content' | 'even' | 'one-line';
 		/**
 		 * How a record is drawn when the frame is too narrow for the table.
 		 * `list`, the default, is the card of labeled rows. `compact` is for a
@@ -267,6 +277,7 @@
 		disclosure,
 		emptyMessage,
 		emptyAction,
+		isEmptyMessageSpoken = true,
 		columnWidths = 'content',
 		recordLayout = 'list',
 		caption,
@@ -397,7 +408,7 @@
 	     the total above it has said it all (#982). -->
 	{#if rows.length === 0}
 		{#if emptyMessage}
-			<EmptyState message={emptyMessage} action={emptyAction} />
+			<EmptyState message={emptyMessage} action={emptyAction} isMessageSpoken={isEmptyMessageSpoken} />
 		{/if}
 	{:else}
 		<table
@@ -405,7 +416,7 @@
 			aria-describedby={describedBy}
 			aria-busy={isBusy}
 			class:even={columnWidths === 'even'}
-			class:fill={columnWidths === 'fill'}
+			class:one-line={columnWidths === 'one-line'}
 			class:has-wrapping-column={columns.some((column) => column.wraps)}
 		>
 			{#if caption}
@@ -614,23 +625,19 @@
 			table-layout: fixed;
 		}
 
-		/* `columnWidths="fill"`: the frame's width, up to a ceiling, with one
-		   column (`grows`) taking what the others leave. Each of the others
-		   asks for 1% and cannot wrap, so the table algorithm gives it its
-		   longest value and no more; the room that is left lands in the one
-		   that has no width. A filter that leaves a column out therefore
-		   moves nothing but that column. The ceiling is what #542 asked for:
-		   a cell never absorbs a whole screen. Three measures (about
-		   1750px): a list read at 1440px uses the width its container gives,
-		   with no empty band beside it, while a 4K window still stops short
-		   of a row that crosses the screen. */
-		.table-view.fill {
-			inline-size: min(100%, calc(var(--measure) * 3));
+		/* `columnWidths="one-line"` (#2739): the shrink-to-fit width #542
+		   chose, so the table stops where its columns are satisfied and a
+		   wide frame leaves its room after the table, not between a name and
+		   its amount. Every column but `grows` keeps its value on one line;
+		   that one holds its track as its least width (a header cell's width
+		   is its column's floor), so the columns after it start at one place
+		   in every filter state, and it alone wraps where the frame runs out. */
+		.table-view.one-line :is(th, td):not(.grows) {
+			white-space: nowrap;
 		}
 
-		.table-view.fill :is(th, td):not(.grows) {
-			inline-size: 1%;
-			white-space: nowrap;
+		.table-view.one-line th.grows {
+			inline-size: var(--data-table-grows-track, auto);
 		}
 
 		/* Rows that are about to be replaced (`isBusy`) dim a little, so a
@@ -641,7 +648,7 @@
 			opacity: 0.6;
 		}
 
-		.table-view.fill :is(th, td) {
+		.table-view.one-line :is(th, td) {
 			max-inline-size: none;
 		}
 

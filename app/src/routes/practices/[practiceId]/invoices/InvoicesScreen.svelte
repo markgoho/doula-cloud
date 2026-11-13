@@ -22,9 +22,8 @@
 		formatAmount,
 		INVOICES_RESULT_RULER,
 		invoiceDateLine,
+		invoiceMoneyState,
 		invoicesResultSummary,
-		invoiceStateBadge,
-		invoiceStateWord,
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
@@ -32,7 +31,7 @@
 		type PracticeInvoice,
 		type PracticeInvoicePage
 	} from '#lib/invoice.js';
-	import Badge from '#lib/components/atoms/Badge.svelte';
+	import MoneyAmount from '#lib/components/molecules/MoneyAmount.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
@@ -312,9 +311,10 @@
 	);
 
 	// Short on the radios, which follow "Show", so on a phone the three share
-	// a line or two with it; whole on the applied tag, which stands alone.
-	const VIEW_OPTIONS: readonly { value: InvoicesView; label: string; tag: string }[] = [
-		{ value: 'all', label: 'Every Invoice', tag: 'Every Invoice' },
+	// a line with it; whole on the applied tag, which stands alone. All is the
+	// list unfiltered, so it draws no tag.
+	const VIEW_OPTIONS: readonly { value: InvoicesView; label: string; tag?: string }[] = [
+		{ value: 'all', label: 'All' },
 		{ value: 'unpaid', label: 'Unpaid', tag: 'Unpaid Invoices' },
 		{ value: 'overdue', label: 'Overdue', tag: 'Overdue Invoices' }
 	];
@@ -376,7 +376,7 @@
 	type AppliedTag = { text: string; href: string; search: string };
 	const appliedTags = $derived.by(() => {
 		const tags: AppliedTag[] = [];
-		const viewTag = VIEW_OPTIONS.find((option) => option.value === view && view !== 'all')?.tag;
+		const viewTag = VIEW_OPTIONS.find((option) => option.value === view)?.tag;
 		if (viewTag) tags.push({ text: viewTag, href: invoicesHref, search: appliedSearch });
 		if (appliedSearch) {
 			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view)}`, search: '' });
@@ -402,23 +402,10 @@
 	// Invoice, keeping the text she typed (in history state, never the address).
 	const emptyListAction = $derived.by((): EmptyStateAction => {
 		const search = shown?.search ?? '';
-		if (search === '' || shown?.view === 'all') return { label: 'Show every Invoice', href: invoicesHref };
-		return { label: `Search every Invoice for "${search}"`, onClick: () => void showFilter(invoicesHref, search) };
+		if (search === '' || shown?.view === 'all') return { label: 'Show all Invoices', href: invoicesHref };
+		return { label: `Search all Invoices for "${search}"`, onClick: () => void showFilter(invoicesHref, search) };
 	});
 
-	/*
-	 * The money said once (DESIGN.md): the amount and its state, in the
-	 * Clients list's words ("owed", "12 days overdue", through
-	 * `invoiceStateWord`). Owed is the amber badge, overdue and written off
-	 * the red one; every other state is a plain word (`invoiceStateBadge`). A paid row's
-	 * state is its date cell's lead, "Paid Nov 10, 2026", so the amount
-	 * stands alone, unless some of it went back: then the state says how
-	 * much, "$300.00 refunded", so the rows add up to "Of that, refunded".
-	 */
-	function stateWord(invoice: PracticeInvoice): string {
-		if (invoiceDateLine(invoice)?.lead !== 'Paid' || invoice.paymentProcessing) return invoiceStateWord(invoice);
-		return invoice.refundedCents > 0 ? `${formatAmount(invoice.refundedCents)} refunded` : '';
-	}
 
 	// #271: local and Stripe Invoices share one book, so the rail is said per
 	// row, beside the reference it decides the shape of. The care it bills
@@ -429,16 +416,24 @@
 
 	const NO_PAYMENT_DUE = 'No payment due';
 
+	/*
+	 * The Payment cell's lead, which a paid row leaves out: its Money cell has
+	 * said "paid" (H8), so the cell says the day under its "Payment" heading,
+	 * and a screen reader hears "paid" once. An unpaid row keeps "Payment
+	 * due", never a bare "due" (ADR-0015).
+	 */
+	const dateLead = (line: NonNullable<ReturnType<typeof invoiceDateLine>>) => (line.lead === 'Paid' ? '' : line.lead);
+
 	// Empty with no day, so a card leaves the fact out; the table's cell still says NO_PAYMENT_DUE.
 	function dateText(invoice: PracticeInvoice): string {
 		const line = invoiceDateLine(invoice);
-		return line ? `${line.lead} ${line.day}` : '';
+		return line ? `${dateLead(line)} ${line.day}`.trim() : '';
 	}
 
 	/*
-	 * Five columns. The Client takes the room the others leave and wraps
-	 * there (`columnWidths="fill"`); every other column is as wide as its
-	 * values on one line. The Money comes second, so a phone's record card
+	 * Five columns, as on the Clients list (`columnWidths="one-line"`): the
+	 * Client holds its track and is the one column that may wrap; every
+	 * other column is as wide as its values on one line. The Money comes second, so a phone's record card
 	 * reads the Client, then the amount and its state, then the rest. The
 	 * days run in the order they happen: raised, then the one that matters
 	 * for the row's state, with its kind in its own words.
@@ -448,8 +443,7 @@
 		{
 			label: 'Money',
 			numeric: true,
-			accessor: (invoice: PracticeInvoice) =>
-				[formatAmount(invoice.amountCents), stateWord(invoice)].filter(Boolean).join(', '),
+			accessor: (invoice: PracticeInvoice) => `${formatAmount(invoice.amountCents)}, ${invoiceMoneyState(invoice).word}`,
 			content: moneyCell
 		},
 		{
@@ -486,10 +480,7 @@
 </script>
 
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
-	<!-- In the table, the amount and its state in two tracks, so amounts end at one place whatever the state says; on a card, the state follows the amount. -->
-	{@const badge = invoiceStateBadge(invoice)}
-	{@const word = stateWord(invoice)}
-	<span class={view === 'table' ? 'money' : 'record-money'}><span class="no-break">{formatAmount(invoice.amountCents)}</span><span class="state">{#if word}<span class="visually-hidden">&#44;&#32;</span>{#if badge}<Badge label={word} variant={badge} />{:else}{word}{/if}{/if}</span></span>
+	<MoneyAmount amount={formatAmount(invoice.amountCents)} state={invoiceMoneyState(invoice)} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
@@ -499,7 +490,7 @@
 
 {#snippet dateCell(invoice: PracticeInvoice, view: DataTableView)}
 	{@const line = invoiceDateLine(invoice)}
-	{#if line}<span class="date" class:tracked={view === 'table'}><span class="lead">{line.lead}</span> <time datetime={line.on}>{line.day}</time></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_PAYMENT_DUE}</span>{/if}
+	{#if line}<span class="date" class:tracked={view === 'table'}><span class="lead">{dateLead(line)}</span> <time datetime={line.on}>{line.day}</time></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_PAYMENT_DUE}</span>{/if}
 {/snippet}
 
 {#snippet raisedCell(invoice: PracticeInvoice, view: DataTableView)}
@@ -641,9 +632,10 @@
 						? 'No Invoices yet. One appears here as soon as a Contract is billed.'
 						: resultSummary}
 					emptyAction={isBookEmpty ? undefined : emptyListAction}
+					isEmptyMessageSpoken={isBookEmpty}
 					caption="Invoices"
 					describedBy={isBookEmpty ? undefined : RESULT_ID}
-					columnWidths="fill"
+					columnWidths="one-line"
 					recordLayout="compact"
 					{isBusy}
 				/>
@@ -708,19 +700,17 @@
 		   measured the same day on the demo Practice with "Postpartum" on every
 		   row, so it was 67.8rem. Holding the Money column still across views
 		   (a state track and Reference, Sent and Payment columns as wide as the
-		   longest each can say) took it to 1135px the same day, so it is 71rem.
+		   longest each can say) took it to 1135px the same day, so it was 71rem.
+		   The table stopped filling its frame (#2739, `columnWidths="one-line"`)
+		   and the floor check measured 1123px on 2026-11-13, so it is 70.2rem:
+		   the held columns, not the fill, are what this width is.
 		   `DataTable.svelte`'s floor comment says why the floor is the route's own. */
 		.invoices-table {
 			container: invoices-table / inline-size;
-			/* The Money column's right edge, written once: the amounts end a
-			   state track and a gap before the cell's inset, and the header ends
-			   where they do. The track holds the longest state this list can say,
-			   a red "NNN days overdue" badge or the plain "payment on its way" and
-			   "$N,NNN.NN refunded", so the amounts keep one edge in every view and
-			   across Load more. */
-			--money-state-track: 20ch;
-			--money-state-gap: var(--space-1);
 			--data-table-cell-inset: var(--space-2);
+			/* The Client column's least width, the Clients list's Name track (a
+			   long two-word name), so the Money starts at one place in every view. */
+			--data-table-grows-track: 15ch;
 		}
 
 		.invoices-table > :global(*) {
@@ -729,7 +719,7 @@
 			--data-table-records-display: block;
 		}
 
-		@container invoices-table (min-width: 71rem) {
+		@container invoices-table (min-width: 70.2rem) {
 			.invoices-table > :global(*) {
 				--data-table-table-display: table;
 				--data-table-records-display: none;
@@ -738,8 +728,8 @@
 
 		/* Reference, Sent and Payment (`columns`' third to fifth) are each as wide
 		   as the longest value they can say, "INV-0000 · Postpartum · By hand" and
-		   "Payment due Nov 30, 2026", whatever rows are shown. The Client takes
-		   the rest, so the Money column's edge is the same in every view. */
+		   "Payment due Nov 30, 2026", whatever rows are shown, so the Money
+		   column's edge is the same in every view. */
 		.invoices-table :global(thead th:nth-child(3)) {
 			min-inline-size: calc(27ch + 2 * var(--data-table-cell-inset));
 		}
@@ -752,32 +742,9 @@
 			min-inline-size: calc(23ch + 2 * var(--data-table-cell-inset));
 		}
 
+		/* The header ends where the amounts do (`MoneyAmount`'s two tracks). */
 		.invoices-table :global(th.numeric) {
-			padding-inline-end: calc(var(--data-table-cell-inset) + var(--money-state-track) + var(--money-state-gap));
-		}
-
-		/* The state's badge is a pill taller than a line of text by its own
-		   block padding; this margin takes that padding back, so a row with a
-		   badge is as tall as a row without one. */
-		.money {
-			margin-block: calc(var(--space-1) / -2);
-			display: inline-grid;
-			grid-template-columns: auto var(--money-state-track);
-			column-gap: var(--money-state-gap);
-			white-space: nowrap;
-		}
-
-		/* A state with no badge is a plain word, quieter than its amount. */
-		.state {
-			color: var(--color-on-surface-variant);
-			text-align: start;
-		}
-
-		.record-money {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-1);
+			padding-inline-end: calc(var(--data-table-cell-inset) + var(--money-state-track) + var(--space-1));
 		}
 
 		/* "Payment due Nov 30, 2026" is one phrase: it wraps whole, never mid-date. */
@@ -791,6 +758,8 @@
 			display: inline-grid;
 			grid-template-columns: 11ch auto;
 			column-gap: var(--space-1);
+			/* A paid row's empty lead has no baseline, so the day sets the row's. */
+			align-items: baseline;
 		}
 
 		.lead {
@@ -808,9 +777,9 @@
 
 		/* The field at its own width, with Apply and an applied view's tag beside
 		   it where the bar holds all three (30rem: the field, Apply and the
-		   "Overdue Invoices" tag). Where it does not, the field takes its own line,
-		   so Apply and the tag share the next one at rest and applied alike, and
-		   applying one view moves nothing. */
+		   "Overdue Invoices" tag). Where it does not, the field narrows to share
+		   its line with Apply alone, so a phone's first screen keeps that line
+		   for the list, and an applied tag takes the line under them. */
 		.search {
 			flex: 1 1 11rem;
 			max-inline-size: max-content;
@@ -818,7 +787,7 @@
 
 		@container filter-bar (max-width: 30rem) {
 			.search {
-				flex-basis: 100%;
+				flex-basis: 60%;
 				max-inline-size: none;
 			}
 		}

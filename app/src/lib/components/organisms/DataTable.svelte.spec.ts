@@ -147,7 +147,7 @@ interface SetupOptions {
 	describedBy?: string;
 	hasRowHeader?: boolean;
 	isBusy?: boolean;
-	columnWidths?: 'content' | 'even' | 'fill';
+	columnWidths?: 'content' | 'even' | 'one-line';
 	recordLayout?: 'list' | 'compact';
 }
 
@@ -276,58 +276,56 @@ describe('DataTable.svelte', () => {
 		}
 	});
 
-	it('lets a filling table\'s one growing column take the room, and every other column keep its content\'s width', async () => {
-		const { container } = await setup({
-			columns: [
-				{ label: 'Name', accessor: (row: Row) => row.name },
-				{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
-			],
-			columnWidths: 'fill',
-			caption: 'People'
-		});
+	it('stops a one-line table where its columns are satisfied, every fact on one line, the growing column at its track', async () => {
+		document.body.style.setProperty('--data-table-grows-track', '30ch');
+		try {
+			const { container } = await setup({
+				columns: [
+					{ label: 'Name', accessor: (row: Row) => row.name },
+					{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
+				],
+				columnWidths: 'one-line',
+				caption: 'People'
+			});
 
-		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
-		const table = container.querySelector('table')!.getBoundingClientRect();
-		const name = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect();
-		const status = page.getByRole('columnheader', { name: 'Status' }).element().getBoundingClientRect();
-		const longest = Math.max(
-			...page
-				.getByRole('rowheader')
-				.elements()
-				.map((header) => {
-					const range = document.createRange();
-					range.selectNodeContents(header);
-					return range.getBoundingClientRect().width;
-				})
-		);
-		// The name column is its longest name and the cell's inset, not a share of the frame.
-		expect(name.width).toBeLessThan(longest + 24);
-		expect(status.width).toBeGreaterThan(table.width / 2);
-		expect(name.width + status.width).toBeCloseTo(table.width, 0);
+			await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+			const table = container.querySelector('table')!.getBoundingClientRect();
+			// A wide frame's room is left after the table, never spread between a name and its status.
+			expect(table.width).toBeLessThan(WIDE[0] / 2);
+			const status = page.getByRole('columnheader', { name: 'Status' }).element();
+			const track = Number(getComputedStyle(status).fontSize.replace('px', '')) * 30 * 0.5;
+			expect(status.getBoundingClientRect().width).toBeGreaterThan(track);
+			for (const header of page.getByRole('rowheader').elements()) {
+				const range = document.createRange();
+				range.selectNodeContents(header);
+				expect(range.getClientRects()).toHaveLength(1);
+			}
+		} finally {
+			document.body.style.removeProperty('--data-table-grows-track');
+		}
 	});
 
-	it('moves no column left of the growing one when a column right of it is left out of a filling table', async () => {
-		const filling = [
+	it('moves no column left of the growing one when a column right of it is left out of a one-line table', async () => {
+		const oneLine = [
 			{ label: 'Name', accessor: (row: Row) => row.name },
 			{ label: 'Status', accessor: (row: Row) => row.status, grows: true },
 			{ label: 'Extra', accessor: () => 'Some words' }
 		];
-		const { container } = await setup({ columns: filling, columnWidths: 'fill', caption: 'People' });
+		await setup({ columns: oneLine, columnWidths: 'one-line', caption: 'People' });
 		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
-		const before = container.querySelector('table')!.getBoundingClientRect().width;
-		const nameBefore = page.getByRole('columnheader', { name: 'Name' }).element().getBoundingClientRect().width;
+		const statusBefore = page.getByRole('columnheader', { name: 'Status' }).element().getBoundingClientRect();
 
 		await render(DataTable<Row>, {
-			columns: filling.slice(0, 2),
+			columns: oneLine.slice(0, 2),
 			rows,
 			emptyMessage: '',
-			columnWidths: 'fill',
+			columnWidths: 'one-line',
 			caption: 'Others'
 		});
 
-		const tables = document.querySelectorAll('table');
-		expect(tables[1]!.getBoundingClientRect().width).toBeCloseTo(before, 0);
-		expect(page.getByRole('columnheader', { name: 'Name' }).nth(1).element().getBoundingClientRect().width).toBeCloseTo(nameBefore, 0);
+		const statusAfter = page.getByRole('columnheader', { name: 'Status' }).nth(1).element().getBoundingClientRect();
+		expect(statusAfter.left).toBeCloseTo(statusBefore.left, 0);
+		expect(statusAfter.width).toBeCloseTo(statusBefore.width, 0);
 	});
 
 	it('draws a compact record as the name, the next field, then the rest on one line, with labels read not drawn', async () => {

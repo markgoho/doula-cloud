@@ -661,6 +661,8 @@ describe('the "owe money" and "no Contract" switches', () => {
 		await setup(nobody);
 
 		await expect.element(testPage.getByText('No active Client is missing a Contract. Clear the filters to widen the list.').first()).toBeVisible();
+		// H8: heard once, from the live result line; the empty state draws it for sight only.
+		expect(testPage.getByRole('paragraph').filter({ hasText: 'No active Client is missing a Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('keeps the no-work switch while neither narrowing is on', async () => {

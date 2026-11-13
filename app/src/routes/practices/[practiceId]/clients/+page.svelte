@@ -14,16 +14,17 @@
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
 	import { pagesToRestore } from '#lib/listReturn.js';
-	import { onMount, untrack, type ComponentProps } from 'svelte';
+	import { onMount, untrack } from 'svelte';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
-	import { formatAmount, invoiceStateBadge, invoiceStateWord } from '#lib/invoice.js';
+	import { formatAmount, invoiceMoneyState } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import MoneyAmount from '#lib/components/molecules/MoneyAmount.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -552,30 +553,22 @@ import type { PageProps as PageProperties } from './$types';
 		prefix: string;
 		lead: string;
 		amount: string;
-		word: string;
-		// Set where the state asks for a badge: amber for owed, red for overdue or written off.
-		variant?: ComponentProps<typeof Badge>['variant'];
+		// An Invoice's state, said once, in the Invoices list's words and badges.
+		state?: ReturnType<typeof invoiceMoneyState>;
 	};
 	const NO_MONEY = 'No amount';
-
-	// The state of an Invoice, said once, here: late and owed are badges (one
-	// meaning per color), the rest plain words.
-	function moneyState(line: OpenEngagement): { word: string; variant?: MoneyLine['variant'] } {
-		const standing = standingOf(line);
-		return { word: invoiceStateWord(standing), variant: invoiceStateBadge(standing) };
-	}
 
 	function moneyLines(client: ClientListItem): MoneyLine[] {
 		const lines = client.openEngagements ?? [];
 		const held = lines.map((line): Omit<MoneyLine, 'engagementId' | 'prefix'> => {
 			if (line.invoiceStatus) {
 				const amount = line.invoiceAmountCents === undefined ? '' : formatAmount(line.invoiceAmountCents);
-				return { lead: '', amount, ...moneyState(line) };
+				return { lead: '', amount, state: invoiceMoneyState(standingOf(line)) };
 			}
-			if (line.feeCents !== undefined) return { lead: 'Your fee', amount: formatAmount(line.feeCents), word: '' };
-			return { lead: '', amount: '', word: '' };
+			if (line.feeCents !== undefined) return { lead: 'Your fee', amount: formatAmount(line.feeCents) };
+			return { lead: '', amount: '' };
 		});
-		if (held.every((money) => money.amount === '' && money.word === '')) return [];
+		if (held.every((money) => money.amount === '' && !money.state?.word)) return [];
 		return lines.map((line, index) => {
 			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
 			return { engagementId: line.engagementId, prefix, ...held[index]! };
@@ -640,8 +633,9 @@ import type { PageProps as PageProperties } from './$types';
 	// Blocked email addresses link (#785) went with them, and a pending
 	// Request is a badge in Status. What is left fits a desktop.
 	// Name, Money, Date and Doula are each as wide as their longest value and
-	// never wrap; Status, the column with the most to say, takes the rest
-	// (`columnWidths="fill"`). A Client with two Engagements stacks hers by design.
+	// never wrap; Status, the column with the most to say, holds its track and
+	// wraps only where the frame runs out (`columnWidths="one-line"`). A Client
+	// with two Engagements stacks hers by design.
 	const columnSet = {
 		name: { label: 'Name', accessor: (client: ClientListItem) => client.name },
 		status: { label: 'Status', accessor: statusText, content: statusCell, grows: true },
@@ -853,7 +847,7 @@ import type { PageProps as PageProperties } from './$types';
 							{/each}
 						</span>
 					</cluster-l>
-					{#if view === 'record' && owed && (owed.amount || owed.word)}{@render recordMoney(owed)}{/if}
+					{#if view === 'record' && owed && (owed.amount || owed.state?.word)}{@render recordMoney(owed)}{/if}
 				</li>
 			{/each}
 			{#if pending}
@@ -871,8 +865,7 @@ import type { PageProps as PageProperties } from './$types';
      has some. The table draws them in its own column. -->
 {#snippet recordMoney(owed: MoneyLine)}
 	<div class="record-money">
-		<span class="visually-hidden">Money: </span><span class="no-break">{owed.lead ? `${owed.lead} ` : ''}{owed.amount}</span>
-		{#if owed.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(owed)}{/if}
+		<span class="visually-hidden">Money: </span>{#if owed.state}<MoneyAmount amount={owed.amount} state={owed.state} />{:else}<span class="no-break">{owed.lead ? `${owed.lead} ` : ''}{owed.amount}</span>{/if}
 	</div>
 {/snippet}
 
@@ -939,14 +932,9 @@ import type { PageProps as PageProperties } from './$types';
 	{/if}
 {/snippet}
 
-<!-- The state said once: a badge where it asks for one (amber owed, red overdue with its days), else a plain word. -->
-{#snippet stateWord(line: MoneyLine)}
-	{#if line.variant}<Badge label={line.word} variant={line.variant} />{:else}{line.word}{/if}
-{/snippet}
-
-<!-- The amount and its state in two tracks, so amounts end at one place; a fee is the words "Your fee" and the amount. -->
+<!-- The amount and its state (`MoneyAmount`, the Invoices list's too); a fee is the words "Your fee" and the amount. -->
 {#snippet moneyValue(line: MoneyLine)}
-	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.word}<span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}{/if}{:else if line.word}<span class="money"><span>{line.amount}</span><span class="state"><span class="visually-hidden">&#44;&#32;</span>{@render stateWord(line)}</span></span>{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
+	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.state}<MoneyAmount amount="" state={line.state} />{/if}{:else if line.state}<MoneyAmount amount={line.amount} state={line.state} isTracked />{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
 {/snippet}
 
 {#snippet actions()}
@@ -1143,8 +1131,9 @@ import type { PageProps as PageProperties } from './$types';
 				isLoadingMore={clients.isLoadingMore}
 				loadMoreError={clients.loadMoreError}
 				{emptyMessage}
+				isEmptyMessageSpoken={isContractor || emptyMessage !== summary}
 				caption="Clients"
-				columnWidths="fill"
+				columnWidths="one-line"
 				recordLayout="compact"
 				describedBy={isContractor ? undefined : RESULT_ID}
 				{isBusy}
@@ -1187,20 +1176,15 @@ import type { PageProps as PageProperties } from './$types';
 		   `DataTable.svelte`'s floor comment says why a floor can be the route's. */
 		.clients-table {
 			container: clients-table / inline-size;
-			/* The Money column's right edge, written once: the amounts end a
-			   state track and a gap before the cell's inset, and the header ends
-			   where they do. */
-			--money-state-track: 20ch;
-			--money-state-gap: var(--space-1);
 			/* The room a cell keeps either side, so two columns are two insets apart. */
 			--data-table-cell-inset: var(--space-2);
 			/* The Name column's least width, a long two-word name, so what follows it
 			   starts at one place whichever Clients the page holds; a longer name
 			   widens it. */
 			--name-track: 15ch;
-			/* The Status column's width: its busiest line on one line, and no wider, so
-			   a wide window leaves no gap between the status words and the Money. */
-			--status-track: 32ch;
+			/* The Status column's width (`grows`): its busiest line on one line, and no
+			   wider, so a wide window leaves no gap between the status words and the Money. */
+			--data-table-grows-track: 32ch;
 		}
 
 		.clients-table > :global(*) {
@@ -1209,18 +1193,8 @@ import type { PageProps as PageProperties } from './$types';
 			--data-table-records-display: grid;
 		}
 
-		/* The table shrinks to its columns instead of filling the frame. */
-		.clients-table :global(.table-view.fill),
-		.clients-table :global(.table-view.fill :is(th, td):not(.grows)) {
-			inline-size: auto;
-		}
-
 		.clients-table :global(.table-view :is(th, td):first-child) {
 			min-inline-size: var(--name-track);
-		}
-
-		.clients-table :global(.table-view th.grows) {
-			inline-size: var(--status-track);
 		}
 
 		/* Records fill the container, in as many columns as it holds. */
@@ -1274,8 +1248,9 @@ import type { PageProps as PageProperties } from './$types';
 			}
 		}
 
+		/* The header ends where the amounts do (`MoneyAmount`'s two tracks). */
 		.clients-table :global(th.numeric) {
-			padding-inline-end: calc(var(--data-table-cell-inset, var(--space-3)) + var(--money-state-track) + var(--money-state-gap));
+			padding-inline-end: calc(var(--data-table-cell-inset) + var(--money-state-track) + var(--space-1));
 		}
 
 		/* A card's fields come in one order: the name, the Status, the Money where
@@ -1330,22 +1305,6 @@ import type { PageProps as PageProperties } from './$types';
 			padding-inline: var(--space-1);
 		}
 
-		/* The amount and its state in two tracks, so every amount in the column
-		   ends at the same place whatever the state beside it says. The state
-		   track holds the widest state it can show, a red "120 days overdue"
-		   badge (210px at 1280px, where the plain "payment on its way" takes
-		   less and the red "written off" badge 147px), and the cell keeps a gap
-		   after it, so a state never touches the Date column's first letter. */
-		.money {
-			/* The state's badge is a pill taller than a line of text by its own block
-			   padding; this margin takes that padding back, so a row with a badge is as
-			   tall as a row without one. */
-			margin-block: calc(var(--space-1) / -2);
-			display: inline-grid;
-			grid-template-columns: auto var(--money-state-track);
-			column-gap: var(--money-state-gap);
-		}
-
 		/* The lead word and the day in two tracks, so every day in the column
 		   starts at one place whichever word leads it. The lead track holds the
 		   longest ("Ended") with room to spare. The words stay one phrase to a
@@ -1357,20 +1316,9 @@ import type { PageProps as PageProperties } from './$types';
 			white-space: nowrap;
 		}
 
-		/* One line, though a cell breaks a word anywhere: a state word is never
-		   split to fit its track. */
-		.money {
-			white-space: nowrap;
-		}
-
 		/* A date, or an amount with its word, is never broken across two lines. */
 		.no-break {
 			white-space: nowrap;
-		}
-
-		.state {
-			color: var(--color-on-surface-variant);
-			text-align: start;
 		}
 
 		/* Name and Doula: in a narrow column each takes half of the line, and
