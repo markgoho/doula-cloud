@@ -13,13 +13,25 @@ Read first (your only standard):
 
 The screen:
 - Source: <sources>. The screens the rubric compares with: <siblings>.
-- Live: Chrome is signed in as Renata Alvarez (Owner, Admin and a Doula) at `<origin>`. Start at `<origin>/` and reach the screen by the nav. Read only, except: <allowed-acts>. Never create, send, save or delete.
+- Live: Chrome is signed in as Renata Alvarez (Owner, Admin and a Doula) at `<origin>`. Start at `<origin>/` and reach the screen by the nav. Chrome-devtools is already signed in by the orchestrator. Read only, except: <allowed-acts>. Never create, send, save or delete.
 
-Browser: load tools in ONE call: ToolSearch "select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__find,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__tabs_close_mcp". tabs_context_mcp first; create your OWN tab and keep using its id (other graders share the browser; if your tab vanishes, create another); close it at the end. Do not sign out or in. javascript_tool only to read (measurements, computed styles, document.activeElement, accessible names, performance resource names), with one exception: for 375px / 768px / 640px checks, on any app page run `document.documentElement.innerHTML='<body style="margin:0;background:#888"><iframe src="<the screen's URL>" style="width:375px;height:740px;border:0;display:block;background:#fff"></iframe></body>'` (change the width) and judge the frame; 640px stands in for 200% zoom at 1280px (say so). Window resizing does not work here.
+Two browsers. Claude in Chrome is the founder's real Chrome: use it for the full-width task walks. Chrome-devtools is a headless browser that can set a real viewport and emulate forced colors and the color scheme: use it for every width check (375px, 640px, 768px), every forced-colors check and the other theme. 640px stands in for 200% zoom at 1280px (say so).
 
-Any check that leaves the screen and comes Back (the list's place, its filters, its scroll): walk it in a fresh tab at full width, with no iframe. The iframe adds its own history entries, so a list "lost" on Back inside it is the method, not the screen. Report a lost list only when the fresh tab loses it, and give the steps.
+Claude in Chrome: load tools in ONE call: ToolSearch "select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__find,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__tabs_close_mcp". tabs_context_mcp first; create your OWN tab and keep using its id (other graders share the browser; if your tab vanishes, create another); close it at the end. Do not sign out or in. javascript_tool only to read (measurements, computed styles, document.activeElement, accessible names, performance resource names).
 
-The app follows the OS color scheme; to judge the other theme, read the dark/light token values in tokens.css and, where you can, compute contrast from them. Judged from source: <from-source>.
+Chrome-devtools: load tools in ONE call: ToolSearch "select:mcp__chrome-devtools__list_pages,mcp__chrome-devtools__new_page,mcp__chrome-devtools__navigate_page,mcp__chrome-devtools__emulate,mcp__chrome-devtools__evaluate_script,mcp__chrome-devtools__take_snapshot,mcp__chrome-devtools__take_screenshot,mcp__chrome-devtools__click,mcp__chrome-devtools__close_page". It is one browser that every grader shares, and every page tool takes a required `pageId`. The rules:
+- Open your own page with `new_page` on the screen's URL. Never pass `isolatedContext`: it starts a signed-out context. Never sign out or in.
+- `new_page` returns the whole page list with the newest page last. Mark your page at once (`evaluate_script`: `window.__grader='<your letter>'`) and check the mark before you trust a `pageId`.
+- Pass your `pageId` on every call.
+- `emulate` replaces all settings on each call, so pass them together every time: `emulate {pageId, viewport:"375x800x1", forcedColors:"active"}`. 640px is `viewport:"640x900x1"`. The other theme is `colorScheme:"dark"` or `"light"`. `prefersReducedMotion` and `prefersContrast` are also there.
+- Ignore the emulation state in a tool's output header: it describes the selected page, not yours. Read `innerWidth` and `matchMedia(...)` on your own page.
+- Before you measure an element, call `el.checkVisibility()`. When it is false, report "not rendered at this width" and do not pass or fail the check on it. At 375px the lists render cards and the `<table>` is `display:none`, yet a hidden `th` still returns a rect at top 0 and computes its `::after` border.
+- A screenshot taken right after `emulate` can time out. Retry it.
+- Close only your own page when you finish.
+
+A Back check works at any width in either browser: a real viewport adds no history entries.
+
+Read the dark and light token values in tokens.css as the contrast source, and compute contrast from them. Judged from source: <from-source>.
 
 Walk every task T1–T8 yourself and count actions. Then score.
 
