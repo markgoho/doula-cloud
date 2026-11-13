@@ -9,7 +9,7 @@
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
-	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import { isAmbientContractor, isOwnerOrAdmin } from '#lib/roles.js';
 	import { sendStaffFeedback } from '#lib/feedback.js';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import type { PracticeOption } from '#lib/components/molecules/PracticeSwitcher.svelte';
@@ -43,11 +43,12 @@
 
 	/*
 	 * The drawing (#431) shows an Owner's bar, with all its sections --
-	 * seven since #265 added Invoices. A Doula's is four: `GET
-	 * .../invoices`, `GET .../billing` and `GET .../staff` are all
-	 * `ownerAndAdmin` on the BFF, so offering her those three would be a
-	 * promise the endpoint refuses. Same rule #423 applied to the landing
-	 * page's rail -- ask only for what the caller's role can be served.
+	 * seven since #265 added Invoices. `GET .../billing`, `GET .../staff`
+	 * and the Contracts screen's void-requests read are `ownerAndAdmin` on
+	 * the BFF, so offering a Doula those would be a promise the endpoint
+	 * refuses; `GET .../invoices` refuses only a plain contractor Doula
+	 * (ADR-0008, #2846). Same rule #423 applied to the landing page's rail
+	 * -- ask only for what the caller's role can be served.
 	 */
 	// The sections that can only be empty while the Practice has no
 	// Client (#2183), keyed on the label every one of them already has.
@@ -60,6 +61,11 @@
 		practiceSession?.roles ?? session?.memberships.find((membership) => membership.practiceId === practiceId)?.roles
 	);
 	const isAdmin = $derived(roles !== undefined && isOwnerOrAdmin({ roles }));
+	const isContractor = $derived(
+		practiceSession?.isContractor ??
+			session?.memberships.find((membership) => membership.practiceId === practiceId)?.employmentType === 'contractor'
+	);
+	const canReadInvoices = $derived(roles !== undefined && !isAmbientContractor({ roles, isContractor }));
 
 	const navItems = $derived.by((): NavItem[] => {
 		if (practiceId === undefined) return [];
@@ -84,25 +90,25 @@
 			// refusal, so offering it to every role is a promise the
 			// endpoint keeps.
 			{ label: 'On call', href: resolve('/practices/[practiceId]/on-call', { practiceId }) },
+			...(canReadInvoices
+				? [
+						// Every Staff member but a plain contractor Doula: `GET
+						// .../invoices` is `NotAmbientContractor`, and ADR-0008
+						// lets an employed Doula read Invoice history (#2846).
+						{ label: 'Invoices', href: resolve('/practices/[practiceId]/invoices', { practiceId }) }
+					]
+				: []),
 			...(isAdmin
 				? [
-						// Invoices is the Practice's money in, Credits its money
-						// out (#265) -- two sections rather than one, because
-						// "what have our Clients not paid us" and "how many
-						// credits do we have left" are not the same question.
-						// Both endpoints are `ownerAndAdmin`, so both sit behind
-						// the same flag.
-						{ label: 'Invoices', href: resolve('/practices/[practiceId]/invoices', { practiceId }) },
-						// The Contract half of the same question (#273): who is
-						// still owed a signature, rather than a payment. Same
-						// `ownerAndAdmin` declaration the endpoint's own doc
-						// comment argues (ADR-0008 has no Practice-wide row), so
-						// it sits behind the same flag rather than a new one.
+						// The Contract half of the Practice's money question (#273):
+						// who is still owed a signature. The screen also reads
+						// `.../contracts/void-requests`, `ownerAndAdmin`, so the
+						// whole screen sits behind this flag.
 						{ label: 'Contracts', href: resolve('/practices/[practiceId]/contracts', { practiceId }) },
 						// Labeled Credits, not Billing (#256): the route stays
-						// `/billing` on purpose (ADR-0032), but the visible
-						// name is the domain term GLOSSARY.md defines, so it
-						// reads as a different counterparty than Getting paid.
+						// `/billing` on purpose (ADR-0032), and `GET .../billing`
+						// is `ownerAndAdmin` (the Credit balance is Owner and
+						// Admin only, ADR-0008).
 						{ label: 'Credits', href: resolve('/practices/[practiceId]/billing', { practiceId }) },
 						{ label: 'Staff', href: resolve('/practices/[practiceId]/staff', { practiceId }) }
 					]
@@ -173,7 +179,7 @@
 	The one exception is a Practice name long enough to wrap in the
 	switcher, which grows the bar when it arrives (#1573) -- a name drawn
 	over the page would be worse than the page moving down once. The parts that need an answer from the BFF -- the person's
-	avatar, the Practice switcher, and the four admin-only nav items --
+	avatar, the Practice switcher, and the admin-only nav items --
 	arrive into a bar that is already there.
 -->
 <StaffTopBar

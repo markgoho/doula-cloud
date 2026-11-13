@@ -44,10 +44,11 @@ interface SetupOptions {
 	routeParameters?: { practiceId?: string };
 	pathname?: string;
 	roles?: string[];
+	isContractor?: boolean;
 	hasPracticeSession?: boolean;
 	hasClients?: boolean;
 	staffSessionRefuses?: boolean;
-	memberships?: { practiceId: string; practiceName: string; roles: string[] }[];
+	memberships?: { practiceId: string; practiceName: string; roles: string[]; employmentType?: string }[];
 }
 
 async function setup({
@@ -55,6 +56,7 @@ async function setup({
 	routeParameters = { practiceId: 'practice-1' },
 	pathname = '/practices/practice-1',
 	roles = ['owner'],
+	isContractor = false,
 	hasPracticeSession = true,
 	hasClients,
 	staffSessionRefuses = false,
@@ -72,7 +74,7 @@ async function setup({
 					practiceId: routeParameters.practiceId ?? '',
 					practiceName: 'Riverside Doula Collective',
 					roles,
-					isContractor: false,
+					isContractor,
 					...(hasClients !== undefined && { hasClients })
 				}
 			}
@@ -175,16 +177,53 @@ describe('the nav', () => {
 	);
 
 	/*
-	 * The drawing (#431) shows an Owner's bar. `GET .../invoices`,
-	 * `GET .../contracts/awaiting-signature`, `GET .../billing` and
-	 * `GET .../staff` are all `ownerAndAdmin` on the BFF, so offering a
-	 * Doula those four would be a promise the endpoint refuses -- the same
-	 * rule #423 applied to the landing page's rail.
+	 * The drawing (#431) shows an Owner's bar. The Contracts screen reads
+	 * `.../contracts/void-requests`, beside `GET .../billing` and
+	 * `GET .../staff`, all `ownerAndAdmin` on the BFF, so offering a Doula
+	 * those three would be a promise the endpoint refuses -- the same rule
+	 * #423 applied to the landing page's rail.
 	 */
-	it.each(['Invoices', 'Contracts', 'Credits', 'Staff'])('hides %s from a Doula', async (label) => {
+	it.each(['Contracts', 'Credits', 'Staff'])('hides %s from a Doula', async (label) => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
+	});
+
+	it.each(['Invoices', 'Contracts', 'Credits', 'Staff'])('hides %s from a contractor Doula', async (label) => {
+		await setup({ roles: ['doula'], isContractor: true });
+
+		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
+	});
+
+	// ADR-0008: an employed Doula reads Invoice history; the Credit balance stays Owner and Admin (#2846).
+	it('offers Invoices to an employed Doula', async () => {
+		await setup({ roles: ['doula'], isContractor: false });
+
+		await expect.element(page.getByRole('link', { name: 'Invoices', exact: true })).toBeVisible();
+	});
+
+	it.each([
+		['an Admin', ['admin'], false],
+		['a contractor who is also an Owner', ['doula', 'owner'], true]
+	])('offers Invoices to %s', async (_who, roles, isContractor) => {
+		await setup({ roles, isContractor });
+
+		await expect.element(page.getByRole('link', { name: 'Invoices', exact: true })).toBeVisible();
+	});
+
+	it.each([
+		['employee', true],
+		['contractor', false]
+	])('where no Practice session loaded, reads a %s Membership for Invoices (offered: %s)', async (employmentType, offered) => {
+		await setup({
+			hasPracticeSession: false,
+			memberships: [{ ...ONE_MEMBERSHIP[0], roles: ['doula'], employmentType }]
+		});
+
+		await expect.element(page.getByRole('link', { name: 'Offers', exact: true })).toBeVisible();
+		const invoices = page.getByRole('link', { name: 'Invoices', exact: true });
+		if (offered) await expect.element(invoices).toBeVisible();
+		else await expect.element(invoices).not.toBeInTheDocument();
 	});
 
 	it.each(['Overview', 'Clients', 'Schedule', 'On call', 'Offers', 'Settings'])(
