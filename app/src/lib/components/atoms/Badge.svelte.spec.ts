@@ -38,7 +38,6 @@ describe('Badge.svelte', () => {
 	});
 });
 
-
 /*
  * #434 -- the background tint has to carry variant signal on its own, not
  * just the border/icon/text. See tokens.spec.ts for why color-mix(in
