@@ -712,7 +712,9 @@
 			{#if totalsDays}
 				<p class="totals-note" id={TOTALS_NOTE_ID}>{invoiceTotalsNote(totalsDays)}</p>
 			{/if}
-			<SummaryList rows={totals.slice(0, 1)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
+			{#if totalsDays}
+				<SummaryList rows={totals.slice(0, 1)} value={total} isCompact describedBy={TOTALS_NOTE_ID} />
+			{/if}
 			<SummaryList rows={totals.slice(1, 3)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
 			<SummaryList rows={totals.slice(3)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
 		</div>
@@ -1007,6 +1009,14 @@
 
 			.search :global(input) {
 				max-inline-size: none;
+			}
+
+			.search {
+				min-inline-size: 0;
+			}
+
+			.search :global(label) {
+				white-space: nowrap;
 			}
 		}
 	}

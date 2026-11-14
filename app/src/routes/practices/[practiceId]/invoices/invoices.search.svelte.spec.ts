@@ -237,7 +237,7 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(testPage.getByRole('definition').nth(1)).toHaveTextContent('$1,800.00 on 1 Invoice');
+		await expect.element(testPage.getByRole('definition').nth(0)).toHaveTextContent('$1,800.00 on 1 Invoice');
 	});
 });
 

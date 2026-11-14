@@ -147,6 +147,8 @@ describe('a period applied (#2871)', () => {
 		await expect.element(testPage.getByRole('status')).toHaveTextContent('Invoices sent in October 2026');
 		const note = testPage.getByText('Totals for Invoices sent in October 2026.');
 		await expect.element(note).toBeVisible();
+		await expect.element(testPage.getByRole('term').nth(0)).toHaveTextContent('Billed');
+		await expect.element(testPage.getByRole('definition').nth(0)).toHaveTextContent('$8,800.00 on 3 Invoices');
 		for (const list of testPage.getByRole('definition').elements()) {
 			expect(list.closest('dl')?.getAttribute('aria-describedby')).toBe(note.element().id);
 		}
@@ -156,6 +158,8 @@ describe('a period applied (#2871)', () => {
 		await setupPeriod();
 
 		await expect.element(testPage.getByText(/^Totals for Invoices sent/)).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Billed', { exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('term').nth(0)).toHaveTextContent('Clients owe');
 	});
 
 	it('asks the BFF for the two days, in a search and for a later page', async () => {

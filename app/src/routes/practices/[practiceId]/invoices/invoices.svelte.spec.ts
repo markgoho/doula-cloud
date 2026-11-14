@@ -169,7 +169,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 
 		const cell = testPage.getByRole('cell', { name: heard('$2,500.00, paid, $1,250.50 refunded') });
 		await expect.element(cell).toBeVisible();
-		await expect.element(testPage.getByRole('definition').nth(4)).toHaveTextContent('$1,250.50');
+		await expect.element(testPage.getByRole('definition').nth(3)).toHaveTextContent('$1,250.50');
 		const row = testPage.getByRole('row').filter({ hasText: paidInvoice.reference }).element();
 		expect(row.textContent!.match(/refunded/g)).toHaveLength(1);
 	});
@@ -222,12 +222,10 @@ describe('the Practice-wide invoice list (#265)', () => {
 		// which is exactly why an unscoped getByText would not say which is
 		// the whole book's.
 		const totals = testPage.getByRole('definition');
-		await expect.element(testPage.getByRole('term').nth(0)).toHaveTextContent('Billed');
-		await expect.element(totals.nth(0)).toHaveTextContent('$8,800.00 on 3 Invoices');
-		await expect.element(totals.nth(1)).toHaveTextContent('$6,300.00 on 2 Invoices');
-		await expect.element(totals.nth(3)).toHaveTextContent('$2,500.00');
-		await expect.element(totals.nth(4)).toHaveTextContent('$1,250.50');
-		await expect.element(testPage.getByRole('term').nth(4)).toHaveTextContent('Of that, refunded');
+		await expect.element(totals.nth(0)).toHaveTextContent('$6,300.00 on 2 Invoices');
+		await expect.element(totals.nth(2)).toHaveTextContent('$2,500.00');
+		await expect.element(totals.nth(3)).toHaveTextContent('$1,250.50');
+		await expect.element(testPage.getByRole('term').nth(3)).toHaveTextContent('Of that, refunded');
 	});
 
 	// #2225: the BFF says a payment is on its way, and the row says so.
@@ -499,7 +497,7 @@ describe('the Practice-wide invoice list while its read runs (#2255)', () => {
 		const before = apply();
 
 		await rerender({ data });
-		await expect.element(testPage.getByRole('definition').nth(1)).toHaveTextContent('$6,300.00');
+		await expect.element(testPage.getByRole('definition').nth(0)).toHaveTextContent('$6,300.00');
 
 		expect(apply()).toBe(before);
 	});
