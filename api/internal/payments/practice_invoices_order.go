@@ -10,7 +10,7 @@ import (
 
 // msgInvalidInvoiceCursor is the refusal for a cursor of another view or
 // order, or one that does not decode.
-const msgInvalidInvoiceCursor = "That page of Invoices is no longer available. Load the list again."
+const msgInvalidInvoiceCursor = pagecursor.MsgInvalidCursor
 
 // msgInvalidInvoiceOrder is the refusal for an order the list does not
 // offer (#2869).

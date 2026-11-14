@@ -686,6 +686,7 @@ describe('the "owe money" and "no Contract" switches', () => {
 // The Doula select and the Name field, carried in the address as `doula`
 // and `q` and applied together with every other filter.
 const doulaField = () => testPage.getByLabelText('Doula', { exact: true });
+const openFold = () => testPage.getByText('More filters and order').click();
 const nameField = () => testPage.getByLabelText('Name', { exact: true });
 const kimiko = { value: 'staff-kimiko', label: 'Kimiko Nakashima' };
 const lena = { value: 'staff-lena', label: 'Lena Vasquez' };
@@ -941,36 +942,33 @@ describe('the "Order" select (#2869)', () => {
 // A phone's first screen is the list, not the bar: the filters fold behind
 // one summary that counts what is on, and open when any is.
 describe('the filter bar on a phone', () => {
-	it('keeps the checkboxes, the Name, the Doula select and Apply in view, behind no disclosure', async () => {
+	it('keeps the checkboxes, the Name and Apply in view, and folds the Doula select, "Also show" and Order behind one summary', async () => {
 		await setup(undefined, { doulas });
 		await testPage.viewport(414, 900);
 
-		await expect.element(testPage.getByText(/More filters/)).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('More filters and order')).toBeVisible();
 		await expect.element(testPage.getByRole('checkbox', { name: 'Who owe money' })).toBeVisible();
 		await expect.element(testPage.getByRole('checkbox', { name: 'Active, with no Contract' })).toBeVisible();
-		await expect.element(testPage.getByRole('checkbox', { name: 'Also show anyone not yet in care' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
 		await expect.element(nameField()).toBeVisible();
+		await expect.element(doulaField()).not.toBeVisible();
+		await expect.element(testPage.getByLabelText('Order', { exact: true })).not.toBeVisible();
+
+		await openFold();
+
 		await expect.element(doulaField()).toBeVisible();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Also show anyone not yet in care' })).toBeVisible();
+		await expect.element(testPage.getByLabelText('Order', { exact: true })).toBeVisible();
 	});
 
-	it('puts the Name and the Doula select side by side, each about half the line', async () => {
+	it.each([375, 320])('holds the opened fold inside the window at %ipx', async (width) => {
 		await setup(undefined, { doulas });
-		await testPage.viewport(375, 900);
+		await testPage.viewport(width, 900);
+		await openFold();
 
-		const name = rectOf(nameField());
-		const doula = rectOf(doulaField());
-		expect(Math.abs(name.top - doula.top)).toBeLessThanOrEqual(1);
-		expect(doula.left).toBeGreaterThan(name.right);
-		expect(Math.abs(name.width - doula.width)).toBeLessThanOrEqual(2);
-	});
-
-	it('still puts them side by side at 320px', async () => {
-		await setup(undefined, { doulas });
-		await testPage.viewport(320, 900);
-
-		const [name, doula] = [rectOf(nameField()), rectOf(doulaField())];
-		expect(Math.abs(name.top - doula.top)).toBeLessThanOrEqual(1);
+		const [doula, order] = [rectOf(doulaField()), rectOf(testPage.getByLabelText('Order', { exact: true }))];
+		expect(doula.right).toBeLessThanOrEqual(width);
+		expect(order.right).toBeLessThanOrEqual(width);
 		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
@@ -2335,6 +2333,7 @@ interface ListScreen {
 	respond?: typeof typical.respond;
 	hasAnyClient?: Promise<boolean>;
 	isDoula?: boolean;
+	rosterDoulas?: typeof doulas;
 }
 
 async function renderListScreen({
@@ -2342,7 +2341,8 @@ async function renderListScreen({
 	height,
 	respond = typical.respond,
 	hasAnyClient = Promise.resolve(true),
-	isDoula = true
+	isDoula = true,
+	rosterDoulas = doulas
 }: ListScreen) {
 	apiFetchWithSession.mockImplementation(toApiResponder({ ...fixture, respond }));
 	await testPage.viewport(width, height);
@@ -2363,7 +2363,7 @@ async function renderListScreen({
 			hasOtherDoulas: true,
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
-			doulas: Promise.resolve(doulas),
+			doulas: Promise.resolve(rosterDoulas),
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
@@ -2384,9 +2384,13 @@ const rowHeights = () =>
 // was before the tags (decision 4 of 2026-11-08): the first card is still reached within it.
 const TAG_ROW = 60;
 
-// The Order select (#2869) shares the line Apply was alone on, so the first card sits lower by what
-// that line grew, and the tag wraps under them: measured 2026-11-13 at 375px, 28px lower with no filter on.
-const ORDER_ROW = 28;
+// The vertical center of an element's words, apart from the box that holds them.
+const centerOfWords = (element: Element) => {
+	const range = document.createRange();
+	range.selectNodeContents(element);
+	const box = range.getBoundingClientRect();
+	return box.top + box.height / 2;
+};
 
 describe('the list at a phone’s width', () => {
 	// Rubric T4: with one filter on, the first Client's card sits fully on the
@@ -2398,7 +2402,7 @@ describe('the list at a phone’s width', () => {
 		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
 		await expect.element(group).toBeVisible();
 		const first = group.element().firstElementChild!.getBoundingClientRect();
-		expect(first.bottom).toBeLessThanOrEqual(740 + TAG_ROW + ORDER_ROW);
+		expect(first.bottom).toBeLessThanOrEqual(740 + TAG_ROW);
 		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
@@ -2417,15 +2421,15 @@ describe('the list at a phone’s width', () => {
 		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
-	it('keeps the checkboxes, the Name and the Doula select in view, with no "More filters"', async () => {
+	it('keeps the checkboxes and the Name in view, with the Doula select behind "More filters and order"', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		await renderListScreen({ width: 375, height: 740 });
 
 		await expect.element(owing()).toBeVisible();
 		await expect.element(noContract()).toBeVisible();
 		await expect.element(nameField()).toBeVisible();
-		await expect.element(doulaField()).toBeVisible();
-		await expect.element(testPage.getByText(/More filters/)).not.toBeInTheDocument();
+		await expect.element(doulaField()).not.toBeVisible();
+		await expect.element(testPage.getByText('More filters and order')).toBeVisible();
 	});
 
 	it.each([375, 320])('draws the Pilot banner on one line at %ipx', async (width) => {
@@ -2437,17 +2441,30 @@ describe('the list at a phone’s width', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Tell us what you think.' })).toBeVisible();
 	});
 
-	it('puts Order and Apply on one row, with Apply no wider than its words, and the one tag under them', async () => {
+	it('puts the summary and Apply on one row, with Apply no wider than its words, and the one tag under them', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		await renderListScreen({ width: 375, height: 740 });
 
-		const order = rectOf(testPage.getByLabelText('Order', { exact: true }));
+		const summary = rectOf(testPage.getByText('More filters and order'));
 		const apply = rectOf(testPage.getByRole('button', { name: 'Apply' }));
 		const tag = rectOf(testPage.getByRole('link', { name: 'Remove filter: Who owe money' }));
 		expect(apply.width).toBeLessThan(375 / 2);
-		expect(apply.left).toBeGreaterThan(order.right);
-		expect(Math.abs(apply.top + apply.height / 2 - (order.top + order.height / 2))).toBeLessThanOrEqual(2);
+		expect(apply.left).toBeGreaterThan(summary.right);
+		expect(Math.abs(apply.top + apply.height / 2 - (summary.top + summary.height / 2))).toBeLessThanOrEqual(2);
 		expect(tag.top).toBeGreaterThanOrEqual(apply.bottom - 1);
+	});
+
+	it('puts the one tag on Apply’s row, centered on its words, where the bar is wide', async () => {
+		pageState.url.searchParams.set('owes', 'true');
+		await renderListScreen({ width: 1280, height: 900 });
+
+		const applyButton = testPage.getByRole('button', { name: 'Apply' });
+		const tagLink = testPage.getByRole('link', { name: 'Remove filter: Who owe money' });
+		const [apply, tag] = [rectOf(applyButton), rectOf(tagLink)];
+		expect(Math.abs(apply.top + apply.height / 2 - (tag.top + tag.height / 2))).toBeLessThanOrEqual(1);
+		expect(tag.left).toBeGreaterThan(apply.right);
+		const [applyCenter, tagCenter] = [centerOfWords(applyButton.element()), centerOfWords(tagLink.element())];
+		expect(Math.abs(applyCenter - tagCenter)).toBeLessThanOrEqual(1);
 	});
 
 	it('reads a record as the name, the status, then the due date and the Doula with their labels', async () => {
@@ -3187,6 +3204,16 @@ describe('what the applied filter has already said', () => {
 		expect(heights.filter((height) => Math.abs(height - 40) > 4), `row heights ${heights.map((height) => Math.round(height))}`).toStrictEqual([]);
 	});
 
+	it('puts the first card whole on a 375px first screen for a Doula on her own Clients, with no allowance for the tag', async () => {
+		pageState.url.searchParams.set('mine', 'true');
+		await renderListScreen({ width: 375, height: 740, rosterDoulas: [] });
+
+		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
+		await expect.element(group).toBeVisible();
+		const first = group.element().firstElementChild!.getBoundingClientRect();
+		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740);
+	});
+
 	it.each([
 		['one Doula', 'doula', kimiko.value],
 		['the no-Contract filter', 'noContract', 'true']
@@ -3197,7 +3224,7 @@ describe('what the applied filter has already said', () => {
 		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
 		await expect.element(group).toBeVisible();
 		const first = group.element().firstElementChild!.getBoundingClientRect();
-		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740 + TAG_ROW + ORDER_ROW);
+		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740 + TAG_ROW);
 	});
 });
 

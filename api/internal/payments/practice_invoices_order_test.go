@@ -214,7 +214,10 @@ func TestGetPracticeInvoicesHandler_ACursorIsBoundToItsViewAndOrder(t *testing.T
 	e.expect(http.MethodGet, practiceInvoicesPath("cursor="+unpaidByDue), http.StatusBadRequest)
 
 	e.postRefused("/invoices/list", http.StatusBadRequest, reqtest.JSON(payments.PracticeInvoicesListRequest{Order: "amount-smallest", Cursor: byAmount}))
-	e.postRefused("/invoices/list", http.StatusBadRequest, reqtest.JSON(payments.PracticeInvoicesListRequest{View: "unpaid", Cursor: byDefault}))
+	refusal := e.postRefused("/invoices/list", http.StatusBadRequest, reqtest.JSON(payments.PracticeInvoicesListRequest{View: "unpaid", Cursor: byDefault}))
+	if refusal.Message != "invalid cursor" {
+		t.Errorf("a cursor of another view is refused in the words the other lists use, got %q", refusal.Message)
+	}
 }
 
 // TestGetPracticeInvoicesHandler_AMalformedKeyedCursorReturns400 proves a

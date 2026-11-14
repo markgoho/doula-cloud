@@ -811,26 +811,14 @@
 		   its line with Apply alone, so a phone's first screen keeps that line
 		   for the list, and an applied tag takes the line under them. There
 		   the box takes the room Apply leaves, so Apply sits one gap after it. */
-		/* The Order select holds the width of its longest option, so Apply does
-		   not move when a view or a pick changes the option shown (#2869). It
-		   gives way where the line has no more room. */
-		.bar-and-list :global(.order) {
-			flex: 0 1 17rem;
-			min-inline-size: 0;
-		}
-
-		.bar-and-list :global(.order select) {
-			max-inline-size: none;
-		}
-
 		.search {
-			flex: 1 1 11rem;
+			flex: 0 1 max-content;
 			max-inline-size: max-content;
 		}
 
 		@container filter-bar (max-width: 30rem) {
 			.search {
-				flex-basis: 60%;
+				flex: 1 1 7rem;
 				max-inline-size: none;
 			}
 

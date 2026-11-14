@@ -8,7 +8,7 @@
  */
 import { page as testPage } from 'vitest/browser';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { cleanup, render } from 'vitest-browser-svelte';
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PracticeInvoiceListData } from '#lib/invoice.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
@@ -191,5 +191,44 @@ describe('an applied order (#2869)', () => {
 
 		await expect.element(orderSelect()).toHaveValue('');
 		await expect.element(testPage.getByRole('list', { name: 'Applied filters' })).not.toBeInTheDocument();
+	});
+});
+
+const applyBox = () => testPage.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
+const spot = (box: DOMRect) => `${Math.round(box.left)},${Math.round(box.top)},${Math.round(box.width)}`;
+
+describe('the Order select’s place (#2869)', () => {
+	it.each([1280, 1024, 375])('holds Apply and Order where they were under every order and view, at %ipx', async (width) => {
+		const spots: string[] = [];
+		for (const [query, view] of [
+			['', 'all'],
+			['?show=unpaid', 'unpaid'],
+			['?show=overdue', 'overdue']
+		] as const) {
+			pageState.url = new URL(`${fixture.url}${query}`);
+			pageState.state = {};
+			await testPage.viewport(width, 900);
+			await render(Page, { data: { ...data, view } });
+			if (width < 672) await testPage.getByText('Order', { exact: true }).first().click();
+
+			for (const label of optionLabels()) {
+				await orderSelect().selectOptions(label!);
+				spots.push([spot(applyBox()), spot(orderSelect().element().getBoundingClientRect())].join(' '));
+			}
+			cleanup();
+		}
+
+		expect(new Set(spots).size, `Apply and Order by order and view: ${[...new Set(spots)].join(' | ')}`).toBe(1);
+	});
+
+	it('puts the first Invoice whole on a 375px first screen, with Order folded beside Apply', async () => {
+		await setupOrder();
+		await testPage.viewport(375, 740);
+
+		const apply = applyBox();
+		const summary = testPage.getByText('Order', { exact: true }).first().element().getBoundingClientRect();
+		expect(Math.abs(apply.top - summary.top), 'the summary shares Apply’s line').toBeLessThanOrEqual(2);
+		const first = document.querySelector('.invoices-table .record')!.getBoundingClientRect();
+		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740);
 	});
 });

@@ -55,6 +55,6 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Column resize | Declined | it fights the intrinsic layout (ADR-0024) |
 | Inline status change | Declined | a Client's status follows the Engagement |
 
-The order was built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
+The order was built in #2869: one control with its value in the address, drawn beside Apply where the bar is wide and folded with the Doula and "Also show anyone not yet in care" behind "More filters and order" below 42rem (decided 2026-11-13, measured at 375px), the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

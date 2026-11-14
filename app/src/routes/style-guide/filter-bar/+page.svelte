@@ -137,7 +137,7 @@
 	<stack-l space="var(--space-4)">
 		<h2>An order the reader chooses</h2>
 		<Text
-			text="An Order select is the last field before Apply, at every width and never folded: it is chosen with the rest and applies with Apply, and the list's own order is the empty choice, labeled with the words the list is in."
+			text="An Order select is the last field before Apply where the bar is wide, and folds with the folded fields behind “More filters and order” (behind “Order” where nothing else folds) where it is not. It is held at the width of its longest option, so a pick never moves Apply. It applies with Apply, and the list's own order is the empty choice, labeled with the words the list is in."
 			tone="variant"
 		/>
 		<FilterBar

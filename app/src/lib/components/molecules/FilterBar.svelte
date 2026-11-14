@@ -174,14 +174,23 @@
 		/**
 		 * The order a reader can choose for the rows (#2869): a labeled `Order`
 		 * select, submitted with Apply as the form field `order`, and the last
-		 * field before Apply at every width. It never folds, and a bar that
-		 * folds whole draws it inside the fold as it does every field. `value`
+		 * field before Apply where the bar is wide. Where the bar is narrow it
+		 * folds with `folded` behind the summary (with `foldsFieldsOnly`: "More
+		 * filters and order", or "Order" when nothing else folds), and a bar that
+		 * folds whole draws it inside the fold as it does every field. Its cell
+		 * is held at the drawn width of its longest option, so a pick never moves
+		 * Apply, and it is never counted in `activeLabels`. `value`
 		 * is the order the select shows, the route's draft, which it seeds from the
 		 * address and puts back in step after a move; the empty value is the list's own
 		 * order and is left out of the address. `onChange` reports a pick
 		 * before Apply, for a route that builds its address from its own state.
 		 */
 		order?: { options: readonly { value: string; label: string }[]; value: string; onChange?: (value: string) => void };
+		/**
+		 * The summary's words for what folds, when the route knows better than
+		 * the bar: "Order" where `folded` is given but draws nothing for this reader.
+		 */
+		foldLabel?: string;
 		/**
 		 * The fields, each a `LabeledField` with a named control. A bar of
 		 * switches alone has none.
@@ -208,6 +217,7 @@
 		isBusy = false,
 		folded,
 		order,
+		foldLabel,
 		children
 	}: Properties = $props();
 
@@ -215,11 +225,14 @@
 	let pickedOrder = $derived(order?.value);
 
 	const summary = $derived.by(() => {
-		const noun = foldsFieldsOnly ? 'More filters' : 'Filters';
+		if (foldsFieldsOnly && !folded && !foldLabel) return 'Order';
+		const noun = foldLabel ?? (foldsFieldsOnly ? (order ? 'More filters and order' : 'More filters') : 'Filters');
 		if (activeLabels.length === 0) return noun;
 		if (activeLabels.length === 1) return `${noun}: ${activeLabels[0]}`;
 		return `${noun}: ${activeLabels.length} on`;
 	});
+
+	const longestOption = $derived(order?.options.toSorted((a, b) => b.label.length - a.label.length)[0]);
 
 	const clearTo = $derived(appliedCount === 1 ? undefined : clearHref);
 
@@ -263,18 +276,23 @@
 {#snippet orderField()}
 	{#if order}
 		<div class="order">
-			<LabeledField label="Order" width={20}>
-				{#snippet children({ id, describedBy, invalid, width })}
-					<Select
-						{id}
-						{describedBy}
-						{invalid}
-						{width}
-						name="order"
-						options={order.options}
-						bind:value={pickedOrder}
-						onChange={order.onChange}
-					/>
+			<LabeledField label="Order">
+				{#snippet children({ id, describedBy, invalid })}
+					<div class="cell">
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							name="order"
+							options={order.options}
+							bind:value={pickedOrder}
+							onChange={order.onChange}
+						/>
+						<!-- The longest option drawn unseen in the same cell: the cell takes its width, so the select is as wide for every pick. -->
+						<span class="longest" aria-hidden="true" inert>
+							<Select options={[longestOption!]} value={longestOption!.value} />
+						</span>
+					</div>
 				{/snippet}
 			</LabeledField>
 		</div>
@@ -321,16 +339,16 @@
 				{/if}
 				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
 					{@render children?.()}
-					{#if folded}
+					{#if folded || order}
 						<details class="fold" open={isOpen} ontoggle={(event) => (isOpen = event.currentTarget.open)}>
 							<summary class="toggle">{summary}</summary>
-							{@render folded()}
+							{@render folded?.()}
+							{@render orderField()}
 						</details>
 					{/if}
 					<!-- The tags follow Apply in the room the row has left beside it, and
 					     wrap under it only where that room runs out: nothing is held for
 					     them, and Apply comes first, so a tag never moves it. -->
-					{@render orderField()}
 					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
 					{@render selected(false)}
 				</cluster-l>
@@ -436,6 +454,14 @@
 			color: var(--color-on-surface-variant);
 		}
 
+		/* Beside Apply, the summary is Apply's height with its words centered, so the two read as one row. */
+		.dense .fold > .toggle {
+			box-sizing: border-box;
+			align-content: center;
+			min-block-size: max(var(--hit-target-min), calc(1lh + 2 * (var(--space-2) + var(--border-thin))));
+			padding-block: 0;
+		}
+
 		/* In a column that holds every control on one row each, the
 		   controls show in full and the summary is not drawn. A closed
 		   <details> hides its content through `::details-content`, so the
@@ -445,6 +471,28 @@
 		   column, one field under the next. */
 		.fold {
 			min-inline-size: 0;
+		}
+
+		/* The Order select's cell is as wide as the longest option's drawn label, and
+		   no wider than the room there is. */
+		.cell {
+			display: grid;
+			grid-template-columns: minmax(0, max-content);
+		}
+
+		.cell > :global(*) {
+			grid-area: 1 / 1;
+			min-inline-size: 0;
+		}
+
+		.cell > :global(select) {
+			inline-size: 100%;
+			max-inline-size: none;
+		}
+
+		.longest {
+			visibility: hidden;
+			pointer-events: none;
 		}
 
 		/* Closed, the summary shares a row with Apply; open, the fields take
@@ -539,6 +587,10 @@
 			display: flex;
 			flex-direction: column;
 			gap: var(--space-related);
+		}
+
+		/* Open, the fields start one step under the summary; closed, nothing is held under it. */
+		.fold[open]::details-content {
 			padding-block-start: var(--space-related);
 		}
 
