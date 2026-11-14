@@ -2,8 +2,10 @@ import { forgetSessionHeld } from '#lib/sessionEnded.js';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadEvent } from '#testing/loadEvent.js';
+import { forgetSessionRead } from '#lib/practiceSession.js';
 import { load } from './+layout.js';
 
+// jscpd:ignore-start -- the same fetch stub the root load's spec uses; each spec stubs its own load's reads
 const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
@@ -17,6 +19,9 @@ function setup(byPath: Record<string, { status: number; body: unknown } | undefi
 	vi.stubGlobal('fetch', fetchMock);
 	return { fetchMock };
 }
+// jscpd:ignore-end
+
+const unreachable = () => vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
 const depends = vi.fn();
 
@@ -27,6 +32,7 @@ const loadArguments = loadEvent(load, {
 });
 
 afterEach(() => {
+	forgetSessionRead();
 	vi.unstubAllGlobals();
 });
 
@@ -164,6 +170,42 @@ describe('practices/[practiceId]/+layout.ts load', () => {
 		await load(loadArguments);
 
 		expect(depends).toHaveBeenCalledWith('practice:session');
+	});
+
+	describe('with no connection', () => {
+		it('keeps the session it last read for this Practice, so the screen stays where it is', async () => {
+			const body = { staffId: 'staff-9', practiceName: 'Riverside', roles: ['owner'], isContractor: false };
+			setup({ '/api/practices/practice-1/session': { status: 200, body } });
+			const online = await load(loadArguments);
+			unreachable();
+
+			await expect(load(loadArguments)).resolves.toEqual(online);
+		});
+
+		it('still throws when there is no session read for this Practice to keep', async () => {
+			unreachable();
+
+			await expect(load(loadArguments)).rejects.toThrow('Failed to fetch');
+		});
+
+		it("does not hand over another Practice's session", async () => {
+			const body = { staffId: 'staff-9', practiceName: 'Riverside', roles: ['owner'], isContractor: false };
+			setup({ '/api/practices/practice-2/session': { status: 200, body } });
+			await load(loadEvent(load, { params: { practiceId: 'practice-2' }, url: loadArguments.url, depends }));
+			unreachable();
+
+			await expect(load(loadArguments)).rejects.toThrow('Failed to fetch');
+		});
+
+		it('forgets the session at sign-out', async () => {
+			const body = { staffId: 'staff-9', practiceName: 'Riverside', roles: ['owner'], isContractor: false };
+			setup({ '/api/practices/practice-1/session': { status: 200, body } });
+			await load(loadArguments);
+			forgetSessionRead();
+			unreachable();
+
+			await expect(load(loadArguments)).rejects.toThrow('Failed to fetch');
+		});
 	});
 
 	it('redirects to login on a 401, rather than reaching for goto mid-load', async () => {

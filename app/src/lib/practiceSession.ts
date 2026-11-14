@@ -10,3 +10,23 @@
  * SvelteKit reads from it.
  */
 export const PRACTICE_SESSION_DEPENDENCY = 'practice:session';
+
+const lastRead: { session?: { practiceId: string } } = {};
+
+/**
+ * The Practice session the last successful read returned, kept in this
+ * document so a read that cannot reach the service (no connection) leaves
+ * the screen where it is instead of replacing it with the error page.
+ * Forgotten at sign-out, so no one is handed another's Practice.
+ */
+export function noteSessionRead(session: { practiceId: string }): void {
+	lastRead.session = session;
+}
+
+export function sessionHeldFor<Session extends { practiceId: string }>(practiceId: string): Session | undefined {
+	return lastRead.session?.practiceId === practiceId ? (lastRead.session as Session) : undefined;
+}
+
+export function forgetSessionRead(): void {
+	lastRead.session = undefined;
+}
