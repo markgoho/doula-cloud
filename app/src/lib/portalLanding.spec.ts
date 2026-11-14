@@ -5,13 +5,15 @@ const engagementA: Engagement = {
 	engagementId: 'a',
 	practiceName: 'Practice A',
 	status: 'intake',
-	createdAt: '2026-01-15T00:00:00Z'
+	createdAt: '2026-01-15T00:00:00Z',
+	practiceTimezone: 'America/New_York'
 };
 const engagementB: Engagement = {
 	engagementId: 'b',
 	practiceName: 'Practice B',
 	status: 'active',
-	createdAt: '2026-03-12T00:00:00Z'
+	createdAt: '2026-03-12T00:00:00Z',
+	practiceTimezone: 'America/New_York'
 };
 
 describe('decidePortalLanding', () => {

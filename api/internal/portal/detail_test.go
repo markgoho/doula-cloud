@@ -28,6 +28,9 @@ func TestDetailHandler_Success(t *testing.T) {
 	if out.PracticeName != "Riverside Doulas" {
 		t.Fatalf("practiceName = %q, want %q", out.PracticeName, "Riverside Doulas")
 	}
+	if out.PracticeTimezone != "America/New_York" {
+		t.Fatalf("practiceTimezone = %q, want %q", out.PracticeTimezone, "America/New_York")
+	}
 	// #505: the portal reads the Engagement's due date.
 	if out.DueDate == nil || *out.DueDate != "2027-06-15" {
 		t.Fatalf("dueDate = %v, want %q", out.DueDate, "2027-06-15")

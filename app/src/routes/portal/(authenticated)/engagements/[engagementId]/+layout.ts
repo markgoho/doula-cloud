@@ -7,6 +7,9 @@ import type { LayoutLoad } from './$types';
 
 export interface EngagementIdentity {
 	practiceName: string;
+	/** The IANA zone the Practice works in; every portal page reads it as
+	 * `page.data.practiceTimezone`. */
+	practiceTimezone: string;
 	clientName: string;
 	/** When the Engagement began (#310) -- the authenticated chrome's own
 	 * way back to the portal root needs it to build the same

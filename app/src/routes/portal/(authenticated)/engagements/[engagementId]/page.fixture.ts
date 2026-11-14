@@ -24,6 +24,7 @@ export const createdAt = '2026-03-12T20:00:00Z';
 export const detail = {
 	engagementId: 'engagement-1',
 	practiceName,
+	practiceTimezone: 'America/New_York',
 	clientName: 'Anne-Marie Ochieng-Whitfield',
 	dueDate: '2027-03-01',
 	offersBirthPlan: true,

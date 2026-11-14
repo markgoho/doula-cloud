@@ -7,6 +7,7 @@ import { load } from './+layout.js';
 const body = {
 	engagementId: 'engagement-1',
 	practiceName: 'Riverside Doulas',
+	practiceTimezone: 'America/New_York',
 	clientName: 'Tasha Bell',
 	createdAt: '2026-03-12T20:00:00Z',
 	offersBirthPlan: true

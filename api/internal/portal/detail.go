@@ -29,6 +29,9 @@ import (
 type Detail struct {
 	EngagementID string `json:"engagementId"`
 	PracticeName string `json:"practiceName"`
+	// PracticeTimezone is the IANA zone the Practice works in, the zone
+	// every absolute time on a portal screen is read in.
+	PracticeTimezone string `json:"practiceTimezone"`
 	// ClientName is the signed-in Client's own name, for the portal
 	// shell's avatar (#452). The portal bar is named after the Practice,
 	// so without this the one thing on the bar that says "this is your
@@ -121,7 +124,7 @@ func DetailHandler() http.Handler {
 		// portal is the derived answer alone.
 		var birthOutcome *string
 		err := tx.QueryRowContext(r.Context(),
-			`SELECT e.id, p.name,
+			`SELECT e.id, p.name, p.timezone,
 			        trim(concat_ws(' ', coalesce(c.preferred_name, c.given_name), c.family_name)),
 			        e.due_date::text, e.created_at, e.kind::text, e.birth_outcome::text,
 			        e.status = 'completed',
@@ -131,7 +134,7 @@ func DetailHandler() http.Handler {
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.client_id = $2`,
 			engagementID, clientID,
-		).Scan(&d.EngagementID, &d.PracticeName, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome, &d.CareEnded, &d.IsOneOfSeveral)
+		).Scan(&d.EngagementID, &d.PracticeName, &d.PracticeTimezone, &d.ClientName, &dueDate, &d.CreatedAt, &kind, &birthOutcome, &d.CareEnded, &d.IsOneOfSeveral)
 		if errors.Is(err, sql.ErrNoRows) {
 			// coverage:ignore reason: clientauth.Middleware already confirmed ownership; unreachable in practice
 			apierr.WriteError(w, "engagement not found", http.StatusNotFound)
