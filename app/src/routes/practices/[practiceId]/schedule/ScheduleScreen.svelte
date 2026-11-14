@@ -93,6 +93,7 @@
 	const LOAD_MORE_FAILED = 'More Visits did not load. Nothing you saved is lost. Try again.';
 	const RESULT_ID = 'schedule-result';
 	const ANY_DOULA = 'Any Doula';
+	const NEEDS_DOULA = 'Needing a new Doula';
 	const UNKNOWN_DOULA = 'that Doula';
 
 	const practiceId = $derived(page.params.practiceId!);
@@ -305,6 +306,7 @@
 	let fromValue = $state('');
 	let toValue = $state('');
 	let isMineChecked = $state(false);
+	let isNeedsDoulaChecked = $state(false);
 	let draftDoula = $state('');
 	let draftOrder = $state<ScheduleOrder>('');
 	let rangeErrors = $state<ScheduleRangeErrors>({});
@@ -319,6 +321,7 @@
 		fromValue = shown.from;
 		toValue = shown.to;
 		isMineChecked = view.isMine;
+		isNeedsDoulaChecked = view.needsDoula;
 		draftDoula = view.doula;
 		draftOrder = view.order;
 		rangeErrors = view.chosen ? scheduleRangeErrors(view.chosen.from, view.chosen.to) : {};
@@ -362,6 +365,7 @@
 		chosen: draftChoice === 'choose' ? { from: fromValue, to: toValue } : undefined,
 		isMine: canMine && isMineChecked,
 		doula: draftDoula,
+		needsDoula: isDoulaPickerOffered && isNeedsDoulaChecked,
 		order: draftOrder
 	});
 
@@ -414,6 +418,7 @@
 			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)), search });
 		}
 		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }), search });
+		if (view.needsDoula) tags.push({ text: NEEDS_DOULA, href: without({ needsDoula: false }), search });
 		if (search) tags.push({ text: `Client: ${search}`, href: scheduleHref(basePath, view), search: '' });
 		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }), search });
 		if (view.order) tags.push({ text: `Order: ${orderLabel(view.order)}`, href: without({ order: '' }), search });
@@ -444,7 +449,9 @@
 				isMine,
 				doulaName: isPicked ? doulaNameOf(shown.doula) : undefined,
 				order: shown.order,
-				search: read.filters.search
+				search: read.filters.search,
+				needsDoula: shown.needsDoula,
+				waitingCount: read.page.offEngagementCount
 			},
 			now,
 			read.page.visitCount
@@ -569,17 +576,32 @@
 			<!-- The Clients list's two rows: the days with their own visible question, then the fields and Apply. -->
 			{#snippet switches()}
 				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline />
-				{#if canMine}
+				{#if canMine || isDoulaPickerOffered}
 					<!-- One group, so each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
 					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a named box of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
 					<fieldset>
 						<legend>Show only</legend>
 						<div class="show-only-boxes">
-							<LabeledField label="Mine" orientation="inline">
-								{#snippet children(control)}
-									<Checkbox name="mine" value="true" checked={isMineChecked} onChange={(checked) => (isMineChecked = checked)} {...control} />
-								{/snippet}
-							</LabeledField>
+							{#if canMine}
+								<LabeledField label="Mine" orientation="inline">
+									{#snippet children(control)}
+										<Checkbox name="mine" value="true" checked={isMineChecked} onChange={(checked) => (isMineChecked = checked)} {...control} />
+									{/snippet}
+								</LabeledField>
+							{/if}
+							{#if isDoulaPickerOffered}
+								<LabeledField label={NEEDS_DOULA} orientation="inline">
+									{#snippet children(control)}
+										<Checkbox
+											name="needsDoula"
+											value="true"
+											checked={isNeedsDoulaChecked}
+											onChange={(checked) => (isNeedsDoulaChecked = checked)}
+											{...control}
+										/>
+									{/snippet}
+								</LabeledField>
+							{/if}
 						</div>
 					</fieldset>
 				{/if}

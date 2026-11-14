@@ -11,7 +11,7 @@ import {
 
 const EASTERN = 'America/New_York';
 const NOW = new Date('2026-11-13T15:00:00Z');
-const noView: ScheduleView = { preset: 30, isMine: false, doula: '', order: '' };
+const noView: ScheduleView = { preset: 30, isMine: false, doula: '', needsDoula: false, order: '' };
 const view = (change: Partial<ScheduleView>): ScheduleView => ({ ...noView, ...change });
 const answer = () => jsonResponse({ items: [], hasMore: false }, 200);
 
@@ -27,6 +27,7 @@ describe('the Client search (#2870)', () => {
 		expect(path).toBe('/api/practices/practice-1/visits/list');
 		expect(init?.method).toBe('POST');
 		expect(JSON.parse(init!.body as string)).toEqual({
+			offEngagement: false,
 			from: '2026-09-12T04:00:00.000Z',
 			to: '2026-09-20T04:00:00.000Z',
 			staffId: 'staff-1',

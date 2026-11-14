@@ -55,6 +55,10 @@ export interface ScheduledVisit {
  */
 export interface SchedulePage extends CursorPage<ScheduledVisit> {
 	visitCount?: number;
+	/**
+	How many Visits under the same other narrowings wait for a new Doula (#2863): on the first page of a read not already narrowed to them, for an Owner or Admin.
+	*/
+	offEngagementCount?: number;
 }
 
 /** How many days ahead the screen looks when the reader has named no
@@ -122,6 +126,10 @@ export interface ScheduleView {
 	*/
 	doula: string;
 	/**
+	Only the Visits waiting for a new Doula (#2863).
+	*/
+	needsDoula: boolean;
+	/**
 	The order the reader chose: empty is soonest first, the list's own.
 	*/
 	order: ScheduleOrder;
@@ -187,6 +195,7 @@ export function scheduleViewFromParameters(
 		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
 		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
 		doula: withoutPicker ? '' : doula,
+		needsDoula: !withoutPicker && parameters.get('needsDoula') === 'true',
 		order: parameters.get('order') === LATEST_ORDER ? LATEST_ORDER : ''
 	};
 }
@@ -221,6 +230,7 @@ export function scheduleHref(basePath: string, view: ScheduleView): string {
 	}
 	if (view.isMine) parameters.set('mine', 'true');
 	if (view.doula) parameters.set('doula', view.doula);
+	if (view.needsDoula) parameters.set('needsDoula', 'true');
 	if (view.order) parameters.set('order', view.order);
 	const query = parameters.toString();
 	return query ? `${basePath}?${query}` : basePath;
@@ -236,7 +246,7 @@ export function withDefaultDays(view: ScheduleView): ScheduleView {
 Whether the address names anything beyond the default days.
 */
 export function isScheduleNarrowed(view: ScheduleView): boolean {
-	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.order !== '';
+	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.needsDoula || view.order !== '';
 }
 
 /** Whose Visits the BFF is asked for. It takes one Staff id; "Mine" and a
@@ -261,6 +271,10 @@ export interface ResolvedScheduleFilters {
 	timeZone: string;
 	staffId?: string;
 	order?: ScheduleOrder;
+	/**
+	Only the Visits waiting for a new Doula (#2863).
+	*/
+	needsDoula?: boolean;
 	/**
 	The Client's name a reader typed (#2870). It is in no address (#1829), so a read that has one is a POST.
 	*/
@@ -287,6 +301,7 @@ export function resolveScheduleRead(
 		? { ...read.days, timeZone, staffId: whose.staffId, order: view.order }
 		: { from: '', to: '', timeZone };
 	if (search) filters.search = search;
+	if (view.needsDoula) filters.needsDoula = true;
 	return { filters, errors: read.errors, isReadable: read.days !== undefined && !whose.isEmpty };
 }
 
@@ -301,6 +316,7 @@ export function practiceSchedulePath(
 	const parameters = new URLSearchParams({ from: range.from, to: range.to });
 	if (filters.staffId) parameters.set('staffId', filters.staffId);
 	if (filters.order) parameters.set('order', filters.order);
+	if (filters.needsDoula) parameters.set('offEngagement', 'true');
 	if (cursor) parameters.set('cursor', cursor);
 	return `/api/practices/${practiceId}/visits?${parameters.toString()}`;
 }
@@ -327,6 +343,7 @@ export async function loadPracticeSchedule(
 				staffId: filters.staffId ?? '',
 				order: filters.order ?? '',
 				search: filters.search,
+				offEngagement: filters.needsDoula === true,
 				cursor
 			})
 		});
@@ -445,6 +462,14 @@ export interface ScheduleWho {
 	The Client's name the rows were searched for.
 	*/
 	search?: string;
+	/**
+	The rows are only the Visits waiting for a new Doula (#2863).
+	*/
+	needsDoula?: boolean;
+	/**
+	How many Visits wait for a new Doula, said after the line when the rows are not narrowed to them.
+	*/
+	waitingCount?: number;
 }
 
 /**
@@ -466,10 +491,30 @@ export function scheduleResultSummary(
 	now: Date = new Date(),
 	total?: number
 ): string {
+	const line = scheduleRowsSummary(count, hasMore, days, timeZone, who, now, total);
+	const waiting = who.waitingCount ?? 0;
+	// The count of Visits waiting is the second sentence of a line that names rows, never of one that narrowed to them.
+	if (count === 0 || waiting === 0 || who.needsDoula) return line;
+	return `${line} ${waiting} ${waiting === 1 ? 'needs' : 'need'} a new Doula.`;
+}
+
+function scheduleRowsSummary(
+	count: number,
+	hasMore: boolean,
+	days: ScheduleDays,
+	timeZone: string,
+	who: ScheduleWho,
+	now: Date,
+	total?: number
+): string {
 	const span = scheduleDaysSpan(days, timeZone, now);
 	// The Client's name a reader typed sits right after the Visits it narrows: `2 Visits for "Camille" from ...`.
 	const about = who.search ? ` for "${who.search}"` : '';
 	if (count === 0) {
+		if (who.needsDoula) {
+			if (who.isMine) return `None of your Visits${about} is waiting for a new Doula ${span}.`;
+			return `No Visit${about}${who.doulaName ? ` for ${who.doulaName}` : ''} is waiting for a new Doula ${span}.`;
+		}
 		if (who.isMine && who.doulaName) return `No Visits${about} for ${who.doulaName} that are also yours ${span}.`;
 		if (who.isMine) return `You have no Visits${about} ${span}.`;
 		if (who.doulaName) return `No Visits${about} for ${who.doulaName} ${span}.`;
@@ -479,7 +524,8 @@ export function scheduleResultSummary(
 	if (count === 1) {
 		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 		const one = hasMore ? 'first Visit' : '1 Visit';
-		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)}${about} ${span}${ordered}.`;
+		const needing = who.needsDoula ? ' that needs a new Doula' : '';
+		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)}${about}${needing} ${span}${ordered}.`;
 	}
 	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 	const whose = owner ? `${owner} ` : '';
@@ -490,7 +536,7 @@ export function scheduleResultSummary(
 				? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
 				: `the first ${count} of ${whose}${Math.max(total, count)} Visits`;
 	}
-	return `Showing ${what}${about} ${span}${ordered}.`;
+	return `Showing ${what}${about}${who.needsDoula ? ' that need a new Doula' : ''} ${span}${ordered}.`;
 }
 
 // A Client's name as long as a real one runs: a typed search longer than this is the one state that can move the list.
@@ -507,6 +553,10 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { isMine: true }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { search: SEARCH_RULER }, now, 9999),
-		scheduleResultSummary(0, false, days, 'UTC', { isMine: true, doulaName: longestDoulaName }, now)
+		scheduleResultSummary(0, false, days, 'UTC', { isMine: true, doulaName: longestDoulaName }, now),
+		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER, waitingCount: 9999 }, now, 9999),
+		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER, needsDoula: true }, now, 9999),
+		scheduleResultSummary(999, true, days, 'UTC', { search: SEARCH_RULER, needsDoula: true }, now, 9999),
+		scheduleResultSummary(0, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER }, now)
 	].toSorted((a, b) => b.length - a.length)[0];
 }
