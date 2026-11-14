@@ -95,6 +95,20 @@ export function rangeErrors(from: string, to: string, limits: RangeLimits = {}):
 }
 
 /**
+Whether a change of control applies the bar as drawn. `undefined` lets it apply. Picking "Choose days" alone only opens its fields (an empty hold), and a range that is no range holds the bar with the errors to say beside the fields.
+*/
+export function rangeHold<E extends { from?: string; to?: string }>(
+	isChoosing: boolean,
+	changed: readonly string[],
+	problemsOf: () => E
+): { errors?: E } | undefined {
+	if (!isChoosing) return undefined;
+	if (changed.length === 1 && changed[0] === 'days') return {};
+	const problems = problemsOf();
+	return problems.from || problems.to ? { errors: problems } : undefined;
+}
+
+/**
 The days a preset reads on a given today: that day and the ones after it, or for `THIS_WEEK` the Monday through Sunday that holds it.
 */
 export function presetDays(preset: number, today: string): Days {

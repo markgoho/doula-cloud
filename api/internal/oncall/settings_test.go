@@ -15,7 +15,12 @@ func (e *env) putSettings(s oncall.Settings) {
 
 func (e *env) settings() oncall.Settings {
 	e.T.Helper()
-	return reqtest.Expect[oncall.Settings](e.T, http.MethodGet, e.settingsURL(), http.StatusOK, e.SignedIn)
+	return e.settingsRead().Settings
+}
+
+func (e *env) settingsRead() oncall.SettingsResponse {
+	e.T.Helper()
+	return reqtest.Expect[oncall.SettingsResponse](e.T, http.MethodGet, e.settingsURL(), http.StatusOK, e.SignedIn)
 }
 
 func (e *env) putRule(r oncall.RuleRequest, want int) {

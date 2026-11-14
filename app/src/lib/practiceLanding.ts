@@ -132,8 +132,8 @@ async function loadNoDoula(fetcher: Fetcher, practiceId: string): Promise<NoDoul
 
 /**
  * Who is free tonight (#2234), from the on-call roster for today in the
- * Practice's own zone. Free is on call for no birth and not away; nothing
- * records who is at a birth now (#428).
+ * Practice's own zone. Free is on call for no birth tonight and has no gap in
+ * force tonight; nothing records who is at a birth now (#428).
  */
 export interface TonightHealth {
 	onCall: { name: string; clients: string[] }[];
@@ -145,20 +145,23 @@ export interface TonightHealth {
 
 export function tonightFrom(roster: Roster): TonightHealth {
 	const onCall = new Map<string, { name: string; clients: string[] }>();
-	for (const window of roster.windows) {
-		for (const doula of window.onCall) {
-			const entry = onCall.get(doula.staffId) ?? { name: doula.name, clients: [] };
-			entry.clients.push(window.clientName);
-			onCall.set(doula.staffId, entry);
-		}
+	const holders = roster.windows.flatMap((window) =>
+		(window.tonight?.holders ?? []).map((holder) => ({ holder, clientName: window.clientName }))
+	);
+	for (const { holder, clientName } of holders) {
+		const entry = onCall.get(holder.staffId) ?? { name: holder.name, clients: [] };
+		entry.clients.push(clientName);
+		onCall.set(holder.staffId, entry);
 	}
+	const isAway = (doula: Roster['doulas'][number]) => doula.unreachable.length > 0;
+	const away = roster.doulas.filter((doula) => isAway(doula));
 	return {
 		onCall: onCall.values().toArray(),
 		free: roster.doulas
-			.filter((doula) => doula.available && doula.concurrentWindows === 0)
+			.filter((doula) => !doula.isOnCallTonight && !isAway(doula) && !onCall.has(doula.staffId))
 			.map((doula) => doula.name),
-		away: roster.doulas.filter((doula) => !doula.available).map((doula) => doula.name),
-		uncovered: roster.windows.filter((window) => window.uncovered).map((window) => window.clientName),
+		away: away.map((doula) => doula.name),
+		uncovered: roster.windows.filter((window) => window.tonight?.isNobody).map((window) => window.clientName),
 		doulas: roster.doulas.length
 	};
 }

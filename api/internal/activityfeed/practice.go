@@ -233,7 +233,7 @@ const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subjec
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
 	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
 	       a.diff ->> '%[9]s', a.diff ->> '%[10]s',
-	       CASE WHEN a.action IN ('%[11]s', '%[12]s') THEN a.diff::text END
+	       CASE WHEN a.action IN ('%[11]s', '%[12]s', '%[13]s') THEN a.diff::text END
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -246,7 +246,7 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
 	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
 	       a.diff ->> '%[9]s', a.diff ->> '%[10]s',
-	       CASE WHEN a.action IN ('%[11]s', '%[12]s') THEN a.diff::text END
+	       CASE WHEN a.action IN ('%[11]s', '%[12]s', '%[13]s') THEN a.diff::text END
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -259,7 +259,7 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 var listPracticeActivityArgs = []any{
 	practiceBatchSize + 1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
 	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt,
-	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter, activity.ActionInvoicesExported, activity.ActionClientsExported,
+	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter, activity.ActionInvoicesExported, activity.ActionClientsExported, activity.ActionPracticeOnCallChanged,
 }
 
 var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, listPracticeActivityArgs...) //nolint:gosec // every interpolated value is a package-internal constant, not request input

@@ -58,7 +58,7 @@ func TestNarrowing_RefusesWhatItShould(t *testing.T) {
 		want   string
 	}{
 		{"it ends before it starts", e.SignedIn, e.Doula.ID, oncall.NarrowingRequest{From: &from, To: &to}, http.StatusBadRequest, "to", oncall.MsgNarrowOrder},
-		{"it is not a date", e.SignedIn, e.Doula.ID, oncall.NarrowingRequest{From: &junk}, http.StatusBadRequest, "from", oncall.MsgNarrowDate},
+		{"it is not a date", e.SignedIn, e.Doula.ID, oncall.NarrowingRequest{From: &junk}, http.StatusBadRequest, fieldFrom, oncall.MsgNarrowDate},
 		{"the Doula is not on the birth", e.SignedIn, stranger.ID, oncall.NarrowingRequest{}, http.StatusNotFound, "", ""},
 		{"a Doula may not narrow anyone", e.As(e.Doula), e.Doula.ID, oncall.NarrowingRequest{}, http.StatusForbidden, "", ""},
 	}

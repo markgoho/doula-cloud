@@ -179,6 +179,14 @@
 		 */
 		foldsFieldsOnly?: boolean;
 		/**
+		 * Leave the check of a field's own `min`, `max` and `required` to the
+		 * route, which words a refusal beside the fields, so the browser's tooltip
+		 * does not come first. Its consumer is the On call roster, whose From and
+		 * To carry a native `min` and `max` (the picker disables the days the
+		 * roster does not serve) and whose own words answer a bad range.
+		 */
+		novalidate?: boolean;
+		/**
 		 * Whether a newer result is on its way. Apply shows its loading state,
 		 * so a press is answered at once and cannot be sent twice.
 		 */
@@ -235,6 +243,7 @@
 		hasUntaggedFilter = false,
 		switches,
 		foldsFieldsOnly = false,
+		novalidate = false,
 		isBusy = false,
 		folded,
 		order,
@@ -427,6 +436,7 @@
 <form
 	method="get"
 	{action}
+	{novalidate}
 	onsubmit={handleSubmit}
 	onchange={handleChange}
 	onkeydown={handleKeydown}

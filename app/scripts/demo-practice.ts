@@ -396,6 +396,29 @@ async function seedAfterALoss(request: APIRequestContext, roster: Roster, today:
 	);
 }
 
+function sendOffer(
+	request: APIRequestContext,
+	roster: Roster,
+	client: ProvisionedClient,
+	staffId: string,
+	amountCents: number
+): Promise<{ offerId: string }> {
+	return send<{ offerId: string }>(
+		request,
+		'POST',
+		`/api/practices/${roster.practiceId}/engagements/${client.engagementId}/offers`,
+		roster.owner,
+		{
+			staffId,
+			amountCents,
+			terms: 'Backup for the birth, on call from 38 weeks, one prenatal visit.',
+			clientFirstInitial: client.givenName.slice(0, 1),
+			clientArea: 'South Wedge',
+			dueDate: client.dueDate
+		}
+	);
+}
+
 // The contractor's door: an Offer on a tail birth, which Lena accepts and
 // then visits, and a second Offer to Fern that she has not answered yet.
 async function seedOffers(
@@ -406,20 +429,7 @@ async function seedOffers(
 ): Promise<void> {
 	const births = tail.filter((client) => client.kind === 'birth');
 	const offer = (client: ProvisionedClient, staffId: string, amountCents: number) =>
-		send<{ offerId: string }>(
-			request,
-			'POST',
-			`/api/practices/${roster.practiceId}/engagements/${client.engagementId}/offers`,
-			roster.owner,
-			{
-				staffId,
-				amountCents,
-				terms: 'Backup for the birth, on call from 38 weeks, one prenatal visit.',
-				clientFirstInitial: client.givenName.slice(0, 1),
-				clientArea: 'South Wedge',
-				dueDate: client.dueDate
-			}
-		);
+		sendOffer(request, roster, client, staffId, amountCents);
 	const lena = roster.staff.lena;
 	const { offerId } = await offer(births[0], lena.staffId, 45_000);
 	await send(request, 'POST', `/api/practices/${roster.practiceId}/offers/${offerId}/accept`, lena.headers);
@@ -678,6 +688,118 @@ async function seedScheduleBook(
 	);
 }
 
+const PRACTICE_ZONE = 'America/New_York';
+
+function inPracticeZone(at: Date): { day: string; hour: number } {
+	const parts = Object.fromEntries(
+		new Intl.DateTimeFormat('en-CA', {
+			timeZone: PRACTICE_ZONE,
+			year: 'numeric',
+			month: '2-digit',
+			day: '2-digit',
+			hour: '2-digit',
+			hourCycle: 'h23'
+		})
+			.formatToParts(at)
+			.map((part) => [part.type, part.value])
+	);
+	return { day: `${parts.year}-${parts.month}-${parts.day}`, hour: Number(parts.hour) };
+}
+
+// The instant `hour` o'clock on `day` in the Practice's zone.
+function atHourInPracticeZone(day: string, hour: number): Date {
+	for (const offsetHours of [4, 5]) {
+		const at = new Date(Date.parse(`${day}T00:00:00Z`) + (hour + offsetHours) * 3_600_000);
+		const seen = inPracticeZone(at);
+		if (seen.day === day && seen.hour === hour) return at;
+	}
+	throw new Error(`demo seed: no instant at ${hour}:00 on ${day} in ${PRACTICE_ZONE}`);
+}
+
+// 6pm tonight to 10am tomorrow in the Practice's zone, started at now when
+// 6pm has passed; before 10am it is the night already under way.
+function tonight(now: Date): { startsAt: string; endsAt: string } {
+	const { day, hour } = inPracticeZone(now);
+	const isEarly = hour < 10;
+	const startsAt = isEarly ? now : new Date(Math.max(atHourInPracticeZone(day, 18).getTime(), now.getTime()));
+	const endsAt = atHourInPracticeZone(isEarly ? day : dayAfter(day, 1), 10);
+	return { startsAt: startsAt.toISOString(), endsAt: endsAt.toISOString() };
+}
+
+// What the On call screen shows beyond a plain Covered row, each on its own
+// birth. Morgan Grier has Marisol as primary and Lena as backup by
+// Narrowing, and a gap Lena covers. Casey Estrada's Doula, Rowan, is
+// narrowed to leave the last week with nobody. Priya is away tonight with
+// nobody covering tonight on Camille's birth, where Bethany takes over from
+// the due date. Imogen has a Doula and no due date, so no window yet. Tamsin
+// Reyes is due in 25 days with no Doula. Quinn Estrada has her own start rule
+// and Tessa Moreau stays plainly Covered. Dee has changed the Practice's rule
+// twice, so its Activity holds two entries.
+async function seedOnCall(
+	request: APIRequestContext,
+	roster: Roster,
+	today: string,
+	tail: readonly ProvisionedClient[],
+	camille: NamedEngagement
+): Promise<void> {
+	const { practiceId, owner, staff } = roster;
+	const birth = (givenName: string, familyName: string) =>
+		tail.find((client) => client.kind === 'birth' && client.givenName === givenName && client.familyName === familyName)!;
+	const engagementPath = (engagementId: string) => `/api/practices/${practiceId}/engagements/${engagementId}`;
+	const narrow = (engagementId: string, staffId: string, from: string | undefined, to: string | undefined) =>
+		send(request, 'PUT', `${engagementPath(engagementId)}/attachments/${staffId}/on-call`, owner, { from, to });
+	const gap = (engagementId: string, body: object) =>
+		send(request, 'POST', `${engagementPath(engagementId)}/coverage-gaps`, owner, body);
+
+	const practiceRule = { startRule: 'gestational_week', startWeek: 37, graceDays: 14 };
+	for (const startWeek of [38, 37]) {
+		await send(request, 'PUT', `/api/practices/${practiceId}/on-call-settings`, staff.dee.headers, {
+			...practiceRule,
+			startWeek
+		});
+	}
+
+	const morgan = birth('Morgan', 'Grier');
+	const lena = staff.lena;
+	const { offerId } = await sendOffer(request, roster, morgan, lena.staffId, 45_000);
+	await send(request, 'POST', `/api/practices/${practiceId}/offers/${offerId}/accept`, lena.headers);
+	await narrow(morgan.engagementId, staff.marisol.staffId, undefined, dayAfter(today, 10));
+	await narrow(morgan.engagementId, lena.staffId, dayAfter(today, 11), undefined);
+	await gap(morgan.engagementId, {
+		staffId: staff.marisol.staffId,
+		startsAt: instantAt(today, 3, 22, 0),
+		endsAt: instantAt(today, 4, 14, 0),
+		reason: 'Her daughter’s recital in Buffalo',
+		coveringStaffId: lena.staffId
+	});
+
+	await narrow(birth('Casey', 'Estrada').engagementId, staff.rowan.staffId, undefined, dayAfter(today, 8));
+
+	await send(request, 'PUT', `${engagementPath(birth('Quinn', 'Estrada').engagementId)}/on-call-rule`, owner, {
+		startRule: 'attachment_granted'
+	});
+
+	await send(request, 'PUT', `${engagementPath(camille.engagementId)}/attachments/${staff.bethany.staffId}`, owner);
+	await narrow(camille.engagementId, staff.priya.staffId, undefined, dayAfter(today, 19));
+	await narrow(camille.engagementId, staff.bethany.staffId, dayAfter(today, 20), undefined);
+
+	await gap(camille.engagementId, {
+		staffId: staff.priya.staffId,
+		...tonight(new Date()),
+		reason: 'At a wedding four hours away'
+	});
+
+	await addClient(
+		request,
+		roster,
+		today,
+		{ givenName: 'Imogen', familyName: 'Okafor', kind: 'birth' },
+		{ doulaStaffId: staff.delia.staffId }
+	);
+
+	await addClient(request, roster, today, { givenName: 'Tamsin', familyName: 'Reyes', kind: 'birth', dueInDays: 25 });
+}
+
 export interface DemoPractice {
 	practiceId: string;
 	// false when this call found the demo Practice already there and wrote
@@ -739,11 +861,12 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	const roster = await buildRoster(request);
 	const tail = await provisionTail(request, roster.practiceId, roster.owner, roster.staff, demoTail(today));
 	await spreadTailAcrossPhases(request, roster, today, tail);
-	await seedPriyaBook(request, roster, today);
+	const [camille] = await seedPriyaBook(request, roster, today);
 	await seedAfterALoss(request, roster, today);
 	await seedOffers(request, roster, today, tail);
 	await seedInvoiceBook(request, roster, today, tail);
 	await seedScheduleBook(request, roster, today, tail);
+	await seedOnCall(request, roster, today, tail, camille);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 

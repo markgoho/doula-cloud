@@ -167,7 +167,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	practice_rate_changed: fixed('Practice rates changed'),
 	practice_name_changed: fixed('Practice name changed'),
 	practice_timezone_changed: fixed('Practice time zone changed'),
-	practice_on_call_changed: fixed('On-call settings changed'),
+	practice_on_call_changed: fixed('On-call rule changed'),
 	practice_data_exported: fixed('Practice data downloaded'),
 	invoices_exported: fixed('Invoices downloaded'),
 	clients_exported: fixed('Clients downloaded'),
@@ -205,6 +205,47 @@ export function staffActivityPhrase(action: string, subjectName?: string, visit?
 	const phrase = STAFF_ACTIVITY_PHRASES[action];
 	if (!phrase) throw new Error(`staffActivityPhrases: no Staff wording for activity action "${action}"`); // voice:ignore: a developer-facing error, never rendered
 	return sentenceCase(phrase(subjectName || undefined, visit, move));
+}
+
+interface OnCallRuleSide {
+	startRule: string;
+	startWeek: number;
+	graceDays: number;
+}
+
+function onCallRuleSide(value: unknown): OnCallRuleSide | undefined {
+	if (typeof value !== 'object' || value === null) return undefined;
+	const { startRule, startWeek, graceDays } = value as Record<string, unknown>;
+	if (typeof startRule !== 'string' || typeof startWeek !== 'number' || typeof graceDays !== 'number') return undefined;
+	return { startRule, startWeek, graceDays };
+}
+
+const GRACE_WORDS = (before: number, after: number) =>
+	`on call now runs ${after} ${after === 1 ? 'day' : 'days'} past the due date, not ${before}`;
+
+/**
+ * The sentence for a change to the Practice's on-call rule, from the
+ * `before` and `after` the BFF recorded. `undefined` when the diff does not
+ * carry both sides or nothing a reader can see differs, so the row keeps its
+ * fixed words.
+ */
+export function onCallRuleChangeWords(diff: Record<string, unknown> | undefined): string | undefined {
+	const before = onCallRuleSide(diff?.before);
+	const after = onCallRuleSide(diff?.after);
+	if (!before || !after) return undefined;
+	const isWeekRule = after.startRule === 'gestational_week';
+	let start: string | undefined;
+	if (before.startRule !== after.startRule) {
+		start = isWeekRule ? `to start at week ${after.startWeek} of pregnancy` : 'to start on the day a Doula takes the birth';
+	} else if (isWeekRule && before.startWeek !== after.startWeek) {
+		start = `from week ${before.startWeek} to week ${after.startWeek}`;
+	}
+	const isGraceChanged = before.graceDays !== after.graceDays;
+	const grace = isGraceChanged ? GRACE_WORDS(before.graceDays, after.graceDays) : undefined;
+	if (start && grace) return `On-call rule changed ${start}, and ${grace}.`;
+	if (start) return `On-call rule changed ${start}.`;
+	if (grace) return `On-call rule changed: ${grace}.`;
+	return undefined;
 }
 
 /**

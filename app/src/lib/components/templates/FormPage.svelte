@@ -25,6 +25,7 @@
 	import type { Snippet } from 'svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import BackLink from '#lib/components/molecules/BackLink.svelte';
 	import PageTitle from '#lib/components/PageTitle.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import { LOADED_PAGE, type PageReadState } from '#lib/pageRead.svelte.js';
@@ -100,6 +101,19 @@
 		 * holds focus.
 		 */
 		isTitleFocused?: boolean;
+		/**
+		 * Where a Back link above the title goes, in every state of `read`
+		 * and above the error summary, GOV.UK's position (`RecordDetail`
+		 * and `DocumentPage` draw theirs the same way). Absent, no link.
+		 * The settings screens are its consumers, the Timezone screen
+		 * first: each is a step in from the settings hub and says so.
+		 */
+		backHref?: string;
+		/**
+		 * The Back link's words when it names where it goes ("Settings");
+		 * `BackLink`'s own "Back" when absent.
+		 */
+		backLabel?: string;
 	}
 
 	let {
@@ -111,7 +125,9 @@
 		errorSummary,
 		actions,
 		read = LOADED_PAGE,
-		isTitleFocused = false
+		isTitleFocused = false,
+		backHref,
+		backLabel
 	}: Properties = $props();
 </script>
 
@@ -128,6 +144,9 @@
 
 <container-l>
 	<center-l max="var(--form-max)" gutters="var(--page-gutter)">
+		{#if backHref}
+			<div class="back"><BackLink href={backHref} label={backLabel} /></div>
+		{/if}
 		{#if read.status === 'failed'}
 			<!-- data-load-error: a fact this Template already has about its
 			     own state, not a test hook -- app/e2e/accessibility.e2e.ts
@@ -187,6 +206,10 @@
 	@layer components {
 		container-l {
 			padding-block: var(--space-8);
+		}
+
+		.back {
+			margin-block-end: var(--space-4);
 		}
 
 		/* Centered in spare room by default (#543); a shell that holds

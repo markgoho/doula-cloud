@@ -22,7 +22,7 @@ import { clientsExportedDetail } from './clientExport.js';
 import { invoicesExportedDetail } from './invoiceExport.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
-import { staffActivityPhrase } from './staffActivityPhrases.js';
+import { onCallRuleChangeWords, staffActivityPhrase } from './staffActivityPhrases.js';
 
 /**
  * subjectKind/subjectId are optional because loadEngagementActivityPage
@@ -212,7 +212,8 @@ function staffEventText(row: ActivityEntry, timeZone: string): string {
 	}
 	const move =
 		row.reassignedFromName && row.reassignedToName ? { from: row.reassignedFromName, to: row.reassignedToName } : undefined;
-	return factChangeText(row) ?? exportedText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit, move);
+	const onCallRule = row.action === 'practice_on_call_changed' ? onCallRuleChangeWords(row.diff) : undefined;
+	return onCallRule ?? factChangeText(row) ?? exportedText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit, move);
 }
 
 const DETAIL_VISIT_LEAD = 'Visit';

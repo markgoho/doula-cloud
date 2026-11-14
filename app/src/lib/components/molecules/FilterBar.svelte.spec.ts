@@ -73,6 +73,7 @@ interface SetupOptions {
 	appliedCount?: number;
 	hasUntaggedFilter?: boolean;
 	foldsFieldsOnly?: boolean;
+	novalidate?: boolean;
 	withFields?: boolean;
 	status?: string;
 	statusRuler?: string;
@@ -130,6 +131,7 @@ async function setup({
 	appliedCount,
 	hasUntaggedFilter,
 	foldsFieldsOnly = false,
+	novalidate,
 	withFields = true,
 	status = 'Showing 2 scheduled visits.',
 	statusRuler,
@@ -155,6 +157,7 @@ async function setup({
 		statusId,
 		switches: switchesFor({ withChangeControls, withSwitches, withHeldSwitch }),
 		foldsFieldsOnly,
+		novalidate,
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
 		appliedCount,
@@ -250,6 +253,18 @@ describe('FilterBar order', () => {
 });
 
 describe('FilterBar', () => {
+	it("leaves a field's own min and max to the browser's check", async () => {
+		await setup();
+
+		expect(page.getByRole('button', { name: 'Apply' }).element().closest('form')!.noValidate).toBe(false);
+	});
+
+	it('leaves the check to the route when it words its own', async () => {
+		await setup({ novalidate: true });
+
+		expect(page.getByRole('button', { name: 'Apply' }).element().closest('form')!.noValidate).toBe(true);
+	});
+
 	it('takes focus on its result line when the route asks, without joining the tab order', async () => {
 		const { component } = await setup();
 		const status = page.getByRole('status');

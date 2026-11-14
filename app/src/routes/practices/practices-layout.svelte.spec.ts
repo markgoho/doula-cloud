@@ -273,7 +273,7 @@ describe('the nav', () => {
 		['an Owner who is a Doula', ['owner', 'doula'], false, undefined, false],
 		['an Admin', ['admin'], false, undefined, false],
 		['an Owner', ['owner'], false, undefined, false]
-	])('opens Clients and Schedule for %s on Mine: %s', async (_who, roles, isContractor, hasOtherDoulas, onMine) => {
+	])('opens Clients, Schedule and On call for %s on Mine: %s', async (_who, roles, isContractor, hasOtherDoulas, onMine) => {
 		await setup({ roles, isContractor, hasOtherDoulas });
 
 		const suffix = onMine ? '?mine=true' : '';
@@ -283,6 +283,9 @@ describe('the nav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Schedule', exact: true }).first())
 			.toHaveAttribute('href', `/practices/practice-1/schedule${suffix}`);
+		await expect
+			.element(page.getByRole('link', { name: 'On call', exact: true }).first())
+			.toHaveAttribute('href', `/practices/practice-1/on-call${suffix}`);
 	});
 
 	it('marks Schedule current when the address says Mine', async () => {

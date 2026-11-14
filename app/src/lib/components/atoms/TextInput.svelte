@@ -98,6 +98,7 @@
 		minlength,
 		maxlength,
 		min,
+		max,
 		step,
 		inputmode,
 		autocomplete,
@@ -153,7 +154,12 @@
 		 * credits starts at 1, not at 0 or -3. Separate from `minlength`,
 		 * which counts characters rather than reading the value.
 		 */
-		min?: number;
+		min?: number | string;
+		/*
+		 * The ceiling `min` is the floor of: a number for type="number", a
+		 * `YYYY-MM-DD` day for type="date".
+		 */
+		max?: number | string;
 		/*
 		 * type="number"'s increment, so a money field can accept cents
 		 * (`step={0.01}`) instead of whole units only. No dedicated money
@@ -236,6 +242,7 @@
 		{minlength}
 		{maxlength}
 		{min}
+		{max}
 		{step}
 		{inputmode}
 		{autocomplete}

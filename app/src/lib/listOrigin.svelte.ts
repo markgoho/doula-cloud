@@ -9,7 +9,7 @@ import { afterNavigate, goto } from '$app/navigation';
  * restores it, or, when the page has moved on since, hands the held search
  * back through `goto`'s state. Memory only, as `clientsReturn.ts` is.
  */
-export type OriginList = 'schedule' | 'invoices';
+export type OriginList = 'schedule' | 'invoices' | 'on-call';
 
 export interface ListOrigin {
 	list: OriginList;
@@ -18,10 +18,11 @@ export interface ListOrigin {
 
 const LABEL: Record<OriginList, string> = {
 	schedule: 'Back to the Schedule',
-	invoices: 'Back to Invoices'
+	invoices: 'Back to Invoices',
+	'on-call': 'Back to On call'
 };
 
-const held: Record<OriginList, string> = { schedule: '', invoices: '' };
+const held: Record<OriginList, string> = { schedule: '', invoices: '', 'on-call': '' };
 
 export function holdListSearch(list: OriginList, search: string): void {
 	held[list] = search;
@@ -31,7 +32,7 @@ export function holdListSearch(list: OriginList, search: string): void {
  * The list `from` is, with the address's filters kept, or nothing when it is
  * neither list. `paths` holds each list's own path for this Practice.
  */
-export function originFrom(from: URL | undefined, paths: Record<OriginList, string>): ListOrigin | undefined {
+export function originFrom(from: URL | undefined, paths: Partial<Record<OriginList, string>>): ListOrigin | undefined {
 	if (!from) return undefined;
 	const list = (Object.keys(paths) as OriginList[]).find((key) => paths[key] === from.pathname);
 	return list ? { list, address: `${from.pathname}${from.search}` } : undefined;
@@ -63,12 +64,11 @@ export class ListBack {
 			return;
 		}
 		const search = held[origin.list];
-		void goto(origin.address, {
-			state: origin.list === 'schedule' ? { scheduleSearch: search } : { invoicesSearch: search }
-		});
+		const states = { schedule: { scheduleSearch: search }, invoices: { invoicesSearch: search }, 'on-call': {} };
+		void goto(origin.address, { state: states[origin.list] });
 	};
 
-	constructor(paths: () => Record<OriginList, string>, here: () => string) {
+	constructor(paths: () => Partial<Record<OriginList, string>>, here: () => string) {
 		afterNavigate(({ from }) => {
 			const found = originFrom(from?.url, paths());
 			if (found) {

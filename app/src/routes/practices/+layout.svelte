@@ -93,7 +93,7 @@
 			// contractor Doula gets the births she is on rather than a
 			// refusal, so offering it to every role is a promise the
 			// endpoint keeps.
-			{ label: 'On call', href: resolve('/practices/[practiceId]/on-call', { practiceId }) },
+			{ label: 'On call', href: listEntry(resolve('/practices/[practiceId]/on-call', { practiceId })) },
 			...(canReadInvoices
 				? [
 						// Every Staff member but a plain contractor Doula: `GET

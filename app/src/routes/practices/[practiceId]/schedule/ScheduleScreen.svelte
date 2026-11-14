@@ -11,7 +11,7 @@
 	 * navigation rather than replacing it (Rule of Least Power), and the
 	 * address is the state.
 	 */
-	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
+	import { beforeNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
@@ -19,7 +19,8 @@
 	import { formatScheduledVisit } from '#lib/dates.js';
 	import { visitDoulaText, visitTypeLabel } from '#lib/engagementDetail.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
-	import { THIS_WEEK } from '#lib/dayRange.js';
+	import { THIS_WEEK, rangeHold } from '#lib/dayRange.js';
+	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import { typedIn } from '#lib/typedIn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -55,10 +56,8 @@
 		type ScheduleRangeErrors,
 		type ScheduleView
 	} from '#lib/visitSchedule.js';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
@@ -67,6 +66,8 @@
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
+	import ReadFailure from '#lib/components/molecules/ReadFailure.svelte';
+	import ShowOnly from '#lib/components/molecules/ShowOnly.svelte';
 	import VisitDoula from '#lib/components/molecules/VisitDoula.svelte';
 	import VisitWhen from '#lib/components/molecules/VisitWhen.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -105,12 +106,14 @@
 	const NEEDS_DOULA = 'Doula no longer on this work';
 	const UNKNOWN_DOULA = 'that Doula';
 
+	// jscpd:ignore-start -- the lines a Practice-wide list opens with: its own path, and the session's zone and role, each read through its own route's typed `resolve` and `page`
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! }));
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	// The Practice's own zone (ADR-0036): every day and time on this screen is read in it, never the reader's.
 	const timeZone = $derived(session.timezone);
 	const canMine = $derived(canNarrowToMine(session));
+	// jscpd:ignore-end
 	// The picker's gate is the roster read's (`+page.ts`), so it holds its
 	// place before the Doulas land.
 	const isDoulaPickerOffered = $derived(isOwnerOrAdmin(session));
@@ -343,22 +346,15 @@
 	}
 	seedDrafts();
 	let filterBar = $state<{ focusStatus: () => void }>();
-	let isFocusPending = $state(false);
-	let lastKey: string | undefined;
 	beforeNavigate(() => {
 		isSearchTouched = false;
 	});
-	afterNavigate(() => {
-		seedDrafts();
-		// A change of narrowing lands on the result line once its list has
-		// loaded, never on first arrival, where the route announcer speaks.
-		if (changeApplies === 0 && lastKey !== undefined && lastKey !== wantedKey) isFocusPending = true;
-		lastKey = wantedKey;
-	});
-	$effect(() => {
-		if (!isFocusPending || !read || readKeyOf(read) !== wantedKey) return;
-		isFocusPending = false;
-		filterBar?.focusStatus();
+	focusResultAfterChange({
+		seed: seedDrafts,
+		wantedKey: () => wantedKey,
+		isLanded: () => read !== undefined && readKeyOf(read) === wantedKey,
+		isOwnChange: () => changeApplies > 0,
+		focus: () => filterBar?.focusStatus()
 	});
 
 	// Picking "Choose days" starts its fields on the days the choice before it showed.
@@ -409,13 +405,10 @@
 
 	// A box, a radio or a select applies the bar as drawn; "Choose days" alone only opens its fields.
 	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
-		if (draftChoice === 'choose') {
-			if (changed.length === 1 && changed[0] === 'days') return false;
-			const problems = scheduleRangeErrors(fromValue, toValue);
-			if (problems.from || problems.to) {
-				rangeErrors = problems;
-				return false;
-			}
+		const hold = rangeHold(draftChoice === 'choose', changed, () => scheduleRangeErrors(fromValue, toValue));
+		if (hold) {
+			if (hold.errors) rangeErrors = hold.errors;
+			return false;
 		}
 		rangeErrors = {};
 		void show(scheduleHref(basePath, draftView), typedIn(searchField, draftSearch), { replace });
@@ -523,15 +516,7 @@
 	});
 
 	// "Try again" runs the read that failed, under the same narrowing.
-	let isRetrying = $state(false);
-	async function tryAgain() {
-		isRetrying = true;
-		try {
-			await (appliedSearch === '' ? onRetry() : readSearch(wantedKey, ++latestSearch));
-		} finally {
-			isRetrying = false;
-		}
-	}
+	const tryAgain = () => (appliedSearch === '' ? onRetry() : readSearch(wantedKey, ++latestSearch));
 
 	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
 	const isDoulaPending = $derived(!read && readFailure === '' && view.doula !== '');
@@ -662,33 +647,28 @@
 			<!-- Folds with the Order select below 42rem; at that width and wider the fold is not drawn and these sit in the fields row. -->
 			{#snippet folded()}
 				{#if canMine || isDoulaPickerOffered}
-					<!-- One group, so each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
-					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a named box of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
-					<fieldset>
-						<legend>Show only</legend>
-						<div class="show-only-boxes">
-							{#if canMine}
-								<LabeledField label="Mine" orientation="inline">
-									{#snippet children(control)}
-										<Checkbox name="mine" value="true" checked={isMineChecked} onChange={(checked) => (isMineChecked = checked)} {...control} />
-									{/snippet}
-								</LabeledField>
-							{/if}
-							{#if isDoulaPickerOffered}
-								<LabeledField label={NEEDS_DOULA} orientation="inline">
-									{#snippet children(control)}
-										<Checkbox
-											name="needsDoula"
-											value="true"
-											checked={isNeedsDoulaChecked}
-											onChange={(checked) => (isNeedsDoulaChecked = checked)}
-											{...control}
-										/>
-									{/snippet}
-								</LabeledField>
-							{/if}
-						</div>
-					</fieldset>
+					<ShowOnly>
+						{#if canMine}
+							<LabeledField label="Mine" orientation="inline">
+								{#snippet children(control)}
+									<Checkbox name="mine" value="true" checked={isMineChecked} onChange={(checked) => (isMineChecked = checked)} {...control} />
+								{/snippet}
+							</LabeledField>
+						{/if}
+						{#if isDoulaPickerOffered}
+							<LabeledField label={NEEDS_DOULA} orientation="inline">
+								{#snippet children(control)}
+									<Checkbox
+										name="needsDoula"
+										value="true"
+										checked={isNeedsDoulaChecked}
+										onChange={(checked) => (isNeedsDoulaChecked = checked)}
+										{...control}
+									/>
+								{/snippet}
+							</LabeledField>
+						{/if}
+					</ShowOnly>
 				{/if}
 				{#if isDoulaPickerOffered}
 					<div class="field doula">
@@ -750,10 +730,7 @@
 
 		<!-- T8: in place of the list, so no row from another narrowing is read as this one's; the bar keeps the narrowing. -->
 		{#if readFailure}
-			<stack-l space="var(--space-related)">
-				<Notice message={readFailure} variant="error" />
-				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
-			</stack-l>
+			<ReadFailure message={readFailure} onRetry={tryAgain} />
 		{:else if read}
 			{#if !read.rangeErrors}
 				<div class="schedule-table">
@@ -794,14 +771,6 @@
 
 <style>
 	@layer components {
-		/* The boxes wrap among themselves beside FilterBar's floated legend. */
-		.show-only-boxes {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-1) var(--space-related);
-		}
-
 		/* The Doula takes half of a narrow line and stands at its own width where there is room, as on the Clients list. */
 		.field {
 			--field-width: 34ch;

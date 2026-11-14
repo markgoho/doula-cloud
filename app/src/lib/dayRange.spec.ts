@@ -10,6 +10,7 @@ import {
 	ENTER_TO_DAY,
 	isCalendarDay,
 	rangeErrors,
+	rangeHold,
 	presetDays,
 	stepDays,
 	THIS_WEEK,
@@ -207,6 +208,27 @@ describe('stepping the days', () => {
 
 	it('has no step where the days are not a range', () => {
 		expect(stepDays(viewOf(7, { from: '', to: '' }), 1, EASTERN, NOW, PRESETS)).toBeUndefined();
+	});
+});
+
+describe('whether a change of control applies the bar', () => {
+	const refused = { from: ENTER_FROM_DAY };
+
+	it('lets a change apply when the days are not typed', () => {
+		expect(rangeHold(false, ['mine'], () => refused)).toBeUndefined();
+	});
+
+	it('holds on the fields alone when "Choose days" is all that changed', () => {
+		expect(rangeHold(true, ['days'], () => refused)).toEqual({});
+	});
+
+	it('holds with the errors when the typed days are no range', () => {
+		expect(rangeHold(true, ['days', 'mine'], () => refused)).toEqual({ errors: refused });
+		expect(rangeHold(true, ['mine'], () => ({ to: ENTER_TO_DAY }))).toEqual({ errors: { to: ENTER_TO_DAY } });
+	});
+
+	it('lets a change apply when the typed days are a range', () => {
+		expect(rangeHold(true, ['mine'], () => ({}))).toBeUndefined();
 	});
 });
 
