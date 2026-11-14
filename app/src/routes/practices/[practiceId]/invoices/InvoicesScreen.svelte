@@ -23,7 +23,7 @@
 		type InvoicePeriod,
 		type InvoicePeriodChoice
 	} from '#lib/invoicePeriod.js';
-	import { requestInvoicesExport, saveFile } from '#lib/invoiceExport.js';
+	import { downloadedWords as downloadedWordsOf, requestInvoicesExport, saveFile } from '#lib/invoiceExport.js';
 	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
 	import { readerTimeZone } from '#lib/zonedTime.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
@@ -316,8 +316,9 @@
 	const invoiceCount = (count: number) => `on ${count} ${count === 1 ? 'Invoice' : 'Invoices'}`;
 
 	/*
-	 * Four short totals read before a row (#2746): what Clients owe, the
-	 * overdue part of it (#768: a narrowing of that figure, never a book
+	 * Five short totals read before a row (#2746, #2871): what was billed (the
+	 * Invoices sent that still stand, a void one not and a written-off one
+	 * counted), what Clients owe, the overdue part of it (#768: a narrowing of that figure, never a book
 	 * beside it, so its label says so), what Clients have paid, and the part
 	 * of that refunded (#1009: a refunded Invoice stays paid and still
 	 * counts in full, so it is said the same way). Each is a label, then its
@@ -331,6 +332,7 @@
 		return { label, figure, note, value: `${figure} ${note}`.trim() };
 	}
 	const totals = $derived([
+		totalRow('Billed', book?.billedCents, invoiceCount(book?.billedCount ?? 10)),
 		totalRow('Clients owe', book?.outstandingCents, invoiceCount(book?.outstandingCount ?? 10)),
 		totalRow('Of that, overdue', book?.overdueCents, invoiceCount(book?.overdueCount ?? 10)),
 		totalRow('Clients have paid', book?.paidCents, ''),
@@ -502,6 +504,8 @@
 	});
 	let isExporting = $state(false);
 	let exportRefusal = $state('');
+	let downloaded = $state.raw<{ key: ReadKey; words: string }>();
+	const downloadedWords = $derived(downloaded && downloaded.key === shown && isSameKey(shown, wanted) ? downloaded.words : '');
 	const isExportDrawn = $derived(isScripted && session !== undefined && isOwnerOrAdmin(session));
 	// Drawn from the first frame so the title row never changes height when the list lands; there is nothing to download until it has.
 	const hasExportRows = $derived(shown !== undefined && !isBookEmpty && readFailure === '');
@@ -521,6 +525,8 @@
 		if (!shown) return;
 		isExporting = true;
 		exportRefusal = '';
+		downloaded = undefined;
+		const key = shown;
 		const result = await requestInvoicesExport(apiFetchWithSession, page.params.practiceId!, {
 			view: shown.view,
 			search: shown.search,
@@ -529,7 +535,10 @@
 		});
 		isExporting = false;
 		if ('refusal' in result) exportRefusal = result.refusal;
-		else saveFile(result.blob, result.filename);
+		else {
+			saveFile(result.blob, result.filename);
+			downloaded = { key, words: downloadedWordsOf(result.filename, result.count) };
+		}
 	}
 
 	// H10: a search that found nothing in a narrowed view is run again over every
@@ -703,14 +712,18 @@
 			{#if totalsDays}
 				<p class="totals-note" id={TOTALS_NOTE_ID}>{invoiceTotalsNote(totalsDays)}</p>
 			{/if}
-			<SummaryList rows={totals.slice(0, 2)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
-			<SummaryList rows={totals.slice(2)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
+			<SummaryList rows={totals.slice(0, 1)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
+			<SummaryList rows={totals.slice(1, 3)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
+			<SummaryList rows={totals.slice(3)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
 		</div>
 	{/if}
 
 	<!-- Under the title row, with the button still there to try again. -->
 	{#if exportRefusal}
 		<Notice variant="error" message={exportRefusal} />
+	{/if}
+	{#if downloadedWords}
+		<Notice variant="status" message={downloadedWords} />
 	{/if}
 
 	<!--

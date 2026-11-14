@@ -44,6 +44,14 @@ export function invoicesExportedDetail(diff: Record<string, unknown>): string | 
 	return `${rows} ${rows === 1 ? 'Invoice' : 'Invoices'}: ${parts.join(', ')}`;
 }
 
+/**
+ * What a finished download says, in place (#2871): the server's file name and
+ * how many Invoices are in it.
+ */
+export function downloadedWords(filename: string, count: number): string {
+	return `Downloaded ${filename}, ${count} ${count === 1 ? 'Invoice' : 'Invoices'}.`;
+}
+
 const FALLBACK_NAME = 'invoices.csv';
 
 /**
@@ -53,7 +61,7 @@ export function exportFilename(disposition: string | null | undefined): string {
 	return /filename="([^"]+)"/.exec(disposition ?? '')?.[1] ?? FALLBACK_NAME;
 }
 
-export type InvoicesExportResult = { blob: Blob; filename: string } | { refusal: string };
+export type InvoicesExportResult = { blob: Blob; filename: string; count: number } | { refusal: string };
 
 /**
  * Asks for every Invoice the scope matches as a CSV. A refusal, and a
@@ -79,7 +87,11 @@ export async function requestInvoicesExport(
 		if (response.status === 429) return { refusal: tooManyDownloads(response.headers.get('Retry-After')) };
 		if (response.status === 403) return { refusal: EXPORT_NOT_ALLOWED };
 		if (!response.ok) return { refusal: EXPORT_FAILED };
-		return { blob: await response.blob(), filename: exportFilename(response.headers.get('Content-Disposition')) };
+		return {
+			blob: await response.blob(),
+			filename: exportFilename(response.headers.get('Content-Disposition')),
+			count: Number(response.headers.get('Invoice-Count'))
+		};
 	} catch {
 		return { refusal: EXPORT_FAILED };
 	}

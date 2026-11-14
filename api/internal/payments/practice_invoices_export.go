@@ -121,6 +121,7 @@ func ExportPracticeInvoicesHandler() http.Handler {
 		}
 
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
+		w.Header().Set("Invoice-Count", strconv.Itoa(len(items)))
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="invoices-%s.csv"`, practiceDay(now, zone)))
 		_, _ = w.Write(body)
 	}, staffauth.NotAmbientContractor())

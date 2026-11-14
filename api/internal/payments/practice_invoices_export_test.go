@@ -240,6 +240,9 @@ func TestExportPracticeInvoices_AnswersAFileNamedForThePracticesDay(t *testing.T
 	if got := resp.Header.Get("Content-Disposition"); got != `attachment; filename="invoices-2026-11-14.csv"` {
 		t.Fatalf("Content-Disposition = %q", got)
 	}
+	if got := resp.Header.Get("Invoice-Count"); got != "0" {
+		t.Fatalf("Invoice-Count = %q, want 0", got)
+	}
 	if got := resp.Header.Get("RateLimit-Limit"); got != "30" {
 		t.Fatalf("RateLimit-Limit = %q, want 30", got)
 	}

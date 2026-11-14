@@ -201,6 +201,32 @@ describe('the Download CSV button (#2871)', () => {
 		return { create, click };
 	}
 
+	it('says in place what it handed over, with the server’s file name and count, and clears when the list changes', async () => {
+		const view = await setupPeriod();
+		await download(
+			new Response('Client\n', { headers: { 'Content-Disposition': 'attachment; filename="invoices-2026-11-14.csv"', 'Invoice-Count': '17' } })
+		);
+
+		await expect
+			.element(testPage.getByRole('status').filter({ hasText: 'Downloaded invoices-2026-11-14.csv, 17 Invoices.' }))
+			.toBeVisible();
+
+		pageState.url.searchParams.set('show', 'unpaid');
+		await view.rerender({ data: { ...data, view: 'unpaid' } });
+		await expect.element(testPage.getByText('Downloaded invoices-2026-11-14.csv', { exact: false })).not.toBeInTheDocument();
+	});
+
+	it('says one Invoice in the singular and says nothing after a refusal', async () => {
+		await setupPeriod();
+		await download(
+			new Response('Client\n', { headers: { 'Content-Disposition': 'attachment; filename="invoices-2026-11-14.csv"', 'Invoice-Count': '1' } })
+		);
+		await expect.element(testPage.getByText('Downloaded invoices-2026-11-14.csv, 1 Invoice.')).toBeVisible();
+
+		await download(new Response('', { status: 500 }));
+		await expect.element(testPage.getByText('Downloaded invoices', { exact: false })).not.toBeInTheDocument();
+	});
+
 	it('says what it downloads, using the result line’s count', async () => {
 		await setupPeriod('', { invoiceCount: 35, hasMore: true, nextCursor: 'c' });
 

@@ -149,6 +149,12 @@ export interface PracticeInvoicePage {
 	 * Every Invoice in the book, whatever its status (#2746).
 	 */
 	invoiceCount: number;
+	/**
+	 * What was billed (#2871): the Invoices sent that still stand, open, paid
+	 * or written off; never a draft or a void one.
+	 */
+	billedCents: number;
+	billedCount: number;
 	/** Every 'paid' Invoice's full amount -- settled bills. A refunded
 	 * Invoice stays 'paid', so it still counts here in full; what went
 	 * back is refundedCents beside it. */
