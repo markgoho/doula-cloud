@@ -53,7 +53,7 @@ func TestUnstaffedDays(t *testing.T) {
 		{
 			name:       "days that start after the window leave the whole window as the hole",
 			rng:        october,
-			effectives: []oncall.Window{{Start: "2026-11-20", End: "2026-11-25"}},
+			effectives: []oncall.Window{{Start: "2026-11-21", End: "2026-11-25"}},
 			want:       []oncall.Window{{Start: windowStart, End: windowEnd}},
 		},
 		{
