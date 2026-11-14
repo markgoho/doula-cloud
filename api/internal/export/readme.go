@@ -29,6 +29,8 @@ func writeReadme(ctx context.Context, tx *sql.Tx, w http.ResponseWriter, zw *zip
 	fmt.Fprintf(&b, "Run by %s, %s.\n\n", staffName, now.Format("2006-01-02T15:04:05Z"))
 	b.WriteString("Every file is a UTF-8 CSV with a header row. Ids are included so the files join to each other.\n")
 	b.WriteString("A blank cell means the column was empty (NULL), not that it was left out.\n")
+	b.WriteString("A cell that starts with =, +, -, @, a tab or a carriage return carries one leading ' so a spreadsheet\n")
+	b.WriteString("reads it as text, not a formula; drop that one ' to get the original. Plain negative numbers are left as they are.\n")
 	b.WriteString("An Activity row whose diff reads as {\"v\":1,\"enc\":\"...\"} is sealed under a Client's own key,\n")
 	b.WriteString("shredded on her erasure (ADR-0027); it is never decrypted here and never will be.\n\n")
 	b.WriteString("Files in this archive:\n")
