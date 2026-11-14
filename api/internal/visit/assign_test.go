@@ -402,3 +402,20 @@ func TestReassignHandler_APlainDoulaMayNameOnlyHerself(t *testing.T) {
 	peerVisit := seedVisit(t, e.DB, e.Engagement.ID, peer)
 	e.reassign(peerVisit, e.Staff.ID, http.StatusOK)
 }
+
+// A contractor attached to the Engagement may set a Visit's date and write
+// its notes, but naming a colleague is the Owner's and the Admin's alone
+// (ADR-0008's "Who may assign a Visit to whom"): a reassign from her is
+// refused, and the Visit stays where it was.
+func TestReassignHandler_AConfinedContractorMayNotNameAColleague(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Doula(), fixture.Contractor()))
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
+	peer := e.Colleague().ID
+	visitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
+
+	e.reassign(visitID, peer, http.StatusForbidden)
+	assignedTo := testdb.Scalar[string](t, e.DB.Admin, `SELECT staff_id::text FROM visits WHERE id = $1`, visitID)
+	if assignedTo != e.Staff.ID {
+		t.Fatalf("visit is assigned to %q, want the refusal to have left it on %q", assignedTo, e.Staff.ID)
+	}
+}

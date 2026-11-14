@@ -329,7 +329,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			await setupGapForm();
 
 			await expect
-				.element(testPage.getByText('Optional. Staff at this Practice can read it; the Client never does.'))
+				.element(testPage.getByText('Optional. Owners, Admins and the Doulas on this birth can read it; the Client never does.'))
 				.toBeVisible();
 			await expect
 				.element(

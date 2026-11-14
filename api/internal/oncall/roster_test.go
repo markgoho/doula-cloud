@@ -155,6 +155,20 @@ func TestRoster_ContractorSeesOnlyTheColleaguesOnHerBirths(t *testing.T) {
 	}
 }
 
+// TestRoster_ContractorDoesNotSeeAColleagueWhoSharesNoBirthInTheRange: a
+// colleague on her birth, asked about days that birth does not reach, has no
+// births in the range, so she is not listed and her staffId does not reach her.
+func TestRoster_ContractorDoesNotSeeAColleagueWhoSharesNoBirthInTheRange(t *testing.T) {
+	e := newRosterEnv(t)
+	testdb.SeedGrantedAttachment(t, e.DB, e.Ada.ID, e.Employee.ID)
+	url := e.rosterURL("2027-03-01", "2027-03-02")
+
+	body := string(reqtest.ExpectBody(t, http.MethodGet, url, http.StatusOK, e.As(e.Contractor)))
+	if strings.Contains(body, e.Employee.ID) {
+		t.Error("a colleague's staffId reached a contractor who shares no birth with her in the range")
+	}
+}
+
 // TestRoster_AContractorNeverReadsABirthWithNoDoula: a birth nobody is on
 // has no Attachment she could hold, so it is neither a row nor a
 // no-window entry for her, and an Owner reads it as one.

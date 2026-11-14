@@ -3921,6 +3921,19 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText(/You contract for this Practice/)).not.toBeInTheDocument();
 		expect(invoiceListReads()).toHaveLength(1);
 	});
+
+	it.each([
+		['an Owner', ['owner']],
+		['an Admin', ['admin']]
+	])('draws no answer for %s while the Invoices read is still out', async (_name, roles) => {
+		await setupMoney(sessionFor(roles), fixtureDetail, (path) =>
+			path.endsWith('/contract/invoices') ? new Promise<Response>(() => {}) : undefined
+		);
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading the Invoices' })).toBeVisible();
+		await expect.element(testPage.getByText('No Invoices yet.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
+	});
 });
 
 // #2271: each contractor's fee, and the Practice's record of paying it.
