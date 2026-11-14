@@ -3,7 +3,7 @@ import { resolve } from '$app/paths';
 import { apiFetch, isMFARequired, isTermsAgreementRequired } from '#lib/api.js';
 import { apiErrorMessage } from '#lib/apiErrorMessage.js';
 import { decideLanding, type SessionInfo } from '#lib/landing.js';
-import { PRACTICE_SESSION_DEPENDENCY } from '#lib/practiceSession.js';
+import { PRACTICE_SESSION_DEPENDENCY, noteSessionRead, sessionHeldFor } from '#lib/practiceSession.js';
 import { staffLoginAfterRefusal } from '#lib/sessionEnded.js';
 import type { BillingMode } from '#lib/invoice.js';
 import type { LayoutLoad } from './$types';
@@ -131,7 +131,14 @@ const deleteSettingsPath = (practiceId: string) =>
  */
 export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise<{ session: PracticeSession }> => {
 	depends(PRACTICE_SESSION_DEPENDENCY);
-	const response = await apiFetch(`/api/practices/${params.practiceId}/session`, {}, fetch);
+	let response: Response;
+	try {
+		response = await apiFetch(`/api/practices/${params.practiceId}/session`, {}, fetch);
+	} catch (error_) {
+		const held = sessionHeldFor<PracticeSession>(params.practiceId);
+		if (held === undefined) throw error_;
+		return { session: held };
+	}
 
 	const returnTo = `${url.pathname}${url.search}`;
 	if (response.status === 401) {
@@ -179,23 +186,23 @@ export const load: LayoutLoad = async ({ params, url, depends, fetch }): Promise
 		redirect(303, agreementPath(params.practiceId));
 	}
 
-	return {
-		session: {
-			practiceId: params.practiceId,
-			staffId: body.staffId,
-			practiceName: body.practiceName,
-			roles: body.roles,
-			isContractor: body.isContractor,
-			pendingDeletion: body.pendingDeletion,
-			secondFactor: body.secondFactor,
-			agreementDue: body.agreementDue,
-			hasClients: body.hasClients,
-			hasOtherDoulas: body.hasOtherDoulas,
-			clientsCanPay: body.clientsCanPay,
-			billingMode: body.billingMode,
-			timezone: body.timezone
-		}
+	const session: PracticeSession = {
+		practiceId: params.practiceId,
+		staffId: body.staffId,
+		practiceName: body.practiceName,
+		roles: body.roles,
+		isContractor: body.isContractor,
+		pendingDeletion: body.pendingDeletion,
+		secondFactor: body.secondFactor,
+		agreementDue: body.agreementDue,
+		hasClients: body.hasClients,
+		hasOtherDoulas: body.hasOtherDoulas,
+		clientsCanPay: body.clientsCanPay,
+		billingMode: body.billingMode,
+		timezone: body.timezone
 	};
+	noteSessionRead(session);
+	return { session };
 };
 
 /**
