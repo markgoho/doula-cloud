@@ -24,7 +24,7 @@ import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarWeekdayDay } from './dates.js';
-import { dayIn, startOfDayIn, zoneName, areZonesApart } from './zonedTime.js';
+import { dayIn, startOfDayIn } from './zonedTime.js';
 
 /** One row of the Practice-wide schedule -- mirrors the Go BFF's
  * ScheduledVisit (api/internal/visit/practice_list.go). `scheduledAt` is
@@ -357,13 +357,61 @@ export async function loadPracticeSchedule(
 }
 
 /**
+The days as a reader says them: "Fri Nov 6 to Thu Nov 12", or one day alone.
+*/
+export function scheduleDaysWords(days: ScheduleDays, timeZone: string, now: Date = new Date()): string {
+	const from = formatCalendarWeekdayDay(days.from, timeZone, now);
+	return days.from === days.to ? from : `${from} to ${formatCalendarWeekdayDay(days.to, timeZone, now)}`;
+}
+
+/**
 The applied tag for chosen days: "Days: Tue Nov 10 to Thu Nov 19".
 */
 export function scheduleDaysTag(days: ScheduleDays, timeZone: string, now: Date = new Date()): string {
-	const from = formatCalendarWeekdayDay(days.from, timeZone, now);
-	return days.from === days.to
-		? `Days: ${from}`
-		: `Days: ${from} to ${formatCalendarWeekdayDay(days.to, timeZone, now)}`;
+	return `Days: ${scheduleDaysWords(days, timeZone, now)}`;
+}
+
+/**
+How many calendar days a window holds, both ends included.
+*/
+function daysIn(days: ScheduleDays): number {
+	const [fromYear, fromMonth, fromDay] = days.from.split('-').map(Number);
+	const [toYear, toMonth, toDay] = days.to.split('-').map(Number);
+	return Math.round((Date.UTC(toYear!, toMonth! - 1, toDay!) - Date.UTC(fromYear!, fromMonth! - 1, fromDay!)) / 86_400_000) + 1;
+}
+
+export interface ScheduleStep {
+	/**
+	The view a step lands on: a preset when the days are one counted from today, chosen days otherwise.
+	*/
+	view: ScheduleView;
+	days: ScheduleDays;
+}
+
+/**
+ * The window one step earlier (`-1`) or later (`1`): the days the reader sees
+ * moved by their own length, 7 for the next 7 days, 30 for the next 30, and
+ * to - from + 1 for chosen days. Calendar arithmetic on the days' own parts, so
+ * a daylight-saving day or a month's end moves nothing; only "today" is read in
+ * the Practice's zone. Nothing where the days are not a range.
+ */
+export function scheduleStep(
+	view: ScheduleView,
+	direction: -1 | 1,
+	timeZone: string,
+	now: Date
+): ScheduleStep | undefined {
+	const shown = scheduleDaysOf(view, timeZone, now).days;
+	if (!shown) return undefined;
+	const length = daysIn(shown) * direction;
+	const days = { from: addDays(shown.from, length), to: addDays(shown.to, length) };
+	const today = dayIn(now, timeZone);
+	if (days.from === today) {
+		for (const preset of [SHORT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_DAYS] as const) {
+			if (days.to === addDays(today, preset - 1)) return { view: { ...view, preset, chosen: undefined }, days };
+		}
+	}
+	return { view: { ...view, chosen: days }, days };
 }
 
 /**
@@ -396,16 +444,6 @@ function scheduleDaysSpan(days: ScheduleDays, timeZone: string, now: Date): stri
 	return days.from === days.to
 		? `on ${wholeDay(days.from, timeZone, now)}`
 		: `from ${wholeDay(days.from, timeZone, now)} to ${wholeDay(days.to, timeZone, now)}`;
-}
-
-/**
- * The one line that says which zone the times are in, for a reader whose own
- * is another: "Times are in this Practice's time zone, Eastern Time." Nothing
- * for a reader in the Practice's zone.
- */
-export function scheduleZoneNote(practiceZone: string, readerZone: string, now: Date): string | undefined {
-	if (!areZonesApart(practiceZone, readerZone, now)) return undefined;
-	return `Times are in this Practice's time zone, ${zoneName(practiceZone, now)}.`;
 }
 
 /**

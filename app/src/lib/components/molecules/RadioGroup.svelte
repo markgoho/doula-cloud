@@ -90,17 +90,25 @@
 		 * conditional reveal, which need the row's width.
 		 */
 		isInline?: boolean;
+		/*
+		 * With `isInline`: links that follow the answers on the same wrapping row,
+		 * so where the answers take two lines they fill the second line's empty
+		 * end rather than taking a third (the Schedule's Earlier and Later). They
+		 * are not answers: the group's value is the radios'.
+		 */
+		trailing?: Snippet;
 	}
 
 	const generatedName = $props.id();
 
-	let { legend, hint, name = generatedName, options, value, onChange, error, isInline = false }: Properties<T> = $props();
+	let { legend, hint, name = generatedName, options, value, onChange, error, isInline = false, trailing }: Properties<T> = $props();
 </script>
 
 {#snippet radios()}
 	{#if isInline}
 		<cluster-l class="inline" space="var(--space-related)" align="center">
 			{@render choices()}
+			{@render trailing?.()}
 		</cluster-l>
 	{:else}
 		<stack-l space="var(--space-5)">

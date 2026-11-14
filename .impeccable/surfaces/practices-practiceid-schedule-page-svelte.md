@@ -52,7 +52,7 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | Sort by Doula or by Client | Declined | a schedule is read in time, and ordering by person scatters each day; the Doula select, "Mine" and the Client search (#2870) find one person's Visits |
 | Search by Client | Have it (#2870) | a "Client" field, first in the fields row, with a tag and a "Look for … in the next 12 months" way on from an empty result; both readings rejected "another screen does it": the Invoices list has its own "Reference or Client" search though the Engagement holds the Invoices too; Dee starts every call with a name (`personas/non-doula-admin.md:13`, `journeys/non-doula-admin.md:84`) |
 | Date navigation: the three choices | Have it | "Next 7 days", "Next 30 days", "Choose days" |
-| Date navigation: previous and next | Build (#2870) | "Earlier" and "Later" step the window; the first decline ("Choose days does it within the Tab budget") was circular, the budget being the rubric's own line; Google Calendar's help says "Swipe left or right to go to other months" and "tap Jump to today" (https://support.google.com/calendar/answer/6110849) |
+| Date navigation: previous and next | Have it (#2870) | "Earlier" and "Later" step the window by its own length (built 2026-11-13); the first decline ("Choose days does it within the Tab budget") was circular, the budget being the rubric's own line; Google Calendar's help says "Swipe left or right to go to other months" and "tap Jump to today" (https://support.google.com/calendar/answer/6110849) |
 | Grouping by day, with a today marker | Have it | a heading row per day over its Visits, "Today, Fri Nov 13" marking today (#2867); T5 and `personas/employed-doula.md:17` |
 | Relative days ("Today", "Tomorrow") | Have it | "Today" and "Tomorrow" lead the day heading (#2867); the cell keeps `VisitWhen` so the Schedule and the Engagement read the same; ADR-0022's "relative under seven days" is the ledger's rule for past entries |
 | Grouping by person | Declined | the rows are bookings; who is free depends on births, which are not Visits (#330); the Doula select shows one Doula's |
@@ -76,7 +76,8 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | Filters that take effect when changed | Declined | the bar holds typed fields (a day, and a Client's name in #2870), so it submits with Apply, as `govuk-alignment.md`'s filter-bar row records; whether a "Show only" box alone takes effect at once is #2870's design call |
 | Booking a Visit from the Schedule | Later (#330) | a Visit is added on its Engagement, where its Client and its Doulas are; booking from a calendar comes with #330's calendar work; all three graders named it |
 | A Doula picker that takes several | Declined | no job on record asks for two Doulas' Visits at once, and "Any Doula" with the day headings shows everyone's; two graders named it |
-| A way to past Visits | Build (#2870) | "Earlier" steps back; today "Choose days" reaches past days |
+| A way to past Visits | Have it (#2870) | "Earlier" steps back a window at a time; "Choose days" reaches any day |
+| The filter bar on a phone | Have it (#2870) | below a 42rem bar "Show only", the Doula select and Order fold under "More filters and order"; Days, Earlier, Later, the Client search and Apply stay in view; the first screen holds a card or two instead of the bar |
 
 The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
