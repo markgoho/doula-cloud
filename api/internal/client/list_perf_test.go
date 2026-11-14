@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"doula-cloud/api/internal/overdue"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -110,7 +111,7 @@ func TestListQueryPlanAtScale(t *testing.T) {
 		     RETURNING id
 		 ), i AS (
 		     INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
-		     SELECT $1, k.id, gen_random_uuid()::text, 'open'::invoice_status, 75000, gen_random_uuid()::text, now()
+		     SELECT $1, k.id, gen_random_uuid()::text, 'open'::invoice_status, 75000, gen_random_uuid()::text, now() - (row_number() OVER ())::int % 60 * interval '1 day'
 		       FROM k
 		     RETURNING id
 		 )
@@ -133,6 +134,8 @@ func TestListQueryPlanAtScale(t *testing.T) {
 	middle := listAfter{at: time.Now().AddDate(0, 0, 150).UTC().Truncate(24 * time.Hour), id: zeroID}
 	middleName := listAfter{name: "perf client 2500", id: zeroID}
 	middleOwed := listAfter{owed: 75000, at: middle.at, id: zeroID}
+	cutoff := overdue.From(time.Now(), time.UTC)
+	middleLate := listAfter{late: cutoff.AddDate(0, 0, -30), at: middle.at, id: zeroID}
 	for name, c := range map[string]struct {
 		filters listFilters
 		order   string
@@ -148,6 +151,9 @@ func TestListQueryPlanAtScale(t *testing.T) {
 		"order by owed, first page":      {listFilters{withWorkOnly: true}, orderOwed, nil},
 		"order by owed, later page":      {listFilters{withWorkOnly: true}, orderOwed, &middleOwed},
 		"order by owed, doula":           {listFilters{withWorkOnly: true, doula: doulaID}, orderOwed, nil},
+		"order by overdue, first page":   {listFilters{withWorkOnly: true, overdueFrom: cutoff}, orderOverdue, nil},
+		"order by overdue, later page":   {listFilters{withWorkOnly: true, overdueFrom: cutoff}, orderOverdue, &middleLate},
+		"order by overdue, doula":        {listFilters{withWorkOnly: true, overdueFrom: cutoff, doula: doulaID}, orderOverdue, nil},
 	} {
 		query, args := listClientsQuery(practiceID, c.filters, c.order, c.after)
 		explainWithinCeiling(t, tx, name, query, args)

@@ -42,11 +42,16 @@ const nameKeyExpr = `lower(concat_ws(' ', COALESCE(NULLIF(c.preferred_name, ''),
 // all (#2874): every open Invoice with no payment on its way, on the live
 // (non-voided) Contract of each of her open Engagements. The owed order sorts
 // by their sum and the Money cell says their sum and their count, so both read
-// this one definition.
+// this one definition. The Contract is a LATERAL with LIMIT 1 (an Engagement
+// has at most one live Contract) so the planner must probe contracts by
+// engagement_id once per Engagement; as a plain join it planned an unkeyed scan
+// of every Contract per Client (#2891: 89 s at 5,000 Clients).
 const (
 	owedInvoicesFrom = `
 	    FROM engagements ge
-	    JOIN contracts gc ON gc.engagement_id = ge.id AND gc.status <> 'voided'
+	    CROSS JOIN LATERAL (
+	        SELECT id FROM contracts WHERE engagement_id = ge.id AND status <> 'voided' LIMIT 1
+	    ) gc
 	    JOIN invoices gi ON gi.contract_id = gc.id`
 	owedInvoicesWhere = `ge.status <> 'completed' AND gi.status = 'open' AND gi.payment_processing_since IS NULL`
 )

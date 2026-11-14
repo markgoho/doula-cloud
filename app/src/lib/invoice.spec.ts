@@ -8,6 +8,7 @@ import {
 	formatAmount,
 	invoiceRowStatusLabel,
 	invoiceRowStatusVariant,
+	invoiceRowStatusIcon,
 	invoiceMoneyState,
 	invoicesResultSummary,
 	invoiceStateBadge,
@@ -195,6 +196,19 @@ describe('invoiceRowStatusLabel and invoiceRowStatusVariant (#2094, #2122)', () 
 			expect(invoiceRowStatusLabel(settling)).toBe('Payment on its way');
 			expect(invoiceRowStatusVariant(settling)).toBe('info');
 		}
+	});
+});
+
+describe('invoiceRowStatusIcon (#2891)', () => {
+	it('gives Owed the receipt, so it is told from Void by more than the word', () => {
+		expect(invoiceRowStatusIcon({ status: 'open', daysOverdue: 0 })).toBe('receipt');
+	});
+
+	it('leaves every other state on its variant icon', () => {
+		expect(invoiceRowStatusIcon({ status: 'open', daysOverdue: 3 })).toBeUndefined();
+		expect(invoiceRowStatusIcon({ status: 'open', daysOverdue: 0, paymentProcessing: true })).toBeUndefined();
+		expect(invoiceRowStatusIcon({ status: 'void', daysOverdue: 0 })).toBeUndefined();
+		expect(invoiceRowStatusIcon({ status: 'paid', daysOverdue: 0 })).toBeUndefined();
 	});
 });
 

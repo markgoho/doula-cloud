@@ -36,6 +36,13 @@ describe('Badge.svelte', () => {
 		expect(svg).toBeInTheDocument();
 		expect(svg).toHaveAttribute('aria-hidden', 'true');
 	});
+
+	it('draws the icon it is given in place of its variant icon', async () => {
+		const plain = await setup({ variant: 'neutral' });
+		const owed = await setup({ variant: 'neutral', icon: 'receipt' });
+
+		expect(owed.container.querySelector('svg')?.getHTML()).not.toBe(plain.container.querySelector('svg')?.getHTML());
+	});
 });
 
 /*
