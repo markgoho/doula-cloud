@@ -3,7 +3,7 @@ package activityfeed
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"net/http"
 
@@ -386,7 +386,7 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 			row.VisitAddedAt = &visitAddedAt.Time
 		}
 		if exportDiff.Valid {
-			row.Diff = json.RawMessage(exportDiff.String)
+			row.Diff = jsontext.Value(exportDiff.String)
 		}
 		// #2111: this feed sets every Client at the Practice side by side,
 		// so a Client actor reads her full name, as the subject name beside

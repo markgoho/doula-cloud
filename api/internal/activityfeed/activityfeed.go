@@ -15,7 +15,7 @@
 package activityfeed
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
 	"time"
 )
 
@@ -65,7 +65,7 @@ type Entry struct {
 	// slice of the book left the product, in no Client's name, so the Staff
 	// feed can say what was downloaded. Every other row sends none, which
 	// keeps a diff off the Client portal and out of this feed (#1150).
-	Diff json.RawMessage `json:"diff,omitempty"`
+	Diff jsontext.Value `json:"diff,omitempty"`
 }
 
 // ListResponse is docs/api-design.md section 4's envelope, the same shape

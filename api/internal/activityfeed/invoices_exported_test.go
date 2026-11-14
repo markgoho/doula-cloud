@@ -1,8 +1,8 @@
 package activityfeed_test
 
 import (
-	"encoding/json"
 	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
