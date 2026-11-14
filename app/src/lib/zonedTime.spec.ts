@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dayIn, partsIn, readerTimeZone, startOfDayIn, zoneName, areZonesApart } from './zonedTime.js';
+import { dayIn, partsIn, readerTimeZone, startOfDayIn, zoneName, zoneNote, areZonesApart } from './zonedTime.js';
 
 const EASTERN = 'America/New_York';
 
@@ -78,5 +78,20 @@ describe('zoneName and areZonesApart', () => {
 
 	it('differs by name when the offsets agree', () => {
 		expect(areZonesApart('Europe/London', 'Africa/Abidjan', winter)).toBe(true);
+	});
+});
+
+describe('zoneNote', () => {
+	const now = new Date('2026-11-13T15:00:00Z');
+
+	it('says nothing to a reader in the Practice’s zone, or in another name for its clock', () => {
+		expect(zoneNote(EASTERN, EASTERN, now)).toBeUndefined();
+		expect(zoneNote(EASTERN, 'America/Toronto', now)).toBeUndefined();
+	});
+
+	it('names the Practice’s zone to a reader in another, in words', () => {
+		const note = "Times are in this Practice's time zone, Eastern Time.";
+		expect(zoneNote(EASTERN, 'America/Denver', now)).toBe(note);
+		expect(zoneNote(EASTERN, 'Asia/Tokyo', now)).toBe(note);
 	});
 });

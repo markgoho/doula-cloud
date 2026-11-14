@@ -28,12 +28,14 @@ export interface OnCallPageData {
  * granted Attachment for. Nothing here narrows anything, and nothing
  * here may -- a hidden control is not a refusal.
  */
-export const load: PageLoad = ({
+export const load: PageLoad = async ({
 	params,
 	url,
+	parent,
 	fetch,
-}): { read: Promise<StreamedRead<OnCallPageData>> } => {
-	const range = rangeFromParameters(url.searchParams);
+}): Promise<{ read: Promise<StreamedRead<OnCallPageData>> }> => {
+	const { session } = await parent();
+	const range = rangeFromParameters(url.searchParams, session.timezone, new Date());
 	return {
 		read: mapRead(streamRead<Roster>(rosterPath(params.practiceId, range), fetch), (roster) => ({
 			roster,

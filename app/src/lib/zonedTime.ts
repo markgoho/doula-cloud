@@ -129,3 +129,13 @@ export function zoneName(timeZone: string, at: Date): string {
 		.find((part) => part.type === 'timeZoneName')?.value;
 	return name ?? timeZone;
 }
+
+/**
+ * The one line that says which zone the times are in, for a reader whose own
+ * is another: "Times are in this Practice's time zone, Eastern Time." Nothing
+ * for a reader in the Practice's zone.
+ */
+export function zoneNote(practiceZone: string, readerZone: string, now: Date): string | undefined {
+	if (!areZonesApart(practiceZone, readerZone, now)) return undefined;
+	return `Times are in this Practice's time zone, ${zoneName(practiceZone, now)}.`;
+}

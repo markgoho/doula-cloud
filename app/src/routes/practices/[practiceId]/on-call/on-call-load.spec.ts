@@ -49,16 +49,18 @@ function setup(status: number, body: unknown = roster) {
 
 /** The `load` argument: the Practice in the path, and whatever range the
  * URL carries. */
-function loadEvent(search = '') {
+function loadEvent(search = '', timezone = 'America/New_York') {
 	return {
 		params: { practiceId: 'practice-1' },
 		url: new URL(`https://example.test/practices/practice-1/on-call${search}`),
+		parent: async () => ({ session: { timezone } }),
 	};
 }
 
 beforeEach(() => {
 	vi.useFakeTimers({ toFake: ['Date'] });
-	vi.setSystemTime(new Date(2026, 9, 2, 9, 0));
+	// 9pm on the 2nd in New York, already the 3rd in Tokyo.
+	vi.setSystemTime(new Date('2026-10-03T01:00:00Z'));
 });
 
 afterEach(() => {
@@ -84,10 +86,20 @@ describe('on-call/+page.ts load', () => {
 
 		const data = await loadedValue<OnCallPageData>(await load(loadEvent() as Parameters<typeof load>[0]));
 
-		expect(data.range).toEqual(defaultRange());
+		expect(data.range).toEqual(defaultRange(new Date(), 'America/New_York'));
+		expect(data.range.from).toBe('2026-10-02');
 		expect(fetchMock.mock.calls[0][0]).toContain(
 			`from=${data.range.from}&to=${data.range.to}`
 		);
+	});
+
+	it('opens on today in the Practice’s own zone (ADR-0036)', async () => {
+		const { fetchMock } = setup(200);
+
+		const data = await loadedValue<OnCallPageData>(await load(loadEvent('', 'Asia/Tokyo') as Parameters<typeof load>[0]));
+
+		expect(data.range.from).toBe('2026-10-03');
+		expect(fetchMock.mock.calls[0][0]).toContain('from=2026-10-03');
 	});
 
 	// #2249: the screen has changed by the time a refusal lands, so the

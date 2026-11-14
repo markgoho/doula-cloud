@@ -16,7 +16,7 @@ import type {
 	RosterDoula,
 	RosterWindow,
 } from '#lib/onCall.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import Page from './OnCallScreen.svelte';
@@ -237,6 +237,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/on-call?from=2026-10-01&to=2026-10-31',
 	props: { data },
+	pageData: practiceSession(['owner']),
 	// The route takes its roster from `load` rather than from a fetch, so
 	// the screen is on the page as soon as it renders; the heading is
 	// what proves it rendered the screen and not an error state.
