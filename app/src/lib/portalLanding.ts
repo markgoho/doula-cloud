@@ -5,6 +5,7 @@ export interface Engagement {
 	/** When the Engagement itself began (#310) -- what tells two Engagements
 	 * at the same Practice apart in `clientRegister.ts`'s `engagementLabel`. */
 	createdAt: string;
+	practiceTimezone: string;
 }
 
 export interface PortalSessionInfo {

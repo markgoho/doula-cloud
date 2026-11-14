@@ -87,6 +87,9 @@ func TestSessionHandler_SingleEngagement(t *testing.T) {
 	if out.Engagements[0].PracticeName != "Test Practice" {
 		t.Fatalf("practiceName = %q, want %q", out.Engagements[0].PracticeName, "Test Practice")
 	}
+	if out.Engagements[0].PracticeTimezone != "America/New_York" {
+		t.Fatalf("practiceTimezone = %q, want %q", out.Engagements[0].PracticeTimezone, "America/New_York")
+	}
 	// #619: the change screen has to show her which mailbox signs her in
 	// before it asks for another, and this is the read that tells it.
 	// seedPortalUser mints the address from the identifier.
@@ -223,7 +226,7 @@ func TestSessionHandler_NoStaffOnlyFact(t *testing.T) {
 	if !ok {
 		t.Fatalf("engagement entry = %+v, want an object", engagements[0])
 	}
-	wantKeys := map[string]bool{"engagementId": true, "practiceName": true, "status": true, "createdAt": true}
+	wantKeys := map[string]bool{"engagementId": true, "practiceName": true, "status": true, "createdAt": true, "practiceTimezone": true}
 	for key := range entry {
 		if !wantKeys[key] {
 			t.Fatalf("engagement entry carries %q -- staff-only facts (kind, birthOutcome, endingReason) must never reach the portal root read", key)

@@ -23,6 +23,10 @@ type EngagementSummary struct {
 	PracticeName string    `json:"practiceName"`
 	Status       string    `json:"status"`
 	CreatedAt    time.Time `json:"createdAt"`
+	// PracticeTimezone is the IANA zone the Practice works in. One Portal
+	// Account can reach Practices in different zones, so it is per
+	// Engagement, never a session field.
+	PracticeTimezone string `json:"practiceTimezone"`
 }
 
 // SessionResponse is what the frontend needs to decide where to land a
@@ -121,7 +125,7 @@ func setIdentityAndCheckClient(ctx context.Context, tx *sql.Tx, identityUID stri
 // WHERE clause of its own to get wrong.
 func listEngagementsForIdentity(ctx context.Context, tx *sql.Tx) ([]EngagementSummary, error) {
 	rows, err := tx.QueryContext(ctx,
-		`SELECT e.id, p.name, e.status, e.created_at
+		`SELECT e.id, p.name, e.status, e.created_at, p.timezone
 		 FROM engagements e
 		 JOIN practices p ON p.id = e.practice_id
 		 ORDER BY e.created_at`,
@@ -135,7 +139,7 @@ func listEngagementsForIdentity(ctx context.Context, tx *sql.Tx) ([]EngagementSu
 	engagements := []EngagementSummary{}
 	for rows.Next() {
 		var e EngagementSummary
-		if err := rows.Scan(&e.EngagementID, &e.PracticeName, &e.Status, &e.CreatedAt); err != nil {
+		if err := rows.Scan(&e.EngagementID, &e.PracticeName, &e.Status, &e.CreatedAt, &e.PracticeTimezone); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("clientauth: scan engagement row: %w", err)
 		}

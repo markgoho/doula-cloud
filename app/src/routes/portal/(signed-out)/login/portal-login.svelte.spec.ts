@@ -76,13 +76,15 @@ const session: PortalSessionInfo = {
 			engagementId: 'engagement-1',
 			practiceName: 'https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake',
 			status: 'active',
-			createdAt: '2026-01-15T20:00:00Z'
+			createdAt: '2026-01-15T20:00:00Z',
+			practiceTimezone: 'America/New_York'
 		},
 		{
 			engagementId: 'engagement-2',
 			practiceName: 'Anne-Marie Ochieng-Whitfield Doula Care',
 			status: 'active',
-			createdAt: '2026-03-12T20:00:00Z'
+			createdAt: '2026-03-12T20:00:00Z',
+			practiceTimezone: 'America/New_York'
 		}
 	]
 };
