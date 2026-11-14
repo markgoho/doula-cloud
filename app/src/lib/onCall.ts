@@ -484,19 +484,62 @@ export function onCallGroup(
 }
 
 /**
- * Who holds the birth tonight, said only where it adds a fact: a covering
- * Doula, several Doulas on the birth, or nobody.
+ * Who holds the birth tonight, said on every birth that is on call tonight:
+ * the Doula holding it, the covering Doula and whom she covers, or nobody.
  */
 export function tonightLine(window: RosterWindow): string | undefined {
 	const tonight = window.tonight;
 	if (!tonight) return undefined;
 	if (tonight.isNobody) return 'Nobody tonight';
-	const isCovered = tonight.holders.some((holder) => holder.coveringFor !== undefined);
-	if (!isCovered && window.onCall.length < 2) return undefined;
 	const who = tonight.holders.map((holder) =>
 		holder.coveringFor ? `${holder.name}, covering for ${holder.coveringFor}` : holder.name
 	);
 	return `Tonight: ${who.join('; ')}`;
+}
+
+/**
+ * Whether the one Doula on the birth is the one holding it tonight, so the
+ * screen says "Tonight" on her own line and adds none.
+ */
+export function isTonightOnHerLine(window: RosterWindow): boolean {
+	const [holder] = window.tonight?.holders ?? [];
+	return (
+		window.onCall.length === 1 &&
+		window.tonight?.holders.length === 1 &&
+		holder?.staffId === window.onCall[0]?.staffId &&
+		holder?.coveringFor === undefined
+	);
+}
+
+/**
+ * What a birth's own start says against the Practice's rule: "On call from
+ * week 38 for this birth, not week 37."
+ */
+export function ownStartWords(own: NonNullable<RosterWindow['ownStart']>, rule: OnCallSettings): string {
+	const isOwnWeek = own.startRule === 'gestational_week';
+	const instead =
+		rule.startRule === 'gestational_week'
+			? `${isOwnWeek ? '' : 'from '}week ${rule.startWeek}`
+			: 'from the day a Doula took it';
+	return isOwnWeek
+		? `On call from week ${own.startWeek} for this birth, not ${instead}.`
+		: `On call from the day a Doula took this birth, not ${instead}.`;
+}
+
+/**
+ * The Order control's first option and the result line say the same words:
+ * tonight first while today is in the days shown, soonest due first when it
+ * is not.
+ */
+export function onCallOrderOptions(isTonightShown: boolean): readonly { value: OnCallOrder; label: string }[] {
+	return [{ value: '', label: isTonightShown ? 'Tonight first' : 'Soonest due first' }, ON_CALL_ORDER_OPTIONS[1]!];
+}
+
+/**
+ * The cover line's subject: "You" for the reader's own gap, else her name.
+ */
+export function gapSubject(gap: Pick<CoverageGap, 'staffId' | 'staffName'>, ownStaffId: string | undefined): string {
+	return gap.staffId === ownStaffId ? 'You' : gap.staffName;
 }
 
 /**

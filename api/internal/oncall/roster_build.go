@@ -68,7 +68,7 @@ func buildRoster(ctx context.Context, tx *sql.Tx, practiceID string, settings pr
 	}
 	slices.SortFunc(built, func(a, b builtRow) int { return compareRows(a.row, b.row, q.byCover) })
 
-	doulaAtOnce := markAtOnce(built, q.rng)
+	doulaAtOnce := markAtOnce(built, q.rng, q.today)
 	doulas, err := rosterDoulas(ctx, tx, practiceID, built, doulaAtOnce, filter.contractorStaffID, onHerBirths)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -129,7 +129,7 @@ func involves(row RosterWindow, staffID string) bool {
 }
 
 // compareRows is the roster's order: births that include tonight first,
-// then due date ascending with none last, then Client name, then id. Under
+// those with nobody holding tonight ahead of the rest, then due date ascending with none last, then Client name, then id. Under
 // order=cover the births needing cover come before all of that.
 func compareRows(a, b RosterWindow, byCover bool) int {
 	if byCover {
@@ -139,10 +139,15 @@ func compareRows(a, b RosterWindow, byCover bool) int {
 	}
 	return cmp.Or(
 		cmp.Compare(rank(a.Tonight == nil), rank(b.Tonight == nil)),
+		cmp.Compare(rank(!nobodyTonight(a)), rank(!nobodyTonight(b))),
 		compareDue(a.DueDate, b.DueDate),
 		cmp.Compare(a.ClientName, b.ClientName),
 		cmp.Compare(a.EngagementID, b.EngagementID),
 	)
+}
+
+func nobodyTonight(r RosterWindow) bool {
+	return r.Tonight != nil && r.Tonight.IsNobody
 }
 
 func rank(later bool) int {
@@ -200,7 +205,7 @@ func rosterWindow(e engagementOnCall, q rosterQuery, zone *time.Location, loaded
 		}
 	}
 
-	row.UnstaffedDays = UnstaffedDays(*e.window, q.rng, effectives)
+	row.UnstaffedDays = UnstaffedDays(Window{Start: max(e.window.Start, q.today), End: e.window.End}, q.rng, effectives)
 	if row.UnstaffedDays == nil {
 		row.UnstaffedDays = []Window{}
 	}
@@ -277,7 +282,7 @@ func tonightOf(e engagementOnCall, q rosterQuery, zone *time.Location, gaps []Ga
 // markAtOnce finds, per Doula, every pair of births whose days she is on
 // call for at once inside rng, writes the other birth onto each row's
 // entry for her, and returns the pairs by Doula.
-func markAtOnce(built []builtRow, rng Window) map[string][]DoulaAtOnce {
+func markAtOnce(built []builtRow, rng Window, today string) map[string][]DoulaAtOnce {
 	type stay struct {
 		row  int
 		days Window
@@ -285,8 +290,8 @@ func markAtOnce(built []builtRow, rng Window) map[string][]DoulaAtOnce {
 	stays := map[string][]stay{}
 	for i, b := range built {
 		for staffID, eff := range b.effective {
-			if days, ok := intersect(eff, rng); ok {
-				stays[staffID] = append(stays[staffID], stay{row: i, days: days})
+			if _, ok := intersect(eff, rng); ok {
+				stays[staffID] = append(stays[staffID], stay{row: i, days: Window{Start: max(eff.Start, today), End: eff.End}})
 			}
 		}
 	}

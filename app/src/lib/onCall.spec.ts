@@ -25,6 +25,10 @@ import {
 	saveNarrowing,
 	TOO_MANY_DAYS,
 	tonightLine,
+	isTonightOnHerLine,
+	ownStartWords,
+	onCallOrderOptions,
+	gapSubject,
 	atOnceLabel,
 	withDefaultDays,
 	type OnCallView,
@@ -319,9 +323,17 @@ describe('a birth’s days', () => {
 });
 
 describe('who holds a birth tonight', () => {
-	it('says nothing for a birth not on call tonight, or for one Doula and no gap', () => {
+	it('says nothing for a birth not on call tonight, and names the holder of a one-Doula birth', () => {
 		expect(tonightLine(windowRow())).toBeUndefined();
-		expect(tonightLine(windowRow({ tonight: tonightHeld }))).toBeUndefined();
+		expect(tonightLine(windowRow({ tonight: tonightHeld }))).toBe('Tonight: Maya Primary');
+		expect(isTonightOnHerLine(windowRow({ tonight: tonightHeld }))).toBe(true);
+	});
+
+	it('keeps the line of its own where she is not the only Doula, or covers, or nobody holds it', () => {
+		const covering = { staffId: 'staff-2', name: 'Lena Vasquez', coveringFor: 'Maya Primary' };
+		expect(isTonightOnHerLine(windowRow({ tonight: { holders: [covering], isNobody: false } }))).toBe(false);
+		expect(isTonightOnHerLine(windowRow({ tonight: nobodyTonight }))).toBe(false);
+		expect(isTonightOnHerLine(windowRow())).toBe(false);
 	});
 
 	it('says nobody when nobody does', () => {
@@ -553,5 +565,44 @@ describe('the calls the screens make', () => {
 				to: undefined,
 			})
 		).rejects.toThrow('not on this birth');
+	});
+});
+
+describe('a birth’s own start against the Practice’s rule', () => {
+	const week37 = { startRule: 'gestational_week', startWeek: 37, graceDays: 14 } as const;
+	const grantDay = { startRule: 'attachment_granted', startWeek: 37, graceDays: 14 } as const;
+
+	it('says the grant-day start against a week rule', () => {
+		expect(ownStartWords({ startRule: 'attachment_granted' }, week37)).toBe('On call from the day a Doula took this birth, not from week 37.');
+	});
+
+	it('says its own week against a week rule', () => {
+		expect(ownStartWords({ startRule: 'gestational_week', startWeek: 38 }, week37)).toBe('On call from week 38 for this birth, not week 37.');
+	});
+
+	it('says what the Practice’s rule is when that is the grant day', () => {
+		expect(ownStartWords({ startRule: 'gestational_week', startWeek: 38 }, grantDay)).toBe(
+			'On call from week 38 for this birth, not from the day a Doula took it.'
+		);
+		expect(ownStartWords({ startRule: 'attachment_granted' }, grantDay)).toBe(
+			'On call from the day a Doula took this birth, not from the day a Doula took it.'
+		);
+	});
+});
+
+describe('the Order control’s first option', () => {
+	it('says what the result line says, by whether today is in the days shown', () => {
+		expect(onCallOrderOptions(true)[0]!.label).toBe('Tonight first');
+		expect(onCallOrderOptions(false)[0]!.label).toBe('Soonest due first');
+		expect(onCallOrderOptions(false)[1]!.value).toBe(COVER_FIRST);
+	});
+});
+
+describe('the subject of a gap line', () => {
+	it('is You for the reader’s own gap, and her name for anyone else’s', () => {
+		const gap = { staffId: 'staff-1', staffName: 'Priya Raman' };
+		expect(gapSubject(gap, 'staff-1')).toBe('You');
+		expect(gapSubject(gap, 'staff-2')).toBe('Priya Raman');
+		expect(gapSubject(gap, undefined)).toBe('Priya Raman');
 	});
 });

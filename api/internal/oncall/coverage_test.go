@@ -48,16 +48,16 @@ func TestUnstaffedDays(t *testing.T) {
 			want:       nil,
 		},
 		{
-			name:       "a hole at the window's tail is clipped to the range",
+			name:       "a hole at the window's tail runs to the window's end",
 			rng:        october,
 			effectives: []oncall.Window{{Start: windowStart, End: "2026-10-27"}},
-			want:       []oncall.Window{{Start: "2026-10-28", End: octLast}},
+			want:       []oncall.Window{{Start: "2026-10-28", End: windowEnd}},
 		},
 		{
-			name:       "nobody on call at all is the whole overlap",
+			name:       "nobody on call at all is the whole window",
 			rng:        october,
 			effectives: nil,
-			want:       []oncall.Window{{Start: windowStart, End: octLast}},
+			want:       []oncall.Window{{Start: windowStart, End: windowEnd}},
 		},
 		{
 			name:       "a range that misses the window has nothing to report",
@@ -75,10 +75,10 @@ func TestUnstaffedDays(t *testing.T) {
 			want: nil,
 		},
 		{
-			name:       "a narrowing that starts after the range leaves the range's tail, clipped",
+			name:       "a narrowing that starts after the range leaves the run before it, whole",
 			rng:        oncall.Window{Start: octFirst, End: octTwelfth},
 			effectives: []oncall.Window{{Start: octTwenty, End: windowEnd}},
-			want:       []oncall.Window{{Start: windowStart, End: octTwelfth}},
+			want:       []oncall.Window{{Start: windowStart, End: "2026-10-19"}},
 		},
 		{
 			name: "overlapping narrowings are one coverage",

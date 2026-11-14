@@ -27,14 +27,17 @@
 		COVER_FIRST,
 		DEFAULT_ON_CALL_DAYS,
 		MOST_ON_CALL_DAYS,
-		ON_CALL_ORDER_OPTIONS,
 		SHORT_ON_CALL_DAYS,
 		TONIGHT_DAYS,
 		atOnceLabel,
 		daysOnCall,
 		daysOnCallText,
 		describeCoverage,
+		gapSubject,
 		isOnCallNarrowed,
+		isTonightOnHerLine,
+		onCallOrderOptions,
+		ownStartWords,
 		onCallEmptyNextStep,
 		onCallGroup,
 		onCallHref,
@@ -107,6 +110,7 @@
 	const SEPARATOR = ', ';
 	const ON_CALL_LABEL = 'On call ';
 	const DUE_LABEL = 'Due ';
+	const TONIGHT_LABEL = 'Tonight: ';
 
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/on-call', { practiceId: page.params.practiceId! }));
@@ -420,8 +424,8 @@
 	];
 
 	const say = (day: string) => formatCalendarWeekdayDay(day, timeZone, now);
-	const ownStartText = (start: NonNullable<RosterWindow['ownStart']>) =>
-		start.startRule === 'gestational_week' ? `Its own start: week ${start.startWeek}` : 'Its own start: the day a Doula took it';
+	const isTonightShown = $derived(daysOf(view, timeZone, now).days?.from === today);
+	const orderOptions = $derived(onCallOrderOptions(isTonightShown));
 	// The rows answer to the days they were read under, which a newer address may not yet be.
 	const isGrouped = $derived(data?.filters !== undefined && roster !== undefined && data.filters.from === roster.today);
 	const shownOrder = $derived(data?.view.order ?? '');
@@ -471,7 +475,7 @@
 	const doulaColumns = [
 		{
 			label: 'Doula',
-			accessor: (doula: RosterDoula) => doula.name
+			accessor: (doula: RosterDoula) => (doula.staffId === session.staffId ? 'You' : doula.name)
 		},
 		{
 			label: 'On call for',
@@ -538,7 +542,7 @@
 				{#each row.onCall as doula (doula.staffId)}
 					<li>
 						<span class="who">
-							<span class="name">{doula.name}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
+							<span class="name">{#if isTonightOnHerLine(row)}{TONIGHT_LABEL}{/if}{doula.name}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
 							{#if doula.atOnce && doula.atOnce.length > 0}
 								<Badge label={atOnceLabel(doula.atOnce.length)} variant="warning" />
 								{#if isCard}
@@ -561,7 +565,7 @@
 			</ul>
 		{/if}
 	</div>
-	{#if tonightLine(row)}
+	{#if tonightLine(row) && !isTonightOnHerLine(row)}
 		<p class="line tonight">{tonightLine(row)}</p>
 	{/if}
 {/snippet}
@@ -572,7 +576,7 @@
 			{#if tableView === 'record'}{ON_CALL_LABEL}{/if}{@render days(row.window, tableView === 'record' ? 'until' : 'Until')}
 		</span>
 		{#if row.ownStart}
-			<span class="line">{ownStartText(row.ownStart)}</span>
+			<span class="line">{ownStartWords(row.ownStart, roster!.rule)}</span>
 		{/if}
 	</div>
 {/snippet}
@@ -604,7 +608,7 @@
 			{/each}
 			{#each gapsByNeed(row) as gap (gap.id)}
 				<span class="line">
-					{gap.staffName} cannot be reached <CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {gap.coveringStaffName
+					{gapSubject(gap, session.staffId)} cannot be reached <CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {gap.coveringStaffName
 						? `${gap.coveringStaffName} covering`
 						: 'nobody covering'}
 				</span>
@@ -677,7 +681,7 @@
 			hasUntaggedFilter={view.order !== ''}
 			foldsFieldsOnly
 			foldLabel={canMine || isOwnerView ? undefined : 'Order'}
-			order={{ options: ON_CALL_ORDER_OPTIONS, value: view.order, onChange: (value) => (draftOrder = value as OnCallOrder) }}
+			order={{ options: orderOptions, value: view.order, onChange: (value) => (draftOrder = value as OnCallOrder) }}
 			{isBusy}
 		>
 			{#snippet switches()}

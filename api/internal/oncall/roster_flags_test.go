@@ -19,6 +19,7 @@ const (
 	octSeventeen   = "2026-10-17"
 	octTwentyEight = "2026-10-28"
 	tonightDue     = "2026-10-22"
+	novThird       = "2026-11-03"
 )
 
 // birthDue is another active birth for a Client named name, due on due
@@ -151,11 +152,11 @@ func TestRoster_ABirthWithNoDoulaIsListedOverTheDaysItsRuleWouldGive(t *testing.
 	if !row.NoDoula || len(row.OnCall) != 0 || !row.Uncovered {
 		t.Errorf("row = %+v, want no Doula, nobody on call, and needing cover", row)
 	}
-	if row.Window != (oncall.Window{Start: "2026-09-29", End: "2026-11-03"}) {
+	if row.Window != (oncall.Window{Start: "2026-09-29", End: novThird}) {
 		t.Errorf("window = %+v, want the week rule's 2026-09-29..2026-11-03", row.Window)
 	}
-	if len(row.UnstaffedDays) != 1 || row.UnstaffedDays[0] != (oncall.Window{Start: octFirst, End: octLast}) {
-		t.Errorf("unstaffed days = %+v, want the whole range", row.UnstaffedDays)
+	if len(row.UnstaffedDays) != 1 || row.UnstaffedDays[0] != (oncall.Window{Start: octFirst, End: novThird}) {
+		t.Errorf("unstaffed days = %+v, want the whole run, from today to the birth's last day", row.UnstaffedDays)
 	}
 	if row.Tonight == nil || !row.Tonight.IsNobody || len(row.Tonight.Holders) != 0 {
 		t.Errorf("tonight = %+v, want nobody holding it", row.Tonight)
@@ -165,7 +166,7 @@ func TestRoster_ABirthWithNoDoulaIsListedOverTheDaysItsRuleWouldGive(t *testing.
 	}
 
 	e.Exec(`UPDATE practices SET on_call_start_rule = 'attachment_granted' WHERE id = $1`, e.Practice.ID)
-	if got := rowOf(t, e.roster(octFirst, octLast), orphan.ID); got.Window != (oncall.Window{Start: octFirst, End: "2026-11-03"}) {
+	if got := rowOf(t, e.roster(octFirst, octLast), orphan.ID); got.Window != (oncall.Window{Start: octFirst, End: novThird}) {
 		t.Errorf("under the grant-day rule window = %+v, want it to open today and end at the due date plus grace", got.Window)
 	}
 }
@@ -273,6 +274,51 @@ func TestRoster_OrdersTonightFirstThenDueDateAndNeedingCoverFirstOnRequest(t *te
 	}
 	if want := []string{later.ID, tonight.ID, e.Birth.ID}; !slices.Equal(orderOf(byCover), want) {
 		t.Errorf("order=cover = %v, want the one needing cover first %v", orderOf(byCover), want)
+	}
+}
+
+func TestRoster_ABirthWithNobodyTonightComesBeforeTheOtherBirthsOfTonight(t *testing.T) {
+	e := newEnv(t)
+	tonight := e.birthDue("Tessa Tonight", tonightDue, e.Doula)
+	nobody := e.birthDue("Zed Nobody", tonightDue, e.Doula)
+	e.Exec(`UPDATE engagement_attachments SET on_call_from = '2026-10-10' WHERE engagement_id = $1`, nobody.ID)
+	later := e.birthDue("Lara Later", octFifth, e.Doula)
+	e.Exec(`UPDATE engagements SET on_call_start_rule = 'gestational_week', on_call_start_week = 40 WHERE id = $1`, later.ID)
+	e.Exec(`UPDATE engagement_attachments SET on_call_from = '2026-10-10' WHERE engagement_id = $1`, later.ID)
+	query := "?from=" + octFirst + "&to=" + octLast
+
+	got := e.rosterQuery(query)
+
+	if want := []string{nobody.ID, tonight.ID, later.ID, e.Birth.ID}; !slices.Equal(orderOf(got), want) {
+		t.Errorf("default order = %v, want the birth with nobody tonight first %v", orderOf(got), want)
+	}
+	if want := []string{nobody.ID, later.ID, tonight.ID, e.Birth.ID}; !slices.Equal(orderOf(e.rosterQuery(query+"&order=cover")), want) {
+		t.Errorf("order=cover = %v, want %v", orderOf(e.rosterQuery(query+"&order=cover")), want)
+	}
+}
+
+func TestRoster_TheSameExtentsReadTheSameUnderEveryRange(t *testing.T) {
+	e := newEnv(t)
+	nobody := e.birthDue("Zed Nobody", tonightDue, e.Doula)
+	e.Exec(`UPDATE engagement_attachments SET on_call_from = '2026-10-10' WHERE engagement_id = $1`, nobody.ID)
+	second := e.birthDue("Quinn Second", octTwentyEight, e.Doula)
+
+	today, wide := e.roster(octFirst, octFirst), e.roster(octFirst, octLast)
+	if a, b := rowOf(t, today, nobody.ID).UnstaffedDays, rowOf(t, wide, nobody.ID).UnstaffedDays; !slices.Equal(a, b) || !slices.Equal(a, []oncall.Window{{Start: octFirst, End: "2026-10-09"}}) {
+		t.Errorf("unstaffed days = %+v under one day and %+v under the month, want the whole run from today to the 9th under both", a, b)
+	}
+
+	oneDay := e.roster(octTwelfthDay, octTwelfthDay)
+	a, b := doulaOf(t, oneDay, e.Doula.ID).AtOnce, doulaOf(t, wide, e.Doula.ID).AtOnce
+	if len(a) == 0 || !slices.EqualFunc(a, b, func(x, y oncall.DoulaAtOnce) bool {
+		return x.Days == y.Days && slices.Equal(x.EngagementIDs, y.EngagementIDs)
+	}) {
+		t.Errorf("the Doula's atOnce = %+v under one day and %+v under the month, want the same shared days", a, b)
+	}
+	for _, id := range []string{nobody.ID, second.ID, e.Birth.ID} {
+		if x, y := rowOf(t, oneDay, id).OnCall[0].AtOnce, rowOf(t, wide, id).OnCall[0].AtOnce; !slices.Equal(x, y) {
+			t.Errorf("a birth's atOnce differs by range: %+v against %+v", x, y)
+		}
 	}
 }
 
@@ -426,7 +472,7 @@ func TestRoster_FlagsADoulaOnTwoBirthsOnlyWhereHerDaysMeetInsideTheRange(t *test
 	if want := []string{second.ID, e.Birth.ID}; !slices.Equal(orderOf(got), want) {
 		t.Fatalf("order = %v, want %v", orderOf(got), want)
 	}
-	shared := oncall.Window{Start: octNinth, End: octTwelfthDay}
+	shared := oncall.Window{Start: octNinth, End: "2026-11-11"}
 	first := rowOf(t, got, second.ID).OnCall[0].AtOnce
 	if len(first) != 1 || first[0].EngagementID != e.Birth.ID || first[0].ClientName != adaWhitfield || first[0].Days != shared {
 		t.Errorf("on the second birth atOnce = %+v, want the first birth over %+v", first, shared)

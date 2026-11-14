@@ -144,6 +144,17 @@ const windows: RosterWindow[] = [
 		tonight: { holders: [holder(5, 3)], isNobody: false }
 	},
 	{
+		engagementId: 'eng-6',
+		clientName: 'Casey Estrada',
+		dueDate: '2026-12-12',
+		window: { start: '2026-11-10', end: '2026-12-26' },
+		onCall: [onCall(6, '2026-11-10', '2026-12-26')],
+		gaps: [],
+		unstaffedDays: [],
+		uncovered: false,
+		tonight: { holders: [holder(6)], isNobody: false }
+	},
+	{
 		engagementId: 'eng-5',
 		clientName: 'Dot Nakamura',
 		dueDate: '2026-12-20',
@@ -153,16 +164,6 @@ const windows: RosterWindow[] = [
 		gaps: [],
 		unstaffedDays: [{ start: '2026-11-29', end: '2026-12-03' }],
 		uncovered: true
-	},
-	{
-		engagementId: 'eng-6',
-		clientName: 'Casey Estrada',
-		dueDate: '2026-12-12',
-		window: { start: '2026-11-21', end: '2026-12-26' },
-		onCall: [onCall(6, '2026-11-21', '2026-12-26')],
-		gaps: [],
-		unstaffedDays: [],
-		uncovered: false
 	}
 ];
 

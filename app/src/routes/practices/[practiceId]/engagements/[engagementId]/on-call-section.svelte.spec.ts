@@ -316,7 +316,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			await expect
 				.element(
 					testPage.getByText(
-						'Leave this unanswered where nobody is covering yet. Every Owner and Admin is told, to arrange cover.'
+						'Leave this unanswered where nobody is covering yet. Every Owner and Admin is told, to arrange cover. Only a Doula on this birth can cover.'
 					)
 				)
 				.toBeVisible();

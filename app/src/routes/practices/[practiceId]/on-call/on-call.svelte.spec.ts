@@ -142,8 +142,47 @@ describe('the on-call roster', () => {
 		await setup();
 
 		await expect.element(testPage.getByText('No Doula yet').first()).toBeVisible();
-		await expect.element(testPage.getByText('Its own start: week 38').first()).toBeVisible();
-		await expect.element(testPage.getByText('Its own start: the day a Doula took it').first()).toBeVisible();
+		await expect.element(testPage.getByText('On call from week 38 for this birth, not week 37.').first()).toBeVisible();
+		await expect.element(testPage.getByText('On call from the day a Doula took this birth, not from week 37.').first()).toBeVisible();
+	});
+
+	it('says every birth on call tonight has a Doula holding it, on her own line when she is the only one', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText('Tonight: Henrietta Oyelaran-Whitcombe').first()).toBeVisible();
+	});
+
+	it('names the Order’s first option as the result line does, by whether today is in the days shown', async () => {
+		await setup();
+		await expect.element(testPage.getByLabelText('Order').getByRole('option').first()).toHaveTextContent('Tonight first');
+	});
+
+	it('names it "Soonest due first" once the days shown do not include today', async () => {
+		setAddress('?from=2026-11-21&to=2026-11-28');
+		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-11-21', to: '2026-11-28' }, isMine: false, doula: '', needsCover: false, order: '' }, filters: { from: '2026-11-21', to: '2026-11-28' } } });
+
+		await expect.element(testPage.getByLabelText('Order').getByRole('option').first()).toHaveTextContent('Soonest due first');
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/, soonest due first\./);
+	});
+
+	it('says "You" where the Doula who cannot be reached is the reader, and her name to anyone else', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText(/You cannot be reached\s+Sat Nov 14, 6:00pm to Sun Nov 15, 9:00am, nobody covering/).first()).toBeVisible();
+		const doulas = testPage.getByRole('table', { name: 'Doulas (2)' });
+		await expect.element(doulas.getByText('You', { exact: true }).first()).toBeVisible();
+	});
+
+	it('says her name to a reader who is not her', async () => {
+		const session = (pageState.data as { session: object }).session;
+		pageState.data = { session: { ...session, staffId: 'staff-9' } };
+
+		await setup();
+
+		await expect
+			.element(testPage.getByText(/Persephone Vandermeulen-Achterberg, CD\(DONA\) cannot be reached\s+Sat Nov 14/).first())
+			.toBeVisible();
+		expect(testPage.getByText(/^You cannot be reached/).elements()).toHaveLength(0);
 	});
 
 	it('says the days on call and the due date as days, each carrying its exact day', async () => {
