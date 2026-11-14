@@ -704,6 +704,7 @@
 			foldsFieldsOnly
 			novalidate
 			foldsSwitches
+			isForcedOpen={Boolean(rangeErrors.from || rangeErrors.to)}
 			foldLabel={canMine || isOwnerView ? 'Days and filters' : 'Days and order'}
 			order={{ options: orderOptions, value: view.order, onChange: (value) => (draftOrder = value as OnCallOrder) }}
 			{isBusy}

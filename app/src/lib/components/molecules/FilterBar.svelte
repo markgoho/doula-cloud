@@ -187,6 +187,11 @@
 		 */
 		foldsSwitches?: boolean;
 		/**
+		 * Opens the fold while true, so a refusal worded beside a folded field is
+		 * never out of sight. The person may close it again.
+		 */
+		isForcedOpen?: boolean;
+		/**
 		 * Leave the check of a field's own `min`, `max` and `required` to the
 		 * route, which words a refusal beside the fields, so the browser's tooltip
 		 * does not come first. Its consumer is the On call roster, whose From and
@@ -252,6 +257,7 @@
 		switches,
 		foldsFieldsOnly = false,
 		foldsSwitches = false,
+		isForcedOpen = false,
 		novalidate = false,
 		isBusy = false,
 		folded,
@@ -377,6 +383,9 @@
 	// for another reason never closes what the person just opened
 	// (`atoms/Details.svelte`).
 	let isOpen = $state(false);
+	$effect(() => {
+		if (isForcedOpen) isOpen = true;
+	});
 </script>
 
 {#snippet selected(isHeld: boolean)}

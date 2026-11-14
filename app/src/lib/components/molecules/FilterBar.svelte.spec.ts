@@ -74,6 +74,7 @@ interface SetupOptions {
 	hasUntaggedFilter?: boolean;
 	foldsFieldsOnly?: boolean;
 	foldsSwitches?: boolean;
+	isForcedOpen?: boolean;
 	foldLabel?: string;
 	novalidate?: boolean;
 	withFields?: boolean;
@@ -134,6 +135,7 @@ async function setup({
 	hasUntaggedFilter,
 	foldsFieldsOnly = false,
 	foldsSwitches = false,
+	isForcedOpen = false,
 	foldLabel,
 	novalidate,
 	withFields = true,
@@ -162,6 +164,7 @@ async function setup({
 		switches: switchesFor({ withChangeControls, withSwitches, withHeldSwitch }),
 		foldsFieldsOnly,
 		foldsSwitches,
+		isForcedOpen,
 		foldLabel,
 		novalidate,
 		isBusy,
@@ -222,6 +225,12 @@ describe('FilterBar foldsSwitches', () => {
 		const name = page.getByLabelText('Name').element().getBoundingClientRect();
 		expect(switches.bottom).toBeLessThanOrEqual(name.top);
 		expect(page.getByLabelText('Also show everyone').element().closest('.switches')).not.toBeNull();
+	});
+
+	it('opens the fold while the route says so, so a refusal beside a folded field is in sight', async () => {
+		await setup({ ...options, width: PHONE, isForcedOpen: true });
+
+		await expect.element(page.getByLabelText('Name')).toBeVisible();
 	});
 
 	it('folds the switches alone under the label given, where nothing else folds', async () => {
