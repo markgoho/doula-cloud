@@ -44,7 +44,21 @@ function nameField() {
 	}));
 }
 
+// A box, three radios of one group and a select: the controls that apply when changed.
+function changeControls() {
+	return createRawSnippet(() => ({
+		render: () =>
+			'<div><label><input type="checkbox" name="mine" value="true">Mine</label>' +
+			'<label><input type="radio" name="show" value="all" checked>All</label>' +
+			'<label><input type="radio" name="show" value="unpaid">Unpaid</label>' +
+			'<label><input type="radio" name="show" value="overdue">Overdue</label>' +
+			'<label for="doula">Doula</label><select id="doula" name="doula"><option value="">Any</option><option value="a">Ana</option><option value="b">Bea</option></select></div>'
+	}));
+}
+
 interface SetupOptions {
+	onChangeApply?: (how: { replace: boolean; changed: readonly string[] }) => boolean | void;
+	withChangeControls?: boolean;
 	// A second field that folds, with `foldsFieldsOnly`; `withFields: false` for none in view.
 	withFolded?: boolean;
 	isBusy?: boolean;
@@ -88,6 +102,18 @@ async function sentOrder(onSubmit: { mock: { calls: unknown[][] } }) {
 	return new FormData(form).get('order');
 }
 
+function switchesFor(options: SetupOptions) {
+	if (options.withChangeControls) return changeControls();
+	if (options.withSwitches) return switchRow();
+	if (options.withHeldSwitch) return heldSwitch();
+}
+
+function childrenFor(options: SetupOptions) {
+	if (options.withChangeControls) return nameField();
+	if (options.withFields === false) return;
+	return options.withFolded ? nameField() : fromField();
+}
+
 const applyBox = () => page.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
 const statusBox = () => page.getByRole('status').element().getBoundingClientRect();
 
@@ -108,6 +134,8 @@ async function setup({
 	status = 'Showing 2 scheduled visits.',
 	statusRuler,
 	onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault()),
+	onChangeApply,
+	withChangeControls = false,
 	width = WIDE,
 	order
 }: SetupOptions = {}) {
@@ -117,6 +145,7 @@ async function setup({
 	const { component, rerender } = await render(FilterBar, {
 		action: '/practices/practice-1/schedule',
 		onSubmit,
+		onChangeApply,
 		legend: 'Narrow the schedule',
 		status,
 		statusRuler,
@@ -124,7 +153,7 @@ async function setup({
 		clearHref,
 		activeLabels,
 		statusId,
-		switches: withSwitches ? switchRow() : (withHeldSwitch ? heldSwitch() : undefined),
+		switches: switchesFor({ withChangeControls, withSwitches, withHeldSwitch }),
 		foldsFieldsOnly,
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
@@ -132,7 +161,7 @@ async function setup({
 		hasUntaggedFilter,
 		folded: withFolded ? fromField() : undefined,
 		order,
-		children: withFields ? (withFolded ? nameField() : fromField()) : undefined
+		children: childrenFor({ withChangeControls, withFields, withFolded })
 	});
 	return { onSubmit, component, rerender };
 }
@@ -674,5 +703,198 @@ describe('FilterBar that folds only its fields', () => {
 
 		await expect.element(page.getByText('More filters', { exact: true })).not.toBeInTheDocument();
 		await expect.element(page.getByRole('button', { name: 'Apply' })).toBeVisible();
+	});
+});
+
+const SETTLE = 250;
+const afterSettle = () => new Promise((resolve) => setTimeout(resolve, SETTLE + 150));
+
+async function setupChanging(onChangeApply = vi.fn()) {
+	const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+	await setup({ foldsFieldsOnly: true, withChangeControls: true, order: ORDER, onChangeApply, onSubmit });
+	return { onChangeApply, onSubmit };
+}
+
+describe('FilterBar applying when a control changes', () => {
+	it('sends a ticked box once, after the settle, and names the field that changed', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Mine').click();
+		expect(onChangeApply).not.toHaveBeenCalled();
+		await afterSettle();
+
+		expect(onChangeApply).toHaveBeenCalledOnce();
+		expect(onChangeApply).toHaveBeenCalledWith({ replace: false, changed: ['mine'] });
+	});
+
+	it('keeps focus on the box it applied', async () => {
+		await setupChanging();
+
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+
+		expect(document.activeElement).toBe(page.getByLabelText('Mine').element());
+	});
+
+	it('does not apply for a typed field, however it changes', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Name').fill('Cam');
+		await userEvent.keyboard('{Tab}');
+		await afterSettle();
+
+		expect(onChangeApply).not.toHaveBeenCalled();
+	});
+
+	it('does nothing when the route gives no onChangeApply', async () => {
+		await setup({ foldsFieldsOnly: true, withChangeControls: true, order: ORDER });
+
+		await page.getByLabelText('Mine').click();
+		await page.getByLabelText('Doula').selectOptions('Ana');
+		await afterSettle();
+
+		await expect.element(page.getByLabelText('Mine')).toBeChecked();
+	});
+
+	it('sends one read for three arrow presses inside the settle', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('All').click();
+		await afterSettle();
+		onChangeApply.mockClear();
+		await userEvent.keyboard('{ArrowRight}{ArrowRight}');
+		await afterSettle();
+
+		expect(onChangeApply).toHaveBeenCalledOnce();
+		expect(onChangeApply.mock.calls[0]![0].changed).toEqual(['show']);
+		await expect.element(page.getByLabelText('Overdue')).toBeChecked();
+	});
+
+	it('sends a pointer pick of a select after the settle', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Doula').selectOptions('Ana');
+		await afterSettle();
+
+		expect(onChangeApply).toHaveBeenCalledWith({ replace: false, changed: ['doula'] });
+	});
+
+	it('sends the Order select the same way', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Order').selectOptions('Latest first');
+		await afterSettle();
+
+		expect(onChangeApply).toHaveBeenCalledWith({ replace: false, changed: ['order'] });
+	});
+
+	it('holds a select the keyboard stepped until Enter, and sends once', async () => {
+		const { onChangeApply } = await setupChanging();
+		(page.getByLabelText('Doula').element() as HTMLSelectElement).focus();
+
+		await userEvent.keyboard('{ArrowDown}');
+		await userEvent.keyboard('{ArrowDown}');
+		await afterSettle();
+		expect(onChangeApply).not.toHaveBeenCalled();
+		await userEvent.keyboard('{Enter}');
+
+		expect(onChangeApply).toHaveBeenCalledOnce();
+		expect(onChangeApply).toHaveBeenCalledWith({ replace: false, changed: ['doula'] });
+		await expect.element(page.getByLabelText('Doula')).toHaveValue('b');
+	});
+
+	it('sends a stepped select once focus leaves it', async () => {
+		const { onChangeApply } = await setupChanging();
+		(page.getByLabelText('Doula').element() as HTMLSelectElement).focus();
+
+		await userEvent.keyboard('{ArrowDown}');
+		await afterSettle();
+		expect(onChangeApply).not.toHaveBeenCalled();
+		await userEvent.keyboard('{Tab}');
+		await afterSettle();
+
+		expect(onChangeApply).toHaveBeenCalledOnce();
+	});
+
+	it('does not treat Enter on a select nothing stepped as an apply, or a modified key as a step', async () => {
+		const { onChangeApply } = await setupChanging();
+		(page.getByLabelText('Doula').element() as HTMLSelectElement).focus();
+
+		await userEvent.keyboard('{Enter}');
+		await userEvent.keyboard('{Control>}a{/Control}');
+		await afterSettle();
+
+		expect(onChangeApply).not.toHaveBeenCalled();
+	});
+
+	it('adds an entry for the first change after focus and replaces it for the changes that follow', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+		await page.getByLabelText('Unpaid').click();
+		await afterSettle();
+
+		expect(onChangeApply.mock.calls.map(([how]) => how.replace)).toEqual([false, true, false]);
+	});
+
+	it('treats arrowing through a radio group as one control', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Unpaid').click();
+		await afterSettle();
+		await userEvent.keyboard('{ArrowRight}');
+		await afterSettle();
+
+		expect(onChangeApply.mock.calls.map(([how]) => how.replace)).toEqual([false, true]);
+	});
+
+	it('adds an entry again after focus has left the bar, and after Back or Forward', async () => {
+		const { onChangeApply } = await setupChanging();
+
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+		dispatchEvent(new PopStateEvent('popstate'));
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+		(document.activeElement as HTMLElement).blur();
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+
+		expect(onChangeApply.mock.calls.map(([how]) => how.replace)).toEqual([false, false, false]);
+	});
+
+	it('still adds the next change’s entry when the route sent nothing', async () => {
+		const onChangeApply = vi.fn<NonNullable<SetupOptions['onChangeApply']>>(() => false);
+		await setupChanging(onChangeApply);
+
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+		await page.getByLabelText('Mine').click();
+		await afterSettle();
+
+		expect(onChangeApply.mock.calls.map(([how]) => how.replace)).toEqual([false, false]);
+	});
+
+	it('lets Apply stand in for a change that has not settled, so one read is sent', async () => {
+		const { onChangeApply, onSubmit } = await setupChanging();
+
+		await page.getByLabelText('Mine').click();
+		await page.getByRole('button', { name: 'Apply' }).click();
+		await afterSettle();
+
+		expect(onSubmit).toHaveBeenCalledOnce();
+		expect(onChangeApply).not.toHaveBeenCalled();
+	});
+
+	it('draws no ruler under an empty list, and the ruler under a list with rows', async () => {
+		await setup({ foldsFieldsOnly: true, statusRuler: 'Showing the longest wording there is.', empty: true });
+		expect(document.querySelectorAll('.ruler')).toHaveLength(0);
+		cleanup();
+
+		await setup({ foldsFieldsOnly: true, statusRuler: 'Showing the longest wording there is.' });
+		expect(document.querySelectorAll('.ruler')).toHaveLength(1);
 	});
 });

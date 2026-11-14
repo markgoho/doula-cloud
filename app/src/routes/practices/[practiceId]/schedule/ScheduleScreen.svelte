@@ -338,7 +338,7 @@
 		seedDrafts();
 		// A change of narrowing lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
-		if (lastKey !== undefined && lastKey !== wantedKey) isFocusPending = true;
+		if (changeApplies === 0 && lastKey !== undefined && lastKey !== wantedKey) isFocusPending = true;
 		lastKey = wantedKey;
 	});
 	$effect(() => {
@@ -373,16 +373,38 @@
 	const isChoosingDays = $derived(draftChoice === 'choose');
 
 	let isApplying = $state(false);
+	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
+	let changeApplies = 0;
 	// A move to another narrowing: a page already being added is abandoned,
 	// so it never lands in the new list, and Apply answers the press at once.
-	async function show(href: string, search: string) {
+	async function show(href: string, search: string, change?: { replace: boolean }) {
 		schedule.abandon();
 		isApplying = true;
+		if (change) changeApplies += 1;
 		try {
-			await goto(href, { state: { scheduleSearch: search } });
+			await goto(href, {
+				state: { scheduleSearch: search },
+				...(change && { replaceState: change.replace, reset: false })
+			});
 		} finally {
 			isApplying = false;
+			if (change) changeApplies -= 1;
 		}
+	}
+
+	// A box, a radio or a select applies the bar as drawn; "Choose days" alone only opens its fields.
+	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
+		if (draftChoice === 'choose') {
+			if (changed.length === 1 && changed[0] === 'days') return false;
+			const problems = scheduleRangeErrors(fromValue, toValue);
+			if (problems.from || problems.to) {
+				rangeErrors = problems;
+				return false;
+			}
+		}
+		rangeErrors = {};
+		void show(scheduleHref(basePath, draftView), draftSearch.trim(), { replace });
+		return true;
 	}
 
 	async function applyFilters(event: SubmitEvent) {
@@ -568,6 +590,7 @@
 			bind:this={filterBar}
 			action={basePath}
 			onSubmit={applyFilters}
+			onChangeApply={applyOnChange}
 			legend="Choose which Visits to show"
 			status={readFailure ? '' : resultSummary}
 			statusRuler={resultRuler}

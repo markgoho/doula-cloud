@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { jsonResponse } from '#lib/testResponse.js';
 import { loadedValue, settledRead } from '#lib/testStreamedRead.js';
-import { load, type SchedulePageData } from './+page.js';
+import { _forgetRoster, load, type SchedulePageData } from './+page.js';
 
 const emptyPage = { items: [], hasMore: false };
 
@@ -71,6 +71,7 @@ const scheduleCalls = (fetchMock: ReturnType<typeof setup>['fetchMock']) =>
 
 beforeEach(() => {
 	vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-02T13:00:00Z') });
+	_forgetRoster();
 });
 
 afterEach(() => {
@@ -250,5 +251,62 @@ describe('schedule/+page.ts load', () => {
 		expect(result.page).toEqual(emptyPage);
 		expect(result.doulas).toEqual([]);
 		expect(result.isRosterUnavailable).toBe(true);
+	});
+});
+
+const rosterCalls = (fetchMock: ReturnType<typeof setup>['fetchMock']) =>
+	fetchMock.mock.calls.filter(([path]) => path.includes('/staff'));
+
+describe('schedule/+page.ts load: the roster, once for a visit (#2888)', () => {
+	it('reads the roster once however many narrowings the visit makes', async () => {
+		const { fetchMock } = setup(200, emptyPage);
+
+		await load(loadEvent());
+		await load(loadEvent('?days=7'));
+		const third = await loadedValue<SchedulePageData>(await load(loadEvent('?mine=true')));
+
+		expect(rosterCalls(fetchMock)).toHaveLength(1);
+		expect(scheduleCalls(fetchMock)).toHaveLength(3);
+		expect(third.doulas).toEqual([{ value: 'staff-1', label: 'Persephone Vandermeulen-Achterberg, CD(DONA)' }]);
+	});
+
+	it('reads it again for the next visit, once she has left', async () => {
+		const { fetchMock } = setup(200, emptyPage);
+
+		await load(loadEvent());
+		_forgetRoster();
+		await load(loadEvent());
+
+		expect(rosterCalls(fetchMock)).toHaveLength(2);
+	});
+
+	it('reads it again when the one kept is a minute old, such as a hovered link’s', async () => {
+		const { fetchMock } = setup(200, emptyPage);
+
+		await load(loadEvent());
+		vi.setSystemTime(new Date('2026-10-02T13:01:01Z'));
+		await load(loadEvent());
+
+		expect(rosterCalls(fetchMock)).toHaveLength(2);
+	});
+
+	it('does not keep a roster that failed to read', async () => {
+		const { fetchMock } = setup(200, emptyPage, 403);
+
+		await loadedValue<SchedulePageData>(await load(loadEvent()));
+		await loadedValue<SchedulePageData>(await load(loadEvent('?days=7')));
+
+		expect(rosterCalls(fetchMock)).toHaveLength(2);
+	});
+
+	it('reads another Practice’s roster, not the one kept', async () => {
+		const { fetchMock } = setup(200, emptyPage);
+
+		await load(loadEvent());
+		const other = loadEvent();
+		other.params = { practiceId: 'practice-2' };
+		await load(other);
+
+		expect(rosterCalls(fetchMock)).toHaveLength(2);
 	});
 });

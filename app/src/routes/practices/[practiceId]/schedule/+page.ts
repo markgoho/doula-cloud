@@ -51,6 +51,35 @@ export interface SchedulePageData {
 
 const NOTHING: SchedulePage = { items: [], hasMore: false };
 
+type RosterRead = { doulas: LabeledValue[]; isRosterUnavailable: boolean };
+
+/*
+ * The roster is read once for a visit to the list, not once for each
+ * narrowing: a change of control is one action, and `load` runs again for
+ * each. The screen's page forgets it when she leaves (`_forgetRoster`), and a
+ * roster that is not used within a minute of being read, such as a hovered
+ * link's, is read again. A read that failed is not kept.
+ */
+const ROSTER_KEPT_MS = 60_000;
+const kept: { roster?: { practiceId: string; readAt: number; read: Promise<RosterRead> } } = {};
+
+export function _forgetRoster() {
+	kept.roster = undefined;
+}
+
+function rosterOf(practiceId: string, fetcher: typeof globalThis.fetch): Promise<RosterRead> {
+	const at = Date.now();
+	const held = kept.roster;
+	if (held?.practiceId === practiceId && at - held.readAt < ROSTER_KEPT_MS) return held.read;
+	const read = loadDoulaOptions(practiceId, fetcher);
+	const entry = { practiceId, readAt: at, read };
+	kept.roster = entry;
+	void read.then((landed) => {
+		if (kept.roster === entry && landed.isRosterUnavailable) kept.roster = undefined;
+	});
+	return read;
+}
+
 /**
  * Loads through SvelteKit's `load`, mirroring the Practice-wide Contract
  * and Invoice lists (#273, #265), and hands the reads over unawaited, so
@@ -82,11 +111,11 @@ export const load: PageLoad = async ({
 	const schedule: Promise<StreamedRead<SchedulePage>> = isReadable
 		? streamRead<SchedulePage>(practiceSchedulePath(params.practiceId, filters), fetch)
 		: Promise.resolve({ isLoaded: true, value: NOTHING });
-	const roster = isOwnerOrAdmin(session)
-		? loadDoulaOptions(params.practiceId, fetch)
+	const doulaRead = isOwnerOrAdmin(session)
+		? rosterOf(params.practiceId, fetch)
 		: Promise.resolve({ doulas: [], isRosterUnavailable: false });
 	const joined = async (): Promise<StreamedRead<SchedulePageData>> => {
-		const [landed, doulas] = await Promise.all([schedule, roster]);
+		const [landed, doulas] = await Promise.all([schedule, doulaRead]);
 		if (!landed.isLoaded) return landed;
 		return { isLoaded: true, value: { page: landed.value, view, filters, now, rangeErrors: errors, ...doulas } };
 	};
