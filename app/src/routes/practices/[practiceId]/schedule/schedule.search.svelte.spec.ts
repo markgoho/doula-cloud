@@ -106,6 +106,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 			staffId: '',
 			order: '',
 			search: 'Anne',
+			offEngagement: false,
 			cursor: ''
 		});
 		await expect.element(testPage.getByRole('searchbox', { name: FIELD })).toHaveValue('Anne');
