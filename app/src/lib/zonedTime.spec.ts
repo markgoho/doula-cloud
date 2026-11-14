@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { dayIn, partsIn, readerTimeZone, startOfDayIn, zoneName, zoneNote, areZonesApart } from './zonedTime.js';
+import { dayIn, instantFromWall, partsIn, readerTimeZone, startOfDayIn, zoneName, zoneNote, areZonesApart } from './zonedTime.js';
 
 const EASTERN = 'America/New_York';
 
@@ -16,8 +16,8 @@ describe('readerTimeZone', () => {
 describe('partsIn', () => {
 	it('reads the wall clock of an instant in the named zone', () => {
 		const instant = new Date('2026-11-14T04:30:00Z');
-		expect(partsIn(instant, EASTERN)).toEqual({ weekday: 'Fri', month: 'Nov', day: 13, year: 2026, hour: 23, minute: 30 });
-		expect(partsIn(instant, 'Asia/Tokyo')).toEqual({ weekday: 'Sat', month: 'Nov', day: 14, year: 2026, hour: 13, minute: 30 });
+		expect(partsIn(instant, EASTERN)).toEqual({ weekday: 'Fri', month: 'Nov', day: 13, year: 2026, hour: 23, minute: 30, second: 0 });
+		expect(partsIn(instant, 'Asia/Tokyo')).toEqual({ weekday: 'Sat', month: 'Nov', day: 14, year: 2026, hour: 13, minute: 30, second: 0 });
 	});
 
 	it('reads midnight as hour 0, never 24', () => {
@@ -93,5 +93,40 @@ describe('zoneNote', () => {
 		const note = "Times are in this Practice's time zone, Eastern Time.";
 		expect(zoneNote(EASTERN, 'America/Denver', now)).toBe(note);
 		expect(zoneNote(EASTERN, 'Asia/Tokyo', now)).toBe(note);
+	});
+});
+
+describe('instantFromWall', () => {
+	it('reads a wall clock in the zone given, whatever zone the reader is in', () => {
+		expect(instantFromWall('2026-11-13T14:00', EASTERN).toISOString()).toBe('2026-11-13T19:00:00.000Z');
+		expect(instantFromWall('2026-07-13T14:00', EASTERN).toISOString()).toBe('2026-07-13T18:00:00.000Z');
+		expect(instantFromWall('2026-11-13T14:00', 'Asia/Tokyo').toISOString()).toBe('2026-11-13T05:00:00.000Z');
+	});
+
+	it('is the inverse of partsIn at the minute', () => {
+		const at = instantFromWall('2026-11-13T14:35', EASTERN);
+		expect(partsIn(at, EASTERN)).toMatchObject({ day: 13, hour: 14, minute: 35 });
+	});
+
+	it('reads a wall time the spring-forward day skips as the hour after it', () => {
+		// 2026-03-08, 2:00 to 3:00 does not exist in New York.
+		expect(instantFromWall('2026-03-08T02:30', EASTERN).toISOString()).toBe('2026-03-08T07:30:00.000Z');
+		expect(partsIn(instantFromWall('2026-03-08T02:30', EASTERN), EASTERN)).toMatchObject({ hour: 3, minute: 30 });
+	});
+
+	it('reads the hour the fall-back day repeats as its first pass', () => {
+		// 2026-11-01, 1:00 to 2:00 happens twice in New York; the first is still EDT.
+		expect(instantFromWall('2026-11-01T01:30', EASTERN).toISOString()).toBe('2026-11-01T05:30:00.000Z');
+	});
+
+	it('reads the hours either side of each change as ordinary', () => {
+		expect(instantFromWall('2026-03-08T01:59', EASTERN).toISOString()).toBe('2026-03-08T06:59:00.000Z');
+		expect(instantFromWall('2026-03-08T03:00', EASTERN).toISOString()).toBe('2026-03-08T07:00:00.000Z');
+		expect(instantFromWall('2026-11-01T02:00', EASTERN).toISOString()).toBe('2026-11-01T07:00:00.000Z');
+	});
+
+	it('is an Invalid Date for an empty or half-typed value, as new Date would give', () => {
+		expect(Number.isNaN(instantFromWall('', EASTERN).getTime())).toBe(true);
+		expect(Number.isNaN(instantFromWall('2026-11-13T', EASTERN).getTime())).toBe(true);
 	});
 });

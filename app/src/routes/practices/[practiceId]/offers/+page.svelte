@@ -5,6 +5,7 @@
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
 	import { resolve } from '$app/paths';
 	import type { PracticeSession } from '../+layout.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { decideOffer, loadInbox, type DecisionOutcome, type Offer } from '#lib/offer.js';
 	import Text from '#lib/components/atoms/Text.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -61,6 +62,7 @@
 			offers={inbox.state.value}
 			onDecide={handleDecide}
 			practiceName={(page.data as { session: PracticeSession }).session.practiceName}
+			timeZone={practiceTimeZone()}
 			{engagementHref}
 			bind:outcome
 		/>

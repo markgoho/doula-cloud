@@ -18,6 +18,7 @@ export const GREETINGS = {
 } as const;
 
 export function greetingFor(now: Date = new Date()): string {
+	// The signed-out greeting has no Practice, so the device's own hour is right.
 	const hour = now.getHours();
 	if (hour >= 5 && hour < 12) return GREETINGS.morning;
 	if (hour >= 12 && hour < 17) return GREETINGS.afternoon;

@@ -121,7 +121,7 @@
 					{#if instance.clientAcknowledgedAt}
 						<Notice
 							variant="status"
-							message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt)}."
+							message="You confirmed you've read this on {formatInstant(instance.clientAcknowledgedAt, page.data.practiceTimezone)}."
 							isFocusedOnAppear={isAcknowledgedHere}
 						/>
 					{:else}

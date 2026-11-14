@@ -6,6 +6,7 @@ import {
 	loadPortalVisitsPage,
 	noVisitsMessage,
 	portalVisitColumns,
+	portalZoneNote,
 	type PortalVisit
 } from './portalVisits.js';
 
@@ -45,11 +46,11 @@ describe('portalVisitColumns', () => {
 	// The design source's own two columns, in its own order: when, then
 	// who. Nothing else is offered to a Client at all.
 	it('offers when and who, and nothing else', () => {
-		expect(portalVisitColumns().map((column) => column.label)).toEqual(['When', 'Who']);
+		expect(portalVisitColumns('America/New_York').map((column) => column.label)).toEqual(['When', 'Who']);
 	});
 
 	it('carries the raw instant underneath the display string', () => {
-		const when = portalVisitColumns()[0]!;
+		const when = portalVisitColumns('America/New_York')[0]!;
 
 		expect(when.datetimeAccessor!(visit())).toBe('2027-02-18T19:00:00Z');
 		expect(when.accessor(visit())).not.toBe('2027-02-18T19:00:00Z');
@@ -60,14 +61,14 @@ describe('portalVisitColumns', () => {
 	// what). That rule is about the Practice's roster acts; who is coming
 	// to her home is a fact about her care, and this column says so.
 	it('names the Doula who is coming, not the Practice', () => {
-		const who = portalVisitColumns()[1]!;
+		const who = portalVisitColumns('America/New_York')[1]!;
 
 		expect(who.accessor(visit({ doulaName: 'Maya Okonkwo' }))).toBe('Maya Okonkwo');
 	});
 
 	// #2596: a booked Visit whose Doula was taken off arrives with no name.
 	it('says it is to be confirmed where the Doula was taken off', () => {
-		expect(portalVisitColumns()[1]!.accessor(visit({ doulaName: '' }))).toBe('To be confirmed');
+		expect(portalVisitColumns('America/New_York')[1]!.accessor(visit({ doulaName: '' }))).toBe('To be confirmed');
 	});
 });
 
@@ -111,5 +112,25 @@ describe('noVisitsMessage', () => {
 	it('reports the state of the list and promises nothing', () => {
 		expect(noVisitsMessage).toBe('Nothing is booked yet.');
 		expect(noVisitsMessage).not.toMatch(/will|soon|shortly|coming/i);
+	});
+});
+
+describe('portalZoneNote', () => {
+	const now = new Date('2026-11-13T15:00:00Z');
+
+	it("says nothing to a Client in the Practice's zone", () => {
+		expect(portalZoneNote('Bloom Doulas', 'America/New_York', 'America/New_York', now)).toBeUndefined();
+	});
+
+	it('names the zone and the Practice to a Client in another', () => {
+		expect(portalZoneNote('Bloom Doulas', 'America/New_York', 'Asia/Tokyo', now)).toBe(
+			'Times are in Eastern Time, the time zone Bloom Doulas works in.'
+		);
+	});
+
+	it("reads a Visit in the Practice's zone, not the Client's", () => {
+		const [when] = portalVisitColumns('America/New_York');
+		// 19:00Z is 2:00pm Eastern, 4:00am the next day in Tokyo.
+		expect(when!.accessor(visit({ scheduledAt: '2027-02-18T19:00:00Z' }))).toBe('Thu Feb 18, 2:00pm');
 	});
 });

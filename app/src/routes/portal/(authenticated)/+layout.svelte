@@ -41,6 +41,7 @@
 			practiceName?: string;
 			clientName?: string;
 			createdAt?: string;
+			practiceTimezone?: string;
 			offersBirthPlan?: boolean;
 		}
 	);
@@ -76,8 +77,11 @@
 	// not yet known`, portal-authenticated-layout.svelte.spec.ts) rather
 	// than calling `engagementLabel` on data that hasn't arrived.
 	const switcherLabel = $derived(
-		detail.practiceName && detail.createdAt
-			? engagementLabel({ practiceName: detail.practiceName, createdAt: detail.createdAt })
+		detail.practiceName && detail.createdAt && detail.practiceTimezone
+			? engagementLabel(
+					{ practiceName: detail.practiceName, createdAt: detail.createdAt },
+					detail.practiceTimezone
+				)
 			: (detail.practiceName ?? '')
 	);
 

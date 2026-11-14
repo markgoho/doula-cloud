@@ -13,6 +13,9 @@ import {
 	scheduledVisitParts,
 	toDatetimeLocalValue
 } from './dates.js';
+import { instantFromWall } from './zonedTime.js';
+
+const EASTERN = 'America/New_York';
 
 describe('the instant / calendar-day distinction', () => {
 	// The one that matters: a due date is a calendar day, so it must read
@@ -28,12 +31,12 @@ describe('the instant / calendar-day distinction', () => {
 	// Noon UTC is the same calendar day in every zone from UTC-11 to
 	// UTC+11, so this fixture's day holds wherever the suite runs.
 	it('reads a timestamp as an instant in the reader own zone, month first', () => {
-		expect(formatInstant('2026-08-01T12:00:00Z')).toBe('Aug 1, 2026');
+		expect(formatInstant('2026-08-01T12:00:00Z', 'America/New_York')).toBe('Aug 1, 2026');
 	});
 
 	it('reads an instant to the minute in the reader own zone', () => {
 		const iso = local(2026, 10, 25, 15, 4);
-		expect(formatInstantWithClock(iso)).toBe('Oct 25, 2026, 3:04pm');
+		expect(formatInstantWithClock(iso, 'America/New_York')).toBe('Oct 25, 2026, 3:04pm');
 	});
 });
 
@@ -45,12 +48,14 @@ describe('the instant / calendar-day distinction', () => {
 // above, so a fixture has to be constructed the same way to stay correct
 // on every machine's zone, CI's included -- not just the one it was
 // written on.
+const two = (n: number) => String(n).padStart(2, '0');
+
 function local(year: number, month: number, day: number, hour = 0, minute = 0, second = 0): string {
-	return new Date(year, month - 1, day, hour, minute, second).toISOString();
+	return instantFromWall(`${year}-${two(month)}-${two(day)}T${two(hour)}:${two(minute)}:${two(second)}`, EASTERN).toISOString();
 }
 
 describe('formatActivityTimestamp (ADR-0022)', () => {
-	const now = new Date(2026, 7, 14, 20, 12, 0); // Friday Aug 14, 2026, 8:12pm local
+	const now = new Date(local(2026, 8, 14, 20, 12)); // Friday Aug 14, 2026, 8:12pm Eastern
 
 	it.each([
 		['30 seconds ago reads as just now', local(2026, 8, 14, 20, 11, 30), 'just now'],
@@ -64,12 +69,11 @@ describe('formatActivityTimestamp (ADR-0022)', () => {
 		['noon is 12pm, not 0pm', local(2026, 8, 11, 12, 0), 'Tuesday, 12:00pm'],
 		['7+ days ago is the absolute date', local(2026, 7, 31, 20, 0), 'Jul 31, 2026, 8:00pm']
 	])('%s', (_name, iso, want) => {
-		expect(formatActivityTimestamp(iso, now)).toBe(want);
+		expect(formatActivityTimestamp(iso, 'America/New_York', now)).toBe(want);
 	});
 });
 
 // #250, #2867: a Visit's own Date column and per-row summary, in the Practice's zone, never the runner's.
-const EASTERN = 'America/New_York';
 const NOW = new Date('2026-11-13T14:00:00Z');
 
 describe('formatScheduledVisit', () => {
@@ -132,36 +136,30 @@ describe('formatCalendarWeekdayDay', () => {
 describe('formatPortalVisit', () => {
 	it('reads a Visit still to come as a weekday and a clock', () => {
 		const iso = local(2027, 2, 18, 14, 0);
-		const expected = new Date(iso);
-		expect(formatPortalVisit(iso, false)).toBe(
-			`${expected.toLocaleDateString('en-US', { weekday: 'short' })} ${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, 2:00pm`
-		);
+		expect(formatPortalVisit(iso, false, EASTERN)).toBe('Thu Feb 18, 2:00pm');
 	});
 
 	it('reads a Visit that has happened as the calendar day, with no clock', () => {
 		const iso = local(2026, 8, 18, 14, 30);
-		const expected = new Date(iso);
-		expect(formatPortalVisit(iso, true)).toBe(
-			`${expected.toLocaleDateString('en-US', { month: 'short' })} ${expected.getDate()}, ${expected.getFullYear()}`
-		);
+		expect(formatPortalVisit(iso, true, EASTERN)).toBe('Aug 18, 2026');
 	});
 
 	// The same instant, both ways: the flag is the server's answer, and
 	// nothing about the value itself decides which form is used.
 	it('renders one instant differently on each side of the flag', () => {
 		const iso = local(2027, 2, 18, 14, 0);
-		expect(formatPortalVisit(iso, false)).not.toBe(formatPortalVisit(iso, true));
+		expect(formatPortalVisit(iso, false, 'America/New_York')).not.toBe(formatPortalVisit(iso, true, 'America/New_York'));
 	});
 });
 
 describe('toDatetimeLocalValue', () => {
 	it.each([[undefined], ['']])('%s round-trips to an empty control value', (value) => {
-		expect(toDatetimeLocalValue(value)).toBe('');
+		expect(toDatetimeLocalValue(value, 'America/New_York')).toBe('');
 	});
 
 	it('renders local date/time parts an <input type="datetime-local"> accepts back', () => {
 		const iso = local(2027, 3, 5, 9, 5);
-		expect(toDatetimeLocalValue(iso)).toBe('2027-03-05T09:05');
+		expect(toDatetimeLocalValue(iso, 'America/New_York')).toBe('2027-03-05T09:05');
 	});
 });
 
@@ -171,12 +169,12 @@ describe('formatInstantWithSeconds (#2666)', () => {
 		['noon', local(2026, 11, 2, 12, 0, 0), 'Nov 2, 2026, 12:00:00pm'],
 		['morning', local(2026, 11, 2, 10, 46, 43), 'Nov 2, 2026, 10:46:43am']
 	])('reads %s to the second, in the reader own zone', (_name, iso, want) => {
-		expect(formatInstantWithSeconds(iso)).toBe(want);
+		expect(formatInstantWithSeconds(iso, 'America/New_York')).toBe(want);
 	});
 });
 
 describe('formatPostpartum', () => {
-	const now = new Date(2026, 10, 8, 15, 30);
+	const now = new Date(local(2026, 11, 8, 15, 30));
 
 	it.each([
 		['2026-11-08', '0 days postpartum'],
@@ -189,10 +187,66 @@ describe('formatPostpartum', () => {
 		['2026-08-01', '14 weeks postpartum'],
 		['2026-11-20', '0 days postpartum']
 	])('reads a birth on %s as %s', (birthDay, want) => {
-		expect(formatPostpartum(birthDay, now)).toBe(want);
+		expect(formatPostpartum(birthDay, 'America/New_York', now)).toBe(want);
 	});
 
 	it('counts calendar days across a clock change, not hours', () => {
-		expect(formatPostpartum('2026-10-18', new Date(2026, 10, 1, 0, 5))).toBe('2 weeks postpartum');
+		const justAfterTheClocksChange = new Date(local(2026, 11, 1, 0, 5));
+		expect(formatPostpartum('2026-10-18', EASTERN, justAfterTheClocksChange)).toBe('2 weeks postpartum');
+	});
+});
+
+describe('every instant formatter reads the zone it is given, never the runner\'s', () => {
+	// 02:30Z on Nov 14 is 9:30pm on Nov 13 in New York and 11:30am on Nov 14 in Tokyo.
+	const instant = '2026-11-14T02:30:00Z';
+
+	it.each([
+		['America/New_York', 'Nov 13, 2026'],
+		['Asia/Tokyo', 'Nov 14, 2026']
+	])('formatInstant in %s', (zone, want) => {
+		expect(formatInstant(instant, zone)).toBe(want);
+	});
+
+	it.each([
+		['America/New_York', 'Nov 13, 2026, 9:30pm'],
+		['Asia/Tokyo', 'Nov 14, 2026, 11:30am']
+	])('formatInstantWithClock in %s', (zone, want) => {
+		expect(formatInstantWithClock(instant, zone)).toBe(want);
+	});
+
+	it.each([
+		['America/New_York', 'Nov 13, 2026, 9:30:15pm'],
+		['Asia/Tokyo', 'Nov 14, 2026, 11:30:15am']
+	])('formatInstantWithSeconds in %s', (zone, want) => {
+		expect(formatInstantWithSeconds('2026-11-14T02:30:15Z', zone)).toBe(want);
+	});
+
+	it.each([
+		['America/New_York', 'Friday, 9:30pm'],
+		['Asia/Tokyo', 'Saturday, 11:30am']
+	])('formatActivityTimestamp names the weekday in %s', (zone, want) => {
+		expect(formatActivityTimestamp(instant, zone, new Date('2026-11-17T12:00:00Z'))).toBe(want);
+	});
+
+	it.each([
+		['America/New_York', 'Fri Nov 13, 9:30pm'],
+		['Asia/Tokyo', 'Sat Nov 14, 11:30am']
+	])('formatPortalVisit in %s', (zone, want) => {
+		expect(formatPortalVisit(instant, false, zone)).toBe(want);
+	});
+
+	it('formatPostpartum counts from the Practice\'s today', () => {
+		// 02:30Z on Nov 20 is still Nov 19 in New York and already Nov 20 in Tokyo.
+		const early = new Date('2026-11-20T02:30:00Z');
+		expect(formatPostpartum('2026-11-19', EASTERN, early)).toBe('0 days postpartum');
+		expect(formatPostpartum('2026-11-19', 'Asia/Tokyo', early)).toBe('1 day postpartum');
+	});
+
+	it('toDatetimeLocalValue is the Practice\'s wall clock, and instantFromWall reads it back', () => {
+		expect(toDatetimeLocalValue(instant, EASTERN)).toBe('2026-11-13T21:30');
+		expect(toDatetimeLocalValue(instant, 'Asia/Tokyo')).toBe('2026-11-14T11:30');
+		expect(instantFromWall(toDatetimeLocalValue(instant, 'Asia/Tokyo'), 'Asia/Tokyo').toISOString()).toBe(
+			'2026-11-14T02:30:00.000Z'
+		);
 	});
 });

@@ -43,12 +43,12 @@
 	-->
 	<section>
 		<h2>Offers already made, read first</h2>
-		<OfferSection {offers} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection timeZone="America/New_York" {offers} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 
 	<section>
 		<h2>Offers already made, and the form for another, opened</h2>
-		<OfferSection
+		<OfferSection timeZone="America/New_York"
 			{offers}
 			{doulas}
 			clientName="Anne-Marie Ochieng-Whitfield"
@@ -60,7 +60,7 @@
 
 	<section>
 		<h2>Nobody asked yet</h2>
-		<OfferSection offers={[]} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection timeZone="America/New_York" offers={[]} {doulas} onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 
 	<!--
@@ -71,11 +71,11 @@
 	-->
 	<section>
 		<h2>No one at the Practice to pick</h2>
-		<OfferSection offers={[]} doulas={[]} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection timeZone="America/New_York" offers={[]} doulas={[]} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 
 	<section>
 		<h2>The roster could not be read</h2>
-		<OfferSection offers={[]} doulas={undefined} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
+		<OfferSection timeZone="America/New_York" offers={[]} doulas={undefined} isFormOpen onCreate={async () => {}} onWithdraw={async () => {}} />
 	</section>
 </stack-l>

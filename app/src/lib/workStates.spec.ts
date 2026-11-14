@@ -47,6 +47,6 @@ describe('workStates', () => {
 	it('formats the day a work state was reported', () => {
 		// 14:02 UTC is Aug 28 in every US zone, so the fixture's day holds
 		// wherever the suite runs.
-		expect(workStateReportedOn('2026-08-28T14:02:11Z')).toBe('Aug 28, 2026');
+		expect(workStateReportedOn('2026-08-28T14:02:11Z', 'America/New_York')).toBe('Aug 28, 2026');
 	});
 });

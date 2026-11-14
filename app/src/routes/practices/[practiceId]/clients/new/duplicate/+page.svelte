@@ -33,6 +33,7 @@
 	import { editClient, type ClientMatch } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
 	import { matchHistory } from '#lib/clientMatch.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
@@ -108,7 +109,7 @@
 			value: match.id,
 			label: fullName(match),
 			description: [
-				matchHistory(match),
+				matchHistory(match, practiceTimeZone()),
 				'Keeps this record. You check any changes before they are saved.'
 			]
 		})),

@@ -63,6 +63,7 @@ async function setup({
 	const onLoadOlder = vi.fn();
 	const onDownloadAttachment = vi.fn();
 	const { container } = await render(MessageThread, {
+		timeZone: 'America/New_York',
 		messages: messagesOption,
 		error,
 		hasMore,
@@ -94,7 +95,7 @@ describe('MessageThread.svelte', () => {
 	it('prints when each message was sent through dates.ts, month first', async () => {
 		await setup();
 
-		await expect.element(page.getByText(formatInstantWithClock(messages[0]!.createdAt))).toBeVisible();
+		await expect.element(page.getByText(formatInstantWithClock(messages[0]!.createdAt, 'America/New_York'))).toBeVisible();
 		await expect.element(page.getByText(/^Jan 1, 2026, \d{1,2}:00(am|pm)$/)).toBeVisible();
 	});
 

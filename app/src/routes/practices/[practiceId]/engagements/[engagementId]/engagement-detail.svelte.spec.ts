@@ -937,6 +937,23 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		await expect.element(testPage.getByRole('rowheader', { name: 'Not yet scheduled', exact: true })).toBeVisible();
 	});
 
+	it('says once, above the Visits, which zone the times are in, to a reader in another (#2872)', async () => {
+		await renderWithFixtureResponder();
+
+		const note = "Times are in this Practice's time zone, Eastern Time.";
+		await expect.element(testPage.getByLabelText('Visits').getByText(note)).toBeVisible();
+		expect(testPage.getByText(note).elements()).toHaveLength(1);
+	});
+
+	it("prefills the change form with the Practice's wall clock, not the reader's (#2872)", async () => {
+		await renderWithFixtureResponder();
+
+		await changeVisit(0);
+		await expect
+			.element(testPage.getByLabelText('Scheduled date and time', { exact: true }))
+			.toHaveValue('2027-03-15T10:30');
+	});
+
 	it('heads the day column "When", as the Schedule does', async () => {
 		await renderWithFixtureResponder();
 
@@ -1012,7 +1029,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits/visit-2/schedule');
-		expect(requests[0]!.body).toEqual({ scheduledAt: new Date('2027-04-01T09:00').toISOString() });
+		expect(requests[0]!.body).toEqual({ scheduledAt: '2027-04-01T13:00:00.000Z' });
 		// #1999: a save returns to the rows, and says what it did.
 		await expect.element(testPage.getByText('The Visit for Jordan Reyes is saved.')).toHaveFocus();
 		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
@@ -1147,7 +1164,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.path).toContain('/visits');
 		expect(requests[0]!.body).toEqual({
-			scheduledAt: new Date('2027-05-20T10:15').toISOString(),
+			scheduledAt: '2027-05-20T14:15:00.000Z',
 			staffId: 'staff-2'
 		});
 		await expect.element(testPage.getByText('The Visit for Jordan Reyes is added.')).toHaveFocus();

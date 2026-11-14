@@ -89,7 +89,7 @@
 	}
 
 	function gapWhen(gap: CoverageGap): string {
-		return `${formatInstant(gap.startsAt)} – ${formatInstant(gap.endsAt)}`;
+		return `${formatInstant(gap.startsAt, timeZone)} – ${formatInstant(gap.endsAt, timeZone)}`;
 	}
 
 	function engagementHref(row: { engagementId: string }): string {

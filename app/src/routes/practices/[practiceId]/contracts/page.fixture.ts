@@ -13,7 +13,7 @@
  */
 import type { AwaitingContract, AwaitingVoidRequest } from '#lib/contract.js';
 import type { CursorPage } from '#lib/paginatedList.svelte.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import type { RouteParams as RouteParameters } from './$types';
 import type { ContractsPageData } from './+page.js';
@@ -109,6 +109,7 @@ export const fixture: RouteFixture<RouteParameters> = {
 	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/contracts',
 	props: { data },
 	// The route takes its first page from `load` rather than from a fetch,

@@ -14,6 +14,6 @@ export interface Stamp {
 /**
 A Stamp as a summary-list row reads it: "Oct 25, 2026 by Priya Raman".
 */
-export function stampText(stamp: Stamp): string {
-	return `${formatInstant(stamp.at)} by ${stamp.by}`;
+export function stampText(stamp: Stamp, timeZone: string): string {
+	return `${formatInstant(stamp.at, timeZone)} by ${stamp.by}`;
 }

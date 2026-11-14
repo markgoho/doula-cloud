@@ -93,11 +93,12 @@ export interface WhatHappensNext {
 export function whatHappensNext(
 	next: PortalVisit | undefined,
 	dueDate: string | undefined,
+	timeZone: string,
 	hasCareEnded = false
 ): WhatHappensNext {
 	const out: WhatHappensNext = hasCareEnded ? { ended: engagementStatusLabel('completed') } : {};
 	if (next) {
-		const when = formatPortalVisit(next.scheduledAt, false);
+		const when = formatPortalVisit(next.scheduledAt, false, timeZone);
 		if (hasCareEnded) {
 			out.lead = next.doulaName
 				? `Your next visit is still booked: ${next.doulaName} is coming on ${when}.`
@@ -126,11 +127,11 @@ export function owedNextLine(openInvoiceCount: number, totalToPayCents: number, 
 /** Her Birth Plan. Its acknowledgment is cleared by a Staff edit, so it
  * always means "read since it last changed" (GLOSSARY.md's Birth Plan
  * entry), and its absence asks her to read it. */
-export function birthPlanCard(glance: BirthPlanGlance | undefined): CareCard {
+export function birthPlanCard(glance: BirthPlanGlance | undefined, timeZone: string): CareCard {
 	const label = 'Read your birth plan';
 	if (!glance) return { label, description: 'Nothing is written in it yet.' };
 	if (glance.acknowledgedAt) {
-		return { label, description: `You confirmed you read it on ${formatInstant(glance.acknowledgedAt)}.` };
+		return { label, description: `You confirmed you read it on ${formatInstant(glance.acknowledgedAt, timeZone)}.` };
 	}
 	return { label, description: 'It is ready for you to read.' };
 }
@@ -138,10 +139,10 @@ export function birthPlanCard(glance: BirthPlanGlance | undefined): CareCard {
 /**
 Her Contract, where it stands.
 */
-export function contractCard(glance: ContractGlance | undefined, practiceName: string): CareCard {
+export function contractCard(glance: ContractGlance | undefined, practiceName: string, timeZone: string): CareCard {
 	if (!glance) return { description: NO_CONTRACT_MESSAGE };
 	if (glance.status === 'signed') {
-		const description = glance.signedAt ? `You signed this on ${formatInstant(glance.signedAt)}.` : 'You signed this.';
+		const description = glance.signedAt ? `You signed this on ${formatInstant(glance.signedAt, timeZone)}.` : 'You signed this.';
 		return { label: 'Read what you signed', description };
 	}
 	if (glance.status === 'voided') {
@@ -152,10 +153,10 @@ export function contractCard(glance: ContractGlance | undefined, practiceName: s
 
 /** Her thread: the newest Message, who sent it and when -- "you" for
  * her own -- quoted, or the file's name when it carried only a file. */
-export function messagesCard(last: LastMessage | undefined): CareCard {
+export function messagesCard(last: LastMessage | undefined, timeZone: string): CareCard {
 	const label = 'Open your messages';
 	if (!last) return { label, description: 'No messages yet.' };
 	const who = last.senderType === 'client' ? 'you' : last.senderName;
 	const what = last.body ? `“${last.body}”` : last.attachmentFilename;
-	return { label, description: `From ${who} on ${formatInstant(last.createdAt)}: ${what}` };
+	return { label, description: `From ${who} on ${formatInstant(last.createdAt, timeZone)}: ${what}` };
 }

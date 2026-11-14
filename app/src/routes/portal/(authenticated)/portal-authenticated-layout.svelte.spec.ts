@@ -23,6 +23,7 @@ const pageState = vi.hoisted(() => ({
 	url: new URL('http://localhost/portal/engagements/engagement-1'),
 	data: {} as {
 		practiceName?: string;
+		practiceTimezone?: string;
 		clientName?: string;
 		createdAt?: string;
 		offersBirthPlan?: boolean;
@@ -83,6 +84,7 @@ async function setup({
 		? {}
 		: {
 				practiceName: 'Riverside Doula Collective',
+				practiceTimezone: 'America/New_York',
 				clientName: 'Tasha Bell',
 				createdAt: '2026-03-12T20:00:00Z',
 				offersBirthPlan

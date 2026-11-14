@@ -55,6 +55,7 @@
 		type ActivityEntry
 	} from '#lib/activityLedger.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { practiceZoneNote } from '#lib/practiceZone.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import type { PracticeSession } from './+layout.js';
 	import OfferInbox from '#lib/components/organisms/OfferInbox.svelte';
@@ -216,7 +217,7 @@
 		{ label: 'Client', accessor: (item: WaitingOnReply) => item.clientName },
 		{
 			label: 'Last message',
-			accessor: (item: WaitingOnReply) => formatActivityTimestamp(item.lastMessageAt),
+			accessor: (item: WaitingOnReply) => formatActivityTimestamp(item.lastMessageAt, session.timezone),
 			variant: 'meta' as const,
 			datetimeAccessor: (item: WaitingOnReply) => item.lastMessageAt
 		}
@@ -276,6 +277,7 @@
 		offers={landing!.openOffers}
 		onDecide={handleDecide}
 		practiceName={session.practiceName}
+		timeZone={session.timezone}
 		engagementHref={offerEngagementHref}
 		bind:outcome={offerOutcome}
 	/>
@@ -312,6 +314,9 @@
 	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
 	     can never be offered work, so an inbox that could only ever say
 	     "You have no offers." is not drawn for her. -->
+	{#if practiceZoneNote()}
+		<Text text={practiceZoneNote()!} tone="muted" />
+	{/if}
 	{#if isDoula(session)}{@render offerInbox()}{/if}
 
 	<!--
@@ -518,7 +523,7 @@
 			{:else}
 				<div class="activity-table">
 					<DataTable
-						columns={activityLedgerColumns()}
+						columns={activityLedgerColumns(session.timezone)}
 						rows={recentActivity}
 						hasMore={false}
 						emptyMessage="Nothing has happened yet."

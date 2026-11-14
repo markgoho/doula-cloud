@@ -30,8 +30,8 @@ describe('whatHappensNext', () => {
 	it('names who is coming and when, then the due date', () => {
 		const next = visit();
 
-		expect(whatHappensNext(next, '2027-03-01')).toEqual({
-			lead: `Priya Raman is coming to you on ${formatPortalVisit(next.scheduledAt, false)}.`,
+		expect(whatHappensNext(next, '2027-03-01', 'America/New_York')).toEqual({
+			lead: `Priya Raman is coming to you on ${formatPortalVisit(next.scheduledAt, false, 'America/New_York')}.`,
 			detail: `Your due date is ${formatCalendarDay('2027-03-01')}.`
 		});
 	});
@@ -39,15 +39,15 @@ describe('whatHappensNext', () => {
 	it('names nobody for a Visit whose Doula was taken off', () => {
 		const next = visit({ doulaName: '' });
 
-		expect(whatHappensNext(next, undefined)).toEqual({
-			lead: `Your next visit is on ${formatPortalVisit(next.scheduledAt, false)}.`
+		expect(whatHappensNext(next, undefined, 'America/New_York')).toEqual({
+			lead: `Your next visit is on ${formatPortalVisit(next.scheduledAt, false, 'America/New_York')}.`
 		});
 	});
 
 	// CB-G5: nothing booked promises nothing, and no due date (after a
 	// loss, or on a postpartum-only Engagement) leaves the line out.
 	it('says nothing is booked, and leaves out a due date there is none of', () => {
-		expect(whatHappensNext(undefined, undefined)).toEqual({ lead: 'No visit is booked yet.' });
+		expect(whatHappensNext(undefined, undefined, 'America/New_York')).toEqual({ lead: 'No visit is booked yet.' });
 	});
 
 	// #2217: once care has ended it says so first, in the register's one
@@ -56,45 +56,45 @@ describe('whatHappensNext', () => {
 	it('says care has ended, then a Visit still booked', () => {
 		const next = visit();
 
-		expect(whatHappensNext(next, undefined, true)).toEqual({
+		expect(whatHappensNext(next, undefined, 'America/New_York', true)).toEqual({
 			ended: 'Care ended',
-			lead: `Your next visit is still booked: Priya Raman is coming on ${formatPortalVisit(next.scheduledAt, false)}.`
+			lead: `Your next visit is still booked: Priya Raman is coming on ${formatPortalVisit(next.scheduledAt, false, 'America/New_York')}.`
 		});
 	});
 
 	it('names nobody for a still-booked Visit whose Doula was taken off', () => {
 		const next = visit({ doulaName: '' });
 
-		expect(whatHappensNext(next, undefined, true)).toEqual({
+		expect(whatHappensNext(next, undefined, 'America/New_York', true)).toEqual({
 			ended: 'Care ended',
-			lead: `Your next visit is still booked, on ${formatPortalVisit(next.scheduledAt, false)}.`
+			lead: `Your next visit is still booked, on ${formatPortalVisit(next.scheduledAt, false, 'America/New_York')}.`
 		});
 	});
 
 	// #2217: "No visit is booked yet." promises a booking ended care does
 	// not hold, so the ended line stands alone.
 	it('says only that care has ended when nothing is booked', () => {
-		expect(whatHappensNext(undefined, undefined, true)).toEqual({ ended: 'Care ended' });
+		expect(whatHappensNext(undefined, undefined, 'America/New_York', true)).toEqual({ ended: 'Care ended' });
 	});
 });
 
 describe('birthPlanCard', () => {
 	it('says when she confirmed she read it', () => {
-		expect(birthPlanCard({ acknowledgedAt: '2026-08-20T12:00:00Z' })).toEqual({
+		expect(birthPlanCard({ acknowledgedAt: '2026-08-20T12:00:00Z' }, 'America/New_York')).toEqual({
 			label: 'Read your birth plan',
-			description: `You confirmed you read it on ${formatInstant('2026-08-20T12:00:00Z')}.`
+			description: `You confirmed you read it on ${formatInstant('2026-08-20T12:00:00Z', 'America/New_York')}.`
 		});
 	});
 
 	it('asks her to read one she has not confirmed since it last changed', () => {
-		expect(birthPlanCard({})).toEqual({
+		expect(birthPlanCard({}, 'America/New_York')).toEqual({
 			label: 'Read your birth plan',
 			description: 'It is ready for you to read.'
 		});
 	});
 
 	it('says nothing is written yet when there is no plan', () => {
-		expect(birthPlanCard(undefined)).toEqual({
+		expect(birthPlanCard(undefined, 'America/New_York')).toEqual({
 			label: 'Read your birth plan',
 			description: 'Nothing is written in it yet.'
 		});
@@ -103,20 +103,20 @@ describe('birthPlanCard', () => {
 
 describe('contractCard', () => {
 	it('says when she signed it', () => {
-		expect(contractCard({ status: 'signed', signedAt: '2026-08-14T15:00:00Z' }, 'Rooted Birth Collective')).toEqual({
+		expect(contractCard({ status: 'signed', signedAt: '2026-08-14T15:00:00Z' }, 'Rooted Birth Collective', 'America/New_York')).toEqual({
 			label: 'Read what you signed',
-			description: `You signed this on ${formatInstant('2026-08-14T15:00:00Z')}.`
+			description: `You signed this on ${formatInstant('2026-08-14T15:00:00Z', 'America/New_York')}.`
 		});
 	});
 
 	// signed_at is stamped in the same write as the status, so this is a
 	// row the model should never hold; it still reads true if it does.
 	it('says she signed it when the instant is missing', () => {
-		expect(contractCard({ status: 'signed' }, 'Rooted Birth Collective').description).toBe('You signed this.');
+		expect(contractCard({ status: 'signed' }, 'Rooted Birth Collective', 'America/New_York').description).toBe('You signed this.');
 	});
 
 	it('asks her to sign one that waits on her', () => {
-		expect(contractCard({ status: 'sent' }, 'Rooted Birth Collective')).toEqual({
+		expect(contractCard({ status: 'sent' }, 'Rooted Birth Collective', 'America/New_York')).toEqual({
 			label: 'Read and sign your contract',
 			description: 'It is ready for you to sign.'
 		});
@@ -125,14 +125,14 @@ describe('contractCard', () => {
 	// The Contract page's own voided notice, word for word: it claims
 	// nothing about money, because voiding touches no Invoice.
 	it('says the Practice ended one that was voided', () => {
-		expect(contractCard({ status: 'voided' }, 'Rooted Birth Collective')).toEqual({
+		expect(contractCard({ status: 'voided' }, 'Rooted Birth Collective', 'America/New_York')).toEqual({
 			label: 'Read your contract',
 			description: 'Rooted Birth Collective ended this contract.'
 		});
 	});
 
 	it('offers no link when none has been sent', () => {
-		expect(contractCard(undefined, 'Rooted Birth Collective')).toEqual({
+		expect(contractCard(undefined, 'Rooted Birth Collective', 'America/New_York')).toEqual({
 			description: 'No contract has been sent for your care yet.'
 		});
 	});
@@ -148,25 +148,25 @@ describe('messagesCard', () => {
 	};
 
 	it('quotes the newest Message and who wrote it', () => {
-		expect(messagesCard(message)).toEqual({
+		expect(messagesCard(message, 'America/New_York')).toEqual({
 			label: 'Open your messages',
-			description: `From Priya Raman on ${formatInstant(message.createdAt)}: “Thursday works. See you at 2.”`
+			description: `From Priya Raman on ${formatInstant(message.createdAt, 'America/New_York')}: “Thursday works. See you at 2.”`
 		});
 	});
 
 	it('calls her own Message yours', () => {
-		expect(messagesCard({ ...message, senderType: 'client', senderName: 'Camille' }).description).toBe(
-			`From you on ${formatInstant(message.createdAt)}: “Thursday works. See you at 2.”`
+		expect(messagesCard({ ...message, senderType: 'client', senderName: 'Camille' }, 'America/New_York').description).toBe(
+			`From you on ${formatInstant(message.createdAt, 'America/New_York')}: “Thursday works. See you at 2.”`
 		);
 	});
 
 	it('names the file when the Message is a file alone', () => {
-		expect(messagesCard({ ...message, body: '', attachmentFilename: 'scan.pdf' }).description).toBe(
-			`From Priya Raman on ${formatInstant(message.createdAt)}: scan.pdf`
+		expect(messagesCard({ ...message, body: '', attachmentFilename: 'scan.pdf' }, 'America/New_York').description).toBe(
+			`From Priya Raman on ${formatInstant(message.createdAt, 'America/New_York')}: scan.pdf`
 		);
 	});
 
 	it('says there are none yet', () => {
-		expect(messagesCard(undefined)).toEqual({ label: 'Open your messages', description: 'No messages yet.' });
+		expect(messagesCard(undefined, 'America/New_York')).toEqual({ label: 'Open your messages', description: 'No messages yet.' });
 	});
 });

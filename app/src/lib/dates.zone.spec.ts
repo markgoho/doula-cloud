@@ -66,8 +66,8 @@ describe('a date in a zone behind UTC (America/New_York)', () => {
 
 	itShowsTheDaysTheBffSent(1, '1 day overdue');
 
-	it('still reads a real instant in the reader zone', () => {
-		expect(formatInstant('2026-10-25T00:00:00Z')).toBe('Oct 24, 2026');
+	it('reads a real instant in the zone it is given', () => {
+		expect(formatInstant('2026-10-25T00:00:00Z', 'America/New_York')).toBe('Oct 24, 2026');
 	});
 
 	it("prints an Invoice's Sent day as the Practice's day the BFF sent (#2205)", () => {
@@ -86,8 +86,8 @@ describe('a date in a zone ahead of UTC (Asia/Tokyo)', () => {
 
 	itShowsTheDaysTheBffSent(3, '3 days overdue');
 
-	it('still reads a real instant in the reader zone', () => {
-		expect(formatInstant('2026-10-25T20:00:00Z')).toBe('Oct 26, 2026');
+	it('reads a real instant in the zone it is given', () => {
+		expect(formatInstant('2026-10-25T20:00:00Z', 'Asia/Tokyo')).toBe('Oct 26, 2026');
 	});
 
 	it("prints an Invoice's Sent day as the Practice's day the BFF sent (#2205)", () => {

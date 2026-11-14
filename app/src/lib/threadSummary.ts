@@ -24,13 +24,13 @@ function excerpt(body: string): string {
  * "“Thursday works.” — Camille Boyd, Oct 24, 2026". A file sent with no
  * words reads as its file name. Undefined for an empty thread.
  */
-export function latestMessageText(messages: readonly Message[]): string | undefined {
+export function latestMessageText(messages: readonly Message[], timeZone: string): string | undefined {
 	const latest = messages.at(-1);
 	if (!latest) return undefined;
 	// A Message carries words, a file, or both (the BFF refuses neither),
 	// so one with no words has a file.
 	const what = latest.body ? `“${excerpt(latest.body)}”` : latest.attachmentFilename!;
-	return `${what} — ${latest.senderName}, ${formatInstant(latest.createdAt)}`;
+	return `${what} — ${latest.senderName}, ${formatInstant(latest.createdAt, timeZone)}`;
 }
 
 /**

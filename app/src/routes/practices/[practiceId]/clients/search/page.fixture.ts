@@ -12,7 +12,7 @@
  * document titles, and not one element in common below the layout
  * primitives. Neither is a subset of the other.
  */
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 /*
@@ -42,6 +42,7 @@ export const fixture: RouteFixture = {
 	name: 'Finding a Client',
 	component: Page,
 	params: { practiceId: 'practice-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/clients/search',
 	props: { data: { isContractor: false } },
 	readyText: 'Find a Client',

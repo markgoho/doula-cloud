@@ -25,6 +25,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import {
 		kindLabel,
 		loadPendingRequests,
@@ -55,7 +56,7 @@
 				request.dueDate ? formatCalendarDay(request.dueDate) : 'Not given'
 		},
 		{ label: 'Asked by', accessor: (request: PendingRequestItem) => request.requestedByName },
-		{ label: 'Asked on', accessor: (request: PendingRequestItem) => formatInstant(request.requestedAt) }
+		{ label: 'Asked on', accessor: (request: PendingRequestItem) => formatInstant(request.requestedAt, practiceTimeZone()) }
 	];
 
 	// DataTable links its first column only, so the Client's name is the

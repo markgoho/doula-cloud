@@ -34,6 +34,7 @@
 	} from '#lib/staff.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { membershipChangeSentence } from '#lib/membershipHistory.js';
 	import { gotoWithOutcome, takeOutcome } from '#lib/outcome.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
@@ -140,7 +141,7 @@
 					},
 					{
 						label: 'Works from',
-						value: `${workStateName(member.workState)}, self-reported ${workStateReportedOn(member.workStateReportedAt)}`
+						value: `${workStateName(member.workState)}, self-reported ${workStateReportedOn(member.workStateReportedAt, practiceTimeZone())}`
 					}
 				]
 			: []
@@ -224,7 +225,7 @@
 			columns={[
 				{
 					label: 'When',
-					accessor: (change: WorkStateEntry) => workStateReportedOn(change.createdAt),
+					accessor: (change: WorkStateEntry) => workStateReportedOn(change.createdAt, practiceTimeZone()),
 					datetimeAccessor: (change: WorkStateEntry) => change.createdAt,
 					variant: 'meta' as const
 				},
@@ -250,11 +251,14 @@
 		     type (#872), and who made each change: the audit trail. The
 		     sentence is the one column that wraps (#2098); When and Who stay
 		     on one line. -->
+		{#if practiceZoneNote()}
+			<Text text={practiceZoneNote()!} tone="muted" />
+		{/if}
 		<DataTable
 			columns={[
 				{
 					label: 'When',
-					accessor: (change: MembershipChange) => formatActivityTimestamp(change.createdAt),
+					accessor: (change: MembershipChange) => formatActivityTimestamp(change.createdAt, practiceTimeZone()),
 					datetimeAccessor: (change: MembershipChange) => change.createdAt,
 					variant: 'meta' as const
 				},

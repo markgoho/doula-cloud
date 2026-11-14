@@ -66,11 +66,11 @@
 
 	<section>
 		<h2>One still open, one already decided</h2>
-		<OfferInbox {offers} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
+		<OfferInbox timeZone="America/New_York" {offers} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 
 	<section>
 		<h2>Nothing offered</h2>
-		<OfferInbox offers={[]} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
+		<OfferInbox timeZone="America/New_York" offers={[]} onDecide={decide} practiceName="Rooted Birth Collective" engagementHref={() => '#'} />
 	</section>
 </stack-l>

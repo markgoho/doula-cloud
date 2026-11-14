@@ -277,7 +277,7 @@
 		}
 		// An audit timestamp, an instant (website.FormatUpdatedAt), read
 		// month first like every other date (#1958).
-		return formatInstant(iso);
+		return formatInstant(iso, session.timezone);
 	}
 
 	/* What Change opens (#2047): the one question its row is about, from

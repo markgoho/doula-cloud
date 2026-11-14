@@ -74,6 +74,7 @@
 	 */
 	let {
 		status,
+		timeZone,
 		hasSignedPdf,
 		amountChangedAt,
 		voidRequests = [],
@@ -99,6 +100,10 @@
 		 * so Void stays the last thing in the section (#2004). */
 		children?: Snippet;
 		status: string;
+		/**
+		The Practice's zone, which reads every time shown.
+		*/
+		timeZone: string;
 		/** The caller's own facts, after Status and any price change: a
 		 * fee, as this reader may see it (#2004). */
 		rows?: SummaryListRow[];
@@ -241,18 +246,18 @@
 	const isSignedNow = $derived(status === 'signed' && signed !== undefined);
 	const facts = $derived<FactRow[]>([
 		isSignedNow
-			? { label: 'Status', value: `Signed on ${formatInstant(signed!.at)}`, instant: signed!.at }
+			? { label: 'Status', value: `Signed on ${formatInstant(signed!.at, timeZone)}`, instant: signed!.at }
 			: { label: 'Status', value: contractStatusText(status) },
 		...(signed
 			? [
 					isSignedNow
 						? { label: 'Signed by', value: signed.by }
-						: { label: 'Signed', value: stampText(signed), instant: signed.at }
+						: { label: 'Signed', value: stampText(signed, timeZone), instant: signed.at }
 				]
 			: []),
-		...(sent ? [{ label: 'Sent', value: stampText(sent), instant: sent.at }] : []),
+		...(sent ? [{ label: 'Sent', value: stampText(sent, timeZone), instant: sent.at }] : []),
 		...(amountChangedAt
-			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt), instant: amountChangedAt }]
+			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt, timeZone), instant: amountChangedAt }]
 			: []),
 		...rows
 	]);

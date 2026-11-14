@@ -11,7 +11,7 @@
  * where it belongs.
  */
 
-import { partsIn } from './zonedTime.js';
+import { dayIn, partsIn } from './zonedTime.js';
 
 /*
  * Every screen that prints a date prints it through this file (#1958):
@@ -23,34 +23,34 @@ import { partsIn } from './zonedTime.js';
  */
 
 /**
- * A timestamp is an instant, and reads correctly in the reader's own
- * zone: "Oct 25, 2026".
+ * A timestamp is an instant, read in the Practice's zone (ADR-0036's
+ * 2026-11-13 amendment): "Oct 25, 2026".
  */
-export function formatInstant(value: string): string {
-	return formatDay(new Date(value));
+export function formatInstant(value: string, timeZone: string): string {
+	return formatDay(new Date(value), timeZone);
 }
 
 /**
- * An instant to the minute, in the reader's own zone: "Oct 25, 2026,
+ * An instant to the minute, in the Practice's zone: "Oct 25, 2026,
  * 3:04pm" -- the same day and the same 12-hour clock the Activity
  * ledger's absolute branch prints (ADR-0022), for a value that is never
  * shown relative (a message's own sent time, a ledger row).
  */
-export function formatInstantWithClock(value: string): string {
+export function formatInstantWithClock(value: string, timeZone: string): string {
 	const date = new Date(value);
-	return `${formatDay(date)}, ${formatClock(date)}`;
+	return `${formatDay(date, timeZone)}, ${formatClock(date, timeZone)}`;
 }
 
 /**
- * An instant to the second, in the reader's own zone: "Oct 25, 2026,
+ * An instant to the second, in the Practice's zone: "Oct 25, 2026,
  * 3:04:09pm". For the one place the minute is not enough to tell two
  * things apart: two Visits added in the same minute (#2666).
  */
-export function formatInstantWithSeconds(value: string): string {
+export function formatInstantWithSeconds(value: string, timeZone: string): string {
 	const date = new Date(value);
-	const clock = formatClock(date);
-	const seconds = date.getSeconds().toString().padStart(2, '0');
-	return `${formatDay(date)}, ${clock.slice(0, -2)}:${seconds}${clock.slice(-2)}`;
+	const clock = formatClock(date, timeZone);
+	const seconds = padTwoDigits(partsIn(date, timeZone).second);
+	return `${formatDay(date, timeZone)}, ${clock.slice(0, -2)}:${seconds}${clock.slice(-2)}`;
 }
 
 /**
@@ -64,24 +64,28 @@ export function formatInstantWithSeconds(value: string): string {
  */
 export function formatCalendarDay(value: string): string {
 	const [year, month, day] = value.split('-').map(Number);
-	return formatDay(new Date(year!, month! - 1, day!));
+	return formatDay(new Date(Date.UTC(year!, month! - 1, day!, 12)), 'UTC');
 }
 
 /**
  * How long ago a birth was, in whole weeks: "3 weeks postpartum", and under
  * fourteen days in days, "5 days postpartum". `birthDay` is a calendar day,
- * `YYYY-MM-DD`, counted against the reader's calendar day so a zone cannot
+ * `YYYY-MM-DD`, counted against the Practice's calendar day, so the reader's zone cannot
  * move it. For a live birth only: a pregnancy that ended in a loss, or in an
  * outcome nobody learned, is never called postpartum (`docs/personas/loss-client.md`).
  * `now` defaults to the real clock and is a parameter only so a test can pin it.
  */
-export function formatPostpartum(birthDay: string, now: Date = new Date()): string {
-	const [year, month, day] = birthDay.split('-').map(Number);
-	const born = Date.UTC(year!, month! - 1, day!);
-	const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+export function formatPostpartum(birthDay: string, timeZone: string, now: Date = new Date()): string {
+	const born = utcOfDay(birthDay);
+	const today = utcOfDay(dayIn(now, timeZone));
 	const days = Math.max(0, Math.round((today - born) / DAY_MS));
 	if (days < 14) return `${days} day${days === 1 ? '' : 's'} postpartum`;
 	return `${Math.floor(days / 7)} weeks postpartum`;
+}
+
+function utcOfDay(value: string): number {
+	const [year, month, day] = value.split('-').map(Number);
+	return Date.UTC(year!, month! - 1, day!);
 }
 
 /**
@@ -110,7 +114,7 @@ export function formatCalendarMonth(value: string): string {
  * "Yesterday, 9:31am", "Tuesday, 4:40pm") in the order given rather than
  * flipping at local midnight regardless of how recent the event was.
  */
-export function formatActivityTimestamp(value: string, now: Date = new Date()): string {
+export function formatActivityTimestamp(value: string, timeZone: string, now: Date = new Date()): string {
 	const date = new Date(value);
 	const diffMs = now.getTime() - date.getTime();
 	if (diffMs < MINUTE_MS) return 'just now';
@@ -122,12 +126,11 @@ export function formatActivityTimestamp(value: string, now: Date = new Date()): 
 		const hours = Math.floor(diffMs / HOUR_MS);
 		return `${hours} hour${hours === 1 ? '' : 's'} ago`;
 	}
-	if (diffMs < 2 * DAY_MS) return `Yesterday, ${formatClock(date)}`;
+	if (diffMs < 2 * DAY_MS) return `Yesterday, ${formatClock(date, timeZone)}`;
 	if (diffMs < WEEK_MS) {
-		const weekday = date.toLocaleDateString('en-US', { weekday: 'long' });
-		return `${weekday}, ${formatClock(date)}`;
+		return `${LONG_WEEKDAYS[partsIn(date, timeZone).weekday]}, ${formatClock(date, timeZone)}`;
 	}
-	return formatInstantWithClock(value);
+	return formatInstantWithClock(value, timeZone);
 }
 
 /**
@@ -209,38 +212,25 @@ export function formatCalendarWeekdayDay(value: string, timeZone: string, now: D
  * file's existing `formatClock` for the hour rather than a second clock
  * format of its own.
  */
-export function formatPortalVisit(value: string, hasHappened: boolean): string {
+export function formatPortalVisit(value: string, hasHappened: boolean, timeZone: string): string {
 	const date = new Date(value);
-	if (hasHappened) return formatDay(date);
-	return formatWeekdayDayClock(date, { withYear: false });
-}
-
-/**
- * "Thu Sep 4, 2:00pm", or "Thu Sep 4, 2027, 2:00pm" with the year.
- */
-function formatWeekdayDayClock(date: Date, { withYear }: { withYear: boolean }): string {
-	return `${formatWeekdayDay(date, { withYear })}, ${formatClock(date)}`;
-}
-
-/**
- * "Thu Sep 4", or "Thu Sep 4, 2027" with the year.
- */
-function formatWeekdayDay(date: Date, { withYear }: { withYear: boolean }): string {
-	const weekday = date.toLocaleDateString('en-US', { weekday: 'short' });
-	return `${weekday} ${formatDay(date, { withYear })}`;
+	if (hasHappened) return formatDay(date, timeZone);
+	const at = partsIn(date, timeZone);
+	return `${at.weekday} ${at.month} ${at.day}, ${clockText(at.hour, at.minute)}`;
 }
 
 /**
  * `<input type="datetime-local">`'s own value shape ("YYYY-MM-DDTHH:mm",
- * local time, no offset) from an ISO instant -- the inverse of what that
+ * the Practice's wall clock, no offset) from an ISO instant -- the inverse of what that
  * control hands back on input, so a Visit's existing scheduled value
  * (#250) can prefill the field it is being changed through. `""` for
  * `undefined`/`null`, the value an empty control itself reports.
  */
-export function toDatetimeLocalValue(value: string | undefined): string {
+export function toDatetimeLocalValue(value: string | undefined, timeZone: string): string {
 	if (!value) return '';
 	const date = new Date(value);
-	return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}T${padTwoDigits(date.getHours())}:${padTwoDigits(date.getMinutes())}`;
+	const at = partsIn(date, timeZone);
+	return `${dayIn(date, timeZone)}T${padTwoDigits(at.hour)}:${padTwoDigits(at.minute)}`;
 }
 
 function padTwoDigits(n: number): string {
@@ -252,22 +242,33 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
-/** "Aug 18, 2026", or "Aug 18" without the year -- the absolute calendar
- * day every formatter here prints, written once. Short month, then day,
- * then year: the order a person in the United States reads and says a
- * date in, which ADR-0022's 2026-10-24 amendment (#1940) sets for the
- * Activity ledger's absolute branch ("Aug 14, 2026, 8:12pm") and every
- * Visit formatter here. */
-function formatDay(date: Date, { withYear = true } = {}): string {
-	const day = `${date.toLocaleDateString('en-US', { month: 'short' })} ${date.getDate()}`;
-	return withYear ? `${day}, ${date.getFullYear()}` : day;
+const LONG_WEEKDAYS: Record<string, string> = {
+	Sun: 'Sunday',
+	Mon: 'Monday',
+	Tue: 'Tuesday',
+	Wed: 'Wednesday',
+	Thu: 'Thursday',
+	Fri: 'Friday',
+	Sat: 'Saturday'
+};
+
+/** "Aug 18, 2026" -- the absolute calendar day every formatter here prints,
+ * written once, as `timeZone` reads `date`. Short month, then day, then
+ * year: the order a person in the United States reads and says a date in,
+ * which ADR-0022's 2026-10-24 amendment (#1940) sets for the Activity
+ * ledger's absolute branch ("Aug 14, 2026, 8:12pm") and every Visit
+ * formatter here. */
+function formatDay(date: Date, timeZone: string): string {
+	const at = partsIn(date, timeZone);
+	return `${at.month} ${at.day}, ${at.year}`;
 }
 
 /** "9:31am" / "12:00pm" -- 12-hour, lowercase am/pm, no periods, minutes
  * always two digits, hour never zero-padded and never 0 (noon and
  * midnight are both 12, per the 12-hour clock's own convention). */
-function formatClock(date: Date): string {
-	return clockText(date.getHours(), date.getMinutes());
+function formatClock(date: Date, timeZone: string): string {
+	const at = partsIn(date, timeZone);
+	return clockText(at.hour, at.minute);
 }
 
 function clockText(hours24: number, minuteOfHour: number): string {

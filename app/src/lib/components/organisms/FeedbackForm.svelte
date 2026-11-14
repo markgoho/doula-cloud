@@ -23,6 +23,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { appBuild } from '#lib/build.js';
 	import { formatInstantWithClock } from '#lib/dates.js';
+	import { readerTimeZone } from '#lib/zonedTime.js';
 	import { browserName, kindOptions, type ClientInput, type Kind } from '#lib/feedback.js';
 	import { errorsFromCause, type FormError } from '#lib/formErrors.js';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -98,7 +99,8 @@
 		const items = [`the page you were on: ${page.url.pathname}`];
 		if (roleAndPractice) items.push(`your role and Practice: ${roleAndPractice}`);
 		items.push(
-			`the time: ${formatInstantWithClock(new Date().toISOString())}`,
+			// The device's own moment, sent to the operator: no Practice zone applies.
+			`the time: ${formatInstantWithClock(new Date().toISOString(), readerTimeZone())}`,
 			`your screen width and browser: ${window.innerWidth}px, ${browserName(navigator.userAgent)}`,
 			`the version of DoulaCloud: ${appBuild()}`
 		);

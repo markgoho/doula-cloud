@@ -37,6 +37,7 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { firstName, fullName } from '#lib/personName.js';
 	import {
@@ -109,7 +110,7 @@
 				label: 'Client',
 				value: `${fullName(request.client)} — ${request.client.isNewToPractice ? 'new to this Practice' : 'already known here'}`
 			},
-			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt)}` },
+			{ label: 'Asked by', value: `${request.requestedByName} on ${formatInstant(request.requestedAt, practiceTimeZone())}` },
 			{ label: 'Kind of work', value: kindLabel(request.kind) },
 			{ label: 'Due date', value: request.dueDate ? formatCalendarDay(request.dueDate) : 'Not given' },
 			// #1596: the third fact the asker states. A fact and never a
@@ -131,7 +132,7 @@
 
 	function engagementLabel(engagement: ApprovalDetail['engagements'][number]): string {
 		const kind = kindLabel(engagement.kind);
-		return `${kind} work, started ${formatInstant(engagement.createdAt)} — ${engagementStatusText(engagement.status)}`;
+		return `${kind} work, started ${formatInstant(engagement.createdAt, practiceTimeZone())} — ${engagementStatusText(engagement.status)}`;
 	}
 
 	function clientHref(clientId: string): string {

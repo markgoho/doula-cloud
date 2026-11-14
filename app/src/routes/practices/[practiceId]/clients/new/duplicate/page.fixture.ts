@@ -7,7 +7,7 @@
  * would have. The two matches this page offers are seeded there too --
  * see that file for why they are not set here.
  */
-import type { RouteFixture } from '../../../../../routeFixture.js';
+import { practiceSession, type RouteFixture } from '../../../../../routeFixture.js';
 import { practiceId, seedIntake } from '../intakeFixture.js';
 import Page from './+page.svelte';
 
@@ -18,6 +18,7 @@ export const fixture: RouteFixture = {
 	name: 'The intake duplicate check',
 	component: Page,
 	params: { practiceId },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/clients/new/duplicate',
 	readyText: 'Is this the same person?'
 };

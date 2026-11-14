@@ -294,9 +294,9 @@ export function clientFactRows(offer: ClientFields): { label: string; value: str
  * when, and always the minute it was sent, so two fee-less Offers from
  * erased Clients still read apart (#2389).
  */
-export function decideDescription(offer: ClientFields & { offeredAt: string }): string {
+export function decideDescription(offer: ClientFields & { offeredAt: string }, timeZone: string): string {
 	const due = offer.dueDate && `due ${formatCalendarDay(offer.dueDate)}`;
-	const sent = `sent ${formatInstantWithClock(offer.offeredAt)}`;
+	const sent = `sent ${formatInstantWithClock(offer.offeredAt, timeZone)}`;
 	const description = [offer.clientArea, due, sent].filter(Boolean).join(', ');
 	return description.charAt(0).toUpperCase() + description.slice(1);
 }

@@ -16,7 +16,7 @@
  */
 import type { ClientEditFields, CollisionMatch } from '#lib/client.js';
 import { editMergeDraft } from '#lib/editMergeDraft.svelte.js';
-import type { RouteFixture } from '../../../../../../routeFixture.js';
+import { practiceSession, type RouteFixture } from '../../../../../../routeFixture.js';
 import { seedDetails } from '../detailsFixture.js';
 import Page from './+page.svelte';
 
@@ -95,6 +95,7 @@ export const fixture: RouteFixture = {
 	name: 'The duplicate check on a change to a Client’s details',
 	component: Page,
 	params: { practiceId, clientId },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/clients/client-1/details/duplicate',
 	readyText: 'Is this the same person?'
 };

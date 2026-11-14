@@ -21,6 +21,7 @@
 		type AwaitingVoidRequest
 	} from '#lib/contract.js';
 	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
@@ -52,7 +53,7 @@
 		},
 		{
 			label: 'Waiting since',
-			accessor: (contract: AwaitingContract) => formatActivityTimestamp(contract.createdAt),
+			accessor: (contract: AwaitingContract) => formatActivityTimestamp(contract.createdAt, practiceTimeZone()),
 			variant: 'meta' as const,
 			datetimeAccessor: (contract: AwaitingContract) => contract.createdAt
 		}
@@ -82,7 +83,7 @@
 		{ label: 'Reason', accessor: (request: AwaitingVoidRequest) => request.reason },
 		{
 			label: 'Waiting since',
-			accessor: (request: AwaitingVoidRequest) => formatActivityTimestamp(request.createdAt),
+			accessor: (request: AwaitingVoidRequest) => formatActivityTimestamp(request.createdAt, practiceTimeZone()),
 			variant: 'meta' as const,
 			datetimeAccessor: (request: AwaitingVoidRequest) => request.createdAt
 		}
@@ -104,6 +105,9 @@
 {/snippet}
 
 {#snippet content()}
+	{#if practiceZoneNote()}
+		<Text text={practiceZoneNote()!} tone="muted" />
+	{/if}
 	<DataTable
 		{columns}
 		rows={contracts.items}
