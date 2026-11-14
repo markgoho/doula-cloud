@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -105,13 +104,22 @@ func TestListQueryPlanAtScale(t *testing.T) {
 		     INSERT INTO engagements (client_id, practice_id, status, kind, due_date)
 		     SELECT id, $1, 'active', 'birth', current_date + (row_number() OVER ())::int % 300 FROM c
 		     RETURNING id
+		 ), k AS (
+		     INSERT INTO contracts (engagement_id, status, prose, amount_cents)
+		     SELECT id, 'signed', '', 150000 FROM e
+		     RETURNING id
+		 ), i AS (
+		     INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
+		     SELECT $1, k.id, gen_random_uuid()::text, 'open'::invoice_status, 75000, gen_random_uuid()::text, now()
+		       FROM k
+		     RETURNING id
 		 )
 		 INSERT INTO engagement_attachments (engagement_id, staff_id, origin, attached_by)
 		 SELECT id, $3, 'granted'::attachment_origin, $3 FROM (SELECT id, row_number() OVER () AS n FROM e) numbered WHERE n % 14 = 0`,
 		practiceID, rowCount, doulaID); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	if _, err := db.Admin.ExecContext(t.Context(), `ANALYZE clients, engagements, engagement_attachments`); err != nil {
+	if _, err := db.Admin.ExecContext(t.Context(), `ANALYZE clients, engagements, engagement_attachments, contracts, invoices`); err != nil {
 		t.Fatalf("analyze: %v", err)
 	}
 
@@ -121,18 +129,27 @@ func TestListQueryPlanAtScale(t *testing.T) {
 		t.Fatalf("disable jit: %v", err)
 	}
 
-	middle := pagecursor.Cursor{At: time.Now().AddDate(0, 0, 150).UTC().Truncate(24 * time.Hour), ID: "00000000-0000-0000-0000-000000000000"}
+	const zeroID = "00000000-0000-0000-0000-000000000000"
+	middle := listAfter{at: time.Now().AddDate(0, 0, 150).UTC().Truncate(24 * time.Hour), id: zeroID}
+	middleName := listAfter{name: "perf client 2500", id: zeroID}
+	middleOwed := listAfter{owed: 75000, at: middle.at, id: zeroID}
 	for name, c := range map[string]struct {
 		filters listFilters
-		after   *pagecursor.Cursor
+		order   string
+		after   *listAfter
 	}{
-		"first page, default filter":     {listFilters{withWorkOnly: true}, nil},
-		"later page":                     {listFilters{withWorkOnly: true}, &middle},
-		"doula":                          {listFilters{withWorkOnly: true, doula: doulaID}, nil},
-		"name":                           {listFilters{withWorkOnly: true, name: "client 49"}, nil},
-		"doula, name, owes, no contract": {listFilters{withWorkOnly: true, doula: doulaID, name: "client 4", owes: true, noContract: true}, nil},
+		"first page, default filter":     {listFilters{withWorkOnly: true}, orderDue, nil},
+		"later page":                     {listFilters{withWorkOnly: true}, orderDue, &middle},
+		"doula":                          {listFilters{withWorkOnly: true, doula: doulaID}, orderDue, nil},
+		"name":                           {listFilters{withWorkOnly: true, name: "client 49"}, orderDue, nil},
+		"doula, name, owes, no contract": {listFilters{withWorkOnly: true, doula: doulaID, name: "client 4", owes: true, noContract: true}, orderDue, nil},
+		"order by name, first page":      {listFilters{withWorkOnly: true}, orderName, nil},
+		"order by name, later page":      {listFilters{withWorkOnly: true}, orderNameDesc, &middleName},
+		"order by owed, first page":      {listFilters{withWorkOnly: true}, orderOwed, nil},
+		"order by owed, later page":      {listFilters{withWorkOnly: true}, orderOwed, &middleOwed},
+		"order by owed, doula":           {listFilters{withWorkOnly: true, doula: doulaID}, orderOwed, nil},
 	} {
-		query, args := listClientsQuery(practiceID, c.filters, c.after)
+		query, args := listClientsQuery(practiceID, c.filters, c.order, c.after)
 		explainWithinCeiling(t, tx, name, query, args)
 	}
 }
