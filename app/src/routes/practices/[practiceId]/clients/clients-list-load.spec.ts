@@ -46,6 +46,14 @@ describe('clients/+page.ts load (#539)', () => {
 	});
 
 	// She has no header link, so the count would decide nothing.
+	it('registers the read "Try again" invalidates', async () => {
+		const depends = vi.fn();
+		const parent = vi.fn().mockResolvedValue(membership(['doula'], true));
+		await load(loadEvent(load, { params: { practiceId }, parent, fetch: loadFetch, depends }));
+
+		expect(depends).toHaveBeenCalledWith('app:clients');
+	});
+
 	it('reads no count for a contractor Doula', async () => {
 		await runLoad(['doula'], true);
 
