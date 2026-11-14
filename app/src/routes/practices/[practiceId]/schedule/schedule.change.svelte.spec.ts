@@ -3,6 +3,7 @@
  * wait for Apply. Its own file because the clock here is real after the first
  * await (the bar settles for 250ms).
  */
+// jscpd:ignore-start -- the route-spec imports and mock preamble every list's spec repeats
 import { page as testPage, userEvent } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SvelteURL } from 'svelte/reactivity';
@@ -10,7 +11,6 @@ import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import Page from './ScheduleScreen.svelte';
-// jscpd:ignore-start -- the route-spec mock preamble every list's spec repeats
 import { practiceSession, toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 import { apiFetchWithSession, goto, pageState } from '#testing/routePage.js';
