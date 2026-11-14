@@ -260,44 +260,55 @@ type ListRequest struct {
 // narrowing, and writes nothing. Must be mounted behind staffauth.Middleware.
 func ListByNameHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		var req ListRequest
-		if !apierr.DecodeJSON(w, r, &req) {
-			return
-		}
-		doula, ok := doulaParam(w, req.Doula)
+		req, ok := decodeListRequest(w, r)
 		if !ok {
 			return
 		}
-		req.Doula = doula
-		text, ok := nameParam(w, req.Name)
-		if !ok {
-			return
-		}
-		req.Name = text
 		serveList(w, r, c, req)
 	})
 }
 
-// serveList answers the Clients list for filters already read and checked
-// by either entry point.
-func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
+// decodeListRequest reads and checks the body of a Clients list POST: its
+// Doula and its name, which the list and the export both take.
+func decodeListRequest(w http.ResponseWriter, r *http.Request) (ListRequest, bool) {
+	var req ListRequest
+	if !apierr.DecodeJSON(w, r, &req) {
+		return req, false
+	}
+	doula, ok := doulaParam(w, req.Doula)
+	if !ok {
+		return req, false
+	}
+	req.Doula = doula
+	text, ok := nameParam(w, req.Name)
+	if !ok {
+		return req, false
+	}
+	req.Name = text
+	return req, true
+}
+
+// filtersFor reads the filters of a Clients list request the way every
+// reader of the list does, answering a 400 or 403 for one the reader may
+// not ask. The export asks the same questions of the same body.
+func filtersFor(w http.ResponseWriter, c staffauth.Call, req ListRequest) (listFilters, bool) {
 	if !isKnownOrder(req.Order) {
 		apierr.WriteError(w, msgInvalidOrder, http.StatusBadRequest)
-		return
+		return listFilters{}, false
 	}
 	if req.Order == orderOwed && c.Reader.IsAmbientContractor() {
 		apierr.WriteError(w, msgOwedOrderContractor, http.StatusBadRequest)
-		return
+		return listFilters{}, false
 	}
 	if req.Owes && c.Reader.IsAmbientContractor() {
 		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)
-		return
+		return listFilters{}, false
 	}
 	due, ok := dueParams(w, req.Due, req.DueFrom, req.DueTo)
 	if !ok {
-		return
+		return listFilters{}, false
 	}
-	filters := listFilters{
+	return listFilters{
 		due:   due,
 		doula: req.Doula,
 		name:  req.Name,
@@ -306,6 +317,15 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		withWorkOnly: !req.All || req.Owes || req.NoContract,
 		owes:         req.Owes,
 		noContract:   req.NoContract,
+	}, true
+}
+
+// serveList answers the Clients list for filters already read and checked
+// by either entry point.
+func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
+	filters, ok := filtersFor(w, c, req)
+	if !ok {
+		return
 	}
 
 	var after *listAfter

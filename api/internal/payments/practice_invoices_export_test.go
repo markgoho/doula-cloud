@@ -1,24 +1,18 @@
 package payments_test
 
 import (
-	"encoding/csv"
-	"encoding/json/v2"
-	"io"
 	"net/http"
 	"slices"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/csvexport/exporttest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/payments"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
-
-const actorStaffKind = "staff"
 
 var exportColumns = []string{
 	"Client", "Invoice", "Care", "Billed", "Amount", "Currency", "State",
@@ -33,37 +27,12 @@ func (e *env) exportRequest(req payments.PracticeInvoicesExportRequest) *http.Re
 // exportRows is the CSV the export answers with, header first.
 func (e *env) exportRows(req payments.PracticeInvoicesExportRequest) [][]string {
 	e.T.Helper()
-	resp := e.exportRequest(req)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		e.T.Fatalf("export status = %d, want 200", resp.StatusCode)
-	}
-	rows, err := csv.NewReader(resp.Body).ReadAll()
-	if err != nil {
-		e.T.Fatalf("read export: %v", err)
-	}
-	return rows
+	return exporttest.Read(e.T, func() *http.Response { return e.exportRequest(req) })
 }
 
 func (e *env) exportActivity() []string {
 	e.T.Helper()
-	rows, err := e.DB.Admin.QueryContext(e.T.Context(), `SELECT diff::text FROM activity WHERE practice_id = $1 AND action = 'invoices_exported' ORDER BY created_at`, e.Practice.ID)
-	if err != nil {
-		e.T.Fatalf("read export activity: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var diffs []string
-	for rows.Next() {
-		var d string
-		if err := rows.Scan(&d); err != nil {
-			e.T.Fatalf("scan export activity: %v", err)
-		}
-		diffs = append(diffs, d)
-	}
-	if err := rows.Err(); err != nil {
-		e.T.Fatalf("read export activity: %v", err)
-	}
-	return diffs
+	return exporttest.Diffs(e.T, e.DB, e.Practice.ID, "invoices_exported")
 }
 
 // TestExportPracticeInvoices_WritesTheTwelveColumnsAndNothingElse proves
@@ -234,21 +203,7 @@ func TestExportPracticeInvoices_AnswersAFileNamedForThePracticesDay(t *testing.T
 	resp := e.exportRequest(payments.PracticeInvoicesExportRequest{})
 	defer func() { _ = resp.Body.Close() }()
 
-	if got := resp.Header.Get("Content-Type"); got != "text/csv; charset=utf-8" {
-		t.Fatalf("Content-Type = %q", got)
-	}
-	if got := resp.Header.Get("Content-Disposition"); got != `attachment; filename="invoices-2026-11-14.csv"` {
-		t.Fatalf("Content-Disposition = %q", got)
-	}
-	if got := resp.Header.Get("Invoice-Count"); got != "0" {
-		t.Fatalf("Invoice-Count = %q, want 0", got)
-	}
-	if got := resp.Header.Get("RateLimit-Limit"); got != "30" {
-		t.Fatalf("RateLimit-Limit = %q, want 30", got)
-	}
-	if got := resp.Header.Get("RateLimit-Remaining"); got != "29" {
-		t.Fatalf("RateLimit-Remaining = %q, want 29", got)
-	}
+	exporttest.RequireFile(t, resp, "invoices-2026-11-14.csv", "Invoice-Count", "0")
 }
 
 // TestExportPracticeInvoices_RecordsWhoWhenWhatAndNeverTheSearch proves the
@@ -264,33 +219,8 @@ func TestExportPracticeInvoices_RecordsWhoWhenWhatAndNeverTheSearch(t *testing.T
 
 	e.exportRows(payments.PracticeInvoicesExportRequest{View: unpaidView, Search: "quinn", SentFrom: dayOct25, SentTo: dayOct25, Order: orderLarge})
 
-	var subjectKind, subjectID, actorKind, actorStaff, diff string
-	var at time.Time
-	if err := e.DB.Admin.QueryRowContext(t.Context(),
-		`SELECT subject_kind, subject_id::text, actor_kind::text, actor_staff_id::text, created_at, diff::text
-		   FROM activity WHERE practice_id = $1 AND action = 'invoices_exported'`, e.Practice.ID,
-	).Scan(&subjectKind, &subjectID, &actorKind, &actorStaff, &at, &diff); err != nil {
-		t.Fatalf("read the export's Activity row: %v", err)
-	}
-	if subjectKind != "practice" || subjectID != e.Practice.ID || actorKind != actorStaffKind || actorStaff != e.Staff.ID || !at.Equal(now) {
-		t.Fatalf("row = %s %s by %s %s at %s, want the Practice by the Staff member at %s", subjectKind, subjectID, actorKind, actorStaff, at, now)
-	}
-	var scope map[string]any
-	if err := json.Unmarshal([]byte(diff), &scope); err != nil {
-		t.Fatalf("diff %s: %v", diff, err)
-	}
 	want := map[string]any{"view": unpaidView, "sentFrom": dayOct25, "sentTo": dayOct25, "order": orderLarge, "rows": 2.0, "searched": true}
-	if len(scope) != len(want) {
-		t.Fatalf("diff = %s, want exactly %v", diff, want)
-	}
-	for k, v := range want {
-		if scope[k] != v {
-			t.Fatalf("diff[%s] = %v, want %v (diff %s)", k, scope[k], v, diff)
-		}
-	}
-	if strings.Contains(strings.ToLower(diff), "quinn") {
-		t.Fatalf("diff %s holds the search's text", diff)
-	}
+	exporttest.RequireRecorded(t, e.DB, e.Practice.ID, e.Staff.ID, "invoices_exported", now, want, "quinn")
 }
 
 // TestExportPracticeInvoices_NoSearchNoPeriodRecordsTheBareView proves a
@@ -334,28 +264,12 @@ func TestExportPracticeInvoices_ARefusedRequestWritesNoRow(t *testing.T) {
 // an Owner and an Admin, and neither a Doula nor a contractor Doula, who
 // get a 403 and no row.
 func TestExportPracticeInvoices_OnlyAnOwnerOrAnAdmin(t *testing.T) {
-	cases := []struct {
-		role fixture.RoleCase
-		want int
-	}{
-		{fixture.OwnerCase, http.StatusOK},
-		{fixture.AdminCase, http.StatusOK},
-		{fixture.EmployeeDoulaCase, http.StatusForbidden},
-		{fixture.ContractorDoulaCase, http.StatusForbidden},
-	}
-	for _, tc := range cases {
-		t.Run(tc.role.Name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.Opts...))
-			e.expect(http.MethodPost, "/invoices/export", tc.want, reqtest.JSON(payments.PracticeInvoicesExportRequest{}))
-			wantRows := 0
-			if tc.want == http.StatusOK {
-				wantRows = 1
-			}
-			if got := len(e.exportActivity()); got != wantRows {
-				t.Fatalf("activity rows = %d, want %d", got, wantRows)
-			}
-		})
-	}
+	exporttest.RequireOwnerAndAdminOnly(t, func(t *testing.T, role fixture.RoleCase) (int, int) {
+		e := newEnv(t, signedInAs(role.Opts...))
+		resp := e.exportRequest(payments.PracticeInvoicesExportRequest{})
+		_ = resp.Body.Close()
+		return resp.StatusCode, len(e.exportActivity())
+	})
 }
 
 // TestExportPracticeInvoices_ContractorAdminIsRefusedAsTheListRefuses proves
@@ -390,31 +304,7 @@ func TestExportPracticeInvoices_AnotherPracticesInvoicesStayOut(t *testing.T) {
 // not recorded.
 func TestExportPracticeInvoices_RateLimitedAsAHeavyEndpoint(t *testing.T) {
 	e := newEnv(t)
-	for range 30 {
-		resp := e.exportRequest(payments.PracticeInvoicesExportRequest{})
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200 inside the limit", resp.StatusCode)
-		}
-	}
-
-	resp := e.exportRequest(payments.PracticeInvoicesExportRequest{})
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("31st status = %d, want 429", resp.StatusCode)
-	}
-	if resp.Header.Get("RateLimit-Limit") != "30" || resp.Header.Get("RateLimit-Remaining") != "0" {
-		t.Fatalf("headers = %v, want RateLimit-Limit 30 and RateLimit-Remaining 0", resp.Header)
-	}
-	if secs, err := strconv.Atoi(resp.Header.Get("Retry-After")); err != nil || secs <= 0 {
-		t.Fatalf("Retry-After = %q, want seconds to wait", resp.Header.Get("Retry-After"))
-	}
-	var body apierr.APIError
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil || body.Code != apierr.CodeRateLimited {
-		t.Fatalf("body = %+v (%v), want RATE_LIMITED", body, err)
-	}
-	if got := len(e.exportActivity()); got != 30 {
-		t.Fatalf("activity rows = %d, want the 30 that were served", got)
-	}
+	exporttest.RequireRateLimited(t, func() *http.Response {
+		return e.exportRequest(payments.PracticeInvoicesExportRequest{})
+	}, func() int { return len(e.exportActivity()) })
 }

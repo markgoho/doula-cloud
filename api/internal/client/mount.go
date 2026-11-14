@@ -44,6 +44,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, nudge tasknudge.Enq
 	ir.ExemptGated("POST /api/practices/{practiceId}/clients/list",
 		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
 		false, staffauth.AnyStaff, ListByNameHandler())
+	// #2891: every Client the list's filters and order match, as a CSV.
+	// Owner and Admin, the readers of the whole book leaving the product,
+	// limited as a heavy endpoint (docs/api-design.md section 6).
+	ir.ExemptGated("POST /api/practices/{practiceId}/clients/export",
+		"a read whose one write is its audit row; a replay would store a book of Client names in the idempotency table",
+		false, staffauth.OwnerAndAdmin, ExportHandler())
 	ir.Replayable("POST /api/practices/{practiceId}/clients", false, CreateHandler())
 	g.Get("/api/practices/{practiceId}/clients/{clientId}", staffauth.AnyStaff, DetailHandler())
 	ir.Exempt("PUT /api/practices/{practiceId}/clients/{clientId}",
