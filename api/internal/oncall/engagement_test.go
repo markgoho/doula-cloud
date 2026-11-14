@@ -10,9 +10,9 @@ import (
 	"doula-cloud/api/internal/testdb"
 )
 
-func (e *env) narrow(staffID string, body oncall.NarrowingRequest, want int) {
+func (e *env) narrow(staffID string, body oncall.NarrowingRequest) {
 	e.T.Helper()
-	reqtest.ExpectStatus(e.T, http.MethodPut, e.narrowURL(staffID), want, e.SignedIn, reqtest.JSON(body))
+	reqtest.ExpectStatus(e.T, http.MethodPut, e.narrowURL(staffID), http.StatusOK, e.SignedIn, reqtest.JSON(body))
 }
 
 func TestNarrowing_APrimaryAndABackupEachCarryTheirOwnDays(t *testing.T) {
@@ -20,8 +20,8 @@ func TestNarrowing_APrimaryAndABackupEachCarryTheirOwnDays(t *testing.T) {
 	backup := e.backup()
 
 	to, from := octTwentyTwo, octTwentyThree
-	e.narrow(e.Doula.ID, oncall.NarrowingRequest{To: &to}, http.StatusOK)
-	e.narrow(backup.ID, oncall.NarrowingRequest{From: &from}, http.StatusOK)
+	e.narrow(e.Doula.ID, oncall.NarrowingRequest{To: &to})
+	e.narrow(backup.ID, oncall.NarrowingRequest{From: &from})
 
 	days := map[string][2]string{}
 	for _, d := range e.panel().Doulas {
@@ -35,7 +35,7 @@ func TestNarrowing_APrimaryAndABackupEachCarryTheirOwnDays(t *testing.T) {
 	}
 
 	// Clearing puts her back on the whole window.
-	e.narrow(e.Doula.ID, oncall.NarrowingRequest{}, http.StatusOK)
+	e.narrow(e.Doula.ID, oncall.NarrowingRequest{})
 	for _, d := range e.panel().Doulas {
 		if d.StaffID == e.Doula.ID && (d.From != nil || *d.OnCallTo != windowEnd) {
 			t.Fatalf("after clearing, primary = %+v, want the whole window", d)

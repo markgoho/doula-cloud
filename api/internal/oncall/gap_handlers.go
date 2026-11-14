@@ -1,8 +1,10 @@
 package oncall
 
 import (
+	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
@@ -33,13 +35,8 @@ func CreateGapHandler(enq tasknudge.Enqueuer) http.Handler {
 			return
 		}
 
-		var gapID string
-		if err := c.tx.QueryRowContext(r.Context(),
-			`INSERT INTO engagement_coverage_gaps
-			     (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, reason, created_by)
-			 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			c.engagementID, facts.StaffID, facts.CoveringStaffID, facts.StartsAt, facts.EndsAt, facts.reason, c.actorID,
-		).Scan(&gapID); err != nil {
+		gapID, err := c.insertGap(r.Context(), facts)
+		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -160,15 +157,7 @@ func lockGapFor(w http.ResponseWriter, r *http.Request, c gapWrite, gapID string
 // finish records the write and, where the saved gap has nobody covering
 // it, queues the Notification and nudges the worker.
 func (c gapWrite) finish(w http.ResponseWriter, r *http.Request, enq tasknudge.Enqueuer, gapID string, action activity.EngagementAction, diff gapDiff, saved gapFacts) bool {
-	if err := recordGap(r.Context(), c.tx, c.practiceID, c.engagementID, c.actorID, action, diff); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return false
-	}
-	if saved.CoveringStaffID != nil {
-		return true
-	}
-	queued, err := queueGapNotice(r.Context(), c.tx, c.practiceID, gapID, c.actorID)
+	queued, err := c.recordSaved(r.Context(), gapID, action, diff, saved)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -178,6 +167,36 @@ func (c gapWrite) finish(w http.ResponseWriter, r *http.Request, enq tasknudge.E
 		tasknudge.Register(r.Context(), tasknudge.Fire(enq, tasknudge.CoverageGap))
 	}
 	return true
+}
+
+// insertGap stores a new live gap and returns its id.
+func (c gapWrite) insertGap(ctx context.Context, facts gapFacts) (string, error) {
+	var gapID string
+	err := c.tx.QueryRowContext(ctx,
+		`INSERT INTO engagement_coverage_gaps
+		     (engagement_id, staff_id, covering_staff_id, starts_at, ends_at, reason, created_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+		c.engagementID, facts.StaffID, facts.CoveringStaffID, facts.StartsAt, facts.EndsAt, facts.reason, c.actorID,
+	).Scan(&gapID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", fmt.Errorf("oncall: insert coverage gap: %w", err)
+	}
+	return gapID, nil
+}
+
+// recordSaved writes the gap action to the Engagement's Activity and,
+// where the saved gap has nobody covering it, queues the Notification.
+// It reports whether one was queued, which is when a handler nudges the
+// worker.
+func (c gapWrite) recordSaved(ctx context.Context, gapID string, action activity.EngagementAction, diff gapDiff, saved gapFacts) (bool, error) {
+	if err := recordGap(ctx, c.tx, c.practiceID, c.engagementID, c.actorID, action, diff); err != nil {
+		return false, err
+	}
+	if saved.CoveringStaffID != nil {
+		return false, nil
+	}
+	return queueGapNotice(ctx, c.tx, c.practiceID, gapID, c.actorID)
 }
 
 // writeGap re-reads the saved gap and writes it as the response.

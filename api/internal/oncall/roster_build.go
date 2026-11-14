@@ -69,7 +69,7 @@ func buildRoster(ctx context.Context, tx *sql.Tx, practiceID string, settings pr
 	slices.SortFunc(built, func(a, b builtRow) int { return compareRows(a.row, b.row, q.byCover) })
 
 	doulaAtOnce := markAtOnce(built, q.rng, q.today)
-	doulas, err := rosterDoulas(ctx, tx, practiceID, built, doulaAtOnce, filter.contractorStaffID, onHerBirths)
+	doulas, err := rosterDoulas(ctx, tx, practiceID, built, doulaAtOnce, filter.attachedStaffID, onHerBirths)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return RosterResponse{}, err
@@ -83,9 +83,9 @@ func buildRoster(ctx context.Context, tx *sql.Tx, practiceID string, settings pr
 		if q.staffID != "" && !involves(b.row, q.staffID) {
 			continue
 		}
-		if filter.contractorStaffID != "" {
+		if filter.attachedStaffID != "" {
 			for i := range b.row.OnCall {
-				if b.row.OnCall[i].StaffID != filter.contractorStaffID {
+				if b.row.OnCall[i].StaffID != filter.attachedStaffID {
 					b.row.OnCall[i].AtOnce = nil
 				}
 			}
@@ -332,7 +332,7 @@ func intersect(a, b Window) (Window, bool) {
 // Practice; a contractor holds only those on one of her births (visible)
 // that has days in the range, each described by those births alone, and
 // none of their overlaps.
-func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []builtRow, atOnce map[string][]DoulaAtOnce, contractorStaffID string, visible map[string]bool) ([]RosterDoula, error) {
+func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []builtRow, atOnce map[string][]DoulaAtOnce, attachedStaffID string, visible map[string]bool) ([]RosterDoula, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT s.id, s.name
 		   FROM practice_memberships pm
@@ -355,7 +355,7 @@ func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []bu
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("oncall: scan roster doula: %w", err)
 		}
-		if contractorStaffID != "" && !visible[d.StaffID] {
+		if attachedStaffID != "" && !visible[d.StaffID] {
 			continue
 		}
 		byID[d.StaffID] = d
@@ -401,13 +401,13 @@ func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []bu
 	out := make([]RosterDoula, 0, len(order))
 	for _, id := range order {
 		d := byID[id]
-		if contractorStaffID != "" && id != contractorStaffID && len(d.Births) == 0 {
+		if attachedStaffID != "" && id != attachedStaffID && len(d.Births) == 0 {
 			continue
 		}
 		slices.SortFunc(d.Unreachable, func(a, b Unreachable) int {
 			return cmp.Or(a.StartsAt.Compare(b.StartsAt), cmp.Compare(a.GapID, b.GapID))
 		})
-		if contractorStaffID == "" || id == contractorStaffID {
+		if attachedStaffID == "" || id == attachedStaffID {
 			d.AtOnce = atOnce[id]
 		}
 		out = append(out, *d)

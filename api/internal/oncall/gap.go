@@ -82,7 +82,6 @@ type gapWrite struct {
 // adds the on-call facts.
 func beginGapWrite(w http.ResponseWriter, r *http.Request, call staffauth.Call) (gapWrite, bool) {
 	tx, practiceID, engagementID := call.Tx, call.PracticeID, call.EngagementID
-	reader, actorID := call.Reader, call.StaffID
 
 	settings, err := loadPracticeSettings(r.Context(), tx, practiceID)
 	if err != nil {
@@ -110,15 +109,21 @@ func beginGapWrite(w http.ResponseWriter, r *http.Request, call staffauth.Call) 
 		apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, noWindowRefusal(reason), nil)
 		return gapWrite{}, false
 	}
+	return newGapWrite(call, settings, engagements[0]), true
+}
+
+// newGapWrite is the state a gap write on one Engagement needs, from the
+// caller and the Engagement's already-derived on-call facts.
+func newGapWrite(call staffauth.Call, settings practiceSettings, e engagementOnCall) gapWrite {
 	return gapWrite{
-		tx:           tx,
-		practiceID:   practiceID,
-		engagementID: engagementID,
-		actorID:      actorID,
-		isOwnerAdmin: reader.IsOwnerOrAdmin(),
-		engagement:   engagements[0],
+		tx:           call.Tx,
+		practiceID:   call.PracticeID,
+		engagementID: e.id,
+		actorID:      call.StaffID,
+		isOwnerAdmin: call.Reader.IsOwnerOrAdmin(),
+		engagement:   e,
 		zone:         settings.zone,
-	}, true
+	}
 }
 
 // isAttached reports whether staffID holds an open, granted Attachment
@@ -169,6 +174,17 @@ func (c gapWrite) accept(w http.ResponseWriter, req GapRequest) (gapFacts, bool)
 // validate checks req against the Engagement's window and Attachments,
 // returning the facts to store or writing the refusal itself.
 func (c gapWrite) validate(w http.ResponseWriter, req GapRequest) (gapFacts, bool) {
+	facts, details := c.check(req)
+	if len(details) > 0 {
+		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "The coverage gap could not be saved.", details)
+		return gapFacts{}, false
+	}
+	return facts, true
+}
+
+// check is validate without the writing: the facts to store, or the
+// refusal keyed by field.
+func (c gapWrite) check(req GapRequest) (gapFacts, map[string]string) {
 	details := map[string]string{}
 	if !c.isAttached(req.StaffID) {
 		details[fieldStaffID] = MsgNotOnCall
@@ -212,8 +228,7 @@ func (c gapWrite) validate(w http.ResponseWriter, req GapRequest) (gapFacts, boo
 	}
 
 	if len(details) > 0 {
-		apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "The coverage gap could not be saved.", details)
-		return gapFacts{}, false
+		return gapFacts{}, details
 	}
 	return gapFacts{
 		StaffID:         req.StaffID,
@@ -221,7 +236,7 @@ func (c gapWrite) validate(w http.ResponseWriter, req GapRequest) (gapFacts, boo
 		EndsAt:          req.EndsAt.UTC(),
 		CoveringStaffID: covering,
 		reason:          reason,
-	}, true
+	}, nil
 }
 
 // whyNotOnCall says why an Engagement loadEngagements did not return has

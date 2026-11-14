@@ -29,6 +29,8 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enque
 		"full-replace UPDATE of one Doula's narrowing; re-sending the same body writes and records nothing",
 		true, staffauth.OwnerAndAdmin, PutNarrowingHandler())
 
+	g.Get("/api/practices/{practiceId}/coverage-gaps/preview", staffauth.AnyStaff, PreviewGapsHandler())
+	ir.Replayable("POST /api/practices/{practiceId}/coverage-gaps", false, RecordGapsHandler(enq))
 	ir.Replayable("POST /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps", true, CreateGapHandler(enq))
 	ir.Exempt("PUT /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps/{gapId}",
 		"full replace of one gap's facts; re-sending the same body writes the same row, and at most one Notification is ever pending per gap (00114's partial unique index)",
