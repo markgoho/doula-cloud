@@ -124,8 +124,8 @@ import type { PageProps as PageProperties } from './$types';
 
 	// What a person reads when a read fails: no status code and no server
 	// text, and the first line says nothing is lost.
-	const LOAD_FAILED = 'Your Clients did not load. Nothing you saved is lost.';
-	const LOAD_MORE_FAILED = 'More Clients did not load. Nothing you saved is lost. Try again.';
+	const LOAD_FAILED = 'Your Clients did not load.';
+	const LOAD_MORE_FAILED = 'More Clients did not load. Try again.';
 
 	// Starts empty: unlike Billing and Invoices this screen fetches its own
 	// first page in the effect below rather than through a load, so every

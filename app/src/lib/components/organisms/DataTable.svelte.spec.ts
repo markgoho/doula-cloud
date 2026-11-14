@@ -132,7 +132,7 @@ const linkContentColumns = [
 ];
 
 interface SetupOptions {
-	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string; namedByRowLink?: boolean }[];
+	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowLinkLabel?: (row: Row) => string;
@@ -1491,7 +1491,7 @@ const ROW_TARGET_ACTIONS = { label: 'Actions', onRemove: () => {} };
 
 const namedStatusColumns = [
 	{ label: 'Name', accessor: (row: Row) => row.name },
-	{ label: 'Status', accessor: (row: Row) => row.status, namedByRowLink: true }
+	{ label: 'Status', accessor: (row: Row) => row.status }
 ];
 
 function followLinksNowhere() {
@@ -1729,7 +1729,7 @@ describe('DataTable.svelte whole-row click target (#2888)', () => {
 	});
 });
 
-describe('DataTable.svelte row link name carries a column (#2864)', () => {
+describe('DataTable.svelte row link name is the caller’s (#2864)', () => {
 	const sameClientTwice: Row[] = [
 		{ name: 'Ada Lovelace', status: 'Mon 9am' },
 		{ name: 'Ada Lovelace', status: 'Tue 9am' }
@@ -1752,12 +1752,11 @@ describe('DataTable.svelte row link name carries a column (#2864)', () => {
 		await expect.element(page.getByRole('link', { name: 'Ada Lovelace, Tue 9am', exact: true })).toBeVisible();
 	});
 
-	it('leaves the same fact out of the cell for a screen reader, so a row says it once', async () => {
+	it('hears every cell, the fact the link names too', async () => {
 		await setupNamed();
 
-		await expect.element(cellOf('Mon 9am')).not.toBeInTheDocument();
+		await expect.element(cellOf('Mon 9am')).toBeVisible();
 		await expect.element(page.getByRole('columnheader', { name: 'Status' })).toBeVisible();
-		await expect.element(page.getByText('Mon 9am').first()).toBeVisible();
 	});
 
 	it('hears the fact in the cell when the row has no link', async () => {
@@ -1766,29 +1765,22 @@ describe('DataTable.svelte row link name carries a column (#2864)', () => {
 		await expect.element(cellOf('Mon 9am')).toBeVisible();
 	});
 
-	it('hides the label of a compact card field with its value', async () => {
-		const { container } = await setupNamed({ recordLayout: 'compact' });
-		await page.viewport(...NARROW);
-
-		const lead = container.querySelector(':scope .record-view .compact-lead')!;
-		expect(lead.querySelector(':scope .visually-hidden')!.getAttribute('aria-hidden')).toBe('true');
-	});
-
-	it('hides the label of a compact card field in the line of fields too', async () => {
+	it('hears the label and value of every compact card field', async () => {
 		const { container } = await setupNamed({
 			columns: [
 				{ label: 'Name', accessor: (row: Row) => row.name },
 				{ label: 'Kind', accessor: () => 'Prenatal' },
-				{ label: 'Status', accessor: (row: Row) => row.status, namedByRowLink: true }
+				{ label: 'Status', accessor: (row: Row) => row.status },
+				{ label: 'Where', accessor: () => 'Home' }
 			],
 			recordLayout: 'compact'
 		});
 		await page.viewport(...NARROW);
 
-		const kind = container.querySelector(':scope .record-view .compact-lead .visually-hidden')!;
-		const status = container.querySelector(':scope .record-view .compact-field .visually-hidden')!;
-		expect(kind.hasAttribute('aria-hidden')).toBe(false);
-		expect(status.getAttribute('aria-hidden')).toBe('true');
+		const labels = container.querySelectorAll(':scope .record-view .record:first-child .visually-hidden');
+		expect([...labels].map((label) => label.textContent)).toEqual(['Kind: ', 'Status: ', 'Where: ']);
+		expect(container.querySelector(':scope .record-view .record:first-child .visually-hidden[aria-hidden]')).toBeNull();
+		expect(container.querySelector(':scope .record-view .record:first-child .compact-separator')!.getAttribute('aria-hidden')).toBe('true');
 	});
 
 	it('leaves a list card’s own label and value heard', async () => {

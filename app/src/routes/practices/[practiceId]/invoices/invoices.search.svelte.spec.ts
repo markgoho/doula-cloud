@@ -153,7 +153,7 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 		apiFetchWithSession.mockResolvedValueOnce(new Response('no', { status: 500 }));
 		await setupSearch({ search: 'Anne' });
 
-		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).toBeVisible();
+		await expect.element(testPage.getByText('Your search did not run.')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeEnabled();
 		await expect.element(testPage.getByRole('searchbox', { name: 'Reference or Client' })).toHaveValue('Anne');
 
@@ -161,7 +161,7 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 		await testPage.getByRole('button', { name: 'Try again' }).click();
 
 		await expect.element(testPage.getByRole('link', { name: overdueInvoice.clientName })).toBeVisible();
-		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Your search did not run.')).not.toBeInTheDocument();
 		expect(lastBody()).toEqual({ view: 'all', search: 'Anne', cursor: '' });
 	});
 

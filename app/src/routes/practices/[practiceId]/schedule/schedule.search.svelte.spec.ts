@@ -200,7 +200,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 		apiFetchWithSession.mockResolvedValueOnce(new Response('no', { status: 500 }));
 		await setupSearch({ search: 'Anne' });
 
-		const said = testPage.getByText('Your search did not run. Nothing you saved is lost.');
+		const said = testPage.getByText('Your search did not run.');
 		await expect.element(said).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeEnabled();
 		await expect.element(testPage.getByRole('searchbox', { name: FIELD })).toHaveValue('Anne');
@@ -208,7 +208,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 		apiFetchWithSession.mockResolvedValueOnce(found());
 		await testPage.getByRole('button', { name: 'Try again' }).click();
 
-		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Your search did not run.')).not.toBeInTheDocument();
 		expect(lastBody()).toMatchObject({ search: 'Anne', cursor: '' });
 	});
 
@@ -220,7 +220,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 		await render(Page, { hasReadFailed: true });
 
 		await expect.element(testPage.getByRole('link', { name: new RegExp(`^${earlierVisit.clientName}`) })).toBeVisible();
-		await expect.element(testPage.getByText('Your schedule did not load. Nothing you saved is lost.')).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Your schedule did not load.')).not.toBeInTheDocument();
 	});
 
 	it('answers with no read when the days are not a range', async () => {
