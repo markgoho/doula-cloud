@@ -14,6 +14,7 @@ import Page from './ScheduleScreen.svelte';
 import { practiceSession, toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 import { apiFetchWithSession, goto, pageState } from '#testing/routePage.js';
+import { afterNavigate } from '$app/navigation';
 
 vi.mock('$app/state', () => import('#testing/routePage.js'));
 vi.mock('#lib/api.js', () => import('#testing/routePage.js'));
@@ -112,6 +113,21 @@ describe('Earlier and Later (#2870)', () => {
 		await expect.element(testPage.getByRole('radio', { name: 'Choose days' })).toBeChecked();
 		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-08-08');
 		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveValue('2026-09-06');
+	});
+
+	it('keep From and To shut when Later lands on days no preset names, and open them from Choose days', async () => {
+		await setupAt();
+
+		await link('Later, Wed Oct 7 to Thu Nov 5').click();
+		pageState.url.searchParams.set('from', '2026-10-07');
+		pageState.url.searchParams.set('to', '2026-11-05');
+		(vi.mocked(afterNavigate).mock.calls.at(-1)![0] as () => void)();
+
+		await expect.element(testPage.getByRole('radio', { name: 'Next 30 days' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Choose days' })).not.toBeChecked();
+		expect(testPage.getByLabelText('From').elements()).toHaveLength(0);
+		await testPage.getByRole('radio', { name: 'Choose days' }).click();
+		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-10-07');
 	});
 
 	it('keep Mine, the Doula, the narrowing to Visits waiting and the order, and Earlier still goes earlier under latest first', async () => {

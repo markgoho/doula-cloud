@@ -273,7 +273,9 @@
 		<stack-l space="var(--space-4)">
 			<Button label="Save" loading={submission.isSubmitting} onClick={save} />
 			{#if savedMessage}
-				<Notice variant="status" message={savedMessage} />
+				<div class="saved" {@attach (element) => element.scrollIntoView({ block: 'nearest' })}>
+					<Notice variant="status" message={savedMessage} />
+				</div>
 			{/if}
 		</stack-l>
 	{/if}
@@ -294,6 +296,10 @@
 	@layer components {
 		.effect:empty {
 			display: none;
+		}
+
+		.saved {
+			scroll-margin-block-end: var(--space-4);
 		}
 
 		.last-changed {

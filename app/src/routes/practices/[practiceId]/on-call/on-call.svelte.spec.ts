@@ -65,6 +65,13 @@ function setup(properties?: Parameters<typeof render<typeof Page>>[1]) {
 	return render(Page, properties ?? { data });
 }
 
+async function applyToBeforeFrom() {
+	await testPage.getByRole('radio', { name: 'Choose days' }).click();
+	await testPage.getByLabelText('From', { exact: true }).fill('2026-11-25');
+	await testPage.getByLabelText('To', { exact: true }).fill('2026-11-20');
+	await testPage.getByRole('button', { name: 'Apply' }).click();
+}
+
 const emptyData = (overrides: Partial<OnCallPageData> = {}): OnCallPageData => ({
 	...data,
 	roster: { ...roster, windows: [], noWindow: [], doulas: [] },
@@ -78,7 +85,7 @@ describe('the on-call roster', () => {
 		await expect
 			.element(testPage.getByRole('status'))
 			.toHaveTextContent(
-				/Showing 6 births on call from Sat\sNov\s14 to Sun\sDec\s13, tonight first\. 3 need cover, 2 of them tonight\. 1 Doula on two births at once\./
+				/Showing 6 births on call from Sat\sNov\s14 to Sun\sDec\s13, nobody tonight first\. 3 need cover, 2 tonight\. 1 Doula on two births at once\./
 			);
 	});
 
@@ -387,11 +394,11 @@ describe('the roster’s filter bar', () => {
 		await expect.element(testPage.getByRole('link', { name: /^Later, / })).toBeVisible();
 	});
 
-	it('offers This week between Tonight and Next 7 days, and applies it as days=week', async () => {
+	it('offers the Days in the Schedule’s order, Tonight first, and applies This week as days=week', async () => {
 		await setup();
 
 		const radios = testPage.getByRole('radio').elements().map((radio) => radio.closest('label')?.textContent?.trim());
-		expect(radios.slice(0, 3)).toEqual(['Tonight', 'This week', 'Next 7 days']);
+		expect(radios.slice(0, 3)).toEqual(['Tonight', 'Next 7 days', 'This week']);
 		await testPage.getByRole('radio', { name: 'This week' }).click();
 
 		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`${onCallPath}?days=week`, { replaceState: false, reset: false }));
@@ -509,14 +516,67 @@ describe('the roster’s filter bar', () => {
 	it('answers a To before From in place, beside the fields, keeping the days typed', async () => {
 		await setup();
 
-		await testPage.getByRole('radio', { name: 'Choose days' }).click();
-		await testPage.getByLabelText('From', { exact: true }).fill('2026-11-25');
-		await testPage.getByLabelText('To', { exact: true }).fill('2026-11-20');
-		await testPage.getByRole('button', { name: 'Apply' }).click();
+		await applyToBeforeFrom();
 
 		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Choose a To day that is the same as the From day or later.');
 		await expect.element(testPage.getByLabelText('From', { exact: true })).toHaveValue('2026-11-25');
 		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('draws neither the result line nor the births while the days typed are refused', async () => {
+		await setup();
+		await expect.element(testPage.getByRole('status').first()).toHaveTextContent(/Showing \d+ births/);
+
+		await applyToBeforeFrom();
+
+		expect(testPage.getByText(/Showing \d+ births/).elements()).toHaveLength(0);
+		expect(testPage.getByRole('table', { name: /^Births on call/ }).elements()).toHaveLength(0);
+	});
+
+	it('keeps From and To shut when Later lands on days no preset names, and opens them from Choose days', async () => {
+		setAddress('?days=7');
+		await setup({ data: { ...data, view: { ...data.view, preset: 7 } } });
+
+		await testPage.getByRole('link', { name: /^Later, / }).click();
+		pageState.url.searchParams.delete('days');
+		pageState.url.searchParams.set('from', '2026-11-21');
+		pageState.url.searchParams.set('to', '2026-11-27');
+		arrived();
+
+		await expect.element(testPage.getByRole('radio', { name: 'Next 7 days' })).not.toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'Choose days' })).not.toBeChecked();
+		expect(testPage.getByLabelText('From', { exact: true }).elements()).toHaveLength(0);
+		await testPage.getByRole('radio', { name: 'Choose days' }).click();
+		await expect.element(testPage.getByLabelText('From', { exact: true })).toHaveValue('2026-11-21');
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveValue('2026-11-27');
+	});
+
+	it('opens From and To when the address names days no step chose', async () => {
+		setAddress('?from=2026-11-21&to=2026-11-27');
+		await setup({ data: { ...data, view: { ...data.view, chosen: { from: '2026-11-21', to: '2026-11-27' } } } });
+
+		await expect.element(testPage.getByLabelText('From', { exact: true })).toHaveValue('2026-11-21');
+	});
+
+	it('names a birth’s only Doula once, on the line that says who holds tonight', async () => {
+		await setup();
+
+		const casey = roster.windows.find((row) => row.clientName === 'Casey Estrada')!;
+		const doulaName = casey.onCall[0]!.name;
+		const row = testPage.getByRole('row', { name: /Casey Estrada/ });
+		await expect.element(row).toBeVisible();
+
+		const text = row.element().textContent ?? '';
+		expect(text).toContain(`Tonight: ${doulaName}`);
+		expect(text.split(doulaName)).toHaveLength(2);
+	});
+
+	it('counts the births in the table’s caption', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('table', { name: `Births on call (${roster.windows.length})` }))
+			.toBeVisible();
 	});
 
 	it('words a range over 92 days in place, and a From before today', async () => {

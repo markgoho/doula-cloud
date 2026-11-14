@@ -151,6 +151,23 @@ describe('the on-call rule screen', () => {
 		expect(week().query()).toBeNull();
 	});
 
+	it('brings the saved message into view when Save sits at the foot of the screen', async () => {
+		await testPage.viewport(1280, 480);
+		await setup();
+		apiFetchWithSession.mockResolvedValueOnce(
+			jsonResponse({ startRule: 'gestational_week', startWeek: 37, graceDays: 14 })
+		);
+
+		await save();
+
+		await expect.element(savedStatus()).toBeVisible();
+		await vi.waitFor(() => {
+			const { top, bottom } = savedStatus().element().getBoundingClientRect();
+			expect(top).toBeGreaterThanOrEqual(0);
+			expect(bottom).toBeLessThanOrEqual(window.innerHeight);
+		});
+	});
+
 	it('sends the rule a person chose, and says what saved', async () => {
 		await setup();
 		apiFetchWithSession.mockResolvedValueOnce(

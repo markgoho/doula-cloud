@@ -331,8 +331,13 @@
 	// A field typed in since the navigation began is hers: the seed leaves it.
 	let isSearchTouched = false;
 
+	// The key of the days a step landed on: the fields stay shut for them, so the bar does not move.
+	let steppedKey: string | undefined;
+	let isStepped = $state(false);
+
 	function seedDrafts() {
 		if (!isSearchTouched) draftSearch = appliedSearch;
+		isStepped = view.chosen !== undefined && (isStepped || steppedKey === wantedKey);
 		draftChoice = view.chosen ? 'choose' : scheduleChoiceOfPreset(view.preset);
 		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
@@ -359,6 +364,7 @@
 
 	// Picking "Choose days" starts its fields on the days the choice before it showed.
 	function chooseDays(choice: ScheduleDaysChoice) {
+		isStepped = false;
 		if (choice === 'choose' && draftChoice !== 'choose') {
 			const shown = scheduleDaysOf(
 				{ ...view, chosen: undefined, preset: schedulePresetOfChoice(draftChoice) },
@@ -381,7 +387,7 @@
 		order: draftOrder
 	});
 
-	const isChoosingDays = $derived(draftChoice === 'choose');
+	const isChoosingDays = $derived(draftChoice === 'choose' && !isStepped);
 
 	let isApplying = $state(false);
 	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
@@ -460,6 +466,7 @@
 	const later = $derived(scheduleStep(view, 1, timeZone, now));
 	function step(event: MouseEvent, to: ScheduleView) {
 		event.preventDefault();
+		steppedKey = isChoosingDays ? undefined : viewKey(to, appliedSearch);
 		void show(scheduleHref(basePath, to), appliedSearch);
 	}
 
@@ -620,7 +627,7 @@
 		>
 			<!-- The Clients list's two rows: the days with their own visible question, then the fields and Apply. -->
 			{#snippet switches()}
-				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline>
+				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={isStepped ? undefined : draftChoice} onChange={chooseDays} isInline>
 					{#snippet trailing()}
 						<!-- Each steps the days the reader sees by their own length; the days it lands on are in its name. Together, so they wrap as one. -->
 						<span class="steps">

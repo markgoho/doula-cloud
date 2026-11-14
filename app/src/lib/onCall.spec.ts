@@ -24,6 +24,7 @@ import {
 	saveGap,
 	saveNarrowing,
 	TOO_MANY_DAYS,
+	isTonightTheOnlyName,
 	tonightLine,
 	coveringWords,
 	onCallDaysOf,
@@ -363,6 +364,26 @@ describe('who holds a birth tonight', () => {
 
 		expect(tonightLine(two)).toBe('Tonight: Maya Primary');
 	});
+
+	it('knows the tonight line is the only place a one-Doula birth names its Doula', () => {
+		const covering = { staffId: 'staff-2', name: 'Lena Vasquez', coveringFor: 'Maya Primary' };
+
+		expect(isTonightTheOnlyName(windowRow({ tonight: tonightHeld }))).toBe(true);
+		expect(isTonightTheOnlyName(windowRow())).toBe(false);
+		expect(isTonightTheOnlyName(windowRow({ tonight: nobodyTonight }))).toBe(false);
+		expect(isTonightTheOnlyName(windowRow({ tonight: { holders: [covering], isNobody: false } }))).toBe(false);
+		expect(
+			isTonightTheOnlyName(
+				windowRow({
+					tonight: tonightHeld,
+					onCall: [
+						{ staffId: 'staff-1', name: 'Maya Primary', from: '2026-10-09', to: '2026-10-20', narrowed: true },
+						{ staffId: 'staff-2', name: 'Bo Ng', from: '2026-10-21', to: '2026-11-13', narrowed: true }
+					]
+				})
+			)
+		).toBe(false);
+	});
 });
 
 describe('the reader and a gap’s cover in words', () => {
@@ -438,14 +459,14 @@ describe('the result line', () => {
 	it('says how many births, that every one is covered, the days and the order', () => {
 		const line = say(roster([windowRow({ tonight: tonightHeld })]));
 
-		expect(line).toBe('Showing 1 birth on call from Sat Oct 17 to Sun Nov 15, tonight first. Every one is covered.');
+		expect(line).toBe('Showing 1 birth on call from Sat Oct 17 to Sun Nov 15, nobody tonight first. Every one is covered.');
 	});
 
-	it('says how many need cover and how many of them tonight', () => {
+	it('says how many need cover and how many of those tonight', () => {
 		const rows = [needsTonight, needs, needsTonight, windowRow()];
 
 		expect(say(roster(rows))).toBe(
-			'Showing 4 births on call from Sat Oct 17 to Sun Nov 15, tonight first. 3 need cover, 2 of them tonight.'
+			'Showing 4 births on call from Sat Oct 17 to Sun Nov 15, nobody tonight first. 3 need cover, 2 tonight.'
 		);
 		const mixed = roster([needs, windowRow()]);
 
@@ -472,7 +493,7 @@ describe('the result line', () => {
 
 	it('says nothing of cover under Needing cover', () => {
 		expect(say(roster([needs, needs]), { needsCover: true })).toBe(
-			'Showing 2 births that need cover from Sat Oct 17 to Sun Nov 15, tonight first.'
+			'Showing 2 births that need cover from Sat Oct 17 to Sun Nov 15, nobody tonight first.'
 		);
 		expect(say(roster([needs]), { needsCover: true })).toContain('1 birth that needs cover');
 	});
@@ -502,6 +523,12 @@ describe('the result line', () => {
 		expect(say(none, { isMine: true })).toBe('You are on call for no births from Sat Oct 17 to Sun Nov 15.');
 		expect(say(none, { doulaName: 'Priya Raman' })).toBe('No births for Priya Raman from Sat Oct 17 to Sun Nov 15.');
 		expect(say(none, { needsCover: true })).toBe('No births need cover from Sat Oct 17 to Sun Nov 15.');
+		expect(say(none, { needsCover: true, doulaName: 'Rowan Petrosyan' })).toBe(
+			'Rowan Petrosyan has no births that need cover from Sat Oct 17 to Sun Nov 15.'
+		);
+		expect(say(none, { needsCover: true, isMine: true })).toBe(
+			'You have no births that need cover from Sat Oct 17 to Sun Nov 15.'
+		);
 		expect(say(none, {}, { from: TODAY, to: TODAY })).toBe('No births on call on Sat Oct 17.');
 	});
 

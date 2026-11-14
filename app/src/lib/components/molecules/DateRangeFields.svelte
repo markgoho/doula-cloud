@@ -30,9 +30,11 @@
 		 */
 		earliest?: string;
 		/**
-		 * The last day either box accepts (`YYYY-MM-DD`, the native `max`).
+		 * The last day the To box accepts (`YYYY-MM-DD`, the native `max`).
 		 * Absent, any day. The On call roster passes the From day plus 91,
-		 * its longest range.
+		 * its longest range. The From box takes none: a `max` that follows
+		 * the From day changes under the digits being typed into it, and the
+		 * browser drops the segment typed so far ("1" then "2" reads 02).
 		 */
 		latest?: string;
 	}
@@ -71,7 +73,6 @@
 					type="date"
 					name="from"
 					min={earliest}
-					max={latest}
 					value={from}
 					onInput={(value) => (from = value)}
 				/>
