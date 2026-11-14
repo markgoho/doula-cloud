@@ -80,6 +80,13 @@ const ORDER = {
 const WIDE = 1280;
 const PHONE = 414;
 
+// What the form's GET carries as `order` when Apply is pressed.
+async function sentOrder(onSubmit: { mock: { calls: unknown[][] } }) {
+	await page.getByRole('button', { name: 'Apply' }).click();
+	const form = (onSubmit.mock.calls[0]![0] as SubmitEvent).target as HTMLFormElement;
+	return new FormData(form).get('order');
+}
+
 const applyBox = () => page.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect();
 const statusBox = () => page.getByRole('status').element().getBoundingClientRect();
 
@@ -140,10 +147,7 @@ describe('FilterBar order', () => {
 
 		const select = page.getByLabelText('Order');
 		await expect.element(select).toHaveValue('latest');
-		await page.getByRole('button', { name: 'Apply' }).click();
-
-		const form = (onSubmit.mock.calls[0]![0] as SubmitEvent).target as HTMLFormElement;
-		expect(new FormData(form).get('order')).toBe('latest');
+		expect(await sentOrder(onSubmit)).toBe('latest');
 	});
 
 	it('reports a pick before Apply', async () => {
@@ -165,11 +169,45 @@ describe('FilterBar order', () => {
 		expect(order.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
-	it('stays in view beside the name at a phone width while the folded fields fold', async () => {
+	it('folds with the folded fields at a phone width, behind one summary and one tab stop', async () => {
 		await setup({ order: ORDER, foldsFieldsOnly: true, withFolded: true, width: PHONE });
 
-		await expect.element(page.getByLabelText('Order')).toBeVisible();
+		await expect.element(page.getByText('More filters and order')).toBeVisible();
+		await expect.element(page.getByLabelText('Order')).not.toBeVisible();
 		await expect.element(page.getByLabelText('From')).not.toBeVisible();
+
+		await page.getByText('More filters and order').click();
+
+		await expect.element(page.getByLabelText('Order')).toBeVisible();
+		await expect.element(page.getByLabelText('From')).toBeVisible();
+	});
+
+	it('folds alone behind a summary reading "Order" where nothing else folds', async () => {
+		await setup({ order: ORDER, foldsFieldsOnly: true, width: PHONE });
+
+		await expect.element(page.getByText('Order', { exact: true }).first()).toBeVisible();
+		await expect.element(page.getByLabelText('Order')).not.toBeVisible();
+	});
+
+	it('still sends the order from the form while the fold is closed', async () => {
+		const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+		await setup({ order: { ...ORDER, value: 'latest' }, foldsFieldsOnly: true, withFolded: true, width: PHONE, onSubmit });
+
+		await expect.element(page.getByLabelText('Order')).not.toBeVisible();
+		expect(await sentOrder(onSubmit)).toBe('latest');
+	});
+
+	it('is as wide for every option, so a pick never moves Apply', async () => {
+		await setup({ order: ORDER });
+		const select = page.getByLabelText('Order');
+		const widthOf = () => select.element().getBoundingClientRect().width;
+		const apply = () => page.getByRole('button', { name: 'Apply' }).element().getBoundingClientRect().left;
+		const [width, left] = [widthOf(), apply()];
+
+		await select.selectOptions('Latest first');
+
+		expect(widthOf()).toBe(width);
+		expect(apply()).toBe(left);
 	});
 
 	it('follows the fields in the bar that folds whole too', async () => {

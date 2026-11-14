@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+// MsgInvalidCursor is the refusal a list writes for a cursor that does not
+// decode or that another view or order minted (#2869). No screen shows it.
+const MsgInvalidCursor = "invalid cursor"
+
 // Cursor is a position in a list ordered by (At, ID) -- the timestamp the
 // list sorts on, and the row id that breaks a tie between two rows sharing
 // it. Both are needed: a bare timestamp skips or repeats rows written in

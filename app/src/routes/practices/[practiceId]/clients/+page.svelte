@@ -350,10 +350,13 @@ import type { PageProps as PageProperties } from './$types';
 		if (!form) return;
 		// A switch the bar does not draw has no box to read, and keeps its address.
 		const adoptChecked = (key: string, isDraftChecked: boolean, set: (isChecked: boolean) => void) => {
-			const box = form.elements.namedItem(key) as HTMLInputElement | null;
-			if (!box || box.checked === isDraftChecked) return;
+			// The "Also show" box is in the form twice (one for each bar), so read every box of the name.
+			const boxes = [...form.querySelectorAll<HTMLInputElement>(`input[name="${CSS.escape(key)}"]`)];
+			if (boxes.length === 0) return;
+			const isChecked = boxes.some((box) => box.checked);
+			if (isChecked === isDraftChecked) return;
 			touched.push(key);
-			set(box.checked);
+			set(isChecked);
 		};
 		adoptChecked('all', isAllChecked, (value) => (isAllChecked = value));
 		adoptChecked('mine', isMineChecked, (value) => (isMineChecked = value));
@@ -1094,6 +1097,7 @@ import type { PageProps as PageProperties } from './$types';
 				applied={appliedTags.length > 0 ? applied : undefined}
 				appliedCount={appliedTags.length}
 				foldsFieldsOnly
+				foldLabel={!isImplyingCare || doulas.length > 0 ?'More filters and order' : 'Order'}
 				order={{
 					options: CLIENT_ORDER_OPTIONS,
 					value: draftOrder,
@@ -1139,7 +1143,9 @@ import type { PageProps as PageProperties } from './$types';
 					</fieldset>
 					<!-- Last, so drawing it or not moves nothing. The default list is ADR-0017's: current care, past care, or a pending Request. The BFF ANDs this with a narrowing that implies care (mine, owing, no Contract, a Doula), so ticking it beside one changes nothing and it is not drawn. -->
 					{#if !isImplyingCare}
-						{@render alsoShow(false)}
+						<div class="also-wide">
+							{@render alsoShow(false)}
+						</div>
 					{:else}
 						<!-- Unseen and out of reach; FilterBar keeps its box where the bar is wide, so the switches, the fields and Apply keep their place. -->
 						<div data-holds-space aria-hidden="true" inert>
@@ -1169,18 +1175,26 @@ import type { PageProps as PageProperties } from './$types';
 						{/snippet}
 					</LabeledField>
 				</div>
-				{#if doulas.length > 0}
-					<!-- Only an Owner or an Admin reads the roster this lists (ADR-0008). Drawn while "Only my Clients" is on too, so Apply never moves: the BFF ANDs the filters, so mine and a Doula is a narrower list. -->
-					<div class="field doula">
-						<LabeledField label="Doula" width={30}>
-							{#snippet children({ id, describedBy, invalid, width })}
-								<Select {id} {describedBy} {invalid} {width} name="doula" options={doulaOptions} bind:value={draftDoula} onChange={() => {
-									touched.push('doula');
-								}} />
-							{/snippet}
-						</LabeledField>
-					</div>
-				{/if}
+				<!-- Folds with the Order select below 42rem. Where the bar is wide the fold is not drawn, and the box above sits on the switches row as it always has; this copy is the narrow bar's. Both are the one form field, `all`. -->
+				{#snippet folded()}
+					{#if doulas.length > 0}
+						<!-- Only an Owner or an Admin reads the roster this lists (ADR-0008). Drawn while "Only my Clients" is on too, so Apply never moves: the BFF ANDs the filters, so mine and a Doula is a narrower list. -->
+						<div class="field doula">
+							<LabeledField label="Doula" width={30}>
+								{#snippet children({ id, describedBy, invalid, width })}
+									<Select {id} {describedBy} {invalid} {width} name="doula" options={doulaOptions} bind:value={draftDoula} onChange={() => {
+										touched.push('doula');
+									}} />
+								{/snippet}
+							</LabeledField>
+						</div>
+					{/if}
+					{#if !isImplyingCare}
+						<div class="also-narrow">
+							{@render alsoShow(false)}
+						</div>
+					{/if}
+				{/snippet}
 			</FilterBar>
 		{/if}
 
@@ -1416,6 +1430,30 @@ import type { PageProps as PageProperties } from './$types';
 
 		.doula {
 			--field-width: 34ch;
+		}
+
+		/* The "Also show" box is drawn twice, once for each bar: on the switches row where the bar is wide, in the fold where it is not. */
+		.also-wide {
+			display: contents;
+		}
+
+		.also-narrow {
+			display: none;
+		}
+
+		/* In the fold the fields are a column, so a field's flex basis would be a height. */
+		@container filter-bar (width < 42rem) {
+			.also-wide {
+				display: none;
+			}
+
+			.also-narrow {
+				display: block;
+			}
+
+			.doula {
+				flex: none;
+			}
 		}
 	}
 </style>

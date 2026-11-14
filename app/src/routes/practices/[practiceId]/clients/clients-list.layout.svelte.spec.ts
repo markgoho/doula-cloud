@@ -169,6 +169,11 @@ async function ready() {
 	await document.fonts.ready;
 }
 
+const point = (element: Element) => {
+	const box = element.getBoundingClientRect();
+	return `${Math.round(box.left)},${Math.round(box.top)},${Math.round(box.width)}`;
+};
+const applyBox = () => testPage.getByRole('button', { name: 'Apply' }).element();
 const px = (value: string) => Number(value.replace('px', ''));
 
 // The words an element shows: from its first visible text to its last, leaving out text that is
@@ -393,14 +398,17 @@ describe('the columns between filter states', () => {
 	});
 
 	// At 1024px the fields, with Order (#2869), leave Apply's line no room for a tag and "Clear
-	// filters", so one filter's take the line under it and the table moves by that line (62px).
-	// At 1280px the bar holds the longest wording on one line and one tag beside Apply.
+	// filters", so one filter's take the line under it and the table moves by exactly that line,
+	// its height and the row gap. At 1280px the bar holds one tag beside Apply and nothing moves.
+	// Apply, Order and the fields never move.
 	it.each([
-		[1280, 1, 1],
-		[1024, 2, 64]
-	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines, oneFilter) => {
+		[1280, 1],
+		[1024, 2]
+	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines) => {
 		const tops: number[] = [];
 		const heights: number[] = [];
+		const tagLines: number[] = [];
+		const fixedPoints: string[] = [];
 		const states = [
 			[{}, ''],
 			[{ owes: 'true' }, ''],
@@ -415,6 +423,11 @@ describe('the columns between filter states', () => {
 			const status = document.querySelector('#clients-result')!;
 			heights.push(document.querySelector('.count')!.getBoundingClientRect().height / px(getComputedStyle(status).lineHeight));
 			tops.push(document.querySelector('table.table-view thead')!.getBoundingClientRect().top);
+			const applyButton = applyBox();
+			const tags = document.querySelector('ul.applied');
+			const rowGap = px(getComputedStyle(document.querySelector('.fields')!).rowGap);
+			tagLines.push(tags && tags.getBoundingClientRect().top >= applyButton.getBoundingClientRect().bottom - 1 ? tags.getBoundingClientRect().height + rowGap : 0);
+			fixedPoints.push([applyButton, document.querySelector('select[name=order]')!, document.querySelector('input[type=search]')!].map((element) => point(element)).join(' '));
 			cleanup();
 			for (const key of Object.keys(queries)) pageState.url.searchParams.delete(key);
 		}
@@ -425,7 +438,8 @@ describe('the columns between filter states', () => {
 		const [rest, owes, three, name] = heights;
 		for (const height of [rest!, owes!, name!]) expect(height, `count line heights ${heights}`).toBeCloseTo(lines, 0);
 		expect(three!, `count line heights ${heights}`).toBeGreaterThanOrEqual(lines - 0.5);
-		for (const top of [tops[1]!, tops[3]!]) expect(Math.abs(top - tops[0]!), `table tops ${tops}`).toBeLessThanOrEqual(oneFilter);
+		for (const index of [1, 3]) expect(Math.abs(tops[index]! - tops[0]! - tagLines[index]!), `table tops ${tops}, tag lines ${tagLines}`).toBeLessThanOrEqual(1);
+		expect(new Set(fixedPoints).size, `Apply, Order and the Name by state: ${fixedPoints.join(' | ')}`).toBe(1);
 		expect(tops[2]! - tops[0]!, `the three tags' lines, table tops ${tops}`).toBeLessThan(100);
 	});
 
@@ -441,6 +455,23 @@ describe('the columns between filter states', () => {
 			expect(Math.abs(oneDoula[column]! - base[column]!), `${column} moved under a Doula`).toBeLessThanOrEqual(1);
 		}
 		expect(Math.abs(noContract.Date! - base.Money!), 'Date took Money’s place').toBeLessThanOrEqual(1);
+	});
+});
+
+describe('the Order select', () => {
+	it.each([1280, 1024, 375])('holds Apply and Order where they were under every order, at %ipx', async (width) => {
+		await renderListScreen({ width, height: 800, respond: () => jsonResponse({ items: [seedLikeClients[0]!], hasMore: false }, 200) });
+		await ready();
+		if (width < 672) await testPage.getByText('More filters and order').click();
+
+		const order = testPage.getByLabelText('Order', { exact: true });
+		const spots: string[] = [];
+		for (const option of ['Soonest due first', 'Name, A to Z', 'Name, Z to A', 'Most owed first']) {
+			await order.selectOptions(option);
+			spots.push([point(applyBox()), point(order.element())].join(' '));
+		}
+
+		expect(new Set(spots).size, `Apply and Order by order: ${spots.join(' | ')}`).toBe(1);
 	});
 });
 
