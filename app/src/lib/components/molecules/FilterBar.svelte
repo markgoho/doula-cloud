@@ -179,6 +179,14 @@
 		 */
 		foldsFieldsOnly?: boolean;
 		/**
+		 * With `foldsFieldsOnly`: the switches fold too, in a narrow column, as the
+		 * first thing inside the fold, then `children`, then `folded`, then Order.
+		 * Apply, the tags and the result line stay in view. From 42rem the fold is
+		 * not drawn and the switches take a full row above the fields. Its consumer
+		 * is the On call roster.
+		 */
+		foldsSwitches?: boolean;
+		/**
 		 * Leave the check of a field's own `min`, `max` and `required` to the
 		 * route, which words a refusal beside the fields, so the browser's tooltip
 		 * does not come first. Its consumer is the On call roster, whose From and
@@ -243,6 +251,7 @@
 		hasUntaggedFilter = false,
 		switches,
 		foldsFieldsOnly = false,
+		foldsSwitches = false,
 		novalidate = false,
 		isBusy = false,
 		folded,
@@ -463,16 +472,24 @@
 		<fieldset>
 			<legend class="quiet">{legend}</legend>
 			<stack-l class="controls" space="var(--space-1)">
-				{#if switches}
+				{#if switches && !foldsSwitches}
 					<cluster-l class="switches" space="var(--space-related)" align="center">
 						{@render switches()}
 					</cluster-l>
 				{/if}
 				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
-					{@render children?.()}
-					{#if folded || order}
+					{#if !foldsSwitches}{@render children?.()}{/if}
+					{#if folded || order || foldsSwitches}
 						<details class="fold" open={isOpen} ontoggle={(event) => (isOpen = event.currentTarget.open)}>
 							<summary class="toggle">{summary}</summary>
+							{#if foldsSwitches}
+								{#if switches}
+									<cluster-l class="switches" space="var(--space-related)" align="center">
+										{@render switches()}
+									</cluster-l>
+								{/if}
+								{@render children?.()}
+							{/if}
 							{@render folded?.()}
 							{@render orderField()}
 						</details>
@@ -810,6 +827,11 @@
 
 			.fold::details-content {
 				display: contents;
+			}
+
+			.fold > .switches {
+				flex-basis: 100%;
+				margin-block-end: calc(var(--space-1) - var(--space-related));
 			}
 
 			.toggle {

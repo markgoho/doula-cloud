@@ -460,12 +460,14 @@
 		},
 		{
 			label: 'Days on call',
+			recordLabel: 'On call',
 			track: 'calc(24ch + 2 * var(--data-table-cell-inset))',
 			accessor: (row: RosterWindow) => daysOnCallText(row.window, today, timeZone, now),
 			content: daysCell
 		},
 		{
 			label: 'Due',
+			recordLabel: 'Due',
 			track: 'calc(11ch + 2 * var(--data-table-cell-inset))',
 			accessor: (row: RosterWindow) => (row.dueDate ? say(row.dueDate) : ''),
 			content: dueCell
@@ -592,9 +594,9 @@
 	</div>
 {/snippet}
 
-{#snippet daysCell(row: RosterWindow)}
-	<div class="lines">
-		<span>{@render days(row.window, 'Until')}</span>
+{#snippet daysCell(row: RosterWindow, tableView: DataTableView)}
+	<div class={tableView === 'record' ? 'card-days' : 'lines'}>
+		<span>{@render days(row.window, tableView === 'record' ? 'until' : 'Until')}</span>
 		{#if row.ownStart}
 			<span class="line wraps">{ownStartWords(row.ownStart, roster!.rule)}</span>
 		{/if}
@@ -701,7 +703,8 @@
 			hasUntaggedFilter={view.order !== ''}
 			foldsFieldsOnly
 			novalidate
-			foldLabel={canMine || isOwnerView ? undefined : 'Order'}
+			foldsSwitches
+			foldLabel={canMine || isOwnerView ? 'Days and filters' : 'Days and order'}
 			order={{ options: orderOptions, value: view.order, onChange: (value) => (draftOrder = value as OnCallOrder) }}
 			{isBusy}
 		>
@@ -900,6 +903,14 @@
 			flex-direction: column;
 			align-items: start;
 			gap: var(--space-1);
+		}
+
+		.card-days {
+			display: contents;
+		}
+
+		.card-days > .line {
+			margin-block-start: var(--space-1);
 		}
 
 		.state {
