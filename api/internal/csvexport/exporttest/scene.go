@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/csvexport"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
@@ -24,7 +25,7 @@ func NewScene(t *testing.T, refuse bool, opts ...fixture.SceneOption) *fixture.S
 	spec := csvexport.Spec{Limit: "test_export", Action: activity.ActionClientsExported, File: "test"}
 	handler := csvexport.Handler(spec, func(w http.ResponseWriter, _ *http.Request, _ staffauth.Call, env csvexport.Env) (csvexport.File, bool) {
 		if refuse {
-			http.Error(w, "refused", http.StatusBadRequest)
+			apierr.WriteError(w, "That download is refused.", http.StatusBadRequest)
 			return csvexport.File{}, false
 		}
 		return csvexport.File{

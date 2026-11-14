@@ -15,6 +15,7 @@ import (
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/fixture"
+	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -167,10 +168,9 @@ func RequireRateLimited(t *testing.T, send func() *http.Response, rows func() in
 		// coverage:ignore reason: a test helper's own failure path, reached only when the download is wrong
 		t.Fatalf("Retry-After = %q, want seconds to wait", resp.Header.Get("Retry-After"))
 	}
-	var body apierr.APIError
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil || body.Code != apierr.CodeRateLimited {
+	if body := reqtest.Decode[apierr.APIError](t, resp); body.Code != apierr.CodeRateLimited {
 		// coverage:ignore reason: a test helper's own failure path, reached only when the download is wrong
-		t.Fatalf("body = %+v (%v), want RATE_LIMITED", body, err)
+		t.Fatalf("body = %+v, want RATE_LIMITED", body)
 	}
 	if got := rows(); got != 30 {
 		// coverage:ignore reason: a test helper's own failure path, reached only when the download is wrong
