@@ -19,6 +19,7 @@
 	import { formatScheduledVisit } from '#lib/dates.js';
 	import { visitDoulaText, visitTypeLabel } from '#lib/engagementDetail.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
+	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
 	import { readerTimeZone, zoneNote as zoneNoteOf } from '#lib/zonedTime.js';
@@ -122,6 +123,9 @@
 	 * the busy state, the focus and the way back to a row all compare.
 	 */
 	const appliedSearch = $derived((page.state.scheduleSearch ?? '').trim());
+	$effect(() => {
+		holdListSearch('schedule', appliedSearch);
+	});
 	const viewKey = (of: ScheduleView, search = '') => `${scheduleHref('', of)}\n${search}`;
 	const wantedKey = $derived(viewKey(view, appliedSearch));
 

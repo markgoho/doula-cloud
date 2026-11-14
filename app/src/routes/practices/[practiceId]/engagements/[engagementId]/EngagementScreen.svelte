@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onDestroy, onMount } from 'svelte';
+	import type { ListBack } from '#lib/listOrigin.svelte.js';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadClientDetail, type ClientDetail } from '#lib/clientDetail.js';
@@ -193,8 +194,9 @@
 	// the navigation runs, and that ends before this screen mounts.
 	let {
 		data,
-		outcome
-	}: { data: Omit<PageData, 'read'> & EngagementSummary; outcome?: string } = $props();
+		outcome,
+		back
+	}: { data: Omit<PageData, 'read'> & EngagementSummary; outcome?: string; back?: ListBack } = $props();
 	const detail = $derived(data);
 
 	// The Contract's PDF download opens to an Owner, an Admin, and an
@@ -3591,8 +3593,9 @@
 <RecordDetail
 	title={detail.clientDisplayName}
 	{outcome}
-	backHref={clientsHref}
-	backLabel="Clients"
+	backHref={back?.href(clientsHref) ?? clientsHref}
+	backLabel={back?.label('Clients') ?? 'Clients'}
+	onBack={back?.go}
 	{summary}
 	{actions}
 	isContentsShown
