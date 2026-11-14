@@ -114,6 +114,8 @@ A list a reader can reorder (#2869) takes the order as a query parameter and kee
 
 The Schedule (`GET /api/practices/{id}/visits`) is the first list on it: empty is soonest first, `latest` is `ORDER BY v.scheduled_at DESC, v.id DESC`.
 
+The Invoices list (`GET /api/practices/{id}/invoices`, and the `order` field of the `POST .../invoices/list` body) is the second. Empty is the view's own order: sent newest first on the whole book, payment due earliest first on Unpaid and Overdue. The others are `sent-newest`, `sent-oldest`, `due-earliest`, `due-latest`, `amount-largest` and `amount-smallest`. Its cursor is bound to the view and the order as the request named them, so a cursor from another view or order is a 400. Sent, payment due and amount are NOT NULL, so no order has a rule for where a missing value sorts.
+
 ---
 
 ## 5. Keep Default Payloads Lean (Use `?include=`)

@@ -1,5 +1,6 @@
 import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import {
+	invoiceOrderOf,
 	invoicesViewOf,
 	practiceInvoicesPath,
 	type PracticeInvoiceListData,
@@ -31,11 +32,13 @@ export const load: PageLoad = ({
 	// carries it through, because every later page of the same list has to
 	// ask for the same view.
 	const view = invoicesViewOf(url.searchParams);
-	const path = practiceInvoicesPath(params.practiceId, undefined, view);
+	const order = invoiceOrderOf(url.searchParams, view);
+	const path = practiceInvoicesPath(params.practiceId, undefined, view, order);
 	return {
 		read: mapRead(streamRead<PracticeInvoicePage>(path, fetch), (invoices) => ({
 			...invoices,
-			view
+			view,
+			order
 		}))
 	};
 };

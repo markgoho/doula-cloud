@@ -183,10 +183,97 @@ export function invoicesViewOf(search: Pick<URLSearchParams, 'get'>): InvoicesVi
 }
 
 /**
- * The query string that names a view, empty for the whole book.
+ * The orders the Invoices list is read in (#2869). The empty one is the
+ * view's own: sent, newest first on the whole book, payment due, earliest
+ * first on Unpaid and Overdue.
  */
-export function invoicesViewQuery(view: InvoicesView): string {
-	return view === 'all' ? '' : `?show=${view}`;
+export type InvoiceOrder =
+	| ''
+	| 'sent-newest'
+	| 'sent-oldest'
+	| 'due-earliest'
+	| 'due-latest'
+	| 'amount-largest'
+	| 'amount-smallest';
+
+type NamedInvoiceOrder = Exclude<InvoiceOrder, ''>;
+
+const INVOICE_ORDERS: Record<NamedInvoiceOrder, { label: string; words: string; column: string; direction: 'ascending' | 'descending' }> = {
+	'sent-newest': { label: 'Sent, newest first', words: 'newest first', column: 'Sent', direction: 'descending' },
+	'sent-oldest': { label: 'Sent, oldest first', words: 'oldest first', column: 'Sent', direction: 'ascending' },
+	'due-earliest': { label: 'Payment due, earliest first', words: 'earliest payment due first', column: 'Payment', direction: 'ascending' },
+	'due-latest': { label: 'Payment due, latest first', words: 'latest payment due first', column: 'Payment', direction: 'descending' },
+	'amount-largest': { label: 'Largest amount first', words: 'largest amount first', column: 'Money', direction: 'descending' },
+	'amount-smallest': { label: 'Smallest amount first', words: 'smallest amount first', column: 'Money', direction: 'ascending' }
+};
+
+const INVOICE_ORDER_NAMES = Object.keys(INVOICE_ORDERS) as NamedInvoiceOrder[];
+
+/**
+ * The order the BFF reads a view in when no order is named.
+ */
+export function invoiceViewOrder(view: InvoicesView): NamedInvoiceOrder {
+	return view === 'all' ? 'sent-newest' : 'due-earliest';
+}
+
+/**
+ * The order an address names for a view: an unknown name, and the name of
+ * the view's own order, are the empty order, so a link never carries what
+ * the view does anyway.
+ */
+export function invoiceOrderOf(search: Pick<URLSearchParams, 'get'>, view: InvoicesView): InvoiceOrder {
+	const named = search.get('order');
+	const order = INVOICE_ORDER_NAMES.find((name) => name === named);
+	return order ? orderForView(order, view) : '';
+}
+
+/**
+ * An order as the view carries it: the view's own order is the empty one.
+ */
+export function orderForView(order: InvoiceOrder, view: InvoicesView): InvoiceOrder {
+	return order === invoiceViewOrder(view) ? '' : order;
+}
+
+/**
+ * The Order select's options for a view: the empty one says the view's own
+ * order in words, and the other five follow; the view's own is not offered
+ * twice.
+ */
+export function invoiceOrderOptions(view: InvoicesView): { value: InvoiceOrder; label: string }[] {
+	const own = invoiceViewOrder(view);
+	return [
+		{ value: '', label: INVOICE_ORDERS[own].label },
+		...INVOICE_ORDER_NAMES
+			.filter((order) => order !== own)
+			.map((order) => ({ value: order, label: INVOICE_ORDERS[order].label }))
+	];
+}
+
+/**
+ * The words of an applied order, as the tag says them: "Order: Sent, oldest first".
+ */
+export function invoiceOrderTag(order: NamedInvoiceOrder): string {
+	return `Order: ${INVOICE_ORDERS[order].label}`;
+}
+
+/**
+ * The column an order sorts on, for the table's header.
+ */
+export function invoiceOrderedBy(order: InvoiceOrder, view: InvoicesView): { column: string; direction: 'ascending' | 'descending' } {
+	const { column, direction } = INVOICE_ORDERS[order || invoiceViewOrder(view)];
+	return { column, direction };
+}
+
+/**
+ * The query string that names a view and an order, empty for the whole
+ * book in its own order.
+ */
+export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = ''): string {
+	const query = new URLSearchParams();
+	if (view !== 'all') query.set('show', view);
+	if (order) query.set('order', order);
+	const text = query.toString();
+	return text ? `?${text}` : '';
 }
 
 /** What the Practice-wide Invoice route's `load` hands its page: one page
@@ -195,17 +282,26 @@ export function invoicesViewQuery(view: InvoicesView): string {
  * has to ask for the same one. */
 export interface PracticeInvoiceListData extends PracticeInvoicePage {
 	view: InvoicesView;
+	order: InvoiceOrder;
 }
 
 /** The Practice-wide Invoice list's path -- exported so the route's
  * `load` can call `apiFetch` on it directly and handle 401/403 the way
  * SvelteKit needs (see the billing route's `+page.ts` for why a
  * role-gated read loads there rather than in `onMount`). */
-export function practiceInvoicesPath(practiceId: string, cursor?: string, view: InvoicesView = 'all'): string {
+export function practiceInvoicesPath(
+	practiceId: string,
+	cursor?: string,
+	view: InvoicesView = 'all',
+	order: InvoiceOrder = ''
+): string {
 	const path = `/api/practices/${practiceId}/invoices`;
 	const query = new URLSearchParams();
 	if (view !== 'all') {
 		query.set(view, 'true');
+	}
+	if (order) {
+		query.set('order', order);
 	}
 	if (cursor) {
 		query.set('cursor', cursor);
@@ -225,15 +321,16 @@ export async function loadPracticeInvoices(
 	practiceId: string,
 	cursor?: string,
 	view: InvoicesView = 'all',
-	search = ''
+	search = '',
+	order: InvoiceOrder = ''
 ): Promise<PracticeInvoicePage> {
 	const response = search
 		? await fetcher(`/api/practices/${practiceId}/invoices/list`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ view, search, cursor: cursor ?? '' })
+				body: JSON.stringify({ view, search, cursor: cursor ?? '', ...(order && { order }) })
 			})
-		: await fetcher(practiceInvoicesPath(practiceId, cursor, view));
+		: await fetcher(practiceInvoicesPath(practiceId, cursor, view, order));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -854,6 +951,11 @@ const VIEW_ORDER: Record<InvoicesView, string> = {
 	overdue: 'longest overdue first'
 };
 
+// The words the line ends on: the view's own, or the order the reader chose.
+function orderWords(view: InvoicesView, order: InvoiceOrder): string {
+	return order === '' ? VIEW_ORDER[view] : INVOICE_ORDERS[order].words;
+}
+
 /**
  * The Invoices list's result line, the status of its filter bar (#2746):
  * how many rows are on screen, of how many the view holds, which view, and
@@ -869,28 +971,32 @@ export function invoicesResultSummary(
 	shown: number,
 	hasMore: boolean,
 	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>,
-	search = ''
+	search = '',
+	order: InvoiceOrder = ''
 ): string {
+	const words = orderWords(view, order);
 	const kind = view === 'all' ? '' : `${view} `;
 	if (search) {
 		if (shown === 0) return `No ${kind}Invoice matches "${search}".`;
 		const matching = `matching "${search}"`;
-		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${words}.`;
 		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}.`;
-		return `Showing ${shown} ${kind}Invoices ${matching}, ${VIEW_ORDER[view]}.`;
+		return `Showing ${shown} ${kind}Invoices ${matching}, ${words}.`;
 	}
 	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
 	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
-	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
+	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${words}.`;
 	if (shown === 1) return `Showing 1 ${kind}Invoice.`;
-	return `Showing ${shown} ${kind}Invoices, ${VIEW_ORDER[view]}.`;
+	return `Showing ${shown} ${kind}Invoices, ${words}.`;
 }
 
 /** The longest wording the result line can say, which the filter bar
  * reserves room for so the list does not move when the line changes. */
 export const INVOICES_RESULT_RULER = (['all', 'unpaid', 'overdue'] as const)
-	.map((view) =>
-		invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 })
+	.flatMap((view) =>
+		(['', ...Object.keys(INVOICE_ORDERS)] as InvoiceOrder[]).map((order) =>
+			invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 }, '', order)
+		)
 	)
 	.toSorted((a, b) => b.length - a.length)[0];
 
