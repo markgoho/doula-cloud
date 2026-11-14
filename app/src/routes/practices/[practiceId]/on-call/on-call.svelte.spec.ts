@@ -10,6 +10,7 @@ import { addDays } from '#lib/visitSchedule.js';
 // the schedule route's own spec for the full reasoning.
 import '#lib/styles/app.css';
 import Page from './OnCallScreen.svelte';
+import { inReaderZone } from '#lib/testZone.js';
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture } from './page.fixture.js';
 import type { OnCallPageData } from './+page.js';
@@ -28,6 +29,8 @@ const goto = vi.hoisted(() => vi.fn());
 vi.mock('$app/navigation', () => ({ goto }));
 
 const { practiceId } = fixture.params;
+
+inReaderZone('America/New_York');
 
 beforeEach(() => {
 	goto.mockReset();
@@ -137,7 +140,7 @@ describe('the on-call roster', () => {
 		// Said relative to today, as the schedule's own spec does:
 		// `rosterHref` omits a day that equals the default range, so a
 		// literal pair would assert a different URL on the day it matched.
-		const { from: today, to: defaultTo } = defaultRange();
+		const { from: today, to: defaultTo } = defaultRange(new Date(), 'America/New_York');
 		const chosenFrom = addDays(today, 5);
 		const chosenTo = addDays(defaultTo, 10);
 
@@ -156,6 +159,26 @@ describe('the on-call roster', () => {
 		await expect
 			.element(testPage.getByRole('status'))
 			.toHaveTextContent(/births on call, \d+ needing cover\./);
+	});
+
+	it('draws no zone note for a reader in the Practice’s zone', async () => {
+		await setup();
+
+		await expect.element(testPage.getByText(/Times are in this Practice/)).not.toBeInTheDocument();
+	});
+
+	it('says once, under the result line, which zone the times are in when the Practice’s is another', async () => {
+		const session = (pageState.data as { session: object }).session;
+		pageState.data = { session: { ...session, timezone: 'Asia/Tokyo' } };
+		try {
+			await setup();
+
+			await expect
+				.element(testPage.getByText(/Times are in this Practice's time zone, Japan.*\./))
+				.toBeVisible();
+		} finally {
+			pageState.data = { session };
+		}
 	});
 
 	it('says so plainly when no birth is on call in the days chosen', async () => {

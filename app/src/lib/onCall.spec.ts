@@ -17,13 +17,15 @@ import {
 	saveGap,
 	saveNarrowing,
 	saveOnCallSettings,
-	toDayValue,
 	type Roster,
 	type RosterWindow,
 } from './onCall.js';
 import { jsonResponse } from './testResponse.js';
 
-const today = new Date(2026, 9, 17, 21, 30);
+const EASTERN = 'America/New_York';
+const TOKYO = 'Asia/Tokyo';
+// 9:30pm Saturday the 17th in New York, already Sunday the 18th in Tokyo.
+const today = new Date('2026-10-18T01:30:00Z');
 
 function windowRow(overrides: Partial<RosterWindow> = {}): RosterWindow {
 	return {
@@ -62,7 +64,7 @@ function roster(
 
 describe('the range a reader is looking at', () => {
 	it('opens on today through the next 30 days, so a first visit is not empty (#2026)', () => {
-		expect(defaultRange(today)).toEqual({
+		expect(defaultRange(today, EASTERN)).toEqual({
 			from: '2026-10-17',
 			to: '2026-11-16',
 		});
@@ -70,27 +72,42 @@ describe('the range a reader is looking at', () => {
 
 	it('reads a day from the URL and falls back to the default for one it does not name', () => {
 		expect(
-			rangeFromParameters(new URLSearchParams('from=2026-10-01'), today)
+			rangeFromParameters(new URLSearchParams('from=2026-10-01'), EASTERN, today)
 		).toEqual({
 			from: '2026-10-01',
 			to: '2026-11-16',
 		});
 	});
 
-	it('names a day in the reader s own zone, never UTC', () => {
-		// 9:30pm on the 17th in a zone behind UTC is already the 18th in
-		// UTC; the reader is still looking at her own Saturday.
-		expect(toDayValue(today)).toBe('2026-10-17');
+	it('names today in the Practice’s zone, whatever zone the reader is in (ADR-0036)', () => {
+		// The same instant is Saturday the 17th in New York and Sunday the
+		// 18th in Tokyo; the range follows the Practice, not the runner.
+		expect(defaultRange(today, EASTERN).from).toBe('2026-10-17');
+		expect(defaultRange(today, TOKYO)).toEqual({
+			from: '2026-10-18',
+			to: '2026-11-17',
+		});
+		expect(
+			rangeFromParameters(new URLSearchParams(), TOKYO, today).from
+		).toBe('2026-10-18');
 	});
 
 	it('writes only the days a reader actually chose into the href', () => {
 		const base = '/practices/practice-1/on-call';
 		expect(
-			rosterHref(base, { from: '2026-10-17', to: '2026-11-16' }, today)
+			rosterHref(base, { from: '2026-10-17', to: '2026-11-16' }, EASTERN, today)
 		).toBe(base);
 		expect(
-			rosterHref(base, { from: '2026-10-17', to: '2026-10-31' }, today)
+			rosterHref(base, { from: '2026-10-17', to: '2026-10-31' }, EASTERN, today)
 		).toBe(`${base}?to=2026-10-31`);
+	});
+
+	it('measures a chosen day against the Practice’s today, not the reader’s', () => {
+		const base = '/practices/practice-1/on-call';
+		const range = { from: '2026-10-17', to: '2026-11-16' };
+		expect(rosterHref(base, range, TOKYO, today)).toBe(
+			`${base}?from=2026-10-17&to=2026-11-16`
+		);
 	});
 
 	it('asks the BFF for exactly those days', () => {

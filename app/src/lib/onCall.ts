@@ -15,6 +15,7 @@ import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { refusalError } from './formErrors.js';
 import { addDays, DEFAULT_SCHEDULE_DAYS } from './visitSchedule.js';
+import { dayIn } from './zonedTime.js';
 
 /** One live coverage gap, as the roster and the Engagement panel show
  * it. Mirrors the Go BFF's oncall.Gap. */
@@ -129,25 +130,15 @@ export interface RosterRange {
 	to: string;
 }
 
-function padTwoDigits(n: number): string {
-	return n.toString().padStart(2, '0');
-}
-
-/** `<input type="date">`'s own value shape for a Date, in the reader's
- * zone -- local getters, never `toISOString`, which names yesterday for
- * anybody behind UTC after their evening. */
-export function toDayValue(date: Date): string {
-	return `${date.getFullYear()}-${padTwoDigits(date.getMonth() + 1)}-${padTwoDigits(date.getDate())}`;
-}
-
 /** The days the screen opens on when the URL names none: today through
  * the next 30 days, the same window the Practice-wide schedule opens on
- * (#2026). It opened on today alone, and a birth's on-call window rarely
- * starts on the day a reader looks, so a first visit was always empty
- * (Cognitive Bias: a default is never neutral). Tonight is the first
- * row; a reader narrows from there. */
-export function defaultRange(now: Date = new Date()): RosterRange {
-	const today = toDayValue(now);
+ * (#2026). Today is the Practice's day, not the reader's (ADR-0036). It
+ * opened on today alone, and a birth's on-call window rarely starts on
+ * the day a reader looks, so a first visit was always empty (Cognitive
+ * Bias: a default is never neutral). Tonight is the first row; a reader
+ * narrows from there. */
+export function defaultRange(now: Date, timeZone: string): RosterRange {
+	const today = dayIn(now, timeZone);
 	return { from: today, to: addDays(today, DEFAULT_SCHEDULE_DAYS) };
 }
 
@@ -155,9 +146,10 @@ export function defaultRange(now: Date = new Date()): RosterRange {
  * default range for a day the URL does not name. */
 export function rangeFromParameters(
 	parameters: Pick<URLSearchParams, 'get'>,
-	now: Date = new Date()
+	timeZone: string,
+	now: Date
 ): RosterRange {
-	const fallback = defaultRange(now);
+	const fallback = defaultRange(now, timeZone);
 	return {
 		from: parameters.get('from') ?? fallback.from,
 		to: parameters.get('to') ?? fallback.to,
@@ -169,9 +161,10 @@ export function rangeFromParameters(
 export function rosterHref(
 	basePath: string,
 	range: RosterRange,
-	now: Date = new Date()
+	timeZone: string,
+	now: Date
 ): string {
-	const fallback = defaultRange(now);
+	const fallback = defaultRange(now, timeZone);
 	const parameters = new URLSearchParams();
 	if (range.from && range.from !== fallback.from)
 		parameters.set('from', range.from);

@@ -45,6 +45,8 @@
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import { readerTimeZone, zoneNote as practiceZoneNote } from '#lib/zonedTime.js';
+	import type { PracticeSession } from '../+layout.js';
 	import type { OnCallPageData } from './+page.js';
 
 	/*
@@ -55,7 +57,10 @@
 
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/on-call', { practiceId }));
-	const range = $derived(rangeFromParameters(page.url.searchParams));
+	const timeZone = $derived((page.data as { session: PracticeSession }).session.timezone);
+	const now = new Date();
+	const range = $derived(rangeFromParameters(page.url.searchParams, timeZone, now));
+	const zoneNote = $derived(practiceZoneNote(timeZone, readerTimeZone(), now));
 
 	// The form's own values, seeded from the URL and put back in step
 	// after every navigation -- a reader edits them before she submits.
@@ -71,7 +76,7 @@
 
 	async function applyRange(event: SubmitEvent) {
 		event.preventDefault();
-		await goto(rosterHref(basePath, { from: fromValue, to: toValue }));
+		await goto(rosterHref(basePath, { from: fromValue, to: toValue }, timeZone, now));
 	}
 
 	const summary = $derived(data ? rosterSummary(data.roster) : 'Loading who is on call');
@@ -215,6 +220,7 @@
 			onSubmit={applyRange}
 			legend="Choose the days"
 			status={summary}
+			statusNote={zoneNote}
 			empty={data !== undefined && data.roster.windows.length === 0}
 		>
 			<DateRangeFields bind:from={fromValue} bind:to={toValue} />

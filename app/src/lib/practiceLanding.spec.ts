@@ -242,6 +242,18 @@ describe('loadPracticeLanding', () => {
 		});
 	});
 
+	it('names no days in the roster request, so the BFF reads today in the Practice’s zone', async () => {
+		const fetcher = fetcherFor();
+
+		await loadPracticeLanding(fetcher, 'practice-1', session);
+
+		const rosterRequests = fetcher.mock.calls
+			.map(([path]) => String(path))
+			.filter((path) => path.includes('/on-call'));
+		expect(rosterRequests).toHaveLength(1);
+		expect(rosterRequests[0]).not.toMatch(/[?&](from|to)=/);
+	});
+
 	it('says the roster could not be read, rather than hiding it', async () => {
 		const landing = await loadPracticeLanding(
 			fetcherFor({ 'on-call': refusal('no') }),
