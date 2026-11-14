@@ -107,6 +107,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 			order: '',
 			search: 'Anne',
 			offEngagement: false,
+			type: '',
 			cursor: ''
 		});
 		await expect.element(testPage.getByRole('searchbox', { name: FIELD })).toHaveValue('Anne');
@@ -145,30 +146,30 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Client Anne' })).toBeVisible();
 	});
 
-	it('says when nothing matched, and offers the same search over the next 12 months', async () => {
+	it('says when nothing matched, and offers the same search a year back and a year ahead', async () => {
 		apiFetchWithSession.mockResolvedValue(found([]));
 		await setupSearch({ search: 'Zelda' });
 
 		await expect
 			.element(testPage.getByText(/^No Visits for "Zelda" from Mon\sSep\s7 to Tue\sOct\s6\.$/).last())
 			.toBeVisible();
-		await testPage.getByRole('button', { name: 'Look for "Zelda" in the next 12 months' }).click();
+		await testPage.getByRole('button', { name: 'Look for "Zelda" a year back and a year ahead' }).click();
 
-		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?from=2026-09-07&to=2027-09-06`, {
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?from=2025-09-07&to=2027-09-06`, {
 			state: { scheduleSearch: 'Zelda' }
 		});
 	});
 
-	it('offers no wider look when the days already reach a year ahead', async () => {
+	it('offers no wider look when the days already reach a year back and a year ahead', async () => {
 		apiFetchWithSession.mockResolvedValue(found([]));
 		await setupSearch({
 			search: 'Zelda',
-			query: '?from=2026-09-07&to=2027-09-06',
-			read: { ...data, view: { ...data.view, chosen: { from: '2026-09-07', to: '2027-09-06' } } }
+			query: '?from=2025-09-07&to=2027-09-06',
+			read: { ...data, view: { ...data.view, chosen: { from: '2025-09-07', to: '2027-09-06' } } }
 		});
 
 		await expect.element(testPage.getByText(/^No Visits for "Zelda"/).last()).toBeVisible();
-		expect(testPage.getByRole('button', { name: /in the next 12 months/ }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: /a year back and a year ahead/ }).elements()).toHaveLength(0);
 	});
 
 	it('keeps Mine in the way on from an empty search, and says whose Visits', async () => {

@@ -139,7 +139,7 @@ describe('loadPracticeSchedule', () => {
 	});
 });
 
-const noView: ScheduleView = { preset: 30, isMine: false, doula: '', needsDoula: false, order: '' };
+const noView: ScheduleView = { preset: 30, isMine: false, doula: '', needsDoula: false, type: '', order: '' };
 const view = (change: Partial<ScheduleView>): ScheduleView => ({ ...noView, ...change });
 
 describe('isCalendarDay', () => {
@@ -179,7 +179,7 @@ const withoutPicker = (query: string, canMine = true) =>
 
 describe('scheduleViewFromParameters', () => {
 	it('is the next 30 days for a bare address', () => {
-		expect(read('')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', needsDoula: false, order: '' });
+		expect(read('')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', needsDoula: false, type: '', order: '' });
 	});
 
 	it('reads days=7, Mine and a Doula', () => {
@@ -189,17 +189,18 @@ describe('scheduleViewFromParameters', () => {
 			isMine: true,
 			doula: 'staff-1',
 			needsDoula: false,
+			type: '',
 			order: ''
 		});
 	});
 
 	describe('for a reader not offered the Doula picker', () => {
 		it('reads her own id as Mine, with no Doula', () => {
-			expect(withoutPicker('doula=staff-1')).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: '', needsDoula: false, order: '' });
+			expect(withoutPicker('doula=staff-1')).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: '', needsDoula: false, type: '', order: '' });
 		});
 
 		it('ignores any other Doula', () => {
-			expect(withoutPicker('doula=staff-2')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', needsDoula: false, order: '' });
+			expect(withoutPicker('doula=staff-2')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', needsDoula: false, type: '', order: '' });
 		});
 
 		it('keeps Mine from the address, and gives it to nobody who is not offered it', () => {
@@ -274,7 +275,7 @@ describe('scheduleHref', () => {
 describe('withDefaultDays and isScheduleNarrowed', () => {
 	it('returns to the default days and keeps Mine and the Doula', () => {
 		const narrowed = view({ preset: 7, chosen: { from: 'a', to: 'b' }, isMine: true, doula: 'staff-1' });
-		expect(withDefaultDays(narrowed)).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: 'staff-1', needsDoula: false, order: '' });
+		expect(withDefaultDays(narrowed)).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: 'staff-1', needsDoula: false, type: '', order: '' });
 	});
 
 	it('is narrowed by anything beyond the default days', () => {
@@ -324,7 +325,7 @@ describe('scheduleEmptyNextStep', () => {
 	it('offers every Doula\'s Visits, on the opening days, when Mine or a Doula is on', () => {
 		expect(scheduleEmptyNextStep(view({ isMine: true }))).toEqual({
 			label: "Show every Doula's Visits",
-			view: view({ isMine: false, doula: '', needsDoula: false, order: '' })
+			view: view({ isMine: false, doula: '', needsDoula: false, type: '', order: '' })
 		});
 		expect(scheduleEmptyNextStep(view({ doula: 'staff-1', isMine: true }))?.view).toEqual(view({}));
 	});

@@ -220,7 +220,7 @@ describe('a booked Visit whose Doula was taken off (#2596)', () => {
 			.element(testPage.getByRole('cell', { name: heard(`${offVisit.staffName}, No longer on this work`) }))
 			.toBeVisible();
 		// Once in the table and once in the record view, both always in the document.
-		expect(testPage.getByText('No longer on this work').elements()).toHaveLength(2);
+		expect(testPage.getByText('No longer on this work', { exact: true }).elements()).toHaveLength(2);
 	});
 });
 
@@ -246,7 +246,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days first, keeping Mine, from an empty Mine view of other days', async () => {
 		setAddress('?days=7&mine=true');
-		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '', needsDoula: false, order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', staffId: 'staff-1' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '', needsDoula: false, type: '', order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', staffId: 'staff-1' }) });
 
 		await expect.element(testPage.getByText('You have no Visits from Mon Sep 7 to Sun Sep 13.').first()).toBeVisible();
 		await expect
@@ -256,7 +256,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days from an empty view of other days with nobody narrowed', async () => {
 		setAddress('?days=7');
-		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '', needsDoula: false, order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '', needsDoula: false, type: '', order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' }) });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
@@ -265,7 +265,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('says Visits for a picked Doula, and offers every Doula\'s on the days it was', async () => {
 		setAddress('?doula=staff-2');
-		await setup({ data: emptyData({ preset: 30, isMine: false, doula: 'staff-2', needsDoula: false, order: '' }) });
+		await setup({ data: emptyData({ preset: 30, isMine: false, doula: 'staff-2', needsDoula: false, type: '', order: '' }) });
 		await expect.element(testPage.getByText('No Visits for Bo Ng from Mon Sep 7 to Tue Oct 6.').first()).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Show every Doula's Visits" }))
@@ -276,7 +276,7 @@ describe('the result line, the empty state and the way back', () => {
 		setAddress('?from=2026-09-14&to=2026-09-14');
 		await setup({
 			data: emptyData(
-				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '', needsDoula: false, order: '' },
+				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '', needsDoula: false, type: '', order: '' },
 				{ from: '2026-09-14', to: '2026-09-14', timeZone: 'America/New_York' }
 			)
 		});
@@ -287,14 +287,14 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('names the Doula it does not know, by her place', async () => {
 		setAddress('?doula=staff-9');
-		await setup({ data: { ...emptyData({ preset: 30, isMine: false, doula: 'staff-9', needsDoula: false, order: '' }), doulas: [] } });
+		await setup({ data: { ...emptyData({ preset: 30, isMine: false, doula: 'staff-9', needsDoula: false, type: '', order: '' }), doulas: [] } });
 
 		await expect.element(testPage.getByText('No Visits for that Doula from Mon Sep 7 to Tue Oct 6.').first()).toBeVisible();
 	});
 
 	it('counts a Mine result as the reader’s own, even when she is also the picked Doula', async () => {
 		setAddress(`?mine=true&doula=${ownSession.session.staffId}`);
-		await setup({ data: { ...data, view: { preset: 30, isMine: true, doula: ownSession.session.staffId, needsDoula: false, order: '' } } });
+		await setup({ data: { ...data, view: { preset: 30, isMine: true, doula: ownSession.session.staffId, needsDoula: false, type: '', order: '' } } });
 
 		await expect
 			.element(testPage.getByRole('status'))
@@ -413,7 +413,7 @@ describe('the narrowing', () => {
 			data: {
 				...data,
 				page: { items: [], hasMore: false },
-				view: { preset: 30, chosen: { from: '2026-09-19', to: '2026-09-12' }, isMine: false, doula: '', needsDoula: false, order: '' },
+				view: { preset: 30, chosen: { from: '2026-09-19', to: '2026-09-12' }, isMine: false, doula: '', needsDoula: false, type: '', order: '' },
 				filters: { from: '', to: '', timeZone: 'America/New_York' },
 				rangeErrors: { to: 'Choose a To day that is the same as the From day or later.' }
 			}
@@ -473,7 +473,7 @@ describe('the narrowing', () => {
 		const screen = await setup({});
 
 		await screen.rerender({
-			data: { ...data, view: { preset: 30, isMine: false, doula: laterVisit.staffId, needsDoula: false, order: '' } }
+			data: { ...data, view: { preset: 30, isMine: false, doula: laterVisit.staffId, needsDoula: false, type: '', order: '' } }
 		});
 
 		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toHaveValue(laterVisit.staffId);
@@ -489,7 +489,7 @@ describe('the narrowing', () => {
 
 	it('drops the From and To fields when the next 7 days is chosen over a range in the address', async () => {
 		setAddress('?from=2026-09-10&to=2026-09-12');
-		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-09-10', to: '2026-09-12' }, isMine: false, doula: '', needsDoula: false, order: '' } } });
+		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-09-10', to: '2026-09-12' }, isMine: false, doula: '', needsDoula: false, type: '', order: '' } } });
 		await expect.element(testPage.getByLabelText('From')).toBeVisible();
 
 		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
@@ -502,7 +502,7 @@ describe('the narrowing', () => {
 		it('reads her own id in the address as Mine', async () => {
 			asDoula();
 			setAddress('?doula=staff-1');
-			await setup({ data: { ...data, doulas: [], view: { preset: 30, isMine: true, doula: '', needsDoula: false, order: '' } } });
+			await setup({ data: { ...data, doulas: [], view: { preset: 30, isMine: true, doula: '', needsDoula: false, type: '', order: '' } } });
 
 			await expect.element(testPage.getByRole('checkbox', { name: 'Mine' })).toBeChecked();
 			await expect.element(testPage.getByRole('link', { name: 'Remove filter: Mine' })).toHaveAttribute(
@@ -918,7 +918,7 @@ describe('the reader’s order (#2869)', () => {
 		setAddress('?days=7&order=latest');
 		await setup({
 			data: emptyData(
-				{ preset: 7, isMine: false, doula: '', needsDoula: false, order: 'latest' },
+				{ preset: 7, isMine: false, doula: '', needsDoula: false, type: '', order: 'latest' },
 				{ from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', order: 'latest' }
 			)
 		});
@@ -969,21 +969,21 @@ describe('the reader’s order (#2869)', () => {
 	});
 });
 
-describe('Needing a new Doula (#2863)', () => {
+describe('Doula no longer on this work (#2863, #2888)', () => {
 	const narrowed = { ...data.view, needsDoula: true };
 
 	it('offers the box to an Owner, named for the address', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('checkbox', { name: 'Needing a new Doula' })).toBeVisible();
-		await expect.element(testPage.getByRole('checkbox', { name: 'Needing a new Doula' })).toHaveAttribute('name', 'needsDoula');
+		await expect.element(testPage.getByRole('checkbox', { name: 'Doula no longer on this work' })).toBeVisible();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Doula no longer on this work' })).toHaveAttribute('name', 'needsDoula');
 	});
 
 	it('offers an Admin who is no Doula the box with no Mine', async () => {
 		pageState.data = { session: { ...practiceSession(['admin']).session } };
 		await setup();
 
-		await expect.element(testPage.getByRole('checkbox', { name: 'Needing a new Doula' })).toBeVisible();
+		await expect.element(testPage.getByRole('checkbox', { name: 'Doula no longer on this work' })).toBeVisible();
 		expect(testPage.getByRole('checkbox', { name: 'Mine' }).elements()).toHaveLength(0);
 	});
 
@@ -992,14 +992,14 @@ describe('Needing a new Doula (#2863)', () => {
 		setAddress('?needsDoula=true');
 		await setup({ data: { ...data, doulas: [] } });
 
-		expect(testPage.getByRole('checkbox', { name: 'Needing a new Doula' }).elements()).toHaveLength(0);
-		expect(testPage.getByRole('link', { name: /Remove filter: Needing/ }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('checkbox', { name: 'Doula no longer on this work' }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: /Remove filter: Doula no longer on this work/ }).elements()).toHaveLength(0);
 	});
 
 	it('goes to the address with needsDoula=true when the box is ticked and applied', async () => {
 		await setup();
 
-		await testPage.getByRole('checkbox', { name: 'Needing a new Doula' }).click();
+		await testPage.getByRole('checkbox', { name: 'Doula no longer on this work' }).click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
 		expect(goto).toHaveBeenCalledWith(`${schedulePath}?needsDoula=true`, NOSEARCH);
@@ -1009,11 +1009,11 @@ describe('Needing a new Doula (#2863)', () => {
 		setAddress('?needsDoula=true');
 		await setup({ data: { ...data, view: narrowed, page: { items: [offVisit], hasMore: false, visitCount: 1 } } });
 
-		await expect.element(testPage.getByRole('checkbox', { name: 'Needing a new Doula' })).toBeChecked();
-		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Needing a new Doula' })).toHaveAttribute('href', schedulePath);
+		await expect.element(testPage.getByRole('checkbox', { name: 'Doula no longer on this work' })).toBeChecked();
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Doula no longer on this work' })).toHaveAttribute('href', schedulePath);
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent(/^Showing 1 Visit that needs a new Doula from Mon\sSep\s7 to Tue\sOct\s6, soonest\sfirst\.$/);
+			.toHaveTextContent(/^Showing 1 Visit whose Doula is no longer on this work, from Mon\sSep\s7 to Tue\sOct\s6, soonest\sfirst\.$/);
 	});
 
 	it('keeps the narrowing in another tag’s ×, and "Clear filters" removes it', async () => {
@@ -1029,10 +1029,10 @@ describe('Needing a new Doula (#2863)', () => {
 	it('says how many wait after the count when the rows are not narrowed to them', async () => {
 		await setup({ data: { ...data, page: { ...schedulePage, visitCount: 3, offEngagementCount: 1 } } });
 
-		await expect.element(testPage.getByRole('status')).toHaveTextContent(/soonest first\. 1 needs a new Doula\.$/);
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/soonest first\. 1 has a Doula no longer on this work\.$/);
 	});
 
-	it('says that no Visit is waiting, and offers the next 30 days from other days', async () => {
+	it('says that no Visit has such a Doula, and offers the next 30 days from other days', async () => {
 		setAddress('?days=7&needsDoula=true');
 		await setup({
 			data: emptyData({ ...narrowed, preset: 7 }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' })
@@ -1040,7 +1040,7 @@ describe('Needing a new Doula (#2863)', () => {
 
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent(/^No Visit is waiting for a new Doula from Mon\sSep\s7 to Sun\sSep\s13\.$/);
+			.toHaveTextContent(/^No Visit has a Doula no longer on this work from Mon\sSep\s7 to Sun\sSep\s13\.$/);
 		await expect
 			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
 			.toHaveAttribute('href', `${schedulePath}?needsDoula=true`);

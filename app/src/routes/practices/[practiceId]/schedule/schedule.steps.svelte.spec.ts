@@ -155,7 +155,7 @@ describe('the bar below 42rem (#2870)', () => {
 
 		const summary = testPage.getByText('More filters and order');
 		await expect.element(summary).toBeVisible();
-		for (const label of ['Mine', 'Needing a new Doula', 'Doula', 'Order']) {
+		for (const label of ['Mine', 'Doula no longer on this work', 'Doula', 'Type', 'Order']) {
 			expect(testPage.getByLabelText(label, { exact: true }).element().checkVisibility(), `${label} is folded away`).toBe(false);
 		}
 		await expect.element(testPage.getByRole('radio', { name: 'Next 30 days' })).toBeVisible();
@@ -166,16 +166,18 @@ describe('the bar below 42rem (#2870)', () => {
 		await summary.click();
 
 		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toBeVisible();
+		await expect.element(testPage.getByRole('combobox', { name: 'Type' })).toBeVisible();
 		await expect.element(testPage.getByRole('combobox', { name: 'Order' })).toBeVisible();
 	});
 
-	it('is just "Order" for a reader who has nothing else to fold', async () => {
+	it('folds the Type and Order for a reader who is offered no Mine and no Doula', async () => {
 		pageState.data = { session: { ...practiceSession(['doula']).session, isContractor: true } };
 		await setupAt('', { width: 375 });
 
-		await expect.element(testPage.getByText('Order', { exact: true }).first()).toBeVisible();
+		await expect.element(testPage.getByText('More filters and order')).toBeVisible();
 		expect(testPage.getByText('Mine').elements()).toHaveLength(0);
-		expect(testPage.getByText('More filters and order').elements()).toHaveLength(0);
+		expect(testPage.getByRole('combobox', { name: 'Doula' }).elements()).toHaveLength(0);
+		expect(testPage.getByLabelText('Type', { exact: true }).element().checkVisibility()).toBe(false);
 	});
 
 	it('draws everything in the row at 42rem and wider, with no summary', async () => {

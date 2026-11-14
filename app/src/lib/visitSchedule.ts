@@ -24,6 +24,7 @@ import type { Fetcher } from './fetcher.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarWeekdayDay } from './dates.js';
+import { visitTypeLabel } from './engagementDetail.js';
 import { dayIn, startOfDayIn } from './zonedTime.js';
 
 /** One row of the Practice-wide schedule -- mirrors the Go BFF's
@@ -130,9 +131,31 @@ export interface ScheduleView {
 	*/
 	needsDoula: boolean;
 	/**
+	One kind of Visit, or empty for every kind.
+	*/
+	type: ScheduleType;
+	/**
 	The order the reader chose: empty is soonest first, the list's own.
 	*/
 	order: ScheduleOrder;
+}
+
+/**
+The Visit types the Schedule narrows to (#2888): the empty one is every type.
+*/
+export type ScheduleType = '' | 'prenatal' | 'birth' | 'postpartum';
+
+export const ANY_SCHEDULE_TYPE = 'Any type';
+
+const SCHEDULE_TYPES = ['prenatal', 'birth', 'postpartum'] as const;
+
+export const SCHEDULE_TYPE_OPTIONS: readonly { value: ScheduleType; label: string }[] = [
+	{ value: '', label: ANY_SCHEDULE_TYPE },
+	...SCHEDULE_TYPES.map((type) => ({ value: type, label: visitTypeLabel(type) }))
+];
+
+function scheduleTypeOf(value: string | null): ScheduleType {
+	return SCHEDULE_TYPES.find((type) => type === value) ?? '';
 }
 
 /**
@@ -196,6 +219,7 @@ export function scheduleViewFromParameters(
 		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
 		doula: withoutPicker ? '' : doula,
 		needsDoula: !withoutPicker && parameters.get('needsDoula') === 'true',
+		type: scheduleTypeOf(parameters.get('type')),
 		order: parameters.get('order') === LATEST_ORDER ? LATEST_ORDER : ''
 	};
 }
@@ -231,6 +255,7 @@ export function scheduleHref(basePath: string, view: ScheduleView): string {
 	if (view.isMine) parameters.set('mine', 'true');
 	if (view.doula) parameters.set('doula', view.doula);
 	if (view.needsDoula) parameters.set('needsDoula', 'true');
+	if (view.type) parameters.set('type', view.type);
 	if (view.order) parameters.set('order', view.order);
 	const query = parameters.toString();
 	return query ? `${basePath}?${query}` : basePath;
@@ -246,7 +271,7 @@ export function withDefaultDays(view: ScheduleView): ScheduleView {
 Whether the address names anything beyond the default days.
 */
 export function isScheduleNarrowed(view: ScheduleView): boolean {
-	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.needsDoula || view.order !== '';
+	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.needsDoula || view.type !== '' || view.order !== '';
 }
 
 /** Whose Visits the BFF is asked for. It takes one Staff id; "Mine" and a
@@ -276,6 +301,10 @@ export interface ResolvedScheduleFilters {
 	*/
 	needsDoula?: boolean;
 	/**
+	Only one kind of Visit (#2888).
+	*/
+	type?: ScheduleType;
+	/**
 	The Client's name a reader typed (#2870). It is in no address (#1829), so a read that has one is a POST.
 	*/
 	search?: string;
@@ -302,6 +331,7 @@ export function resolveScheduleRead(
 		: { from: '', to: '', timeZone };
 	if (search) filters.search = search;
 	if (view.needsDoula) filters.needsDoula = true;
+	if (view.type) filters.type = view.type;
 	return { filters, errors: read.errors, isReadable: read.days !== undefined && !whose.isEmpty };
 }
 
@@ -317,6 +347,7 @@ export function practiceSchedulePath(
 	if (filters.staffId) parameters.set('staffId', filters.staffId);
 	if (filters.order) parameters.set('order', filters.order);
 	if (filters.needsDoula) parameters.set('offEngagement', 'true');
+	if (filters.type) parameters.set('type', filters.type);
 	if (cursor) parameters.set('cursor', cursor);
 	return `/api/practices/${practiceId}/visits?${parameters.toString()}`;
 }
@@ -344,6 +375,7 @@ export async function loadPracticeSchedule(
 				order: filters.order ?? '',
 				search: filters.search,
 				offEngagement: filters.needsDoula === true,
+				type: filters.type ?? '',
 				cursor
 			})
 		});
@@ -448,15 +480,19 @@ function scheduleDaysSpan(days: ScheduleDays, timeZone: string, now: Date): stri
 
 /**
  * The action an empty result offers, the way back to the days the screen
- * opens on first, keeping Mine and the Doula; with those days on, Mine or a
- * Doula answers with every Doula's Visits on the same days. Nothing where
- * the opening days are on and nothing is narrowed.
+ * opens on first, keeping Mine, the Doula and the type; with those days on,
+ * a type answers with every type of Visit, then Mine or a Doula answers with
+ * every Doula's Visits on the same days. Nothing where the opening days are
+ * on and nothing is narrowed.
  */
 export function scheduleEmptyNextStep(
 	view: ScheduleView
 ): { label: string; view: ScheduleView } | undefined {
 	if (view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen) {
 		return { label: `Show the next ${DEFAULT_SCHEDULE_DAYS} days`, view: withDefaultDays(view) };
+	}
+	if (view.type) {
+		return { label: 'Show every type of Visit', view: { ...view, type: '' } };
 	}
 	if (view.isMine || view.doula) {
 		return { label: "Show every Doula's Visits", view: { ...view, isMine: false, doula: '' } };
@@ -466,9 +502,9 @@ export function scheduleEmptyNextStep(
 
 /**
  * The action an empty search offers (#2870): the same search over a year
- * ahead, today through today plus 364 days in the Practice's zone, keeping
- * Mine, the Doula and the order. Nothing where the days already reach that
- * far.
+ * back and a year ahead, today less 365 days through today plus 364 days in
+ * the Practice's zone, keeping Mine, the Doula, the type and the order.
+ * Nothing where the days already reach that far.
  */
 export function scheduleSearchNextStep(
 	view: ScheduleView,
@@ -476,11 +512,12 @@ export function scheduleSearchNextStep(
 	timeZone: string,
 	now: Date
 ): { label: string; view: ScheduleView } | undefined {
-	const from = dayIn(now, timeZone);
-	const to = addDays(from, 364);
+	const today = dayIn(now, timeZone);
+	const from = addDays(today, -365);
+	const to = addDays(today, 364);
 	const days = scheduleDaysOf(view, timeZone, now).days;
 	if (days && days.from <= from && days.to >= to) return undefined;
-	return { label: `Look for "${search}" in the next 12 months`, view: { ...view, chosen: { from, to } } };
+	return { label: `Look for "${search}" a year back and a year ahead`, view: { ...view, chosen: { from, to } } };
 }
 
 export interface ScheduleWho {
@@ -501,11 +538,15 @@ export interface ScheduleWho {
 	*/
 	search?: string;
 	/**
-	The rows are only the Visits waiting for a new Doula (#2863).
+	The rows are only the Visits whose Doula is no longer on the work (#2863).
 	*/
 	needsDoula?: boolean;
 	/**
-	How many Visits wait for a new Doula, said after the line when the rows are not narrowed to them.
+	The rows are only one kind of Visit (#2888).
+	*/
+	type?: ScheduleType;
+	/**
+	How many Visits have a Doula no longer on the work, said after the line when the rows are not narrowed to them.
 	*/
 	waitingCount?: number;
 }
@@ -516,6 +557,9 @@ The words a result line ends on for an order.
 export function scheduleOrderWords(order: ScheduleOrder = ''): string {
 	return order === LATEST_ORDER ? 'latest first' : 'soonest first';
 }
+
+// Said as the badge on a Visit's row says it (`NO_LONGER_ON_THIS_ENGAGEMENT`), so the box, the tag and the line name one condition once.
+const NO_LONGER_ON_THIS_WORK = 'no longer on this work';
 
 /** What the result line says: the count, and while more exist how many there
  * are in all (`total`, the BFF's `visitCount`; a page without one says no
@@ -531,9 +575,9 @@ export function scheduleResultSummary(
 ): string {
 	const line = scheduleRowsSummary(count, hasMore, days, timeZone, who, now, total);
 	const waiting = who.waitingCount ?? 0;
-	// The count of Visits waiting is the second sentence of a line that names rows, never of one that narrowed to them.
+	// The count of Visits with such a Doula is the second sentence of a line that names rows, never of one that narrowed to them.
 	if (count === 0 || waiting === 0 || who.needsDoula) return line;
-	return `${line} ${waiting} ${waiting === 1 ? 'needs' : 'need'} a new Doula.`;
+	return `${line} ${waiting} ${waiting === 1 ? 'has' : 'have'} a Doula ${NO_LONGER_ON_THIS_WORK}.`;
 }
 
 function scheduleRowsSummary(
@@ -548,33 +592,36 @@ function scheduleRowsSummary(
 	const span = scheduleDaysSpan(days, timeZone, now);
 	// The Client's name a reader typed sits right after the Visits it narrows: `2 Visits for "Camille" from ...`.
 	const about = who.search ? ` for "${who.search}"` : '';
+	// The type sits before the noun, in lowercase as a running sentence says it: `3 postpartum Visits`.
+	const kind = who.type ? `${visitTypeLabel(who.type).toLowerCase()} ` : '';
+	const visits = `${kind}Visits`;
+	const visit = `${kind}Visit`;
 	if (count === 0) {
 		if (who.needsDoula) {
-			if (who.isMine) return `None of your Visits${about} is waiting for a new Doula ${span}.`;
-			return `No Visit${about}${who.doulaName ? ` for ${who.doulaName}` : ''} is waiting for a new Doula ${span}.`;
+			if (who.isMine) return `None of your ${visits}${about} has a Doula ${NO_LONGER_ON_THIS_WORK} ${span}.`;
+			return `No ${visit}${about}${who.doulaName ? ` for ${who.doulaName}` : ''} has a Doula ${NO_LONGER_ON_THIS_WORK} ${span}.`;
 		}
-		if (who.isMine && who.doulaName) return `No Visits${about} for ${who.doulaName} that are also yours ${span}.`;
-		if (who.isMine) return `You have no Visits${about} ${span}.`;
-		if (who.doulaName) return `No Visits${about} for ${who.doulaName} ${span}.`;
-		return `No Visits${about} ${span}.`;
+		if (who.isMine && who.doulaName) return `No ${visits}${about} for ${who.doulaName} that are also yours ${span}.`;
+		if (who.isMine) return `You have no ${visits}${about} ${span}.`;
+		if (who.doulaName) return `No ${visits}${about} for ${who.doulaName} ${span}.`;
+		return `No ${visits}${about} ${span}.`;
 	}
 	const ordered = `, ${scheduleOrderWords(who.order)}`;
+	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
+	const needing = who.needsDoula ? ` whose Doula is ${NO_LONGER_ON_THIS_WORK},` : '';
 	if (count === 1) {
-		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
-		const one = hasMore ? 'first Visit' : '1 Visit';
-		const needing = who.needsDoula ? ' that needs a new Doula' : '';
+		const one = hasMore ? `first ${visit}` : `1 ${visit}`;
 		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)}${about}${needing} ${span}${ordered}.`;
 	}
-	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 	const whose = owner ? `${owner} ` : '';
-	let what = `${whose}${count} Visits`;
+	let what = `${whose}${count} ${visits}`;
 	if (hasMore) {
 		what =
 			total === undefined
-				? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
-				: `the first ${count} of ${whose}${Math.max(total, count)} Visits`;
+				? `the first ${count}${owner ? ` of ${owner}` : ''} ${visits}`
+				: `the first ${count} of ${whose}${Math.max(total, count)} ${visits}`;
 	}
-	return `Showing ${what}${about}${who.needsDoula ? ' that need a new Doula' : ''} ${span}${ordered}.`;
+	return `Showing ${what}${about}${needing} ${span}${ordered}.`;
 }
 
 // A Client's name as long as a real one runs: a typed search longer than this is the one state that can move the list.
@@ -586,6 +633,7 @@ const SEARCH_RULER = 'Camille Ortiz';
 export function scheduleResultRuler(longestDoulaName: string): string {
 	const days = { from: '2000-09-29', to: '2000-12-29' };
 	const now = new Date(1999, 0, 1);
+	const postpartum: ScheduleType = 'postpartum';
 	return [
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER }, now, 9999),
@@ -596,6 +644,8 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER, needsDoula: true }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { search: SEARCH_RULER, needsDoula: true }, now, 9999),
 		scheduleResultSummary(0, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER }, now),
-		scheduleResultSummary(1, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER, order: LATEST_ORDER }, now)
+		scheduleResultSummary(1, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER, order: LATEST_ORDER }, now),
+		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, search: SEARCH_RULER, type: postpartum, order: LATEST_ORDER }, now, 9999),
+		scheduleResultSummary(0, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER, type: postpartum }, now)
 	].toSorted((a, b) => b.length - a.length)[0];
 }

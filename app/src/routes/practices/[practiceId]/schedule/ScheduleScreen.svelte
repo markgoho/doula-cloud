@@ -42,7 +42,9 @@
 		scheduleResultSummary,
 		scheduleViewFromParameters,
 		SCHEDULE_ORDER_OPTIONS,
+		SCHEDULE_TYPE_OPTIONS,
 		type ScheduleOrder,
+		type ScheduleType,
 		withDefaultDays,
 		type ScheduleDaysChoice,
 		type ScheduledVisit,
@@ -95,7 +97,7 @@
 	const LOAD_MORE_FAILED = 'More Visits did not load. Nothing you saved is lost. Try again.';
 	const RESULT_ID = 'schedule-result';
 	const ANY_DOULA = 'Any Doula';
-	const NEEDS_DOULA = 'Needing a new Doula';
+	const NEEDS_DOULA = 'Doula no longer on this work';
 	const UNKNOWN_DOULA = 'that Doula';
 
 	const practiceId = $derived(page.params.practiceId!);
@@ -313,6 +315,7 @@
 	let isMineChecked = $state(false);
 	let isNeedsDoulaChecked = $state(false);
 	let draftDoula = $state('');
+	let draftType = $state<ScheduleType>('');
 	let draftOrder = $state<ScheduleOrder>('');
 	let rangeErrors = $state<ScheduleRangeErrors>({});
 	let draftSearch = $state('');
@@ -328,6 +331,7 @@
 		isMineChecked = view.isMine;
 		isNeedsDoulaChecked = view.needsDoula;
 		draftDoula = view.doula;
+		draftType = view.type;
 		draftOrder = view.order;
 		rangeErrors = view.chosen ? scheduleRangeErrors(view.chosen.from, view.chosen.to) : {};
 	}
@@ -371,6 +375,7 @@
 		isMine: canMine && isMineChecked,
 		doula: draftDoula,
 		needsDoula: isDoulaPickerOffered && isNeedsDoulaChecked,
+		type: draftType,
 		order: draftOrder
 	});
 
@@ -447,6 +452,7 @@
 		if (view.needsDoula) tags.push({ text: NEEDS_DOULA, href: without({ needsDoula: false }), search });
 		if (search) tags.push({ text: `Client: ${search}`, href: scheduleHref(basePath, view), search: '' });
 		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }), search });
+		if (view.type) tags.push({ text: `Type: ${visitTypeLabel(view.type)}`, href: without({ type: '' }), search });
 		return tags;
 	});
 
@@ -484,6 +490,7 @@
 				order: shown.order,
 				search: read.filters.search,
 				needsDoula: shown.needsDoula,
+				type: shown.type,
 				waitingCount: read.page.offEngagementCount
 			},
 			now,
@@ -611,7 +618,6 @@
 			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 			hasUntaggedFilter={view.order !== ''}
 			foldsFieldsOnly
-			foldLabel={canMine || isDoulaPickerOffered ? undefined : 'Order'}
 			order={{ options: SCHEDULE_ORDER_OPTIONS, value: view.order, onChange: (value) => (draftOrder = value as ScheduleOrder) }}
 			{isBusy}
 		>
@@ -690,6 +696,13 @@
 						</LabeledField>
 					</div>
 				{/if}
+				<div class="field type">
+					<LabeledField label="Type" width={10}>
+						{#snippet children({ id, describedBy, invalid, width })}
+							<Select {id} {describedBy} {invalid} {width} name="type" options={SCHEDULE_TYPE_OPTIONS} bind:value={draftType} />
+						{/snippet}
+					</LabeledField>
+				</div>
 			{/snippet}
 			<!-- First in the fields row, in view at every width. Unnamed, so a Client's name never reaches the address (#1829). -->
 			<div class="field search">
@@ -782,6 +795,14 @@
 			--field-width: 34ch;
 			flex: 1 1 min(var(--field-width), calc(50% - var(--space-related) / 2));
 			max-inline-size: var(--field-width);
+		}
+
+		.doula {
+			--field-width: 17ch;
+		}
+
+		.type {
+			--field-width: 13ch;
 		}
 
 		.steps {
