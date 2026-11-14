@@ -98,7 +98,7 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent(/^Showing 1 Visit for "Anne" from Mon\sSep\s7 to Tue\sOct\s6\.$/);
+			.toHaveTextContent(/^Showing 1 Visit for "Anne" from Mon\sSep\s7 to Tue\sOct\s6, soonest\sfirst\.$/);
 		expect(apiFetchWithSession).toHaveBeenLastCalledWith(listPath, expect.objectContaining({ method: 'POST' }));
 		expect(lastBody()).toEqual({
 			from: '2026-09-07T04:00:00.000Z',

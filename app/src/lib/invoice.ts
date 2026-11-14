@@ -250,13 +250,6 @@ export function invoiceOrderOptions(view: InvoicesView): { value: InvoiceOrder; 
 }
 
 /**
- * The words of an applied order, as the tag says them: "Order: Sent, oldest first".
- */
-export function invoiceOrderTag(order: NamedInvoiceOrder): string {
-	return `Order: ${INVOICE_ORDERS[order].label}`;
-}
-
-/**
  * The column an order sorts on, for the table's header.
  */
 export function invoiceOrderedBy(order: InvoiceOrder, view: InvoicesView): { column: string; direction: 'ascending' | 'descending' } {
@@ -980,13 +973,13 @@ export function invoicesResultSummary(
 		if (shown === 0) return `No ${kind}Invoice matches "${search}".`;
 		const matching = `matching "${search}"`;
 		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${words}.`;
-		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}.`;
+		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}, ${words}.`;
 		return `Showing ${shown} ${kind}Invoices ${matching}, ${words}.`;
 	}
 	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
 	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
 	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${words}.`;
-	if (shown === 1) return `Showing 1 ${kind}Invoice.`;
+	if (shown === 1) return `Showing 1 ${kind}Invoice, ${words}.`;
 	return `Showing ${shown} ${kind}Invoices, ${words}.`;
 }
 

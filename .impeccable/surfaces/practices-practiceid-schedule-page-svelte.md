@@ -44,7 +44,7 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | A deep link to a row | Have it | the Engagement at `#visit-<id>` |
 | Paging | Have it | "Load more"; the result line counts the rows shown and says whether more exist |
 | Bulk selection and bulk actions | Later | "Priya is ill" for a week is several Visits to move (`journeys/practice-owner.md:120`); it follows a row-level Reassign, which is declined below, so it waits with it |
-| Density and column choice | Declined | three columns leave nothing to choose |
+| Density and column choice | Declined | four columns leave nothing to choose |
 | Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
 | A list-level export, print or copy | Later (#2871) | decided with the Invoices list's export (#2871); two of three graders found "no record of a printed cover sheet" weak for an office manager who prints a day's sheet |
 | Row actions without opening the record | Declined | Reassign needs the Engagement's own facts (who is attached, who may take the Visit), and the row opens it at that Visit with Reassign in view; one reading asked for Reassign on the row, the other accepted the decline |
@@ -56,11 +56,11 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | Grouping by day, with a today marker | Have it | a heading row per day over its Visits, "Today, Fri Nov 13" marking today (#2867); T5 and `personas/employed-doula.md:17` |
 | Relative days ("Today", "Tomorrow") | Have it | "Today" and "Tomorrow" lead the day heading (#2867); the cell keeps `VisitWhen` so the Schedule and the Engagement read the same; ADR-0022's "relative under seven days" is the ledger's rule for past entries |
 | Grouping by person | Declined | the rows are bookings; who is free depends on births, which are not Visits (#330); the Doula select shows one Doula's |
-| A week or month calendar beside the list | Later (#330) | a week grid needs a Visit's length, which the model lacks; the month view needs no length and is deferred with the rest of #330's calendar, a deferral and not a reason; all three graders called it weak |
+| A week or month calendar beside the list | Later (#330, #2888) | a week grid needs a Visit's length, which the model lacks; the month view needs no length and is deferred with the rest of #330's calendar, a deferral and not a reason (#2888 takes the reason up); all three graders called it weak |
 | A total count | Have it | while more exist the result line says "the first 30 of 42 Visits", the count of the days and Doula chosen, which the first page carries (#2867) |
 | Time zone shown | Have it | days and times are the Practice's (ADR-0036), and a reader in another zone is told so once under the result line (#2867) |
 | Search by name or reference | Have it (#2870) | as "Search by Client" |
-| Clear all filters | Have it | "Clear filters" beside two or more tags; one tag's × clears it |
+| Clear all filters | Have it | "Clear filters" beside two or more tags, or beside one tag and a chosen order; one tag's × clears it; a chosen order draws no tag, so "Clear filters" is how it is undone with the fold closed |
 | A next step from an empty result | Have it | "Show the next 30 days", "Show every Doula's Visits" |
 | A saved or default view | Declined | the address is the saved view; Linear saves "personal preferences or … the default" (https://linear.app/docs/display-options) |
 | Filters kept across visits | Declined | the address and the history keep the view |
@@ -72,7 +72,9 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | The Visit's type on the row (prenatal, birth, postpartum) | Have it (#2870) | a Type column beside the When in the table and "Prenatal · Priya Raman" on the card, in the Engagement's words from the BFF's one derivation; the Engagement's Visits showed it and this list's endpoint did not send it; Priya asked "is it a prenatal or the birth?" (walked 2026-11-13); all three graders of round 4 named it |
 | A Visit's length and place on the row | Later (#330) | the model holds neither |
 | A narrowing to the Visits that need a new Doula, with their count | Have it (#2863) | a "Needing a new Doula" box in "Show only" for an Owner or Admin (`?needsDoula=true`), a tag, and the count on the result line ("2 need a new Doula."); four blind walks as Dee reached for it |
-| A reader's own Visits first ("Mine" on already for a Doula) | Build (#2870) | decided by its design call for this list and the Clients list together; Priya, both walks: "This is everyone's"; Linear opens a member on "My issues" (unread) |
+| A reader's own Visits first ("Mine" on already for a Doula) | Have it (#2870) | decided by its design call for this list and the Clients list together; Priya, both walks: "This is everyone's"; Linear opens a member on "My issues" (unread) |
+| Filter by Visit type | Build (#2888) | three of three graders expected it in round 5 (Acuity's appointment type, Calendly's event type); the row shows the type and the BFF derives it |
+| A whole-row click target | Open (#2888) | two of three graders (Stripe's lists); decided in #2888 |
 | Filters that take effect when changed | Declined | the bar holds typed fields (a day, and a Client's name in #2870), so it submits with Apply, as `govuk-alignment.md`'s filter-bar row records; whether a "Show only" box alone takes effect at once is #2870's design call |
 | Booking a Visit from the Schedule | Later (#330) | a Visit is added on its Engagement, where its Client and its Doulas are; booking from a calendar comes with #330's calendar work; all three graders named it |
 | A Doula picker that takes several | Declined | no job on record asks for two Doulas' Visits at once, and "Any Doula" with the day headings shows everyone's; two graders named it |

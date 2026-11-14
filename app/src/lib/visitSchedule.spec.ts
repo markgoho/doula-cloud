@@ -376,9 +376,9 @@ describe('scheduleResultSummary', () => {
 	});
 
 	it('says one Visit with whose first, never "1 of"', () => {
-		expect(say(1, false, { isMine: true })).toBe('Showing your 1 Visit from Fri Nov 13 to Thu Nov 19.');
+		expect(say(1, false, { isMine: true })).toBe('Showing your 1 Visit from Fri Nov 13 to Thu Nov 19, soonest first.');
 		expect(say(1, false, { doulaName: 'Priya Raman' })).toBe(
-			"Showing Priya Raman's 1 Visit from Fri Nov 13 to Thu Nov 19."
+			"Showing Priya Raman's 1 Visit from Fri Nov 13 to Thu Nov 19, soonest first."
 		);
 	});
 
@@ -396,7 +396,7 @@ describe('scheduleResultSummary', () => {
 	});
 
 	it('says one Visit with no order', () => {
-		expect(say(1, false)).toBe('Showing 1 Visit from Fri Nov 13 to Thu Nov 19.');
+		expect(say(1, false)).toBe('Showing 1 Visit from Fri Nov 13 to Thu Nov 19, soonest first.');
 	});
 
 	it('says whose when narrowed', () => {

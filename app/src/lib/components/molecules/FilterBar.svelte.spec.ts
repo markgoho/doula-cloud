@@ -57,6 +57,7 @@ interface SetupOptions {
 	// One removable tag, as the Clients list draws its selected filters.
 	withApplied?: boolean;
 	appliedCount?: number;
+	hasUntaggedFilter?: boolean;
 	foldsFieldsOnly?: boolean;
 	withFields?: boolean;
 	status?: string;
@@ -101,6 +102,7 @@ async function setup({
 	withHeldSwitch = false,
 	withApplied = false,
 	appliedCount,
+	hasUntaggedFilter,
 	foldsFieldsOnly = false,
 	withFields = true,
 	status = 'Showing 2 scheduled visits.',
@@ -127,6 +129,7 @@ async function setup({
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
 		appliedCount,
+		hasUntaggedFilter,
 		folded: withFolded ? fromField() : undefined,
 		order,
 		children: withFields ? (withFolded ? nameField() : fromField()) : undefined
@@ -629,6 +632,12 @@ describe('FilterBar that folds only its fields', () => {
 
 		await expect.element(page.getByRole('link', { name: 'Remove filter: Who owe money' })).toBeVisible();
 		await expect.element(page.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+	});
+
+	it('draws "Clear filters" beside exactly one tag while another filter draws none', async () => {
+		await setup({ foldsFieldsOnly: true, withApplied: true, appliedCount: 1, hasUntaggedFilter: true, clearHref: '/practices/practice-1/schedule' });
+
+		await expect.element(page.getByRole('link', { name: 'Clear filters' })).toBeVisible();
 	});
 
 	it('keeps "Clear filters" while a filter is on that draws no tag', async () => {

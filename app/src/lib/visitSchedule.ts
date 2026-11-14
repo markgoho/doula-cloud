@@ -558,7 +558,7 @@ function scheduleRowsSummary(
 		if (who.doulaName) return `No Visits${about} for ${who.doulaName} ${span}.`;
 		return `No Visits${about} ${span}.`;
 	}
-	const ordered = hasMore || count > 1 ? `, ${scheduleOrderWords(who.order)}` : '';
+	const ordered = `, ${scheduleOrderWords(who.order)}`;
 	if (count === 1) {
 		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 		const one = hasMore ? 'first Visit' : '1 Visit';
@@ -595,6 +595,7 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER, waitingCount: 9999 }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER, needsDoula: true }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { search: SEARCH_RULER, needsDoula: true }, now, 9999),
-		scheduleResultSummary(0, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER }, now)
+		scheduleResultSummary(0, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER }, now),
+		scheduleResultSummary(1, false, days, 'UTC', { needsDoula: true, doulaName: longestDoulaName, search: SEARCH_RULER, order: LATEST_ORDER }, now)
 	].toSorted((a, b) => b.length - a.length)[0];
 }

@@ -119,12 +119,11 @@ describe('the Order select (#2869)', () => {
 });
 
 describe('an applied order (#2869)', () => {
-	it('draws a tag whose × removes only it, keeping the view and the search', async () => {
+	it('draws no tag for it: the other tags keep it, and Clear filters removes it', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [data.items[0]] }));
 		await setupOrder('?show=overdue&order=amount-smallest', { view: 'overdue', order: 'amount-smallest' }, 'Anne');
 
-		const tag = testPage.getByRole('link', { name: 'Remove filter: Order: Smallest amount first' });
-		await expect.element(tag).toHaveAttribute('href', `${path}?show=overdue`);
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Order: Smallest amount first' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Remove filter: Overdue Invoices' }))
 			.toHaveAttribute('href', `${path}?order=amount-smallest`);
@@ -132,9 +131,6 @@ describe('an applied order (#2869)', () => {
 			.element(testPage.getByRole('link', { name: 'Remove filter: Matching Anne' }))
 			.toHaveAttribute('href', `${path}?show=overdue&order=amount-smallest`);
 		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', path);
-
-		await tag.click();
-		expect(goto).toHaveBeenLastCalledWith(`${path}?show=overdue`, { state: { invoicesSearch: 'Anne' } });
 	});
 
 	it('is no tag at all for the view’s own order', async () => {

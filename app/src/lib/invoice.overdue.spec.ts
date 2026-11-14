@@ -32,7 +32,7 @@ describe('invoicesResultSummary', () => {
 		['unpaid', 12, false, 'Showing 12 unpaid Invoices, earliest payment due first.'],
 		['unpaid', 0, false, 'No Invoice is unpaid.'],
 		['overdue', 7, false, 'Showing 7 overdue Invoices, longest overdue first.'],
-		['overdue', 1, false, 'Showing 1 overdue Invoice.'],
+		['overdue', 1, false, 'Showing 1 overdue Invoice, longest overdue first.'],
 		['overdue', 0, false, 'No Invoice is overdue.']
 	] as const)('%s with %i shown (more: %s) reads "%s"', (view, shown, hasMore, text) => {
 		expect(invoicesResultSummary(view, shown, hasMore, counts)).toBe(text);

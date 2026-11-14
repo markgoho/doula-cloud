@@ -3,7 +3,6 @@ import {
 	invoiceOrderedBy,
 	invoiceOrderOf,
 	invoiceOrderOptions,
-	invoiceOrderTag,
 	invoicesResultSummary,
 	invoicesViewQuery,
 	invoiceViewOrder,
@@ -56,7 +55,6 @@ describe('the order of the Invoices list (#2869)', () => {
 		expect(invoiceOrderedBy('', 'all')).toEqual({ column: 'Sent', direction: 'descending' });
 		expect(invoiceOrderedBy('', 'overdue')).toEqual({ column: 'Payment', direction: 'ascending' });
 		expect(invoiceOrderedBy('amount-smallest', 'all')).toEqual({ column: 'Money', direction: 'ascending' });
-		expect(invoiceOrderTag('sent-oldest')).toBe('Order: Sent, oldest first');
 	});
 
 	it('writes the view and the order into the address, and nothing for the view’s own', () => {

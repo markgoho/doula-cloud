@@ -888,13 +888,11 @@ describe('the reader’s order (#2869)', () => {
 		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`, NOSEARCH);
 	});
 
-	it('draws the applied order as a tag whose × removes only it, and Clear filters removes it too', async () => {
+	it('draws no tag for the applied order: Clear filters is drawn beside the other tag and removes both', async () => {
 		setAddress('?days=7&order=latest');
 		await setup({ data: { ...latestData(), view: { ...data.view, preset: 7, order: 'latest' } } });
 
-		await expect
-			.element(testPage.getByRole('link', { name: 'Remove filter: Order Latest first' }))
-			.toHaveAttribute('href', `${schedulePath}?days=7`);
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Order Latest first' })).not.toBeInTheDocument();
 		await expect
 			.element(testPage.getByRole('link', { name: 'Remove filter: Next 7 days' }))
 			.toHaveAttribute('href', `${schedulePath}?order=latest`);
@@ -1001,7 +999,7 @@ describe('Needing a new Doula (#2863)', () => {
 		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Needing a new Doula' })).toHaveAttribute('href', schedulePath);
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent(/^Showing 1 Visit that needs a new Doula from Mon\sSep\s7 to Tue\sOct\s6\.$/);
+			.toHaveTextContent(/^Showing 1 Visit that needs a new Doula from Mon\sSep\s7 to Tue\sOct\s6, soonest\sfirst\.$/);
 	});
 
 	it('keeps the narrowing in another tag’s ×, and "Clear filters" removes it', async () => {

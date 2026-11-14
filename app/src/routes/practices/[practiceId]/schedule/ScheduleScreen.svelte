@@ -407,7 +407,6 @@
 	 */
 	// The search is in no address, so a tag hands it on in the history entry's state, or an empty one when it is the search's own.
 	type AppliedTag = { text: string; href: string; search: string };
-	const orderLabel = (order: ScheduleOrder) => SCHEDULE_ORDER_OPTIONS.find((option) => option.value === order)!.label;
 	const appliedTags = $derived.by(() => {
 		const tags: AppliedTag[] = [];
 		const search = appliedSearch;
@@ -422,7 +421,6 @@
 		if (view.needsDoula) tags.push({ text: NEEDS_DOULA, href: without({ needsDoula: false }), search });
 		if (search) tags.push({ text: `Client: ${search}`, href: scheduleHref(basePath, view), search: '' });
 		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }), search });
-		if (view.order) tags.push({ text: `Order: ${orderLabel(view.order)}`, href: without({ order: '' }), search });
 		return tags;
 	});
 
@@ -578,6 +576,7 @@
 			clearHref={appliedSearch !== '' || isScheduleNarrowed(view) ? basePath : undefined}
 			applied={appliedTags.length > 0 ? applied : undefined}
 			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
+			hasUntaggedFilter={view.order !== ''}
 			foldsFieldsOnly
 			foldLabel={canMine || isDoulaPickerOffered ? undefined : 'Order'}
 			order={{ options: SCHEDULE_ORDER_OPTIONS, value: view.order, onChange: (value) => (draftOrder = value as ScheduleOrder) }}

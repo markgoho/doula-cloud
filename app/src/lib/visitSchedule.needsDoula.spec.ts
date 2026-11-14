@@ -83,7 +83,7 @@ describe('Needing a new Doula (#2863): the result line', () => {
 		expect(say(2, false, { needsDoula: true, waitingCount: 2 })).toBe(
 			'Showing 2 Visits that need a new Doula from Fri Nov 13 to Sat Dec 12, soonest first.'
 		);
-		expect(say(1, false, { needsDoula: true })).toBe('Showing 1 Visit that needs a new Doula from Fri Nov 13 to Sat Dec 12.');
+		expect(say(1, false, { needsDoula: true })).toBe('Showing 1 Visit that needs a new Doula from Fri Nov 13 to Sat Dec 12, soonest first.');
 		expect(say(30, true, { needsDoula: true }, 45)).toBe(
 			'Showing the first 30 of 45 Visits that need a new Doula from Fri Nov 13 to Sat Dec 12, soonest first.'
 		);
