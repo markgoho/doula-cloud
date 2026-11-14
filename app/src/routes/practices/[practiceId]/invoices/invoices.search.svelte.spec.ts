@@ -88,7 +88,7 @@ describe('finding an Invoice by its reference or its Client (#2746)', () => {
 
 		await expect
 			.element(testPage.getByRole('status'))
-			.toHaveTextContent('Showing 1 overdue Invoice matching "0042".');
+			.toHaveTextContent('Showing 1 overdue Invoice matching "0042", longest overdue first.');
 		expect(apiFetchWithSession).toHaveBeenLastCalledWith(listPath, expect.objectContaining({ method: 'POST' }));
 		expect(lastBody()).toEqual({ view: 'overdue', search: '0042', cursor: '' });
 		await expect.element(testPage.getByRole('searchbox', { name: 'Reference or Client' })).toHaveValue('0042');
@@ -214,7 +214,7 @@ describe('the bar and the list agree while a newer filter loads (#2746)', () => 
 		await rerender({ data: { ...data, items: [overdueInvoice], view: 'overdue' } });
 
 		await expect.element(testPage.getByRole('table')).toHaveAttribute('aria-busy', 'false');
-		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 1 overdue Invoice.');
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('Showing 1 overdue Invoice, longest overdue first.');
 	});
 
 	it('holds one tag\'s room beside the result line while no filter is on, so applying one moves nothing under it', async () => {

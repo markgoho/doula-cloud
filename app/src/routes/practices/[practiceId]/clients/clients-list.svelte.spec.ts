@@ -882,15 +882,13 @@ describe('the "Order" select (#2869)', () => {
 		pageState.url.searchParams.delete('order');
 	});
 
-	it('draws a tag, "Order: Name, A to Z", whose × leads to the list without it and keeps the rest', async () => {
+	it('draws no tag for the order: its filter\'s tag keeps the order, and "Clear filters" is drawn and removes both', async () => {
 		pageState.url.searchParams.set('order', 'name');
 		pageState.url.searchParams.set('owes', 'true');
 
 		await setup();
 
-		const tag = tags().getByRole('link', { name: 'Remove filter: Order Name, A to Z' });
-		await expect.element(tag).toHaveTextContent('Order: Name, A to Z');
-		await expect.element(tag).toHaveAttribute('href', `${base}?owes=true`);
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Order Name, A to Z' })).not.toBeInTheDocument();
 		await expect
 			.element(tags().getByRole('link', { name: 'Remove filter: Who owe money' }))
 			.toHaveAttribute('href', `${base}?order=name`);
@@ -899,13 +897,13 @@ describe('the "Order" select (#2869)', () => {
 		pageState.url.searchParams.delete('owes');
 	});
 
-	it('is the one tag a bare order leaves, so "Clear filters" is not drawn beside it', async () => {
+	it('draws no tag for a bare order, and "Clear filters" returns to the default order', async () => {
 		pageState.url.searchParams.set('order', 'owed');
 
 		await setup();
 
-		await expect.element(tags().getByRole('link', { name: 'Remove filter: Order Most owed first' })).toHaveAttribute('href', base);
-		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Order Most owed first' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', base);
 		pageState.url.searchParams.delete('order');
 	});
 

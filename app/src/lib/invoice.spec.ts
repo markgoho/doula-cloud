@@ -161,7 +161,7 @@ describe('invoicesResultSummary with a search (#2746)', () => {
 		expect(invoicesResultSummary('unpaid', 2, false, counts, 'Quinn')).toBe(
 			'Showing 2 unpaid Invoices matching "Quinn", earliest payment due first.'
 		);
-		expect(invoicesResultSummary('overdue', 1, false, counts, 'Quinn')).toBe('Showing 1 overdue Invoice matching "Quinn".');
+		expect(invoicesResultSummary('overdue', 1, false, counts, 'Quinn')).toBe('Showing 1 overdue Invoice matching "Quinn", longest overdue first.');
 	});
 
 	it('says when nothing matched', () => {

@@ -146,6 +146,11 @@
 		 */
 		appliedCount?: number;
 		/**
+		 * A filter is on that draws no tag, such as the order: beside one tag the
+		 * tag's × would leave it on, so "Clear filters" is drawn.
+		 */
+		hasUntaggedFilter?: boolean;
+		/**
 		 * Switches that sit in a row of their own above the fields, so a
 		 * switch drawn or hidden never moves a field or Apply. A group of them
 		 * is a `<fieldset>` (or a `RadioGroup isInline` with its `legend`) whose
@@ -212,6 +217,7 @@
 		statusNote,
 		applied,
 		appliedCount = 0,
+		hasUntaggedFilter = false,
 		switches,
 		foldsFieldsOnly = false,
 		isBusy = false,
@@ -234,7 +240,7 @@
 
 	const longestOption = $derived(order?.options.toSorted((a, b) => b.label.length - a.label.length)[0]);
 
-	const clearTo = $derived(appliedCount === 1 ? undefined : clearHref);
+	const clearTo = $derived(appliedCount === 1 && !hasUntaggedFilter ? undefined : clearHref);
 
 	let statusLine = $state<HTMLParagraphElement>();
 

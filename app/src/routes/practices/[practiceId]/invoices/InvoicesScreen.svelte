@@ -27,7 +27,6 @@
 		invoiceOrderedBy,
 		invoiceOrderOf,
 		invoiceOrderOptions,
-		invoiceOrderTag,
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
@@ -390,7 +389,6 @@
 		if (viewTag) {
 			tags.push({ text: viewTag, href: `${invoicesHref}${invoicesViewQuery('all', orderForView(order, 'all'))}`, search: appliedSearch });
 		}
-		if (order) tags.push({ text: invoiceOrderTag(order), href: `${invoicesHref}${invoicesViewQuery(view)}`, search: appliedSearch });
 		if (appliedSearch) {
 			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: '' });
 		}
@@ -605,9 +603,10 @@
 				statusRuler={INVOICES_RESULT_RULER}
 				statusId={RESULT_ID}
 				empty={shown !== undefined && invoices.items.length === 0}
-				clearHref={appliedTags.length > 0 ? invoicesHref : undefined}
+				clearHref={order !== '' || appliedTags.length > 0 ? invoicesHref : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
 				appliedCount={appliedTags.length}
+				hasUntaggedFilter={order !== ''}
 				foldsFieldsOnly
 				order={{ options: invoiceOrderOptions(draftView), value: draftOrder, onChange: (value) => (draftOrder = value as InvoiceOrder) }}
 				{isBusy}

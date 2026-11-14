@@ -65,7 +65,7 @@ describe('the Client search (#2870)', () => {
 		const say = (count: number, who = {}, hasMore = false) =>
 			scheduleResultSummary(count, hasMore, days, EASTERN, { search: 'Camille', ...who }, NOW, 41).replaceAll('\u{A0}', ' ');
 		expect(say(2)).toBe('Showing 2 Visits for "Camille" from Fri Nov 13 to Sat Dec 12, soonest first.');
-		expect(say(1)).toBe('Showing 1 Visit for "Camille" from Fri Nov 13 to Sat Dec 12.');
+		expect(say(1)).toBe('Showing 1 Visit for "Camille" from Fri Nov 13 to Sat Dec 12, soonest first.');
 		expect(say(30, {}, true)).toBe('Showing the first 30 of 41 Visits for "Camille" from Fri Nov 13 to Sat Dec 12, soonest first.');
 		expect(say(0)).toBe('No Visits for "Camille" from Fri Nov 13 to Sat Dec 12.');
 		expect(say(0, { isMine: true })).toBe('You have no Visits for "Camille" from Fri Nov 13 to Sat Dec 12.');

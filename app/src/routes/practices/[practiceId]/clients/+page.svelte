@@ -433,7 +433,6 @@ import type { PageProps as PageProperties } from './$types';
 	// address (#1829), so removing any other filter hands it on in the history
 	// entry's state, and removing the name hands on an empty one.
 	type AppliedTag = { text: string; href: string; name: string };
-	const orderLabel = (order: ClientOrder) => CLIENT_ORDER_OPTIONS.find((option) => option.value === order)!.label;
 	const appliedTags = $derived.by(() => {
 		const view: ClientsView = {
 			all: isShowingEveryone,
@@ -453,7 +452,6 @@ import type { PageProps as PageProperties } from './$types';
 		if (appliedDoula) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
 		if (isShowingEveryone) add(`Including ${NO_CARE_YET}`, { all: false });
 		if (appliedName) add(`Name: ${appliedName}`, {}, '');
-		if (appliedOrder) add(`Order: ${orderLabel(appliedOrder)}`, { order: '' });
 		return tags;
 	});
 
@@ -1096,6 +1094,7 @@ import type { PageProps as PageProperties } from './$types';
 				clearHref={isFiltered ? clientsPath({}) : undefined}
 				applied={appliedTags.length > 0 ? applied : undefined}
 				appliedCount={appliedTags.length}
+				hasUntaggedFilter={appliedOrder !== ''}
 				foldsFieldsOnly
 				foldLabel={!isImplyingCare || doulas.length > 0 ?'More filters and order' : 'Order'}
 				order={{
