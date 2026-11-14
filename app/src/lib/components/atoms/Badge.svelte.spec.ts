@@ -38,10 +38,11 @@ describe('Badge.svelte', () => {
 	});
 
 	it('draws the icon it is given in place of its variant icon', async () => {
-		const plain = await setup({ variant: 'neutral' });
-		const owed = await setup({ variant: 'neutral', icon: 'receipt' });
+		const own = await render(Icon, { name: 'receipt', size: 16 });
+		const drawn = own.container.getHTML();
+		const { container } = await setup({ variant: 'neutral', icon: 'receipt' });
 
-		expect(owed.container.querySelector('svg')?.getHTML()).not.toBe(plain.container.querySelector('svg')?.getHTML());
+		expect(container.getHTML()).toContain(drawn);
 	});
 });
 
