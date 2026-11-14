@@ -16,7 +16,7 @@ import Page from './+page.svelte';
 import StaffFeedback from '#lib/components/organisms/StaffFeedback.svelte';
 import StaffTopBar from '#lib/components/organisms/StaffTopBar.svelte';
 import { TYPICAL_CLIENTS } from '../../../typicalPilot.js';
-import { goto, pageState } from '#testing/routePage.js';
+import { goto, invalidate, pageState } from '#testing/routePage.js';
 import { snapshot } from '$app/navigation';
 import type { ListReturn } from '#lib/listReturn.js';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
@@ -333,6 +333,18 @@ describe('clients list screen', () => {
 
 		await expect.element(testPage.getByRole('table')).toBeVisible();
 		await expect.element(testPage.getByText(/Your Clients did not load/)).not.toBeInTheDocument();
+	});
+
+	it('reads the roster behind the Doula filter again from "Try again"', async () => {
+		await setup(textResponse('Server rejected the Clients list request'));
+		await expect.element(testPage.getByText(/Your Clients did not load/)).toBeVisible();
+		invalidate.mockClear();
+
+		apiFetchWithSession.mockImplementation(toApiResponder(fixture));
+		await testPage.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(testPage.getByRole('table')).toBeVisible();
+		expect(invalidate).toHaveBeenCalledWith('app:clients');
 	});
 });
 

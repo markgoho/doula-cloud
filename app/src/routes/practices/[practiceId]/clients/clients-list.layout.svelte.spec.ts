@@ -62,6 +62,7 @@ const navigation = vi.hoisted(() => ({
 }));
 vi.mock('$app/navigation', () => ({
 	goto,
+	invalidate: vi.fn(),
 	replaceState,
 	snapshot: vi.fn(),
 	beforeNavigate: (callback: () => void) => {

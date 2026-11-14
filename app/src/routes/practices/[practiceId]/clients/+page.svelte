@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { page } from '#lib/appState.svelte.js';
-	import { afterNavigate, beforeNavigate, goto, replaceState } from '$app/navigation';
+	import { afterNavigate, beforeNavigate, goto, invalidate, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
@@ -41,7 +41,8 @@
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import type { RouteId } from '$app/types';
-import type { PageProps as PageProperties } from './$types';
+	import { CLIENTS_READ } from '#lib/clientsRead.js';
+	import type { PageProps as PageProperties } from './$types';
 
 	// #539 (ADR-0017): +page.ts's load already decided, before this
 	// component mounted, whether the caller is a contractor Doula with
@@ -850,6 +851,13 @@ import type { PageProps as PageProperties } from './$types';
 	 * mixing both.
 	 */
 	let latestLoad = 0;
+	// "Try again" reads the roster behind the Doula filter again too: a read
+	// that failed with no signal otherwise leaves the select with only "Any Doula".
+	async function retry() {
+		void invalidate(CLIENTS_READ);
+		await loadFirstPage(appliedView());
+	}
+
 	async function loadFirstPage(view: ReturnType<typeof appliedView>) {
 		const thisLoad = ++latestLoad;
 		// The rows already on screen stay up, marked busy, until the new
@@ -1298,7 +1306,7 @@ import type { PageProps as PageProperties } from './$types';
 		{#if error}
 			<stack-l space="var(--space-related)">
 				<Notice message={error} variant="error" />
-				<Button label="Try again" onClick={() => loadFirstPage(appliedView())} />
+				<Button label="Try again" onClick={retry} />
 			</stack-l>
 		{:else if isReady}
 			<!--

@@ -27,6 +27,7 @@ import { apiFetch } from '#lib/api.js';
 import { hasAnyClient, loadDoulaCounts, type DoulaCounts } from '#lib/client.js';
 import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin, opensOnMine, type LabeledValue } from '#lib/roles.js';
 import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
+import { CLIENTS_READ } from '#lib/clientsRead.js';
 import type { PageLoad } from './$types';
 
 export interface ClientsListGate {
@@ -109,7 +110,8 @@ async function hasAnyClientRecord(practiceId: string, fetcher: typeof globalThis
 	}
 }
 
-export const load: PageLoad = async ({ params, parent, fetch }): Promise<ClientsListGate> => {
+export const load: PageLoad = async ({ params, parent, fetch, depends }): Promise<ClientsListGate> => {
+	depends(CLIENTS_READ);
 	const { session } = await parent();
 	const isContractor = isAmbientContractor(session);
 	const wantsMine = !isContractor && isDoula(session) && session.hasOtherDoulas !== false;
