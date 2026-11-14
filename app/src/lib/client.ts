@@ -38,6 +38,14 @@ export interface ClientListItem {
 	 * #264 (RA-G6). Empty/absent for a Client with none. Mirrors the Go
 	 * BFF's client.ListItem.OpenEngagements. */
 	openEngagements?: OpenEngagement[];
+	/** What this Client owes in all (#2874): the sum, in cents, and the
+	 * number of her open Invoices with no payment on its way, across every
+	 * open Engagement. "Most owed first" orders by the sum. Both are 0 for a
+	 * Client who owes nothing and absent for a contractor Doula, who is never
+	 * told money. Mirrors the Go BFF's client.ListItem.OwedCents and
+	 * OwedInvoiceCount. */
+	owedCents?: number;
+	owedInvoiceCount?: number;
 }
 
 /** One rollup line of ClientListItem.openEngagements -- mirrors the Go

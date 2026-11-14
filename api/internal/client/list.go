@@ -79,6 +79,14 @@ type ListItem struct {
 	// by PendingRequestKinds above).
 	OpenEngagements []OpenEngagement `json:"openEngagements,omitempty"`
 
+	// OwedCents and OwedInvoiceCount (#2874) are what this Client owes in
+	// all: the sum and the number of her open Invoices with no payment on its
+	// way, across every open Engagement. "Most owed first" orders by the sum.
+	// Both are 0 for a Client who owes nothing and absent for a contractor
+	// Doula, who is never told money (ADR-0008).
+	OwedCents        *int64 `json:"owedCents,omitempty"`
+	OwedInvoiceCount *int   `json:"owedInvoiceCount,omitempty"`
+
 	// sortAt is this Client's place in the list's order, encoded as one time
 	// by dueSortJoin. It is the cursor's time.
 	sortAt time.Time
@@ -322,6 +330,12 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 	}
 
 	if err := attachOpenEngagements(r.Context(), c.Tx, c.PracticeID, list, c.Reader, c.StaffID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+
+	if err := attachOwedTotals(r.Context(), c.Tx, list, c.Reader); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
