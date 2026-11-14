@@ -95,9 +95,18 @@ describe('schedule/+page.ts load', () => {
 		expect(url.searchParams.get('from')).toBe('2026-09-12T04:00:00.000Z');
 		expect(url.searchParams.get('to')).toBe('2026-09-20T04:00:00.000Z');
 		expect(url.searchParams.get('staffId')).toBe('staff-1');
-		expect(result.filters).toEqual({ from: '2026-09-12', to: '2026-09-19', timeZone: 'America/New_York', staffId: 'staff-1' });
+		expect(result.filters).toEqual({ from: '2026-09-12', to: '2026-09-19', timeZone: 'America/New_York', staffId: 'staff-1', order: '' });
 		expect(result.now).toBeInstanceOf(Date);
 		expect(result.page).toEqual(emptyPage);
+	});
+
+	it('asks the BFF for the order the address names (#2869)', async () => {
+		const { fetchMock } = setup(200, emptyPage);
+
+		const result = await loadedValue<SchedulePageData>(await load(loadEvent('?order=latest')));
+
+		expect(new URL(fetchMock.mock.calls[0][0], 'https://example.test').searchParams.get('order')).toBe('latest');
+		expect(result.filters.order).toBe('latest');
 	});
 
 	it('opens on today and the 29 days after it, the 30th day included', async () => {
@@ -107,7 +116,7 @@ describe('schedule/+page.ts load', () => {
 		const result = await loadedValue<SchedulePageData>(await load(loadEvent()));
 
 		const url = new URL(fetchMock.mock.calls[0][0], 'https://example.test');
-		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-10-31', timeZone: 'America/New_York', staffId: undefined });
+		expect(result.filters).toEqual({ from: '2026-10-02', to: '2026-10-31', timeZone: 'America/New_York', staffId: undefined, order: '' });
 		expect(url.searchParams.get('from')).toBe('2026-10-02T04:00:00.000Z');
 		expect(url.searchParams.get('to')).toBe('2026-11-01T04:00:00.000Z');
 	});

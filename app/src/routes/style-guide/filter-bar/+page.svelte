@@ -133,4 +133,31 @@
 			{/snippet}
 		</FilterBar>
 	</stack-l>
+
+	<stack-l space="var(--space-4)">
+		<h2>An order the reader chooses</h2>
+		<Text
+			text="An Order select is the last field before Apply, at every width and never folded: it is chosen with the rest and applies with Apply, and the list's own order is the empty choice, labeled with the words the list is in."
+			tone="variant"
+		/>
+		<FilterBar
+			{action}
+			onSubmit={stay}
+			legend="Choose which Visits to show"
+			status="Showing 2 Visits, latest first."
+			foldsFieldsOnly
+			order={{
+				options: [
+					{ value: '', label: 'Soonest first' },
+					{ value: 'latest', label: 'Latest first' }
+				],
+				value: 'latest'
+			}}
+		>
+			{@render nameField()}
+			{#snippet folded()}
+				{@render doulaField('staffId', 20)}
+			{/snippet}
+		</FilterBar>
+	</stack-l>
 </stack-l>

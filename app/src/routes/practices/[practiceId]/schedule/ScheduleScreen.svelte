@@ -37,6 +37,8 @@
 		scheduleResultSummary,
 		scheduleViewFromParameters,
 		scheduleZoneNote,
+		SCHEDULE_ORDER_OPTIONS,
+		type ScheduleOrder,
 		withDefaultDays,
 		type ScheduleDaysChoice,
 		type ScheduledVisit,
@@ -223,6 +225,7 @@
 	let toValue = $state('');
 	let isMineChecked = $state(false);
 	let draftDoula = $state('');
+	let draftOrder = $state<ScheduleOrder>('');
 	let rangeErrors = $state<ScheduleRangeErrors>({});
 
 	function seedDrafts() {
@@ -232,6 +235,7 @@
 		toValue = shown.to;
 		isMineChecked = view.isMine;
 		draftDoula = view.doula;
+		draftOrder = view.order;
 		rangeErrors = view.chosen ? scheduleRangeErrors(view.chosen.from, view.chosen.to) : {};
 	}
 	seedDrafts();
@@ -269,7 +273,8 @@
 		preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
 		chosen: draftChoice === 'choose' ? { from: fromValue, to: toValue } : undefined,
 		isMine: canMine && isMineChecked,
-		doula: draftDoula
+		doula: draftDoula,
+		order: draftOrder
 	});
 
 	const isChoosingDays = $derived(draftChoice === 'choose');
@@ -308,6 +313,7 @@
 	 * days draw no tag; "Clear filters" goes to the bare path.
 	 */
 	type AppliedTag = { text: string; href: string };
+	const orderLabel = (order: ScheduleOrder) => SCHEDULE_ORDER_OPTIONS.find((option) => option.value === order)!.label;
 	const appliedTags = $derived.by(() => {
 		const tags: AppliedTag[] = [];
 		const without = (change: Partial<ScheduleView>) => scheduleHref(basePath, { ...view, ...change });
@@ -319,6 +325,7 @@
 		}
 		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }) });
 		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }) });
+		if (view.order) tags.push({ text: `Order: ${orderLabel(view.order)}`, href: without({ order: '' }) });
 		return tags;
 	});
 
@@ -342,7 +349,7 @@
 			schedule.hasMore,
 			read.filters,
 			timeZone,
-			{ isMine, doulaName: isPicked ? doulaNameOf(shown.doula) : undefined },
+			{ isMine, doulaName: isPicked ? doulaNameOf(shown.doula) : undefined, order: shown.order },
 			now,
 			read.page.visitCount
 		);
@@ -455,6 +462,7 @@
 			applied={appliedTags.length > 0 ? applied : undefined}
 			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 			foldsFieldsOnly
+			order={{ options: SCHEDULE_ORDER_OPTIONS, value: view.order, onChange: (value) => (draftOrder = value as ScheduleOrder) }}
 			{isBusy}
 		>
 			<!-- The Clients list's two rows: the days with their own visible question, then the fields and Apply. -->
@@ -532,6 +540,7 @@
 						recordLayout="compact"
 						rowGroup={(visit) => scheduleDayGroup(visit.scheduledAt, timeZone, now)}
 						groupHeadingLevel={2}
+						orderedBy={{ column: 'When', direction: read.view.order ? 'descending' : 'ascending' }}
 						{isBusy}
 					/>
 				</div>

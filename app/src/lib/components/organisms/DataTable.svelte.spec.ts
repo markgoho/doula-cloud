@@ -1373,6 +1373,19 @@ describe('rows grouped under a heading (#2867)', () => {
 		await expect.element(page.elementLocator(headings[1]!)).toBeVisible();
 	});
 
+	it('marks the ordering column, and only it, with aria-sort', async () => {
+		await setupGrouped({ rowGroup: undefined, orderedBy: { column: 'Status', direction: 'descending' } });
+
+		await expect.element(page.getByRole('columnheader', { name: 'Status' })).toHaveAttribute('aria-sort', 'descending');
+		await expect.element(page.getByRole('columnheader', { name: 'Name' })).not.toHaveAttribute('aria-sort');
+	});
+
+	it('marks no column when the table has no orderedBy', async () => {
+		await setupGrouped({ rowGroup: undefined });
+
+		await expect.element(page.getByRole('columnheader', { name: 'Status' })).not.toHaveAttribute('aria-sort');
+	});
+
 	it('spans the actions column too', async () => {
 		const { container } = await setupGrouped({
 			rowActions: { label: 'Actions', content: removeActionSnippet(() => {}) }

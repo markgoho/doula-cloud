@@ -139,7 +139,7 @@ describe('loadPracticeSchedule', () => {
 	});
 });
 
-const noView: ScheduleView = { preset: 30, isMine: false, doula: '' };
+const noView: ScheduleView = { preset: 30, isMine: false, doula: '', order: '' };
 const view = (change: Partial<ScheduleView>): ScheduleView => ({ ...noView, ...change });
 
 describe('isCalendarDay', () => {
@@ -179,7 +179,7 @@ const withoutPicker = (query: string, canMine = true) =>
 
 describe('scheduleViewFromParameters', () => {
 	it('is the next 30 days for a bare address', () => {
-		expect(read('')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '' });
+		expect(read('')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', order: '' });
 	});
 
 	it('reads days=7, Mine and a Doula', () => {
@@ -187,17 +187,18 @@ describe('scheduleViewFromParameters', () => {
 			preset: 7,
 			chosen: undefined,
 			isMine: true,
-			doula: 'staff-1'
+			doula: 'staff-1',
+			order: ''
 		});
 	});
 
 	describe('for a reader not offered the Doula picker', () => {
 		it('reads her own id as Mine, with no Doula', () => {
-			expect(withoutPicker('doula=staff-1')).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: '' });
+			expect(withoutPicker('doula=staff-1')).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: '', order: '' });
 		});
 
 		it('ignores any other Doula', () => {
-			expect(withoutPicker('doula=staff-2')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '' });
+			expect(withoutPicker('doula=staff-2')).toEqual({ preset: 30, chosen: undefined, isMine: false, doula: '', order: '' });
 		});
 
 		it('keeps Mine from the address, and gives it to nobody who is not offered it', () => {
@@ -272,7 +273,7 @@ describe('scheduleHref', () => {
 describe('withDefaultDays and isScheduleNarrowed', () => {
 	it('returns to the default days and keeps Mine and the Doula', () => {
 		const narrowed = view({ preset: 7, chosen: { from: 'a', to: 'b' }, isMine: true, doula: 'staff-1' });
-		expect(withDefaultDays(narrowed)).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: 'staff-1' });
+		expect(withDefaultDays(narrowed)).toEqual({ preset: 30, chosen: undefined, isMine: true, doula: 'staff-1', order: '' });
 	});
 
 	it('is narrowed by anything beyond the default days', () => {
@@ -322,7 +323,7 @@ describe('scheduleEmptyNextStep', () => {
 	it('offers every Doula\'s Visits, on the opening days, when Mine or a Doula is on', () => {
 		expect(scheduleEmptyNextStep(view({ isMine: true }))).toEqual({
 			label: "Show every Doula's Visits",
-			view: view({ isMine: false, doula: '' })
+			view: view({ isMine: false, doula: '', order: '' })
 		});
 		expect(scheduleEmptyNextStep(view({ doula: 'staff-1', isMine: true }))?.view).toEqual(view({}));
 	});
@@ -519,3 +520,43 @@ describe('scheduleResultRuler', () => {
 	});
 });
 
+
+const sayInOrder = (order: '' | 'latest') =>
+	scheduleResultSummary(30, true, { from: '2026-11-13', to: '2026-11-19' }, EASTERN, { order }, NOW, 42).replaceAll(
+		'\u{A0}',
+		' '
+	);
+
+describe('the reader’s order (#2869)', () => {
+	it('reads order=latest, and any other order as the default', () => {
+		expect(read('order=latest').order).toBe('latest');
+		expect(read('order=name').order).toBe('');
+		expect(read('').order).toBe('');
+	});
+
+	it('writes order=latest and nothing for the default order, and counts it as a narrowing', () => {
+		expect(scheduleHref('/s', view({ order: 'latest' }))).toBe('/s?order=latest');
+		expect(scheduleHref('/s', view({ order: '' }))).toBe('/s');
+		expect(isScheduleNarrowed(view({ order: 'latest' }))).toBe(true);
+	});
+
+	it('keeps the order through the links that change the days', () => {
+		const narrowed = view({ preset: 7, order: 'latest' });
+		expect(scheduleHref('/s', withDefaultDays(narrowed))).toBe('/s?order=latest');
+	});
+
+	it('asks the endpoint for the order, and for none by default', () => {
+		const filters = { from: '2026-09-12', to: '2026-09-19', timeZone: EASTERN };
+		expect(practiceSchedulePath('p', { ...filters, order: 'latest' }, 'c')).toContain('order=latest&cursor=c');
+		expect(practiceSchedulePath('p', { ...filters, order: '' })).not.toContain('order');
+	});
+
+	it('ends the result line on its words', () => {
+		expect(sayInOrder('latest')).toMatch(/, latest first\.$/);
+		expect(sayInOrder('')).toMatch(/, soonest first\.$/);
+	});
+
+	it('keeps the ruler as long as the longest wording', () => {
+		expect(scheduleResultRuler('Bo Ng').length).toBeGreaterThan(0);
+	});
+});

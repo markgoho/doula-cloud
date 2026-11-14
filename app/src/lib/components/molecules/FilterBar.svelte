@@ -73,6 +73,8 @@
 	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import Select from '#lib/components/atoms/Select.svelte';
+	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 
 	interface Properties {
 		/**
@@ -170,6 +172,16 @@
 		 */
 		folded?: Snippet;
 		/**
+		 * The order a reader can choose for the rows (#2869): a labeled `Order`
+		 * select, submitted with Apply as the form field `order`, and the last
+		 * field before Apply at every width. It never folds, and a bar that
+		 * folds whole draws it inside the fold as it does every field. `value`
+		 * is the order the address names; the empty value is the list's own
+		 * order and is left out of the address. `onChange` reports a pick
+		 * before Apply, for a route that builds its address from its own state.
+		 */
+		order?: { options: readonly { value: string; label: string }[]; value: string; onChange?: (value: string) => void };
+		/**
 		 * The fields, each a `LabeledField` with a named control. A bar of
 		 * switches alone has none.
 		 */
@@ -194,8 +206,12 @@
 		foldsFieldsOnly = false,
 		isBusy = false,
 		folded,
+		order,
 		children
 	}: Properties = $props();
+
+	// What the select holds: the order the address names, until a pick.
+	let pickedOrder = $derived(order?.value);
 
 	const summary = $derived.by(() => {
 		const noun = foldsFieldsOnly ? 'More filters' : 'Filters';
@@ -239,6 +255,27 @@
 					<Link href={clearTo ?? action} label="Clear filters" />
 				</span>
 			{/if}
+		</div>
+	{/if}
+{/snippet}
+
+{#snippet orderField()}
+	{#if order}
+		<div class="order">
+			<LabeledField label="Order" width={20}>
+				{#snippet children({ id, describedBy, invalid, width })}
+					<Select
+						{id}
+						{describedBy}
+						{invalid}
+						{width}
+						name="order"
+						options={order.options}
+						bind:value={pickedOrder}
+						onChange={order.onChange}
+					/>
+				{/snippet}
+			</LabeledField>
 		</div>
 	{/if}
 {/snippet}
@@ -292,6 +329,7 @@
 					<!-- The tags follow Apply in the room the row has left beside it, and
 					     wrap under it only where that room runs out: nothing is held for
 					     them, and Apply comes first, so a tag never moves it. -->
+					{@render orderField()}
 					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
 					{@render selected(false)}
 				</cluster-l>
@@ -310,6 +348,7 @@
 				{/if}
 				<cluster-l class="fields" space="var(--space-related)" align="flex-end">
 					{@render children?.()}
+					{@render orderField()}
 					<Button type="submit" label="Apply" variant="secondary" loading={isBusy} />
 					{@render selected(true)}
 				</cluster-l>

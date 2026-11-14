@@ -230,7 +230,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days first, keeping Mine, from an empty Mine view of other days', async () => {
 		setAddress('?days=7&mine=true');
-		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', staffId: 'staff-1' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: true, doula: '', order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', staffId: 'staff-1' }) });
 
 		await expect.element(testPage.getByText('You have no Visits from Mon Sep 7 to Sun Sep 13.').first()).toBeVisible();
 		await expect
@@ -240,7 +240,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('offers the next 30 days from an empty view of other days with nobody narrowed', async () => {
 		setAddress('?days=7');
-		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' }) });
+		await setup({ data: emptyData({ preset: 7, isMine: false, doula: '', order: '' }, { from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York' }) });
 
 		await expect
 			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
@@ -249,7 +249,7 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('says Visits for a picked Doula, and offers every Doula\'s on the days it was', async () => {
 		setAddress('?doula=staff-2');
-		await setup({ data: emptyData({ preset: 30, isMine: false, doula: 'staff-2' }) });
+		await setup({ data: emptyData({ preset: 30, isMine: false, doula: 'staff-2', order: '' }) });
 		await expect.element(testPage.getByText('No Visits for Bo Ng from Mon Sep 7 to Tue Oct 6.').first()).toBeVisible();
 		await expect
 			.element(testPage.getByRole('link', { name: "Show every Doula's Visits" }))
@@ -260,7 +260,7 @@ describe('the result line, the empty state and the way back', () => {
 		setAddress('?from=2026-09-14&to=2026-09-14');
 		await setup({
 			data: emptyData(
-				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '' },
+				{ preset: 30, chosen: { from: '2026-09-14', to: '2026-09-14' }, isMine: false, doula: '', order: '' },
 				{ from: '2026-09-14', to: '2026-09-14', timeZone: 'America/New_York' }
 			)
 		});
@@ -271,14 +271,14 @@ describe('the result line, the empty state and the way back', () => {
 
 	it('names the Doula it does not know, by her place', async () => {
 		setAddress('?doula=staff-9');
-		await setup({ data: { ...emptyData({ preset: 30, isMine: false, doula: 'staff-9' }), doulas: [] } });
+		await setup({ data: { ...emptyData({ preset: 30, isMine: false, doula: 'staff-9', order: '' }), doulas: [] } });
 
 		await expect.element(testPage.getByText('No Visits for that Doula from Mon Sep 7 to Tue Oct 6.').first()).toBeVisible();
 	});
 
 	it('counts a Mine result as the reader’s own, even when she is also the picked Doula', async () => {
 		setAddress(`?mine=true&doula=${ownSession.session.staffId}`);
-		await setup({ data: { ...data, view: { preset: 30, isMine: true, doula: ownSession.session.staffId } } });
+		await setup({ data: { ...data, view: { preset: 30, isMine: true, doula: ownSession.session.staffId, order: '' } } });
 
 		await expect
 			.element(testPage.getByRole('status'))
@@ -397,7 +397,7 @@ describe('the narrowing', () => {
 			data: {
 				...data,
 				page: { items: [], hasMore: false },
-				view: { preset: 30, chosen: { from: '2026-09-19', to: '2026-09-12' }, isMine: false, doula: '' },
+				view: { preset: 30, chosen: { from: '2026-09-19', to: '2026-09-12' }, isMine: false, doula: '', order: '' },
 				filters: { from: '', to: '', timeZone: 'America/New_York' },
 				rangeErrors: { to: 'Choose a To day that is the same as the From day or later.' }
 			}
@@ -457,7 +457,7 @@ describe('the narrowing', () => {
 		const screen = await setup({});
 
 		await screen.rerender({
-			data: { ...data, view: { preset: 30, isMine: false, doula: laterVisit.staffId } }
+			data: { ...data, view: { preset: 30, isMine: false, doula: laterVisit.staffId, order: '' } }
 		});
 
 		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).toHaveValue(laterVisit.staffId);
@@ -473,7 +473,7 @@ describe('the narrowing', () => {
 
 	it('drops the From and To fields when the next 7 days is chosen over a range in the address', async () => {
 		setAddress('?from=2026-09-10&to=2026-09-12');
-		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-09-10', to: '2026-09-12' }, isMine: false, doula: '' } } });
+		await setup({ data: { ...data, view: { preset: 30, chosen: { from: '2026-09-10', to: '2026-09-12' }, isMine: false, doula: '', order: '' } } });
 		await expect.element(testPage.getByLabelText('From')).toBeVisible();
 
 		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
@@ -486,7 +486,7 @@ describe('the narrowing', () => {
 		it('reads her own id in the address as Mine', async () => {
 			asDoula();
 			setAddress('?doula=staff-1');
-			await setup({ data: { ...data, doulas: [], view: { preset: 30, isMine: true, doula: '' } } });
+			await setup({ data: { ...data, doulas: [], view: { preset: 30, isMine: true, doula: '', order: '' } } });
 
 			await expect.element(testPage.getByRole('checkbox', { name: 'Mine' })).toBeChecked();
 			await expect.element(testPage.getByRole('link', { name: 'Remove filter: Mine' })).toHaveAttribute(
@@ -845,5 +845,112 @@ describe('the Practice’s own days and times, whatever zone the reader is in (#
 			expect(testPage.getByText(/time zone/).elements()).toHaveLength(0);
 			expect(whenOf(laterVisit)).toBe('Fri Sep 18, 10:05pm');
 		});
+	});
+});
+
+// The table's day headings, in order: a rowgroup header has no accessible role the locators reach, so the
+// table's own markup is read (no accessible signal for it).
+const dayHeadings = () =>
+	[...document.querySelectorAll('.table-view th[scope="rowgroup"]')].map((heading) => heading.textContent);
+
+const latestData = (): SchedulePageData => ({
+	...data,
+	view: { ...data.view, order: 'latest' },
+	filters: { ...data.filters, order: 'latest' },
+	page: { ...schedulePage, items: schedulePage.items.toReversed() }
+});
+
+describe('the reader’s order (#2869)', () => {
+	it('draws an Order select, Soonest first by default, as the last field before Apply', async () => {
+		await setup();
+
+		const order = testPage.getByRole('combobox', { name: 'Order' });
+		await expect.element(order).toHaveValue('');
+		await expect.element(order).toHaveDisplayValue('Soonest first');
+		const doula = testPage.getByRole('combobox', { name: 'Doula' }).element();
+		const apply = testPage.getByRole('button', { name: 'Apply' }).element();
+		expect(doula.compareDocumentPosition(order.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(order.element().compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('goes to ?order=latest on Apply, beside the other narrowing, and leaves it out for Soonest first', async () => {
+		await setup();
+
+		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
+		await testPage.getByRole('combobox', { name: 'Order' }).selectOptions('Latest first');
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7&order=latest`);
+
+		await testPage.getByRole('combobox', { name: 'Order' }).selectOptions('Soonest first');
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`);
+	});
+
+	it('draws the applied order as a tag whose × removes only it, and Clear filters removes it too', async () => {
+		setAddress('?days=7&order=latest');
+		await setup({ data: { ...latestData(), view: { ...data.view, preset: 7, order: 'latest' } } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Remove filter: Order Latest first' }))
+			.toHaveAttribute('href', `${schedulePath}?days=7`);
+		await expect
+			.element(testPage.getByRole('link', { name: 'Remove filter: Next 7 days' }))
+			.toHaveAttribute('href', `${schedulePath}?order=latest`);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', schedulePath);
+		await expect.element(testPage.getByRole('combobox', { name: 'Order' })).toHaveValue('latest');
+	});
+
+	it('keeps the order on the links an empty result offers', async () => {
+		setAddress('?days=7&order=latest');
+		await setup({
+			data: emptyData(
+				{ preset: 7, isMine: false, doula: '', order: 'latest' },
+				{ from: '2026-09-07', to: '2026-09-13', timeZone: 'America/New_York', order: 'latest' }
+			)
+		});
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Show the next 30 days' }))
+			.toHaveAttribute('href', `${schedulePath}?order=latest`);
+	});
+
+	it('ends the result line on "latest first", and marks When descending', async () => {
+		setAddress('?order=latest');
+		await setup({ data: latestData() });
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/, latest first\.$/);
+		await expect.element(testPage.getByRole('columnheader', { name: 'When' })).toHaveAttribute('aria-sort', 'descending');
+		expect(testPage.getByRole('columnheader', { name: 'Client' }).element()).not.toHaveAttribute('aria-sort');
+	});
+
+	it('marks When ascending by default', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('columnheader', { name: 'When' })).toHaveAttribute('aria-sort', 'ascending');
+	});
+
+	it('runs the day headings newest first, one heading for each day', async () => {
+		setAddress('?order=latest');
+		await setup({ data: latestData() });
+
+		expect(dayHeadings()).toEqual(['Mon Jan 4, 2027', 'Fri Sep 18', 'Sat Sep 12']);
+	});
+
+	it('continues the same order and one day heading when Load more adds the rest of a day', async () => {
+		setAddress('?order=latest');
+		const [first, second] = schedulePage.items.toReversed();
+		const sameDay = { ...second!, visitId: 'visit-9', scheduledAt: '2026-09-19T01:00:00Z' };
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ items: [sameDay], hasMore: false }));
+		await setup({
+			data: { ...latestData(), page: { items: [first!, second!], hasMore: true, nextCursor: 'cursor-1' } }
+		});
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		const url = new URL(apiFetchWithSession.mock.calls[0][0], 'https://example.test');
+		expect(url.searchParams.get('order')).toBe('latest');
+		expect(url.searchParams.get('cursor')).toBe('cursor-1');
+		await expect.element(testPage.getByRole('link', { name: startsWith(second!.clientName) }).first()).toBeVisible();
+		expect(dayHeadings().filter((day) => day === 'Fri Sep 18')).toHaveLength(1);
 	});
 });
