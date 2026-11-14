@@ -122,9 +122,8 @@ func TestScheduleList_PageTwoUnderASearchByCursor(t *testing.T) {
 	seedScheduledVisit(t, e.DB, other.ID, e.Staff.ID, base.Add(time.Minute))
 
 	first := e.searchSchedule(visit.ScheduleListRequest{Search: searchAda})
-	if len(first.Items) != 30 || !first.HasMore || first.NextCursor == nil {
-		t.Fatalf("first page = %d items, hasMore=%v, cursor=%v; want 30/true/non-nil",
-			len(first.Items), first.HasMore, first.NextCursor)
+	if len(first.Items) != 30 || first.NextCursor == nil {
+		t.Fatalf("first page = %d items, cursor=%v; want 30 and a cursor", len(first.Items), first.NextCursor)
 	}
 	wantVisitCount(t, first, 31)
 

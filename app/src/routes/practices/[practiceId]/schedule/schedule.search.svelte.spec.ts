@@ -13,6 +13,7 @@ import { jsonResponse } from '#lib/testResponse.js';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import Page from './ScheduleScreen.svelte';
+// jscpd:ignore-start -- the route-spec mock preamble every list's search spec repeats
 import { toPageState } from '../../../routeFixture.js';
 import { data, fixture, schedulePage } from './page.fixture.js';
 import type { SchedulePageData } from './+page.js';
@@ -26,6 +27,7 @@ vi.mock('$app/navigation', async () => ({
 	beforeNavigate: vi.fn(),
 	snapshot: vi.fn()
 }));
+// jscpd:ignore-end
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 const { practiceId } = fixture.params;
@@ -60,10 +62,12 @@ async function setupSearch({ search = '', query = '', read = data }: SetupOption
 	return render(Page, { data: read });
 }
 
+// jscpd:ignore-start -- reads the last POST body, as the Invoices list's search spec does
 function lastBody(): Record<string, unknown> {
 	const call = apiFetchWithSession.mock.calls.at(-1)!;
 	return JSON.parse((call[1] as RequestInit).body as string) as Record<string, unknown>;
 }
+// jscpd:ignore-end
 
 const found = (items = [earlierVisit], extra: object = {}) =>
 	jsonResponse({ items, hasMore: false, visitCount: items.length, ...extra });
@@ -194,7 +198,8 @@ describe('finding a Client’s Visits by her name (#2870)', () => {
 		apiFetchWithSession.mockResolvedValueOnce(new Response('no', { status: 500 }));
 		await setupSearch({ search: 'Anne' });
 
-		await expect.element(testPage.getByText('Your search did not run. Nothing you saved is lost.')).toBeVisible();
+		const said = testPage.getByText('Your search did not run. Nothing you saved is lost.');
+		await expect.element(said).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeEnabled();
 		await expect.element(testPage.getByRole('searchbox', { name: FIELD })).toHaveValue('Anne');
 
