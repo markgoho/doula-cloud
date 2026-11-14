@@ -143,9 +143,9 @@ func TestListHandler_OrdersByTheOldestOverdueInvoiceAcrossPageBoundaries(t *test
 		}
 		return cmp.Or(a.dueAt.Compare(b.dueAt), cmp.Compare(a.dueOn, b.dueOn), cmp.Compare(a.id, b.id))
 	})
-	wantIDs := make([]string, len(want))
-	for i, c := range want {
-		wantIDs[i] = c.id
+	var wantIDs []string
+	for _, c := range want {
+		wantIDs = append(wantIDs, c.id)
 	}
 	if wantIDs[0] != oldest.id {
 		t.Fatalf("test model: first = %s, want the oldest", wantIDs[0])
