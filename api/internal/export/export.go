@@ -3,7 +3,6 @@ package export
 import (
 	"archive/zip"
 	"database/sql"
-	"encoding/csv"
 	"encoding/json/v2"
 	"fmt"
 	"log"
@@ -12,6 +11,7 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/csvsafe"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -136,7 +136,7 @@ func writeEntity(r *http.Request, w http.ResponseWriter, tx *sql.Tx, zw *zip.Wri
 		// coverage:ignore reason: response streaming failure, not exercised by unit tests
 		return fmt.Errorf("create %s: %w", e.file, err)
 	}
-	cw := csv.NewWriter(fw)
+	cw := csvsafe.NewWriter(fw)
 	if err := cw.Write(e.header); err != nil {
 		// coverage:ignore reason: response streaming failure, not exercised by unit tests
 		return fmt.Errorf("write header: %w", err)
