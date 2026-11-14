@@ -306,4 +306,13 @@ describe('RadioGroup.svelte, inline (#2746)', () => {
 		const wrapped = views.map((view) => page.getByRole('radio', { name: view.label }).element().getBoundingClientRect().top);
 		expect(new Set(wrapped).size).toBeGreaterThan(1);
 	});
+
+	it('draws trailing links on the answers’ own row, in the group but not among its radios', async () => {
+		await page.viewport(1280, 800);
+		const trailing = createRawSnippet(() => ({ render: () => '<a href="#earlier">Earlier</a>' }));
+		await render(RadioGroup<Mode>, { legend: 'Days', options, value: 'signup', onChange: vi.fn(), isInline: true, trailing });
+
+		await expect.element(page.getByRole('group', { name: 'Days' }).getByRole('link', { name: 'Earlier' })).toBeVisible();
+		expect(page.getByRole('radio').elements()).toHaveLength(2);
+	});
 });

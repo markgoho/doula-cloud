@@ -21,7 +21,7 @@
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
-	import { readerTimeZone } from '#lib/zonedTime.js';
+	import { readerTimeZone, zoneNote as zoneNoteOf } from '#lib/zonedTime.js';
 	import {
 		DEFAULT_SCHEDULE_DAYS,
 		SHORT_SCHEDULE_DAYS,
@@ -31,6 +31,8 @@
 		scheduleSearchNextStep,
 		scheduleDaysOf,
 		scheduleDaysTag,
+		scheduleDaysWords,
+		scheduleStep,
 		scheduleDayGroup,
 		scheduleEmptyNextStep,
 		scheduleHref,
@@ -38,7 +40,6 @@
 		scheduleResultRuler,
 		scheduleResultSummary,
 		scheduleViewFromParameters,
-		scheduleZoneNote,
 		SCHEDULE_ORDER_OPTIONS,
 		type ScheduleOrder,
 		withDefaultDays,
@@ -425,6 +426,14 @@
 		return tags;
 	});
 
+	// The days one step each way from the ones the rows show; the search is in no address, so a step hands it on in state.
+	const earlier = $derived(scheduleStep(view, -1, timeZone, now));
+	const later = $derived(scheduleStep(view, 1, timeZone, now));
+	function step(event: MouseEvent, to: ScheduleView) {
+		event.preventDefault();
+		void show(scheduleHref(basePath, to), appliedSearch);
+	}
+
 	function removeTag(event: MouseEvent, tag: AppliedTag) {
 		event.preventDefault();
 		void show(tag.href, tag.search);
@@ -461,7 +470,7 @@
 		scheduleResultRuler(doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '')
 	);
 	// Said once, under the result line, only to a reader whose own zone reads these times differently.
-	const zoneNote = $derived(scheduleZoneNote(timeZone, readerTimeZone(), now));
+	const zoneNote = $derived(zoneNoteOf(timeZone, readerTimeZone(), now));
 	const isBusy = $derived(isApplying || (read !== undefined && readKeyOf(read) !== wantedKey && readFailure === ''));
 	const isEmpty = $derived(read !== undefined && !read.rangeErrors && schedule.items.length === 0);
 
@@ -570,12 +579,38 @@
 			applied={appliedTags.length > 0 ? applied : undefined}
 			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 			foldsFieldsOnly
+			foldLabel={canMine || isDoulaPickerOffered ? undefined : 'Order'}
 			order={{ options: SCHEDULE_ORDER_OPTIONS, value: view.order, onChange: (value) => (draftOrder = value as ScheduleOrder) }}
 			{isBusy}
 		>
 			<!-- The Clients list's two rows: the days with their own visible question, then the fields and Apply. -->
 			{#snippet switches()}
-				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline />
+				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline>
+					{#snippet trailing()}
+						<!-- Each steps the days the reader sees by their own length; the days it lands on are in its name. Together, so they wrap as one. -->
+						<span class="steps">
+						{#if earlier}
+							<Link
+								href={scheduleHref(basePath, earlier.view)}
+								label="Earlier"
+								ariaLabel={`Earlier, ${scheduleDaysWords(earlier.days, timeZone, now)}`}
+								onClick={(event) => step(event, earlier.view)}
+							/>
+						{/if}
+						{#if later}
+							<Link
+								href={scheduleHref(basePath, later.view)}
+								label="Later"
+								ariaLabel={`Later, ${scheduleDaysWords(later.days, timeZone, now)}`}
+								onClick={(event) => step(event, later.view)}
+							/>
+						{/if}
+						</span>
+					{/snippet}
+				</RadioGroup>
+			{/snippet}
+			<!-- Folds with the Order select below 42rem; at that width and wider the fold is not drawn and these sit in the fields row. -->
+			{#snippet folded()}
 				{#if canMine || isDoulaPickerOffered}
 					<!-- One group, so each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
 					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a named box of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
@@ -604,6 +639,24 @@
 							{/if}
 						</div>
 					</fieldset>
+				{/if}
+				{#if isDoulaPickerOffered}
+					<div class="field doula">
+						<LabeledField label="Doula" width={30}>
+							{#snippet children({ id, describedBy, invalid, width })}
+								<Select
+									{id}
+									{describedBy}
+									{invalid}
+									{width}
+									name="doula"
+									options={doulaOptions}
+									disabled={!read || read.isRosterUnavailable}
+									bind:value={draftDoula}
+								/>
+							{/snippet}
+						</LabeledField>
+					</div>
 				{/if}
 			{/snippet}
 			<!-- First in the fields row, in view at every width. Unnamed, so a Client's name never reaches the address (#1829). -->
@@ -635,24 +688,6 @@
 					toError={rangeErrors.to}
 					hint="Both days are included."
 				/>
-			{/if}
-			{#if isDoulaPickerOffered}
-				<div class="field doula">
-					<LabeledField label="Doula" width={30}>
-						{#snippet children({ id, describedBy, invalid, width })}
-							<Select
-								{id}
-								{describedBy}
-								{invalid}
-								{width}
-								name="doula"
-								options={doulaOptions}
-								disabled={!read || read.isRosterUnavailable}
-								bind:value={draftDoula}
-							/>
-						{/snippet}
-					</LabeledField>
-				</div>
 			{/if}
 		</FilterBar>
 
@@ -714,6 +749,16 @@
 			--field-width: 34ch;
 			flex: 1 1 min(var(--field-width), calc(50% - var(--space-related) / 2));
 			max-inline-size: var(--field-width);
+		}
+
+		.steps {
+			display: inline-flex;
+			gap: var(--space-related);
+		}
+
+		/* The Client field starts narrow so it shares a line with the fold's summary on a phone, and takes what the line has left. */
+		.search {
+			flex-basis: 12ch;
 		}
 
 		/* The Client's track, the Clients list's Name track (a long two-word name). */

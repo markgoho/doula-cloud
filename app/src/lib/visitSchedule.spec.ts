@@ -16,15 +16,15 @@ import {
 	scheduleResultRuler,
 	scheduleResultSummary,
 	scheduleStaffId,
+	scheduleDaysWords,
+	scheduleStep,
 	scheduleViewFromParameters,
-	scheduleZoneNote,
 	toInstantRange,
 	withDefaultDays,
 	type ScheduleView
 } from './visitSchedule.js';
 
 const EASTERN = 'America/New_York';
-const DENVER = 'America/Denver';
 const TOKYO = 'Asia/Tokyo';
 const NOW = new Date('2026-11-13T15:00:00Z');
 
@@ -496,20 +496,95 @@ describe('the Practice’s today (#2867)', () => {
 	});
 });
 
-describe('scheduleZoneNote (#2867)', () => {
-	it('says nothing to a reader in the Practice’s zone', () => {
-		expect(scheduleZoneNote(EASTERN, EASTERN, NOW)).toBeUndefined();
+const preset = (days: 7 | 30): ScheduleView => ({ ...read(''), preset: days });
+const chosen = (from: string, to: string): ScheduleView => ({ ...read(''), chosen: { from, to } });
+
+describe('scheduleStep (#2870)', () => {
+	it('steps the next 30 days earlier by 30 days, as chosen days', () => {
+		const step = scheduleStep(preset(30), -1, EASTERN, NOW)!;
+		expect(step.days).toEqual({ from: '2026-10-14', to: '2026-11-12' });
+		expect(step.view.chosen).toEqual(step.days);
 	});
 
-	it('says nothing when another name for the same clock is the reader’s', () => {
-		expect(scheduleZoneNote(EASTERN, 'America/Toronto', NOW)).toBeUndefined();
+	it('steps the next 7 days later by 7 days', () => {
+		expect(scheduleStep(preset(7), 1, EASTERN, NOW)!.days).toEqual({ from: '2026-11-20', to: '2026-11-26' });
 	});
 
-	it('names the Practice’s zone to a reader in another, in words', () => {
-		const note = "Times are in this Practice's time zone, Eastern Time.";
-		expect(scheduleZoneNote(EASTERN, DENVER, NOW)).toBe(note);
-		expect(scheduleZoneNote(EASTERN, TOKYO, NOW)).toBe(note);
-		expect(scheduleZoneNote(EASTERN, 'UTC', NOW)).toBe(note);
+	it('steps chosen days by their own length, both ends included', () => {
+		expect(scheduleStep(chosen('2026-11-06', '2026-11-12'), 1, EASTERN, NOW)!.days).toEqual({
+			from: '2026-11-13',
+			to: '2026-11-19'
+		});
+		expect(scheduleStep(chosen('2026-11-10', '2026-11-12'), -1, EASTERN, NOW)!.days).toEqual({
+			from: '2026-11-07',
+			to: '2026-11-09'
+		});
+		expect(scheduleStep(chosen('2026-11-12', '2026-11-12'), -1, EASTERN, NOW)!.days).toEqual({
+			from: '2026-11-11',
+			to: '2026-11-11'
+		});
+	});
+
+	it('writes a result that is the next 7 days from today as that preset, and the next 30 as the bare path', () => {
+		const sevenBack = scheduleStep(chosen('2026-11-06', '2026-11-12'), 1, EASTERN, NOW)!;
+		expect(scheduleHref('/schedule', sevenBack.view)).toBe('/schedule?days=7');
+		const thirtyBack = scheduleStep(chosen('2026-10-14', '2026-11-12'), 1, EASTERN, NOW)!;
+		expect(scheduleHref('/schedule', thirtyBack.view)).toBe('/schedule');
+	});
+
+	it('counts today in the Practice’s zone, where it is already the next day', () => {
+		const step = scheduleStep(chosen('2026-11-14', '2026-11-20'), -1, TOKYO, new Date('2026-11-13T15:30:00Z'))!;
+		expect(step.days).toEqual({ from: '2026-11-07', to: '2026-11-13' });
+		const back = scheduleStep(chosen('2026-11-07', '2026-11-13'), 1, TOKYO, new Date('2026-11-13T15:30:00Z'))!;
+		expect(scheduleHref('/schedule', back.view)).toBe('/schedule?days=7');
+	});
+
+	it('steps across the day daylight saving ends, which is 25 hours long', () => {
+		const step = scheduleStep(chosen('2026-11-01', '2026-11-07'), -1, EASTERN, NOW)!;
+		expect(step.days).toEqual({ from: '2026-10-25', to: '2026-10-31' });
+		expect(scheduleStep(chosen('2026-10-28', '2026-11-03'), 1, EASTERN, NOW)!.days).toEqual({
+			from: '2026-11-04',
+			to: '2026-11-10'
+		});
+	});
+
+	it('steps across the day daylight saving starts, which is 23 hours long', () => {
+		const spring = new Date('2026-03-10T15:00:00Z');
+		expect(scheduleStep(chosen('2026-03-08', '2026-03-14'), -1, EASTERN, spring)!.days).toEqual({
+			from: '2026-03-01',
+			to: '2026-03-07'
+		});
+		expect(scheduleStep(chosen('2026-03-01', '2026-03-07'), 1, EASTERN, spring)!.days).toEqual({
+			from: '2026-03-08',
+			to: '2026-03-14'
+		});
+	});
+
+	it('steps across a month end and a year end', () => {
+		expect(scheduleStep(chosen('2026-02-23', '2026-03-01'), 1, EASTERN, NOW)!.days).toEqual({
+			from: '2026-03-02',
+			to: '2026-03-08'
+		});
+		expect(scheduleStep(chosen('2026-12-28', '2027-01-03'), 1, EASTERN, NOW)!.days).toEqual({
+			from: '2027-01-04',
+			to: '2027-01-10'
+		});
+	});
+
+	it('keeps Mine, the Doula, the narrowing to Visits waiting and the order', () => {
+		const view: ScheduleView = { ...preset(7), isMine: true, doula: 'staff-1', needsDoula: true, order: 'latest' };
+		const href = scheduleHref('/schedule', scheduleStep(view, -1, EASTERN, NOW)!.view);
+		expect(href).toBe('/schedule?from=2026-11-06&to=2026-11-12&mine=true&doula=staff-1&needsDoula=true&order=latest');
+	});
+
+	it('names the days a step lands on in words', () => {
+		const step = scheduleStep(preset(7), -1, EASTERN, NOW)!;
+		expect(scheduleDaysWords(step.days, EASTERN, NOW)).toBe('Fri Nov 6 to Thu Nov 12');
+		expect(scheduleDaysWords({ from: '2026-11-06', to: '2026-11-06' }, EASTERN, NOW)).toBe('Fri Nov 6');
+	});
+
+	it('is nothing where the days are not a range', () => {
+		expect(scheduleStep(chosen('', '2026-11-12'), 1, EASTERN, NOW)).toBeUndefined();
 	});
 });
 

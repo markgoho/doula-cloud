@@ -315,18 +315,18 @@ describe('the narrowing', () => {
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
 
 		await expect.element(testPage.getByLabelText('From')).toHaveValue('2026-09-07');
-		await expect.element(testPage.getByLabelText('To')).toHaveValue('2026-10-06');
-		await expect.element(testPage.getByLabelText('To')).toHaveAccessibleDescription('Both days are included.');
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveValue('2026-10-06');
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveAccessibleDescription('Both days are included.');
 	});
 
 	it('keeps what was typed when the radio is chosen again', async () => {
 		await setup();
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
-		await testPage.getByLabelText('To').fill('2026-09-20');
+		await testPage.getByLabelText('To', { exact: true }).fill('2026-09-20');
 
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
 
-		await expect.element(testPage.getByLabelText('To')).toHaveValue('2026-09-20');
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveValue('2026-09-20');
 	});
 
 	it('starts From and To on the next 7 days when that was the choice before', async () => {
@@ -335,7 +335,7 @@ describe('the narrowing', () => {
 
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
 
-		await expect.element(testPage.getByLabelText('To')).toHaveValue('2026-09-13');
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveValue('2026-09-13');
 	});
 
 	it('goes to the address for the next 7 days, Mine and a Doula, so it survives a reload and can be shared', async () => {
@@ -361,7 +361,7 @@ describe('the narrowing', () => {
 		await setup();
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
 		await testPage.getByLabelText('From').fill('2026-09-10');
-		await testPage.getByLabelText('To').fill('2026-09-19');
+		await testPage.getByLabelText('To', { exact: true }).fill('2026-09-19');
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
@@ -371,14 +371,14 @@ describe('the narrowing', () => {
 	it('refuses a To day before the From day beside To, moves focus there, and goes nowhere', async () => {
 		await setup();
 		await testPage.getByRole('radio', { name: 'Choose days' }).click();
-		await testPage.getByLabelText('To').fill('2026-09-01');
+		await testPage.getByLabelText('To', { exact: true }).fill('2026-09-01');
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
 		await expect
-			.element(testPage.getByLabelText('To'))
+			.element(testPage.getByLabelText('To', { exact: true }))
 			.toHaveAccessibleDescription('Both days are included. Choose a To day that is the same as the From day or later.');
-		await expect.element(testPage.getByLabelText('To')).toHaveFocus();
+		await expect.element(testPage.getByLabelText('To', { exact: true })).toHaveFocus();
 		expect(goto).not.toHaveBeenCalled();
 	});
 
@@ -407,7 +407,7 @@ describe('the narrowing', () => {
 
 		await expect.element(testPage.getByRole('radio', { name: 'Choose days' })).toBeChecked();
 		await expect
-			.element(testPage.getByLabelText('To'))
+			.element(testPage.getByLabelText('To', { exact: true }))
 			.toHaveAccessibleDescription('Both days are included. Choose a To day that is the same as the From day or later.');
 		expect(testPage.getByRole('table').elements()).toHaveLength(0);
 		expect(testPage.getByRole('alert').elements()).toHaveLength(1);

@@ -505,14 +505,14 @@
 		   list's "Show" radios) draws its legend on the boxes' own row: floated,
 		   an ordinary box beside them, where a rendered legend takes a line above.
 		   The boxes wrap among themselves beside it. */
-		.switches > :global(fieldset) {
+		:is(.switches, .fold) > :global(fieldset) {
 			margin: 0;
 			padding: 0;
 			border: 0;
 			min-inline-size: 0;
 		}
 
-		.switches > :global(fieldset) > :global(legend) {
+		:is(.switches, .fold) > :global(fieldset) > :global(legend) {
 			float: inline-start;
 			display: flex;
 			align-items: center;
@@ -531,7 +531,7 @@
 		   box or circle and a tighter gap to its words, read by `Checkbox`,
 		   `RadioGroup` and `LabeledField` through the choice tokens, so no route
 		   picks a size. */
-		.switches {
+		:is(.switches, .fold) {
 			--choice-size: calc(var(--control-height) * 0.6);
 			--choice-gap: var(--space-2);
 			row-gap: var(--space-1);
@@ -539,12 +539,12 @@
 
 		/* A small box keeps the full target: its row and its label stand the
 		   target tall, the box centered in it. */
-		.switches :global(.inline-row) {
+		:is(.switches, .fold) :global(.inline-row) {
 			grid-template-rows: minmax(var(--hit-target-min), auto);
 			align-items: center;
 		}
 
-		.switches :global(.inline-row > label) {
+		:is(.switches, .fold) :global(.inline-row > label) {
 			align-self: stretch;
 			display: flex;
 			align-items: center;
