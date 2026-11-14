@@ -42,6 +42,21 @@ func TestUnstaffedDays(t *testing.T) {
 			want: []oncall.Window{{Start: "2026-10-16", End: "2026-10-19"}},
 		},
 		{
+			name: "a narrowing inside another's days does not move the hole after them",
+			rng:  october,
+			effectives: []oncall.Window{
+				{Start: windowStart, End: octTwenty},
+				{Start: octFifteen, End: octFifteen},
+			},
+			want: []oncall.Window{{Start: "2026-10-21", End: windowEnd}},
+		},
+		{
+			name:       "days that start after the window leave the whole window as the hole",
+			rng:        october,
+			effectives: []oncall.Window{{Start: "2026-11-20", End: "2026-11-25"}},
+			want:       []oncall.Window{{Start: windowStart, End: windowEnd}},
+		},
+		{
 			name:       "a hole outside the chosen range is not reported",
 			rng:        oncall.Window{Start: octFirst, End: octTwelfth},
 			effectives: []oncall.Window{{Start: windowStart, End: octFifteen}},
