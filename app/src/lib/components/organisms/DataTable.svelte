@@ -180,10 +180,11 @@
 		rowHref?: (row: T) => string;
 		/**
 		 * The row link's accessible name, where its visible text alone does
-		 * not tell two rows apart: the Invoices list's two Invoices of one
-		 * Client ("Tessa Moreau, INV-0012"). It starts with the visible
-		 * text, so a person who says what she sees still reaches it (WCAG
-		 * 2.5.3, Label in Name).
+		 * not tell two rows apart: two Invoices of one Client. The caller
+		 * adds the fact only for a row another loaded row matches, so every
+		 * cell is still heard and a list of links tells the rows apart. It
+		 * starts with the visible text, so a person who says what she sees
+		 * still reaches it (WCAG 2.5.3, Label in Name).
 		 */
 		rowLinkLabel?: (row: T) => string;
 		/**
@@ -411,28 +412,6 @@
 		}
 	});
 
-	/*
-	 * Whether a given cell actually renders its column's snippet (#740),
-	 * spent as a class on the `<td>` so the cell's geometry follows from
-	 * the COLUMN rather than from a class name the caller's markup had to
-	 * carry. `columnIndex === 0 && rowHref` is the documented refusal on
-	 * `Column.content`: the row link wins there and the cell is one line
-	 * of link text, so it is not a content cell for styling either.
-	 *
-	 * This restates a condition the `cell` snippet's own `{#if}` chain
-	 * writes inline, and that is not an oversight: the inline form is what
-	 * narrows `rowHref` and `column.content` from optional to callable for
-	 * the compiler, and a call through this function narrows neither. The
-	 * two must agree, so a spec asserts the pair together -- a linked
-	 * first column renders the link AND takes no content padding -- and
-	 * disagreement fails there rather than showing up on screen.
-	 */
-	function isUnheard(column: Column<T>, columnIndex: number, view: DataTableView): boolean {
-		return Boolean(
-			rowHref && column.namedByRowLink && columnIndex > 0 && (view === 'table' || recordLayout === 'compact')
-		);
-	}
-
 	const CONTROLS =
 		'a, button, input, select, textarea, summary, label, option, details, dialog, [role=button], [role=link], [role=menuitem], [role=checkbox], [contenteditable], td.actions, .record-actions';
 	const MOVE_LIMIT = 5;
@@ -489,6 +468,22 @@
 		};
 	}
 
+	/*
+	 * Whether a given cell actually renders its column's snippet (#740),
+	 * spent as a class on the `<td>` so the cell's geometry follows from
+	 * the COLUMN rather than from a class name the caller's markup had to
+	 * carry. `columnIndex === 0 && rowHref` is the documented refusal on
+	 * `Column.content`: the row link wins there and the cell is one line
+	 * of link text, so it is not a content cell for styling either.
+	 *
+	 * This restates a condition the `cell` snippet's own `{#if}` chain
+	 * writes inline, and that is not an oversight: the inline form is what
+	 * narrows `rowHref` and `column.content` from optional to callable for
+	 * the compiler, and a call through this function narrows neither. The
+	 * two must agree, so a spec asserts the pair together -- a linked
+	 * first column renders the link AND takes no content padding -- and
+	 * disagreement fails there rather than showing up on screen.
+	 */
 	function isContentCell(column: Column<T>, columnIndex: number): boolean {
 		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
 	}
@@ -535,14 +530,6 @@
 	linked first column is deliberately unreachable -- see `Column.content`.
 -->
 {#snippet cell(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
-	{#if isUnheard(column, columnIndex, view)}
-		<span aria-hidden="true">{@render cellBody(column, columnIndex, row, view)}</span>
-	{:else}
-		{@render cellBody(column, columnIndex, row, view)}
-	{/if}
-{/snippet}
-
-{#snippet cellBody(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
 	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}
 			><Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} isRowLink /></time
@@ -693,7 +680,7 @@
 						{@const lead = fields[0]!}
 						{@const rest = fields.slice(1)}
 						<div class="compact-lead">
-							<span class="visually-hidden" aria-hidden={isUnheard(lead.column, lead.columnIndex, view) || undefined}>{`${lead.label}: `}</span>
+							<span class="visually-hidden">{`${lead.label}: `}</span>
 							{@render cell(lead.column, lead.columnIndex, row, view)}
 						</div>
 						{#if rest.length > 0}
@@ -703,8 +690,8 @@
 									     starts a line takes its dot past the line's start, where it is
 									     clipped: no line starts or ends on one. -->
 									<span class="compact-field">
-										<span class="visually-hidden" aria-hidden={isUnheard(field.column, field.columnIndex, view) || undefined}>{`${field.label}: `}</span>
-										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}{@render cell(field.column, field.columnIndex, row, view)}
+										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}<span class="visually-hidden">{`${field.label}: `}</span>
+										{@render cell(field.column, field.columnIndex, row, view)}
 									</span>
 								{/each}
 							</div>

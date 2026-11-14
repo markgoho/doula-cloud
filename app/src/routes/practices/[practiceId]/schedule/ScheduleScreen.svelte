@@ -71,6 +71,7 @@
 	import VisitWhen from '#lib/components/molecules/VisitWhen.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import { rowLinkLabeler } from '#lib/rowLinkLabel.js';
 	import type { PracticeSession } from '../+layout.js';
 	import type { SchedulePageData } from './+page.js';
 
@@ -96,9 +97,9 @@
 
 	// What a person reads when a read fails: no status code and no server
 	// text, and that nothing is lost (T8, as on the Clients and Invoices lists).
-	const LOAD_FAILED = 'Your schedule did not load. Nothing you saved is lost.';
-	const SEARCH_FAILED = 'Your search did not run. Nothing you saved is lost.';
-	const LOAD_MORE_FAILED = 'More Visits did not load. Nothing you saved is lost. Try again.';
+	const LOAD_FAILED = 'Your schedule did not load.';
+	const SEARCH_FAILED = 'Your search did not run.';
+	const LOAD_MORE_FAILED = 'More Visits did not load. Try again.';
 	const RESULT_ID = 'schedule-result';
 	const ANY_DOULA = 'Any Doula';
 	const NEEDS_DOULA = 'Doula no longer on this work';
@@ -557,8 +558,7 @@
 		{
 			label: 'When',
 			accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone),
-			content: whenCell,
-			namedByRowLink: true
+			content: whenCell
 		},
 		{ label: 'Type', track: 'calc(10ch + 2 * var(--data-table-cell-inset))', accessor: (visit: ScheduledVisit) => visitTypeLabel(visit.type) },
 		{
@@ -577,8 +577,14 @@
 		return `${engagement}#visit-${visit.visitId}`;
 	}
 
-	// Two Visits of one Client are two links a list of links tells apart.
-	const rowLinkLabel = (visit: ScheduledVisit) => `${visit.clientName}, ${formatScheduledVisit(visit.scheduledAt, timeZone)}`;
+	// A Client's link adds the day only once another loaded Visit is hers, so two links of one Client stay apart.
+	const rowLinkLabel = $derived(
+		rowLinkLabeler(
+			schedule.items,
+			(visit) => visit.clientName,
+			(visit) => formatScheduledVisit(visit.scheduledAt, timeZone)
+		)
+	);
 </script>
 
 {#snippet whenCell(visit: ScheduledVisit, tableView: DataTableView)}

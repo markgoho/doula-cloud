@@ -180,20 +180,19 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, owed') })).toBeVisible();
 	});
 
-	// T6, #2864: the reference is heard in the row link's name and once; the
-	// cell under "Invoice" says the care and how it was billed. C1 (#2746): the
-	// care is the Engagement's kind, in the Clients list's words.
-	it('says the care each Invoice bills for and how it was billed, and the reference only in the row link', async () => {
+	// T6, #2864: every visible cell is heard, so the cell under "Invoice" says
+	// the reference, the care and how it was billed. C1 (#2746): the care is the
+	// Engagement's kind, in the Clients list's words.
+	it('says the reference, the care each Invoice bills for and how it was billed', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: heard('Postpartum, billed By hand') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('Birth, billed through Stripe') }).first()).toBeVisible();
-		expect(testPage.getByRole('cell', { name: /INV-0042|DC-0092/ }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('cell', { name: heard('INV-0042, Postpartum, billed By hand') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('DC-0092, Birth, billed through Stripe') })).toBeVisible();
 	});
 
 	// T6: the table is named, described by the result line, and two
 	// Invoices of one Client are two links a list of links tells apart.
-	it('names the table, describes it by the result line, and names each link by Client and reference', async () => {
+	it('names the table, describes it by the result line, and names two Invoices of one Client by Client and reference', async () => {
 		await setup({ ...data, items: [openInvoice, { ...openInvoice, id: 'inv-9', reference: 'INV-0043' }] });
 
 		const table = testPage.getByRole('table', { name: 'Invoices' });
@@ -297,7 +296,7 @@ describe('the Practice-wide invoice list (#265)', () => {
 
 		await expect
 			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('More Invoices did not load. Nothing you saved is lost. Try again.');
+			.toHaveTextContent('More Invoices did not load. Try again.');
 		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('invalid cursor')).not.toBeInTheDocument();
@@ -320,7 +319,7 @@ describe('a read that did not land', () => {
 		const onRetry = vi.fn(() => retried.promise);
 		await render(Page, { hasReadFailed: true, onRetry });
 
-		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Your Invoices did not load. Nothing you saved is lost.');
+		await expect.element(testPage.getByRole('alert')).toHaveTextContent('Your Invoices did not load.');
 		await expect.element(testPage.getByRole('status', { name: 'Loading your Invoices' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('radio', { name: 'All', exact: true })).toBeVisible();
 
@@ -388,7 +387,7 @@ describe('coming back from an Invoice', () => {
 		const { scrollTo, screen } = await renderHoldingAPlace();
 		await screen.rerender({ data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
-		const left = testPage.getByRole('link', { name: /^Cleo,/ });
+		const left = testPage.getByRole('link', { name: /^Cleo/ });
 		await expect.element(left).toBeVisible();
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
 		await expect.element(left).toHaveFocus();
@@ -407,7 +406,7 @@ describe('coming back from an Invoice', () => {
 
 		await screen.rerender({ isReading: false, data: { ...data, hasMore: true, nextCursor: 'cursor-1' } });
 
-		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).toHaveFocus();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo/ })).toHaveFocus();
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
 	});
 
@@ -445,9 +444,9 @@ describe('coming back from an Invoice', () => {
 
 		second.resolve(jsonResponse(cleoPage));
 
-		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo/ })).toBeVisible();
 		expect(scrollTo).not.toHaveBeenCalled();
-		await expect.element(testPage.getByRole('link', { name: /^Cleo,/ })).not.toHaveFocus();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo/ })).not.toHaveFocus();
 	});
 
 	it('restores at once when the rows had already landed, and names no row for a move off the app', async () => {

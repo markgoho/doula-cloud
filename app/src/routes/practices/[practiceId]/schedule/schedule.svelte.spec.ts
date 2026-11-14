@@ -51,8 +51,8 @@ const setAddress = (query: string) => {
 	pageState.url = new SvelteURL(`https://example.test${schedulePath}${query}`);
 };
 
-// A name as the start of a row link's name: the Client, then the Visit's day.
-const startsWith = (name: string) => new RegExp(`^${name.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`)}, `);
+// A row link's name starts with the Client, and says the Visit's day only when another loaded Visit is hers.
+const startsWith = (name: string) => new RegExp(`^${name.replaceAll(/[$()*+.?[\\\]^{|}]/g, String.raw`\$&`)}(, |$)`);
 
 beforeEach(async () => {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
@@ -92,9 +92,7 @@ function setup(properties?: Parameters<typeof render<typeof Page>>[1]) {
 // side of a visually hidden comma, so the words match with any spacing.
 const heard = (text: string) => new RegExp(`^${text.split(/,? /).join(String.raw`\s*,?\s*`)}$`);
 
-// The When cells are drawn and not read (#2864), so no role or name finds
-// them; the table's own `<time>` elements are the cells' content. A fact with
-// no accessible signal, by design.
+// The table's own `<time>` elements are the When cells' content.
 const whenTimes = () => [...testPage.getByRole('table', { name: 'Visits' }).element().querySelectorAll('time.when')];
 
 describe('the Practice-wide schedule (#263)', () => {
@@ -115,26 +113,51 @@ describe('the Practice-wide schedule (#263)', () => {
 		expect(when!.textContent).toMatch(/^[A-Z][a-z]{2} Sep \d+\s*,?\s*\d/);
 	});
 
-	// #2864: the day and time are said once, in the link's name; the cell
-	// under "When" is drawn and not read.
-	it('says a Visit’s day and time once, in the link’s name, and not again in the When cell', async () => {
+	// #2864: every visible cell is heard; the link names the Client alone.
+	it('names a row whose Client has no other Visit loaded by the Client alone, and its When cell is heard', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) })).toHaveAccessibleName(/, [A-Z][a-z]{2} Sep \d+, \d+:\d\d[ap]m$/);
-		expect(testPage.getByRole('cell', { name: /[ap]m/ }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) })).toHaveAccessibleName(earlierVisit.clientName);
+		const when = testPage.getByRole('cell', { name: /^[A-Z][a-z]{2} Sep \d+\s*,?\s*\d+:\d\d[ap]m$/ });
+		expect(when.elements().length).toBeGreaterThan(0);
+		await expect.element(when.first()).toBeVisible();
 	});
 
-	it('names each row as the way in to its Visit on the Engagement, told apart by its day (#2747)', async () => {
+	it('names each row as the way in to its Visit on the Engagement (#2747)', async () => {
 		await setup();
 
-		const link = testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) });
 		await expect
-			.element(link)
+			.element(testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) }))
 			.toHaveAttribute(
 				'href',
 				`/practices/${practiceId}/engagements/${earlierVisit.engagementId}#visit-${earlierVisit.visitId}`
 			);
-		await expect.element(link).toHaveAccessibleName(/^Anne-Marie Ochieng-Whitfield, [A-Z][a-z]{2} Sep \d+, \d+:\d\d[ap]m$/);
+	});
+
+	it('tells two Visits of one Client apart by their days, and no other row', async () => {
+		const sameClient = { ...earlierVisit, visitId: 'visit-same', scheduledAt: '2026-09-20T14:30:00Z' };
+		await setup({ data: { ...data, page: { ...schedulePage, items: [earlierVisit, sameClient, laterVisit] } } });
+
+		const names = testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) }).elements().map((link) => link.getAttribute('aria-label'));
+		expect(names).toHaveLength(2);
+		expect(new Set(names).size).toBe(2);
+		for (const name of names) expect(name).toMatch(/^Anne-Marie Ochieng-Whitfield, [A-Z][a-z]{2} Sep \d+, \d+:\d\d[ap]m$/);
+		await expect.element(testPage.getByRole('link', { name: startsWith(laterVisit.clientName) })).toHaveAccessibleName(laterVisit.clientName);
+	});
+
+	it('adds the day to both links once Load more brings a second Visit of a Client', async () => {
+		const sameClient = { ...earlierVisit, visitId: 'visit-same', scheduledAt: '2026-09-20T14:30:00Z' };
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ items: [sameClient], hasMore: false }));
+		await setup({ data: { ...data, page: { ...schedulePage, hasMore: true, nextCursor: 'cursor-1' } } });
+		await expect.element(testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) })).toHaveAccessibleName(earlierVisit.clientName);
+
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.poll(() => testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) }).elements()).toHaveLength(2);
+		const links = testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) }).elements();
+		for (const link of links) {
+			expect(link.getAttribute('aria-label')).toMatch(/, [A-Z][a-z]{2} Sep \d+, \d+:\d\d[ap]m$/);
+		}
 	});
 
 	it('says the table’s purpose and what it holds, and states the count and order once', async () => {
@@ -600,7 +623,7 @@ describe('paging', () => {
 
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
-		await expect.element(testPage.getByRole('link', { name: /^Cleo, / })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo$/ })).toBeVisible();
 		await expect.element(testPage.getByRole('link', { name: /^Anne-Marie/ })).toBeVisible();
 		const url = new URL(apiFetchWithSession.mock.calls[0][0], 'https://example.test');
 		expect(url.pathname).toBe(`/api/practices/${practiceId}/visits`);
@@ -633,7 +656,7 @@ describe('paging', () => {
 
 		await expect
 			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('More Visits did not load. Nothing you saved is lost. Try again.');
+			.toHaveTextContent('More Visits did not load. Try again.');
 		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		expect(testPage.getByText('invalid cursor').elements()).toHaveLength(0);
@@ -658,7 +681,7 @@ describe('when the read fails (T8)', () => {
 
 		await expect
 			.element(testPage.getByRole('alert'))
-			.toHaveTextContent('Your schedule did not load. Nothing you saved is lost.');
+			.toHaveTextContent('Your schedule did not load.');
 		await expect.element(testPage.getByRole('radio', { name: 'Next 7 days' })).toBeChecked();
 		expect(testPage.getByRole('table').elements()).toHaveLength(0);
 
@@ -689,7 +712,7 @@ describe('coming back from an Engagement', () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse(nextPage));
 		await setup({ data: { ...data, page: morePage } });
 		await testPage.getByRole('button', { name: 'Load more' }).click();
-		await expect.element(testPage.getByRole('link', { name: /^Cleo, / })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo$/ })).toBeVisible();
 
 		leaveTo('#visit-visit-9');
 
@@ -712,7 +735,7 @@ describe('coming back from an Engagement', () => {
 
 		await screen.rerender({ data: { ...data, page: morePage } });
 
-		const left = testPage.getByRole('link', { name: /^Cleo, / });
+		const left = testPage.getByRole('link', { name: /^Cleo$/ });
 		await expect.element(left).toBeVisible();
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
 		await expect.element(left).toHaveFocus();
@@ -741,7 +764,7 @@ describe('coming back from an Engagement', () => {
 
 		await vi.waitFor(() => expect(scrollTo).toHaveBeenCalledWith(0, 120));
 		expect(apiFetchWithSession).toHaveBeenCalledTimes(2);
-		await expect.element(testPage.getByRole('link', { name: /^Cleo, / })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo$/ })).toBeVisible();
 	});
 
 	it('waits for the read of the entry she came back to', async () => {
@@ -781,7 +804,7 @@ describe('coming back from an Engagement', () => {
 
 		second.resolve(jsonResponse(nextPage));
 
-		await expect.element(testPage.getByRole('link', { name: /^Cleo, / })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Cleo$/ })).toBeVisible();
 		expect(scrollTo).not.toHaveBeenCalled();
 	});
 

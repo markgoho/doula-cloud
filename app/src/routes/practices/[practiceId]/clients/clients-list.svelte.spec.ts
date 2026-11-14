@@ -318,7 +318,7 @@ describe('clients list screen', () => {
 		await setup(textResponse('Server rejected the Clients list request'));
 
 		await expect
-			.element(testPage.getByText('Your Clients did not load. Nothing you saved is lost.', { exact: true }))
+			.element(testPage.getByText('Your Clients did not load.', { exact: true }))
 			.toBeVisible();
 		// The button says it; the sentence above it does not say it twice.
 		await expect.element(testPage.getByText('Try again', { exact: true })).toBeVisible();
@@ -2044,7 +2044,7 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
 		await expect
-			.element(testPage.getByText('More Clients did not load. Nothing you saved is lost. Try again.'))
+			.element(testPage.getByText('More Clients did not load. Try again.'))
 			.toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();

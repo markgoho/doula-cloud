@@ -72,6 +72,7 @@
 	import type { PracticeInvoiceListData } from '#lib/invoice.js';
 	import type { PracticeSession } from '../+layout.js';
 	import { isOwner, isOwnerOrAdmin } from '#lib/roles.js';
+	import { rowLinkLabeler } from '#lib/rowLinkLabel.js';
 
 	/*
 	 * `data` is the read once it lands (#2255). Until then the screen draws
@@ -95,9 +96,9 @@
 
 	// What a person reads when a read fails: no status code and no server
 	// text, and that nothing is lost (T8, as on the Clients list).
-	const LOAD_FAILED = 'Your Invoices did not load. Nothing you saved is lost.';
-	const SEARCH_FAILED = 'Your search did not run. Nothing you saved is lost.';
-	const LOAD_MORE_FAILED = 'More Invoices did not load. Nothing you saved is lost. Try again.';
+	const LOAD_FAILED = 'Your Invoices did not load.';
+	const SEARCH_FAILED = 'Your search did not run.';
+	const LOAD_MORE_FAILED = 'More Invoices did not load. Try again.';
 
 	const view = $derived(invoicesViewOf(page.url.searchParams));
 	// #2869: the order the address names, empty for the view's own.
@@ -628,8 +629,14 @@
 		return `${engagement}#invoice-${invoice.id}`;
 	}
 
-	// Two Invoices of one Client are two links a list of links tells apart.
-	const rowLinkLabel = (invoice: PracticeInvoice) => `${invoice.clientName}, ${invoice.reference}`;
+	// A Client's link adds the reference only once another loaded Invoice is hers, so two links of one Client stay apart.
+	const rowLinkLabel = $derived(
+		rowLinkLabeler(
+			invoices.items,
+			(invoice) => invoice.clientName,
+			(invoice) => invoice.reference
+		)
+	);
 </script>
 
 {#snippet moneyCell(invoice: PracticeInvoice, view: DataTableView)}
@@ -637,8 +644,7 @@
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
-	<!-- The reference is drawn under "Invoice" and heard in the row link's name ("Tessa Moreau, INV-0012"), which is what tells two Invoices of one Client apart in a list of links, so it is heard once. -->
-	<span class="no-break"><span aria-hidden="true">{invoice.reference}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+	<span class="no-break"><span>{invoice.reference}</span><span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 {/snippet}
 
 <!-- In the table a paid row's "Paid" is heard and not seen: its Money cell shows "paid" under the "Payment" heading (H8), and a row read whole still says the day's kind. A card has no heading, so it shows it. An unpaid row keeps "Payment due", never a bare "due" (ADR-0015). -->
