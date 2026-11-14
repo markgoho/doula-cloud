@@ -152,13 +152,33 @@ interface Caller {
 	hasAnyClient?: boolean;
 	// The Practice's Doulas, which +page.ts reads for an Owner or an Admin.
 	doulas?: { value: string; label: string }[];
+	// Every Doula on the roster, which names a Doula who holds no Client; the options by default.
+	everyDoula?: { value: string; label: string }[];
+	// Whether she may choose a Doula; true where the options are given.
+	canChooseDoula?: boolean;
+	// Whether the list opens on "Mine" for her.
+	opensOnMine?: boolean;
+	// Holds the roster back until the test lets it land.
+	roster?: Promise<{ value: string; label: string }[]>;
 	// Answers each request by its address, for a list read in pages.
 	responder?: (path: string) => Promise<Response>;
 }
 
 async function setup(
 	response?: Response,
-	{ isContractor = false, isDoula = false, hasOtherDoulas = true, hasMine = true, hasAnyClient = true, doulas = [], responder }: Caller = {}
+	{
+		isContractor = false,
+		isDoula = false,
+		hasOtherDoulas = true,
+		hasMine = true,
+		hasAnyClient = true,
+		doulas = [],
+		roster,
+		everyDoula = doulas,
+		canChooseDoula = doulas.length > 0 || roster !== undefined,
+		opensOnMine = false,
+		responder
+	}: Caller = {}
 ) {
 	// DataTable's own content floor (#508) shows its record cards below
 	// 55rem, and this file's assertions are about the <table> specifically.
@@ -183,7 +203,10 @@ async function setup(
 			hasOtherDoulas,
 			hasMine: Promise.resolve(hasMine),
 			hasAnyClient: Promise.resolve(hasAnyClient),
-			doulas: Promise.resolve(doulas),
+			doulas: roster ?? Promise.resolve(doulas),
+			everyDoula: roster ?? Promise.resolve(everyDoula),
+			canChooseDoula,
+			opensOnMine,
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor, timezone: 'America/New_York' }
 		}
 	});
@@ -209,6 +232,9 @@ describe('before the page has taken over', () => {
 					hasMine: Promise.resolve(true),
 					hasAnyClient: Promise.resolve(true),
 					doulas: Promise.resolve([]),
+					everyDoula: Promise.resolve([]),
+					canChooseDoula: false,
+					opensOnMine: false,
 					session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 				}
 			}
@@ -2364,6 +2390,9 @@ async function renderListScreen({
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
 			doulas: Promise.resolve(rosterDoulas),
+			everyDoula: Promise.resolve(rosterDoulas),
+			canChooseDoula: rosterDoulas.length > 0,
+			opensOnMine: false,
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
@@ -2510,7 +2539,7 @@ describe('the rows of a typical page', () => {
 
 		await expect.element(testPage.getByRole('cell', { name: 'Joss Adeyemi, Lena Vasquez', exact: true }).first()).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: /Ended Nov 2, 2026/ })).toBeVisible();
-		await expect.element(testPage.getByText('12 days overdue').first()).toBeVisible();
+		await expect.element(testPage.getByText('overdue', { exact: true }).first()).toBeVisible();
 		const heights = rowHeights();
 		expect(heights.length).toBe(8);
 		expect(heights.filter((height) => Math.abs(height - 40) > 4), `row heights ${heights.map((height) => Math.round(height))}`).toStrictEqual([]);
@@ -2526,7 +2555,7 @@ describe('the rows of a typical page', () => {
 
 		const row = testPage.getByRole('row', { name: new RegExp(TYPICAL_CLIENTS[6].name) });
 		await expect.element(row).toHaveTextContent('Postpartum');
-		await expect.element(row).toHaveTextContent('12 days overdue');
+		await expect.element(row).toHaveTextContent('overdue');
 		await expect.element(row).toHaveTextContent('Active');
 		await expect.element(row).toHaveTextContent('Contract signed');
 		const height = row.element().getBoundingClientRect().height;
@@ -2727,7 +2756,7 @@ describe('the Money column’s state', () => {
 		}
 	});
 
-	it('draws owed in the amber badge and overdue, with its days, in the red one; a settled state stays plain', async () => {
+	it('draws owed in the amber badge and overdue in the red one; a settled state stays plain', async () => {
 		await renderListScreen({ width: 1280, height: 900, respond: () => jsonResponse({ items: seedLikeClients, hasMore: false }) });
 		await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
 
@@ -2736,8 +2765,8 @@ describe('the Money column’s state', () => {
 			return badge ? getComputedStyle(badge).getPropertyValue('--badge-hue').trim() : undefined;
 		};
 		expect(hue('owed')).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-warning').trim());
-		expect(hue('12 days overdue')).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim());
-		expect(hue('12 days overdue')).not.toBe(hue('owed'));
+		expect(hue('overdue')).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim());
+		expect(hue('overdue')).not.toBe(hue('owed'));
 	});
 
 	it('says the fact once to a screen reader: in the Money cell, never in Status', async () => {
@@ -2745,16 +2774,16 @@ describe('the Money column’s state', () => {
 		await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
 
 		const row = testPage.getByRole('row', { name: new RegExp(TYPICAL_CLIENTS[6].name) }).element();
-		expect(row.textContent!.match(/12 days overdue/g)).toHaveLength(1);
+		expect(row.textContent!.match(/overdue/g)).toHaveLength(1);
 		expect(row.querySelector('td.grows')!.textContent).not.toMatch(/overdue|Owes/i);
-		expect(row.querySelector('td.numeric')!.textContent).toMatch(/\$[\d,.]+\s*,\s*12 days overdue/);
+		expect(row.querySelector('td.numeric')!.textContent).toMatch(/\$[\d,.]+\s*,\s*overdue\s*,\s*1 Invoice/);
 	});
 
 	it('gives the widest badge its track', async () => {
 		await renderListScreen({ width: 1280, height: 900, respond: () => jsonResponse({ items: seedLikeClients, hasMore: false }) });
 		await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
 
-		const badge = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span')].find((element) => element.textContent?.trim() === '12 days overdue')!;
+		const badge = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span')].find((element) => element.textContent?.trim() === 'overdue')!;
 		expect(badge.getBoundingClientRect().width).toBeLessThanOrEqual(badge.closest('.state')!.getBoundingClientRect().width);
 	});
 });
@@ -3364,6 +3393,8 @@ describe('the columns of a busy page at 1366px and up', () => {
 	it('starts Status at one x whether or not Money and the Doula are drawn', async () => {
 		const withoutMoney = seedLikeClients.map((client) => ({
 			...client,
+			owedCents: undefined,
+			owedInvoiceCount: undefined,
 			openEngagements: client.openEngagements?.map((line) => ({
 				...line,
 				invoiceStatus: undefined,
@@ -3508,5 +3539,227 @@ describe('the Clients list applies untyped controls when changed (#2888)', () =>
 
 		expect(goto).toHaveBeenCalledOnce();
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, noName);
+	});
+});
+
+const nextStepLink = (name: string) => testPage.getByRole('link', { name, exact: true });
+
+describe('a shared link to a Doula, before the roster lands (#2864)', () => {
+	const base = `/practices/${practiceId}/clients`;
+
+	it('draws the select disabled from the first paint, holding her id, with no tag and no result line', async () => {
+		pageState.url.searchParams.set('doula', lena.value);
+		const roster = Promise.withResolvers<typeof doulas>();
+		await setup(undefined, { roster: roster.promise });
+
+		await expect.element(doulaField()).toBeDisabled();
+		await expect.element(doulaField()).toHaveValue(lena.value);
+		await expect.element(testPage.getByRole('option', { name: 'Any Doula' })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('link', { name: /Remove filter: Doula/ })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent('');
+
+		roster.resolve(doulas);
+
+		await expect.element(doulaField()).toBeEnabled();
+		await expect.element(doulaField()).toHaveValue(lena.value);
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Doula Lena Vasquez' })).toBeVisible();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing Lena Vasquez's \d+ Clients?/);
+	});
+
+	it('says "More filters and order" before and after the roster lands', async () => {
+		pageState.url.searchParams.set('doula', lena.value);
+		const roster = Promise.withResolvers<typeof doulas>();
+		await setup(undefined, { roster: roster.promise });
+		await testPage.viewport(375, 900);
+
+		await expect.element(testPage.getByText('More filters and order')).toBeVisible();
+		roster.resolve(doulas);
+		await expect.element(doulaField()).toBeEnabled();
+		await expect.element(testPage.getByText('More filters and order')).toBeVisible();
+	});
+
+	it('draws no sentence for an empty list until the roster names her', async () => {
+		pageState.url.searchParams.set('doula', lena.value);
+		const roster = Promise.withResolvers<typeof doulas>();
+		await setup(nobody, { roster: roster.promise });
+
+		await expect.element(testPage.getByRole('status', { name: 'Loading Clients' })).toBeVisible();
+		await expect.element(testPage.getByText(/has no Clients/)).not.toBeInTheDocument();
+
+		roster.resolve(doulas);
+
+		await expect.element(testPage.getByText('Lena Vasquez has no Clients. Clear the filters to widen the list.').first()).toBeVisible();
+	});
+
+	it('names a Doula who holds no Client from the whole roster, and keeps her in the select', async () => {
+		pageState.url.searchParams.set('doula', lena.value);
+		await setup(undefined, { doulas: [kimiko], everyDoula: doulas });
+
+		await expect.element(doulaField()).toHaveValue(lena.value);
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Doula Lena Vasquez' })).toBeVisible();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing Lena Vasquez's/);
+	});
+
+	it('keeps the select drawn and enabled with "Any Doula" alone when the roster lands empty', async () => {
+		await setup(undefined, { canChooseDoula: true });
+
+		await expect.element(doulaField()).toBeEnabled();
+		await expect.element(doulaField().getByRole('option', { name: 'Any Doula' })).toBeInTheDocument();
+		expect(doulaField().getByRole('option').elements()).toHaveLength(1);
+	});
+
+	it('says "that Doula" when the roster could not be read', async () => {
+		pageState.url.searchParams.set('doula', lena.value);
+		await setup(undefined, { canChooseDoula: true });
+
+		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Doula that Doula' })).toBeVisible();
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing that Doula's/);
+	});
+
+	it('is not drawn at all for a reader who may not choose a Doula', async () => {
+		await setup(undefined, { canChooseDoula: false });
+
+		await expect.element(doulaField()).not.toBeInTheDocument();
+		await expect.element(testPage.getByText('Order', { exact: true })).toBeVisible();
+	});
+
+	describe('an empty result offers one next step chosen by what emptied it', () => {
+		const nextStep = nextStepLink;
+
+		it('offers every Client for a Name beside other filters, and sends the Name with it', async () => {
+			pageState.url.searchParams.set('owes', 'true');
+			pageState.url.searchParams.set('order', 'name');
+			historyState.clientsName = 'Cam';
+			await setup(nobody);
+
+			await testPage.getByRole('button', { name: 'Search every Client for "Cam"' }).click();
+
+			expect(goto).toHaveBeenLastCalledWith(`${base}?all=true&order=name`, { state: { clientsName: 'Cam' } });
+		});
+
+		it('offers every Client for a Name alone among those in care', async () => {
+			historyState.clientsName = 'Cam';
+			await setup(nobody);
+
+			await testPage.getByRole('button', { name: 'Search every Client for "Cam"' }).click();
+
+			expect(goto).toHaveBeenLastCalledWith(`${base}?all=true`, { state: { clientsName: 'Cam' } });
+		});
+
+		it('sends a Name over every Client to the search that finds or adds one', async () => {
+			pageState.url.searchParams.set('all', 'true');
+			historyState.clientsName = 'Cam';
+			await setup(nobody);
+
+			await expect.element(nextStep('Find or add a Client').nth(1)).toHaveAttribute('href', `${base}/search`);
+			await expect.element(testPage.getByRole('button', { name: /Search every Client/ })).not.toBeInTheDocument();
+		});
+
+		it('sends a Name over every Client to adding one while the Practice holds none', async () => {
+			pageState.url.searchParams.set('all', 'true');
+			historyState.clientsName = 'Cam';
+			await setup(nobody, { hasAnyClient: false });
+
+			await expect.element(nextStep('Add a Client').nth(1)).toHaveAttribute('href', `${base}/new?from=clients`);
+		});
+
+		it('shows every Client in care without the filters, keeping the order', async () => {
+			pageState.url.searchParams.set('owes', 'true');
+			pageState.url.searchParams.set('doula', lena.value);
+			pageState.url.searchParams.set('order', 'name');
+			await setup(nobody, { doulas });
+
+			await expect.element(nextStep('Show every Client in care')).toHaveAttribute('href', `${base}?order=name`);
+		});
+
+		it('offers a Doula who opens on Mine her own Clients when other filters emptied it', async () => {
+			pageState.url.searchParams.set('mine', 'true');
+			pageState.url.searchParams.set('owes', 'true');
+			await setup(nobody, { isDoula: true, opensOnMine: true });
+
+			await expect.element(nextStep('Show all your Clients')).toHaveAttribute('href', `${base}?mine=true`);
+		});
+
+		it('offers a Doula who opens on Mine every Client in care once Mine is off', async () => {
+			pageState.url.searchParams.set('owes', 'true');
+			await setup(nobody, { isDoula: true, opensOnMine: true });
+
+			await expect.element(nextStep('Show every Client in care')).toHaveAttribute('href', base);
+		});
+
+		it('offers nothing beyond the sentence when Mine alone is empty', async () => {
+			pageState.url.searchParams.set('mine', 'true');
+			await setup(nobody, { isDoula: true, opensOnMine: true });
+
+			await expect.element(testPage.getByText('You are not the Doula for any Client yet.').first()).toBeVisible();
+			await expect.element(testPage.getByRole('link', { name: /^Show / })).not.toBeInTheDocument();
+		});
+
+		it('offers nothing beyond the sentence for the default list with nobody in care', async () => {
+			await setup(nobody);
+
+			await expect.element(testPage.getByRole('link', { name: /^Show / })).not.toBeInTheDocument();
+			await expect.element(testPage.getByRole('button', { name: /^Search every/ })).not.toBeInTheDocument();
+		});
+	});
+});
+
+const owingClient = (owedCents: number, owedInvoiceCount: number, daysOverdue = 0) => ({
+	...clients[1]!,
+	clientId: 'client-owing',
+	name: 'Quinn Owing',
+	owedCents,
+	owedInvoiceCount,
+	openEngagements: [
+		{
+			engagementId: 'engagement-owing',
+			kind: 'birth',
+			engagementStatus: 'active',
+			dueDate: '2027-03-14',
+			doulaNames: ['Lena Vasquez'],
+			invoiceStatus: 'open',
+			invoiceAmountCents: 30_000,
+			daysOverdue
+		}
+	]
+});
+const owingRow = () => testPage.getByRole('row', { name: /Quinn Owing/ });
+
+describe('the Money cell says what a Client owes in all (#2874)', () => {
+	const row = owingRow;
+
+	it('says the total and the count of Invoices, in the amber badge', async () => {
+		await setup(jsonResponse({ items: [owingClient(50_000, 2)], hasMore: false }));
+
+		await expect.element(row()).toHaveTextContent(/\$500\.00, owed,\s*2 Invoices/);
+	});
+
+	it('says one Invoice in the singular', async () => {
+		await setup(jsonResponse({ items: [owingClient(30_000, 1)], hasMore: false }));
+
+		await expect.element(row()).toHaveTextContent(/\$300\.00, owed,\s*1 Invoice(?!s)/);
+	});
+
+	it('marks the total overdue, in the red badge, when an open Invoice is late', async () => {
+		await setup(jsonResponse({ items: [owingClient(50_000, 2, 12)], hasMore: false }));
+
+		await expect.element(row()).toHaveTextContent(/\$500\.00, overdue,\s*2 Invoices/);
+	});
+
+	it('says the total once on a card, with its count', async () => {
+		await setup(jsonResponse({ items: [owingClient(50_000, 2)], hasMore: false }));
+		await testPage.viewport(375, 740);
+
+		// Both trees are in the DOM and the page draws one: only a fact about which one CSS shows (case 1).
+		const shown = [...document.querySelectorAll<HTMLElement>('.record-money')].filter((element) => element.checkVisibility());
+		expect(shown).toHaveLength(1);
+		expect(shown[0]!.textContent).toMatch(/\$500\.00, owed,\s*2 Invoices/);
+	});
+
+	it('draws no total for a Client who owes nothing, and keeps her Engagement\'s own words', async () => {
+		await setup(jsonResponse({ items: [{ ...owingClient(0, 0), openEngagements: [{ ...owingClient(0, 0).openEngagements[0]!, invoiceStatus: 'paid' }] }], hasMore: false }));
+
+		await expect.element(row()).toHaveTextContent(/\$300\.00, paid/);
+		await expect.element(row()).not.toHaveTextContent(/Invoices?\b/);
 	});
 });

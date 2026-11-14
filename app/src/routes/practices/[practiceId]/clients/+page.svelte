@@ -39,6 +39,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
+	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import type { RouteId } from '$app/types';
 import type { PageProps as PageProperties } from './$types';
 
@@ -65,6 +66,7 @@ import type { PageProps as PageProperties } from './$types';
 			isCurrent = false;
 		};
 	});
+	const isOnMineByDefault = $derived(data?.opensOnMine ?? false);
 	const canNarrowToMine = $derived(!isContractor && (data?.isDoula ?? false) && (data?.hasOtherDoulas ?? true));
 	// #1609: whether the Practice holds any Client record, which decides
 	// where the header link goes. Defaults to the search, which is right
@@ -86,11 +88,18 @@ import type { PageProps as PageProperties } from './$types';
 	// Owner or an Admin and empty for everyone else, so the filter is not
 	// drawn for them.
 	let doulas = $state.raw<LabeledValue[]>([]);
+	// Every Doula on the roster, one who holds no Client too, to name a shared link's Doula.
+	let everyDoula = $state.raw<LabeledValue[]>([]);
+	let isRosterLanded = $state(false);
+	const canChooseDoula = $derived(data?.canChooseDoula ?? false);
 	$effect(() => {
-		const gate = data?.doulas ?? Promise.resolve([]);
+		const gate = Promise.all([data?.doulas ?? Promise.resolve([]), data?.everyDoula ?? data?.doulas ?? Promise.resolve([])]);
 		let isCurrent = true;
-		void gate.then((options) => {
-			if (isCurrent) doulas = options;
+		void gate.then(([options, roster]) => {
+			if (!isCurrent) return;
+			doulas = options;
+			everyDoula = roster;
+			isRosterLanded = true;
 		});
 		return () => {
 			isCurrent = false;
@@ -125,7 +134,6 @@ import type { PageProps as PageProperties } from './$types';
 	const isBusy = $derived(isRefreshing || isApplying);
 	// The address names a Doula the Practice does not hold, which the BFF refuses.
 	let isDoulaUnknown = $state(false);
-	const isReady = $derived(isLoaded && hasAnyClient !== undefined);
 
 	// The default filter is Clients in care (ADR-0017); `?all=true`
 	// switches to everyone -- including a Client whose only Request was
@@ -436,13 +444,18 @@ import type { PageProps as PageProperties } from './$types';
 		void applyDrawn({ replace });
 	}
 
-	const doulaOptions = $derived([{ value: '', label: 'Any Doula' }, ...doulas]);
-	// The Doula's name for the result sentence; the id's place if the roster
-	// has not landed, or does not list her (a Doula who holds no Client is left
-	// out of it).
+	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
+	const isDoulaPending = $derived(!isRosterLanded && appliedDoula !== '');
+	const doulaOptions = $derived.by(() => {
+		if (isDoulaPending) return [{ value: appliedDoula, label: '' }];
+		const named = doulas.some((doula) => doula.value === appliedDoula) ? undefined : everyDoula.find((doula) => doula.value === appliedDoula);
+		return [{ value: '', label: 'Any Doula' }, ...doulas, ...(named ? [named] : [])];
+	});
+	// The Doula's name for the result sentence, from the whole roster; "that Doula" only when
+	// the roster could not be read or does not list her.
 	function doulaNameOf(id: string): string {
 		if (id === '') return '';
-		return doulas.find((doula) => doula.value === id)?.label ?? 'that Doula';
+		return everyDoula.find((doula) => doula.value === id)?.label ?? 'that Doula';
 	}
 
 	// The GOV.UK "selected filters": one removable tag for each filter the
@@ -467,21 +480,25 @@ import type { PageProps as PageProperties } from './$types';
 		if (isShowingOwing) add('Who owe money', { owing: false });
 		if (isShowingNoContract) add('Active, with no Contract', { noContract: false });
 		if (isShowingMine) add('Mine', { mine: false });
-		if (appliedDoula) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
+		if (appliedDoula && isRosterLanded) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
 		if (isShowingEveryone) add(`Including ${NO_CARE_YET}`, { all: false });
 		if (appliedName) add(`Name: ${appliedName}`, {}, '');
 		return tags;
 	});
 
-	async function removeTag(event: MouseEvent, tag: AppliedTag) {
-		event.preventDefault();
+	async function showList(href: string, name: string) {
 		clients.abandon();
 		isApplying = true;
 		try {
-			await goto(tag.href, { state: { clientsName: tag.name } });
+			await goto(href, { state: { clientsName: name } });
 		} finally {
 			isApplying = false;
 		}
+	}
+
+	function removeTag(event: MouseEvent, tag: AppliedTag) {
+		event.preventDefault();
+		return showList(tag.href, tag.name);
 	}
 
 	// The longest the count line can say without a typed name: a Doula's (or the signed-in
@@ -511,6 +528,9 @@ import type { PageProps as PageProperties } from './$types';
 	// The first page's total for what is shown (#2867); later pages carry none.
 	let shownTotal = $state<number>();
 	const shownDoulaName = $derived(doulaNameOf(shown.doula));
+	const isShownDoulaPending = $derived(!isRosterLanded && shown.doula !== '');
+	// An empty list waits for the roster when a Doula is applied: its sentence names her.
+	const isReady = $derived(isLoaded && hasAnyClient !== undefined && !(isShownDoulaPending && clients.items.length === 0));
 	const summary = $derived(
 		isDoulaUnknown
 			? UNKNOWN_DOULA
@@ -643,6 +663,17 @@ import type { PageProps as PageProperties } from './$types';
 	};
 	const NO_MONEY = 'No amount';
 
+	// What the Client owes in all (#2874): the BFF's sum and count of her open Invoices with no
+	// payment on its way, said once. Red where any Engagement's oldest open Invoice is late.
+	type OwedTotal = { amount: string; count: number; word: 'owed' | 'overdue'; variant: 'warning' | 'error' };
+	function owedTotal(client: ClientListItem): OwedTotal | undefined {
+		const count = client.owedInvoiceCount ?? 0;
+		if (count === 0 || client.owedCents === undefined) return undefined;
+		const isLate = (client.openEngagements ?? []).some((line) => line.invoiceStatus === 'open' && !line.paymentProcessing && (line.daysOverdue ?? 0) > 0);
+		const amount = formatAmount(client.owedCents);
+		return isLate ? { amount, count, word: 'overdue', variant: 'error' } : { amount, count, word: 'owed', variant: 'warning' };
+	}
+
 	function moneyLines(client: ClientListItem): MoneyLine[] {
 		const lines = client.openEngagements ?? [];
 		const held = lines.map((line): Omit<MoneyLine, 'engagementId' | 'prefix'> => {
@@ -761,7 +792,7 @@ import type { PageProps as PageProperties } from './$types';
 	// there when a Client on the page has some, which no Client under "Only
 	// active Clients with no Contract" does. Under one Doula, the count line
 	// names her, so her column would repeat her name down the page.
-	const hasMoney = $derived(clients.items.some((client) => moneyLines(client).length > 0));
+	const hasMoney = $derived(clients.items.some((client) => owedTotal(client) || moneyLines(client).length > 0));
 	const hasDoulaColumn = $derived(shown.doula === '');
 	// A column left out gives its room to Status, the column that grows, so
 	// the columns after it start where they started. The Doula is the last
@@ -897,11 +928,25 @@ import type { PageProps as PageProperties } from './$types';
 	// nobody exists -- and "No Clients yet." would contradict the "Find or
 	// add a Client" link above it. With the switch on there is no
 	// filter left to point at, so the plain message stays.
-	// Everyone else has the bar's own "Clear filters", in view at every width, so
-	// the empty state does not offer it a second time.
-	const emptyAction = $derived(
-		isContractor ? { label: 'How to add Clients of your own', href: searchHref() } : undefined
-	);
+	// #2864: everyone else is offered the one step chosen by what emptied the list.
+	const emptyAction = $derived.by((): EmptyStateAction | undefined => {
+		if (isContractor) return { label: 'How to add Clients of your own', href: searchHref() };
+		const { name, order, showMine, showOwing, showNoContract, doula, showAll } = shown;
+		const isNarrowed = showMine || showOwing || showNoContract || doula !== '';
+		if (name) {
+			if (!isNarrowed && showAll) {
+				return hasAnyClient === false
+					? { label: 'Add a Client', href: startHref(page.params.practiceId!, 'clients') }
+					: { label: 'Find or add a Client', href: searchHref() };
+			}
+			return { label: `Search every Client for "${name}"`, onClick: () => void showList(clientsPath({ all: true, order }), name) };
+		}
+		if (!isNarrowed) return undefined;
+		if (isOnMineByDefault && showMine) {
+			return showOwing || showNoContract || doula ? { label: 'Show all your Clients', href: clientsPath({ mine: true, order }) } : undefined;
+		}
+		return { label: 'Show every Client in care', href: clientsPath({ order }) };
+	});
 
 	const emptyMessage = $derived.by(() => {
 		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
@@ -926,6 +971,7 @@ import type { PageProps as PageProperties } from './$types';
 	-->
 	{@const pending = pendingRequestText(client)}
 	{@const money = moneyLines(client)}
+	{@const total = owedTotal(client)}
 	{#if (client.openEngagements ?? []).length > 0 || pending}
 		<!--
 			The name is the row's one link; each Engagement is a link on the
@@ -952,7 +998,9 @@ import type { PageProps as PageProperties } from './$types';
 							{/each}
 						</span>
 					</cluster-l>
-					{#if view === 'record' && owed && (owed.amount || owed.state?.word)}{@render recordMoney(owed)}{/if}
+					{#if view === 'record' && total && lineIndex === 0}
+						<div class="record-money"><span class="visually-hidden">Money: </span>{@render owedTotalValue(total, false)}</div>
+					{:else if view === 'record' && !total && owed && (owed.amount || owed.state?.word)}{@render recordMoney(owed)}{/if}
 				</li>
 			{/each}
 			{#if pending}
@@ -1030,7 +1078,10 @@ import type { PageProps as PageProperties } from './$types';
 {#snippet moneyCell(client: ClientListItem)}
 	<!-- One line per open Engagement, in the Status cell's order. Nothing for a Client whose lines hold no money. The record card has no Money field: its Status line carries each amount. -->
 	{@const lines = moneyLines(client)}
-	{#if lines.length === 1}
+	{@const total = owedTotal(client)}
+	{#if total}
+		{@render owedTotalValue(total, true)}
+	{:else if lines.length === 1}
 		{@render moneyValue(lines[0])}
 	{:else if lines.length > 1}
 		<ul class="status-list">
@@ -1039,6 +1090,11 @@ import type { PageProps as PageProperties } from './$types';
 			{/each}
 		</ul>
 	{/if}
+{/snippet}
+
+<!-- What the Client owes in all and how many Invoices make it: "$500.00 owed, 2 Invoices". -->
+{#snippet owedTotalValue(total: OwedTotal, isTracked: boolean)}
+	<span class="owed-total money" class:tracked={isTracked}><span class="amount">{total.amount}</span><span class="visually-hidden">, </span><span class="state"><Badge label={total.word} variant={total.variant} /><span class="visually-hidden">, </span><span class="count">{total.count} {total.count === 1 ? 'Invoice' : 'Invoices'}</span></span></span>
 {/snippet}
 
 <!-- The amount and its state (`MoneyAmount`, the Invoices list's too); a fee is the words "Your fee" and the amount. -->
@@ -1096,6 +1152,12 @@ import type { PageProps as PageProperties } from './$types';
 			/>
 		</li>
 	{/each}
+	{#if isDoulaPending}
+		<!-- The Doula's tag is not drawn until the roster names her; its box is held, unseen and out of reach, so the line under Apply that a narrow bar gives it does not appear later and move the list. -->
+		<li class="held" aria-hidden="true" inert>
+			<Link href={clientsPath({})} label="Doula: that Doula" variant="chip" icon="x" />
+		</li>
+	{/if}
 {/snippet}
 
 {#snippet content()}
@@ -1124,15 +1186,15 @@ import type { PageProps as PageProperties } from './$types';
 				onSubmit={applyFilters}
 				onChangeApply={applyOnChange}
 				legend="Choose which Clients to show"
-				status={isReady ? summary : ''}
+				status={isReady && !isShownDoulaPending ? summary : ''}
 				statusRuler={longestSummary}
 				empty={isReady && clients.items.length === 0}
 				clearHref={isFiltered ? clientsPath({}) : undefined}
-				applied={appliedTags.length > 0 ? applied : undefined}
-				appliedCount={appliedTags.length}
+				applied={isDoulaPending || appliedTags.length > 0 ? applied : undefined}
+				appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 				hasUntaggedFilter={appliedOrder !== ''}
 				foldsFieldsOnly
-				foldLabel={!isImplyingCare || doulas.length > 0 ?'More filters and order' : 'Order'}
+				foldLabel={!isImplyingCare || canChooseDoula ? 'More filters and order' : 'Order'}
 				order={{
 					options: CLIENT_ORDER_OPTIONS,
 					value: draftOrder,
@@ -1212,12 +1274,12 @@ import type { PageProps as PageProperties } from './$types';
 				</div>
 				<!-- Folds with the Order select below 42rem. Where the bar is wide the fold is not drawn, and the box above sits on the switches row as it always has; this copy is the narrow bar's. Both are the one form field, `all`. -->
 				{#snippet folded()}
-					{#if doulas.length > 0}
-						<!-- Only an Owner or an Admin reads the roster this lists (ADR-0008). Drawn while "Only my Clients" is on too, so Apply never moves: the BFF ANDs the filters, so mine and a Doula is a narrower list. -->
+					{#if canChooseDoula}
+						<!-- Only an Owner or an Admin reads the roster this lists (ADR-0008). Drawn from the first paint and while "Only my Clients" is on too, so Apply never moves: the BFF ANDs the filters, so mine and a Doula is a narrower list. -->
 						<div class="field doula">
 							<LabeledField label="Doula" width={30}>
 								{#snippet children({ id, describedBy, invalid, width })}
-									<Select {id} {describedBy} {invalid} {width} name="doula" options={doulaOptions} bind:value={draftDoula} onChange={() => {
+									<Select {id} {describedBy} {invalid} {width} name="doula" options={doulaOptions} disabled={!isRosterLanded} bind:value={draftDoula} onChange={() => {
 										touched.push('doula');
 									}} />
 								{/snippet}
@@ -1373,6 +1435,32 @@ import type { PageProps as PageProperties } from './$types';
 			display: none;
 		}
 
+		/* MoneyAmount's two tracks, with the Invoice count beside the badge in the state's own. */
+		.owed-total {
+			display: inline-flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1);
+		}
+
+		.owed-total.tracked {
+			display: inline-grid;
+			grid-template-columns: auto var(--money-state-track);
+			margin-block: calc(var(--space-1) / -2);
+			white-space: nowrap;
+		}
+
+		.owed-total .state {
+			display: inline-flex;
+			align-items: center;
+			gap: var(--space-1);
+		}
+
+		.count {
+			color: var(--color-on-surface-variant);
+			white-space: nowrap;
+		}
+
 		.record-money {
 			display: flex;
 			align-items: center;
@@ -1381,6 +1469,10 @@ import type { PageProps as PageProperties } from './$types';
 
 		.reserve {
 			display: contents;
+			visibility: hidden;
+		}
+
+		.held {
 			visibility: hidden;
 		}
 

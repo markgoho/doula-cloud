@@ -222,6 +222,7 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'invited' : 'accepted'),
 		portalInviteDelivery: !isNew && index % 4 === 1 ? 'sent' : undefined,
 		pendingRequestKinds: index === 5 ? ['birth'] : [],
+		...(!isNew && index !== 5 && { owedCents: kind === 'birth' ? 150_000 : 90_000, owedInvoiceCount: 1 }),
 		// The Client with a pending birth Request has no Engagement yet: the
 		// Request is what asks for one (ADR-0017), so her row holds the one badge.
 		openEngagements: isNew || index === 5
@@ -264,10 +265,14 @@ const busiestLine = new Map<number, object>([
 	[6, { kind: 'postpartum' as const, ...overdue, dueDate: undefined, birthOutcome: 'live_birth' as const, pregnancyEndedOn: daysAgo(45) }]
 ]);
 
+// #2874: the widest total the Money cell says, a five-figure sum over two Invoices, on the busiest row.
+const busiestOwed = { owedCents: 1_245_000, owedInvoiceCount: 2 };
+
 export const seedLikeClients: ClientListItem[] = typicalClients.map((client, index) => {
 	const [line] = client.openEngagements ?? [];
 	const busiest = busiestLine.get(index);
-	return line && busiest ? { ...client, openEngagements: [{ ...line, ...busiest }] } : client;
+	const owed = index === 4 ? busiestOwed : {};
+	return line && busiest ? { ...client, ...owed, openEngagements: [{ ...line, ...busiest }] } : client;
 });
 
 export const typical: RouteVariant = {
