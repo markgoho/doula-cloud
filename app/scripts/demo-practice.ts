@@ -32,7 +32,7 @@ import { drainOutbox, readMailbox } from '../e2e/outboxMail';
 import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateInvoice, backdateInvoices, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
+import { backdateContracts, backdateInvoice, backdateInvoices, backdateVoidRequests, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 import {
@@ -741,7 +741,7 @@ async function seedOnCall(
 	today: string,
 	tail: readonly ProvisionedClient[],
 	camille: NamedEngagement
-): Promise<void> {
+): Promise<{ imogen: NamedEngagement; tamsin: NamedEngagement }> {
 	const { practiceId, owner, staff } = roster;
 	const birth = (givenName: string, familyName: string) =>
 		tail.find((client) => client.kind === 'birth' && client.givenName === givenName && client.familyName === familyName)!;
@@ -789,7 +789,7 @@ async function seedOnCall(
 		reason: 'At a wedding four hours away'
 	});
 
-	await addClient(
+	const imogen = await addClient(
 		request,
 		roster,
 		today,
@@ -797,7 +797,138 @@ async function seedOnCall(
 		{ doulaStaffId: staff.delia.staffId }
 	);
 
-	await addClient(request, roster, today, { givenName: 'Tamsin', familyName: 'Reyes', kind: 'birth', dueInDays: 25 });
+	const tamsin = await addClient(request, roster, today, { givenName: 'Tamsin', familyName: 'Reyes', kind: 'birth', dueInDays: 25 });
+	return { imogen, tamsin };
+}
+
+async function addressFor(request: APIRequestContext, roster: Roster, client: ProvisionedClient): Promise<NamedEngagement> {
+	const { givenName, familyName, kind } = client;
+	const email = demoAddress(givenName, familyName);
+	await send(request, 'PUT', `/api/practices/${roster.practiceId}/clients/${client.clientId}`, roster.owner, {
+		givenName,
+		familyName,
+		email,
+		override: true
+	});
+	return { client: { givenName, familyName, kind }, clientId: client.clientId, engagementId: client.engagementId, email };
+}
+
+async function askToVoid(
+	request: APIRequestContext,
+	roster: Roster,
+	engagement: NamedEngagement,
+	asker: DoulaSession,
+	reason: string
+): Promise<string> {
+	const { voidRequests } = await send<{ voidRequests: { id: string; requestedBy: string }[] }>(
+		request,
+		'POST',
+		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/contract/void-request`,
+		asker.headers,
+		{ reason }
+	);
+	return voidRequests.find((each) => each.requestedBy === asker.staffId)!.id;
+}
+
+function voidContract(request: APIRequestContext, roster: Roster, engagement: NamedEngagement): Promise<unknown> {
+	return send(request, 'POST', `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/contract/void`, roster.staff.dee.headers);
+}
+
+// A Contract book for an agency (#2749), beside Grace's Sent Contract from
+// Priya's book: six Sent and three Draft Contracts of different ages on
+// Clients with no Contract yet, three void requests waiting on Dee and
+// Renata, one the Owner declined, and two Contracts Dee voided after a
+// request, one of them replaced by a new Draft. Its new Clients are
+// postpartum with a Doula already, so the On call screen gains no row.
+async function seedContractBook(
+	request: APIRequestContext,
+	roster: Roster,
+	today: string,
+	tail: readonly ProvisionedClient[],
+	unsigned: { imogen: NamedEngagement; tamsin: NamedEngagement },
+	imani: NamedEngagement
+): Promise<void> {
+	const { staff } = roster;
+	const newClient = (givenName: string, familyName: string, doula: string) =>
+		addClient(request, roster, today, { givenName, familyName, kind: 'postpartum' }, { doulaStaffId: staff[doula].staffId });
+	const sent = async (engagement: NamedEngagement) => {
+		await invitePortal(request, roster, engagement);
+		await contractFor(request, roster, today, engagement, undefined);
+	};
+	const waiting: { engagementId: string; days: number }[] = [];
+
+	const reeseBishop = await addressFor(request, roster, tail[0]);
+	const reeseCalloway = await addressFor(request, roster, tail[1]);
+	const noelle = await newClient('Noelle', 'Ibarra', 'joss');
+	for (const [engagement, days] of [
+		[reeseBishop, 41],
+		[reeseCalloway, 24],
+		[unsigned.imogen, 9],
+		[unsigned.tamsin, 5],
+		[noelle, 2]
+	] as const) {
+		await sent(engagement);
+		waiting.push({ engagementId: engagement.engagementId, days });
+	}
+
+	const talia = await newClient('Talia', 'Brandt', 'marisol');
+	const june = await newClient('June', 'Okonkwo', 'bethany');
+	for (const [engagement, days] of [
+		[talia, 6],
+		[june, 1]
+	] as const) {
+		await contractFor(request, roster, today, engagement, undefined, { send: false });
+		waiting.push({ engagementId: engagement.engagementId, days });
+	}
+
+	const wrongCare = await newClient('Odalys', 'Reyes', 'aditi');
+	await contractFor(request, roster, today, wrongCare, await portalSessionFor(request, roster, wrongCare));
+	await askToVoid(request, roster, wrongCare, staff.aditi, 'Odalys wants postpartum care only, not birth support. The Contract has the wrong care on it.');
+	await voidContract(request, roster, wrongCare);
+	await contractFor(request, roster, today, wrongCare, undefined, { send: false });
+
+	const movedAway = await newClient('Willa', 'Sandoval', 'kimiko');
+	await contractFor(request, roster, today, movedAway, await portalSessionFor(request, roster, movedAway));
+	await askToVoid(request, roster, movedAway, staff.kimiko, 'Willa moved to Arizona to be near her mother before we started. We will not be working together.');
+	await voidContract(request, roster, movedAway);
+
+	const priceDispute = await addressFor(request, roster, tail[22]);
+	const declinedId = await askToVoid(request, roster, priceDispute, staff.delia, 'Harper asked for a lower price than the one on her Contract. Can we void it and start over?');
+	await send(
+		request,
+		'POST',
+		`/api/practices/${roster.practiceId}/engagements/${priceDispute.engagementId}/contract/void-request/${declinedId}/decline`,
+		roster.owner,
+		{ reason: 'The price is the rate and she signed it. Offer her a payment plan on the Invoice instead.' }
+	);
+
+	const open: { engagement: NamedEngagement; asker: DoulaSession; reason: string; days: number }[] = [
+		{
+			engagement: imani,
+			asker: staff.priya,
+			reason: 'Imani moved in with her mother in Ohio after the baby came, so I will not be seeing her.',
+			days: 1
+		},
+		{
+			engagement: await addressFor(request, roster, tail[3]),
+			asker: staff.joss,
+			reason: 'Jamie changed from birth to postpartum-only care. The birth Contract is the wrong one.',
+			days: 4
+		},
+		{
+			engagement: await addressFor(request, roster, tail[18]),
+			asker: staff.rowan,
+			reason: 'I made this Contract for the wrong Quinn by mistake. Please void it.',
+			days: 11
+		}
+	];
+	const asked: { requestId: string; days: number }[] = [];
+	for (const { engagement, asker, reason, days } of open) {
+		asked.push({ requestId: await askToVoid(request, roster, engagement, asker, reason), days });
+		waiting.push({ engagementId: engagement.engagementId, days: 60 });
+	}
+	backdateContracts(waiting);
+	backdateVoidRequests(asked);
 }
 
 export interface DemoPractice {
@@ -861,12 +992,13 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	const roster = await buildRoster(request);
 	const tail = await provisionTail(request, roster.practiceId, roster.owner, roster.staff, demoTail(today));
 	await spreadTailAcrossPhases(request, roster, today, tail);
-	const [camille] = await seedPriyaBook(request, roster, today);
+	const [camille, , imani] = await seedPriyaBook(request, roster, today);
 	await seedAfterALoss(request, roster, today);
 	await seedOffers(request, roster, today, tail);
 	await seedInvoiceBook(request, roster, today, tail);
 	await seedScheduleBook(request, roster, today, tail);
-	await seedOnCall(request, roster, today, tail, camille);
+	const unsigned = await seedOnCall(request, roster, today, tail, camille);
+	await seedContractBook(request, roster, today, tail, unsigned, imani);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 
