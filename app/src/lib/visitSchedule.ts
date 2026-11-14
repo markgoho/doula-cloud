@@ -25,7 +25,21 @@ import type { CursorPage } from './paginatedList.svelte.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarWeekdayDay } from './dates.js';
 import { visitTypeLabel } from './engagementDetail.js';
+import {
+	addDays,
+	daysOf,
+	daysSpan,
+	daysTag,
+	daysWords,
+	rangeErrors,
+	stepDays,
+	type Days,
+	type DaysStep,
+	type RangeErrors
+} from './dayRange.js';
 import { dayIn, startOfDayIn } from './zonedTime.js';
+
+export { addDays, ENTER_FROM_DAY, ENTER_TO_DAY, isCalendarDay, TO_BEFORE_FROM } from './dayRange.js';
 
 /** One row of the Practice-wide schedule -- mirrors the Go BFF's
  * ScheduledVisit (api/internal/visit/practice_list.go). `scheduledAt` is
@@ -72,28 +86,6 @@ The other preset the "Days" choice offers.
 export const SHORT_SCHEDULE_DAYS = 7;
 
 export type ScheduleDaysChoice = '7' | '30' | 'choose';
-
-/** A calendar day, `YYYY-MM-DD`, from the parts of a UTC date: a day has
- * no zone, so counting in days is arithmetic on its own parts. */
-function dayOfUtc(date: Date): string {
-	return date.toISOString().slice(0, 10);
-}
-
-/** The calendar day `days` after the given one, as another
- * `YYYY-MM-DD`. Arithmetic on the day's own parts, in no zone: a day in a
- * zone is 25 hours long when daylight saving ends and 23 when it starts, so
- * counting hours from a midnight lands a day off. */
-export function addDays(day: string, days: number): string {
-	const [year, month, date] = day.split('-').map(Number);
-	return dayOfUtc(new Date(Date.UTC(year, month - 1, date + days)));
-}
-
-/**
-Whether a string is a real calendar day in `YYYY-MM-DD` form.
-*/
-export function isCalendarDay(value: string): boolean {
-	return /^\d{4}-\d{2}-\d{2}$/.test(value) && addDays(value, 0) === value;
-}
 
 /** The instants the BFF's half-open range takes, for a pair of calendar
  * days in the Practice's zone. `from` is the start of its day and `to` is
@@ -170,33 +162,9 @@ export const SCHEDULE_ORDER_OPTIONS: readonly { value: ScheduleOrder; label: str
 	{ value: LATEST_ORDER, label: 'Latest first' }
 ];
 
-/**
-The two days a view reads, once they are both days and in order.
-*/
-export interface ScheduleDays {
-	from: string;
-	to: string;
-}
+export type ScheduleDays = Days;
 
-export interface ScheduleRangeErrors {
-	from?: string;
-	to?: string;
-}
-
-export const ENTER_FROM_DAY = 'Enter a From day';
-export const ENTER_TO_DAY = 'Enter a To day';
-export const TO_BEFORE_FROM = 'Choose a To day that is the same as the From day or later.';
-
-/**
-Why two typed days cannot be a range, in the words each field says.
-*/
-export function scheduleRangeErrors(from: string, to: string): ScheduleRangeErrors {
-	const errors: ScheduleRangeErrors = {};
-	if (!isCalendarDay(from)) errors.from = ENTER_FROM_DAY;
-	if (!isCalendarDay(to)) errors.to = ENTER_TO_DAY;
-	else if (!errors.from && to < from) errors.to = TO_BEFORE_FROM;
-	return errors;
-}
+export type ScheduleRangeErrors = RangeErrors;
 
 /** Reads the narrowing off a URL's search parameters. `canMine` is whether
  * this reader is offered "Mine" at all; an address cannot give her what
@@ -224,20 +192,18 @@ export function scheduleViewFromParameters(
 	};
 }
 
-/** The days a view reads: a preset of N days is today through today plus
- * N - 1, the last day included. Chosen days that are not a range carry
- * their errors instead. */
-export function scheduleDaysOf(
-	view: ScheduleView,
-	timeZone: string,
-	now: Date = new Date()
-): { days: ScheduleDays; errors?: undefined } | { days?: undefined; errors: ScheduleRangeErrors } {
-	if (view.chosen) {
-		const errors = scheduleRangeErrors(view.chosen.from, view.chosen.to);
-		return Object.keys(errors).length > 0 ? { errors } : { days: view.chosen };
-	}
-	const from = dayIn(now, timeZone);
-	return { days: { from, to: addDays(from, view.preset - 1) } };
+/**
+The days a view reads, or why two chosen days are not a range.
+*/
+export function scheduleDaysOf(view: ScheduleView, timeZone: string, now: Date = new Date()) {
+	return daysOf(view, timeZone, now);
+}
+
+/**
+Why two typed days cannot be a range, in the words each field says.
+*/
+export function scheduleRangeErrors(from: string, to: string): ScheduleRangeErrors {
+	return rangeErrors(from, to);
 }
 
 /** The screen's own URL for a view -- what the browser's address bar
@@ -391,41 +357,19 @@ export async function loadPracticeSchedule(
 /**
 The days as a reader says them: "Fri Nov 6 to Thu Nov 12", or one day alone.
 */
-export function scheduleDaysWords(days: ScheduleDays, timeZone: string, now: Date = new Date()): string {
-	const from = formatCalendarWeekdayDay(days.from, timeZone, now);
-	return days.from === days.to ? from : `${from} to ${formatCalendarWeekdayDay(days.to, timeZone, now)}`;
-}
+export const scheduleDaysWords = daysWords;
 
 /**
 The applied tag for chosen days: "Days: Tue Nov 10 to Thu Nov 19".
 */
-export function scheduleDaysTag(days: ScheduleDays, timeZone: string, now: Date = new Date()): string {
-	return `Days: ${scheduleDaysWords(days, timeZone, now)}`;
-}
+export const scheduleDaysTag = daysTag;
 
-/**
-How many calendar days a window holds, both ends included.
-*/
-function daysIn(days: ScheduleDays): number {
-	const [fromYear, fromMonth, fromDay] = days.from.split('-').map(Number);
-	const [toYear, toMonth, toDay] = days.to.split('-').map(Number);
-	return Math.round((Date.UTC(toYear!, toMonth! - 1, toDay!) - Date.UTC(fromYear!, fromMonth! - 1, fromDay!)) / 86_400_000) + 1;
-}
-
-export interface ScheduleStep {
-	/**
-	The view a step lands on: a preset when the days are one counted from today, chosen days otherwise.
-	*/
-	view: ScheduleView;
-	days: ScheduleDays;
-}
+export type ScheduleStep = DaysStep<ScheduleView>;
 
 /**
  * The window one step earlier (`-1`) or later (`1`): the days the reader sees
  * moved by their own length, 7 for the next 7 days, 30 for the next 30, and
- * to - from + 1 for chosen days. Calendar arithmetic on the days' own parts, so
- * a daylight-saving day or a month's end moves nothing; only "today" is read in
- * the Practice's zone. Nothing where the days are not a range.
+ * to - from + 1 for chosen days. Nothing where the days are not a range.
  */
 export function scheduleStep(
 	view: ScheduleView,
@@ -433,17 +377,7 @@ export function scheduleStep(
 	timeZone: string,
 	now: Date
 ): ScheduleStep | undefined {
-	const shown = scheduleDaysOf(view, timeZone, now).days;
-	if (!shown) return undefined;
-	const length = daysIn(shown) * direction;
-	const days = { from: addDays(shown.from, length), to: addDays(shown.to, length) };
-	const today = dayIn(now, timeZone);
-	if (days.from === today) {
-		for (const preset of [SHORT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_DAYS] as const) {
-			if (days.to === addDays(today, preset - 1)) return { view: { ...view, preset, chosen: undefined }, days };
-		}
-	}
-	return { view: { ...view, chosen: days }, days };
+	return stepDays(view, direction, timeZone, now, [SHORT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_DAYS]);
 }
 
 /**
@@ -458,24 +392,6 @@ export function scheduleDayGroup(scheduledAt: string, timeZone: string, now: Dat
 	if (key === today) return { key, label: `Today, ${day}` };
 	if (key === addDays(today, 1)) return { key, label: `Tomorrow, ${day}` };
 	return { key, label: day };
-}
-
-/**
- * A day held whole on one line: its spaces do not break, so a line wraps
- * between days and never inside one.
- */
-function wholeDay(day: string, timeZone: string, now: Date): string {
-	return formatCalendarWeekdayDay(day, timeZone, now).replaceAll(' ', '\u{A0}');
-}
-
-/**
- * Where a sentence says the days are: "from Fri Nov 13 to Sat Dec 12", or
- * "on Mon Nov 16" when the first day is the last.
- */
-function scheduleDaysSpan(days: ScheduleDays, timeZone: string, now: Date): string {
-	return days.from === days.to
-		? `on ${wholeDay(days.from, timeZone, now)}`
-		: `from ${wholeDay(days.from, timeZone, now)} to ${wholeDay(days.to, timeZone, now)}`;
 }
 
 /**
@@ -589,7 +505,7 @@ function scheduleRowsSummary(
 	now: Date,
 	total?: number
 ): string {
-	const span = scheduleDaysSpan(days, timeZone, now);
+	const span = daysSpan(days, timeZone, now);
 	// The Client's name a reader typed sits right after the Visits it narrows: `2 Visits for "Camille" from ...`.
 	const about = who.search ? ` for "${who.search}"` : '';
 	// The type sits before the noun, in lowercase as a running sentence says it: `3 postpartum Visits`.
