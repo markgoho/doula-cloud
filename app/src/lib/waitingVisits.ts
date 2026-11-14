@@ -66,5 +66,5 @@ export function datedWaitingHref(basePath: string, waiting: WaitingVisits, now: 
 	const today = dayIn(now, timeZone);
 	const last = waiting.latestScheduledAt ? dayIn(new Date(waiting.latestScheduledAt), timeZone) : today;
 	const chosen = last > addDays(today, DEFAULT_SCHEDULE_DAYS - 1) ? { from: today, to: last } : undefined;
-	return scheduleHref(basePath, { preset: DEFAULT_SCHEDULE_DAYS, chosen, isMine: false, doula: '', needsDoula: true, order: '' });
+	return scheduleHref(basePath, { preset: DEFAULT_SCHEDULE_DAYS, chosen, isMine: false, doula: '', needsDoula: true, type: '', order: '' });
 }

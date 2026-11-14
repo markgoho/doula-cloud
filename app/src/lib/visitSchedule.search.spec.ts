@@ -11,7 +11,7 @@ import {
 
 const EASTERN = 'America/New_York';
 const NOW = new Date('2026-11-13T15:00:00Z');
-const noView: ScheduleView = { preset: 30, isMine: false, doula: '', needsDoula: false, order: '' };
+const noView: ScheduleView = { preset: 30, isMine: false, doula: '', needsDoula: false, type: '', order: '' };
 const view = (change: Partial<ScheduleView>): ScheduleView => ({ ...noView, ...change });
 const answer = () => jsonResponse({ items: [], hasMore: false }, 200);
 
@@ -33,6 +33,7 @@ describe('the Client search (#2870)', () => {
 			staffId: 'staff-1',
 			order: 'latest',
 			search: 'Camille',
+			type: '',
 			cursor: 'c1'
 		});
 	});
@@ -72,15 +73,15 @@ describe('the Client search (#2870)', () => {
 		expect(say(0, { doulaName: 'Bo Ng' })).toBe('No Visits for "Camille" for Bo Ng from Fri Nov 13 to Sat Dec 12.');
 	});
 
-	it('looks a year ahead, today through today plus 364 days, keeping Mine and the order', () => {
+	it('looks a year back and a year ahead, today less 365 days through today plus 364, keeping Mine and the order', () => {
 		const step = scheduleSearchNextStep(view({ isMine: true, order: 'latest' }), 'Camille', EASTERN, NOW);
 
-		expect(step?.label).toBe('Look for "Camille" in the next 12 months');
-		expect(step?.view).toMatchObject({ isMine: true, order: 'latest', chosen: { from: '2026-11-13', to: '2027-11-12' } });
+		expect(step?.label).toBe('Look for "Camille" a year back and a year ahead');
+		expect(step?.view).toMatchObject({ isMine: true, order: 'latest', chosen: { from: '2025-11-13', to: '2027-11-12' } });
 	});
 
-	it('offers nothing where the days already reach a year ahead', () => {
-		const wide = view({ chosen: { from: '2026-11-13', to: '2027-11-12' } });
+	it('offers nothing where the days already reach a year back and a year ahead', () => {
+		const wide = view({ chosen: { from: '2025-11-13', to: '2027-11-12' } });
 		expect(scheduleSearchNextStep(wide, 'Camille', EASTERN, NOW)).toBeUndefined();
 	});
 
