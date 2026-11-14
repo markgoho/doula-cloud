@@ -51,6 +51,8 @@ func DecodeKeyed(s, order string) (Keyed, error) {
 	return c, nil
 }
 
+// jscpd:ignore-start -- FetchKeyed and FetchKeyedFrom differ only in where the cursor is read from
+
 // FetchKeyed is Fetch for a keyed cursor: decode turns the request's
 // cursor into the position fetch reads from (it should start from
 // DecodeKeyed with the request's order and refuse a cursor whose keys it
@@ -65,7 +67,20 @@ func FetchKeyed[T, C any](
 	fetch func(after *C) ([]T, error),
 	key func(T) ([]string, string),
 ) (page Page[T], ok bool) {
-	return fetchPage(w, r, message, decode, fetch, func(items []T) Page[T] {
+	return FetchKeyedFrom(w, r.URL.Query().Get("cursor"), message, order, size, decode, fetch, key)
+}
+
+// FetchKeyedFrom is FetchKeyed for a cursor the caller already read, from a
+// request body.
+func FetchKeyedFrom[T, C any](
+	w http.ResponseWriter,
+	cursor, message, order string,
+	size int,
+	decode func(string) (C, error),
+	fetch func(after *C) ([]T, error),
+	key func(T) ([]string, string),
+) (page Page[T], ok bool) {
+	return fetchPage(w, cursor, message, decode, fetch, func(items []T) Page[T] {
 		items, hasMore := Trim(items, size)
 		if !hasMore {
 			return Page[T]{Items: items}
@@ -75,6 +90,8 @@ func FetchKeyed[T, C any](
 		return Page[T]{Items: items, Next: &next, HasMore: true}
 	})
 }
+
+// jscpd:ignore-end
 
 // TimeKey is a timestamp as a sort key value.
 func TimeKey(t time.Time) string { return t.Format(time.RFC3339Nano) }

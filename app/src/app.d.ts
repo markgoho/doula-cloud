@@ -37,10 +37,12 @@ declare global {
 		 * filter: a Client's name is never in a URL (#1829), so it rides here.
 		 * `invoicesSearch` is the Invoices list's "Reference or Client" field,
 		 * which can hold a Client's name, for the same reason (#2746).
+		 * `scheduleSearch` is the Schedule's "Client" field (#2870).
 		 */
 		interface PageState {
 			clientsName?: string;
 			invoicesSearch?: string;
+			scheduleSearch?: string;
 			// How many pages of the Clients list were open, for a Back to it.
 			clientsPages?: number;
 		}

@@ -43,6 +43,8 @@ const [earlierVisit, laterVisit, offVisit] = schedulePage.items;
 const { practiceId } = fixture.params;
 const schedulePath = `/practices/${practiceId}/schedule`;
 const ownSession = fixture.pageData as { session: { staffId: string } };
+// A move with no search: the history entry's state says so (#2870).
+const NOSEARCH = { state: { scheduleSearch: '' } };
 
 // Reactive, because the screen reads the address through a derived.
 const setAddress = (query: string) => {
@@ -344,7 +346,7 @@ describe('the narrowing', () => {
 		await testPage.getByRole('combobox', { name: 'Doula' }).selectOptions(earlierVisit.staffName);
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
-		expect(goto).toHaveBeenCalledWith(`${schedulePath}?days=7&mine=true&doula=${earlierVisit.staffId}`);
+		expect(goto).toHaveBeenCalledWith(`${schedulePath}?days=7&mine=true&doula=${earlierVisit.staffId}`, NOSEARCH);
 	});
 
 	it('goes to the bare path for the default days and nothing else', async () => {
@@ -352,7 +354,7 @@ describe('the narrowing', () => {
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
-		expect(goto).toHaveBeenCalledWith(schedulePath);
+		expect(goto).toHaveBeenCalledWith(schedulePath, NOSEARCH);
 	});
 
 	it('goes to the chosen days', async () => {
@@ -363,7 +365,7 @@ describe('the narrowing', () => {
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
-		expect(goto).toHaveBeenCalledWith(`${schedulePath}?from=2026-09-10&to=2026-09-19`);
+		expect(goto).toHaveBeenCalledWith(`${schedulePath}?from=2026-09-10&to=2026-09-19`, NOSEARCH);
 	});
 
 	it('refuses a To day before the From day beside To, moves focus there, and goes nowhere', async () => {
@@ -555,7 +557,7 @@ describe('the applied tags', () => {
 
 		await testPage.getByRole('link', { name: 'Remove filter: Next 7 days' }).click();
 
-		expect(goto).toHaveBeenCalledWith(schedulePath);
+		expect(goto).toHaveBeenCalledWith(schedulePath, NOSEARCH);
 	});
 });
 
@@ -879,11 +881,11 @@ describe('the reader’s order (#2869)', () => {
 		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
 		await testPage.getByRole('combobox', { name: 'Order' }).selectOptions('Latest first');
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7&order=latest`);
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7&order=latest`, NOSEARCH);
 
 		await testPage.getByRole('combobox', { name: 'Order' }).selectOptions('Soonest first');
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`);
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`, NOSEARCH);
 	});
 
 	it('draws the applied order as a tag whose × removes only it, and Clear filters removes it too', async () => {
