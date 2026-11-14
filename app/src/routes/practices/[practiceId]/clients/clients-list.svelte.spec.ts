@@ -1638,12 +1638,12 @@ describe('the Status column (#264, #2022)', () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
-				items: [{ ...clients[0], openEngagements: [{ ...line, daysOverdue: 1 }] }],
+				items: [{ ...clients[0], oldestOverdueDays: 1, openEngagements: [{ ...line, daysOverdue: 1 }] }],
 				hasMore: false
 			})
 		);
 
-		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice$/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*1 day overdue\s*,\s*1 Invoice$/ })).toBeVisible();
 	});
 
 	it('reads the total in the Money column, whatever the late Invoice carries for an amount', async () => {
@@ -1655,7 +1655,7 @@ describe('the Status column (#264, #2022)', () => {
 			})
 		);
 
-		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice$/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*12 days overdue\s*,\s*1 Invoice$/ })).toBeVisible();
 	});
 
 	// #2130: the BFF's one count (#2122) decides it, so a late Invoice
@@ -1663,7 +1663,7 @@ describe('the Status column (#264, #2022)', () => {
 	it('reads "Overdue" once the BFF counts the open Invoice late', async () => {
 		await setup();
 
-		await expect.element(table().getByRole('cell', { name: /\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /\$4,500\.00\s*,\s*12 days overdue\s*,\s*1 Invoice/ })).toBeVisible();
 		await expect.element(table().getByText('Owes', { exact: true })).not.toBeInTheDocument();
 	});
 
@@ -1686,7 +1686,7 @@ describe('the Status column (#264, #2022)', () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
-				items: [{ ...clients[0], openEngagements: [{ ...line, daysOverdue: 0 }] }],
+				items: [{ ...clients[0], oldestOverdueDays: 0, openEngagements: [{ ...line, daysOverdue: 0 }] }],
 				hasMore: false
 			})
 		);
@@ -1818,7 +1818,7 @@ describe('the Money column', () => {
 		const merged = { ...first, ...line };
 		const isOwed = merged.invoiceStatus === 'open' && !merged.paymentProcessing;
 		return jsonResponse({
-			items: [{ ...clients[0], owedCents: isOwed ? 450_000 : 0, owedInvoiceCount: isOwed ? 1 : 0, openEngagements: [merged] }],
+			items: [{ ...clients[0], owedCents: isOwed ? 450_000 : 0, owedInvoiceCount: isOwed ? 1 : 0, oldestOverdueDays: isOwed ? (merged.daysOverdue ?? 0) : 0, openEngagements: [merged] }],
 			hasMore: false
 		});
 	};
@@ -1833,7 +1833,7 @@ describe('the Money column', () => {
 
 	it.each([
 		['an open Invoice', { daysOverdue: 0 }, String.raw`owed\s*,\s*1 Invoice`],
-		['a late Invoice', { daysOverdue: 12 }, String.raw`overdue\s*,\s*1 Invoice`],
+		['a late Invoice', { daysOverdue: 12 }, String.raw`12 days overdue\s*,\s*1 Invoice`],
 		['a payment on its way', { paymentProcessing: true }, 'payment on its way'],
 		['a paid Invoice', { invoiceStatus: 'paid', daysOverdue: 0 }, 'paid'],
 		// #2849: as the Invoices list says it, through the one `invoiceMoneyState`.

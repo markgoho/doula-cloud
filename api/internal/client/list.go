@@ -338,6 +338,7 @@ func listZone(ctx context.Context, c staffauth.Call, filters *listFilters) (*tim
 	}
 	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
 	if err != nil {
+		// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
 		return nil, fmt.Errorf("client: load practice timezone: %w", err)
 	}
 	filters.overdueFrom = overdue.From(clock.Now(ctx), zone)

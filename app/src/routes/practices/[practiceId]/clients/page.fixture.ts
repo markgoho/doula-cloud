@@ -34,6 +34,7 @@ export const clients: ClientListItem[] = [
 		pendingRequestKinds: ['birth'],
 		// The BFF sums what a Client owes for every non-contractor row (#2874): her one open Invoice.
 		owedCents: 450_000,
+		oldestOverdueDays: 12,
 		owedInvoiceCount: 1,
 		/*
 		 * #264: both ends of the rollup on one Client -- ADR-0017's "two
