@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { staffActivityPhrase, staffActivityPhrasedActions } from './staffActivityPhrases.js';
+import { onCallRuleChangeWords, staffActivityPhrase, staffActivityPhrasedActions } from './staffActivityPhrases.js';
 
 /*
  * Every action's Staff wording, with the subject's name (the Practice-wide
@@ -92,7 +92,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['practice_deletion_requested', 'Practice set to be deleted', 'Practice set to be deleted'],
 	['practice_deletion_restored', 'Practice deletion canceled', 'Practice deletion canceled'],
 	['practice_name_changed', 'Practice name changed', 'Practice name changed'],
-	['practice_on_call_changed', 'On-call settings changed', 'On-call settings changed'],
+	['practice_on_call_changed', 'On-call rule changed', 'On-call rule changed'],
 	['practice_rate_changed', 'Practice rates changed', 'Practice rates changed'],
 	['practice_timezone_changed', 'Practice time zone changed', 'Practice time zone changed'],
 	['push_notifications_disabled', 'Notifications turned off by Amara', 'Notifications turned off by the Client'],
@@ -138,6 +138,13 @@ describe('staffActivityPhrase', () => {
 
 	it('covers every phrased action in the table above', () => {
 		expect(WORDING.map(([action]) => action)).toEqual(staffActivityPhrasedActions());
+	});
+
+	it('says nothing for an on-call rule change whose recorded sides are not rules', () => {
+		const rule = { startRule: 'gestational_week', startWeek: 37, graceDays: 14 };
+		expect(onCallRuleChangeWords({ before: 'week 37', after: rule })).toBeUndefined();
+		expect(onCallRuleChangeWords({ before: rule, after: undefined })).toBeUndefined();
+		expect(onCallRuleChangeWords({ before: { ...rule, startWeek: '37' }, after: rule })).toBeUndefined();
 	});
 
 	it('refuses an action it holds no words for, rather than printing it', () => {

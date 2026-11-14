@@ -312,6 +312,49 @@ describe('activityLedgerColumns', () => {
 		expect(what.accessor(entry({ action: 'clients_exported', diff: { nope: true } }))).toBe('Clients downloaded');
 	});
 
+	it('says what a change to the on-call rule changed, from its diff', () => {
+		const what = activityLedgerColumns('America/New_York')[1];
+		const week = { startRule: 'gestational_week', startWeek: 37, graceDays: 14 };
+		const said = (after: object) =>
+			what.accessor(entry({ action: 'practice_on_call_changed', diff: { before: week, after: { ...week, ...after } } }));
+
+		expect(said({ startWeek: 38 })).toBe('On-call rule changed from week 37 to week 38.');
+		expect(said({ graceDays: 21 })).toBe('On-call rule changed: on call now runs 21 days past the due date, not 14.');
+		expect(said({ graceDays: 1 })).toBe('On-call rule changed: on call now runs 1 day past the due date, not 14.');
+		expect(said({ startRule: 'attachment_granted' })).toBe('On-call rule changed to start on the day a Doula takes the birth.');
+		expect(
+			what.accessor(
+				entry({
+					action: 'practice_on_call_changed',
+					diff: { before: { ...week, startRule: 'attachment_granted' }, after: { ...week, startWeek: 36 } }
+				})
+			)
+		).toBe('On-call rule changed to start at week 36 of pregnancy.');
+		expect(said({ startWeek: 38, graceDays: 21 })).toBe(
+			'On-call rule changed from week 37 to week 38, and on call now runs 21 days past the due date, not 14.'
+		);
+	});
+
+	it('keeps the fixed words for an on-call rule change whose diff cannot be read', () => {
+		const what = activityLedgerColumns('America/New_York')[1];
+
+		expect(what.accessor(entry({ action: 'practice_on_call_changed' }))).toBe('On-call rule changed');
+		expect(what.accessor(entry({ action: 'practice_on_call_changed', diff: { before: 'x', after: 5 } }))).toBe(
+			'On-call rule changed'
+		);
+		expect(
+			what.accessor(
+				entry({
+					action: 'practice_on_call_changed',
+					diff: {
+						before: { startRule: 'gestational_week', startWeek: 37, graceDays: 14 },
+						after: { startRule: 'gestational_week', startWeek: 37, graceDays: 14 }
+					}
+				})
+			)
+		).toBe('On-call rule changed');
+	});
+
 	it("says the row's own words for an entry carrying no detail (#2006)", () => {
 		const what = activityLedgerColumns('America/New_York')[1];
 

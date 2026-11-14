@@ -6,7 +6,7 @@
  */
 import type { ComponentProps } from 'svelte';
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import { jsonResponse } from '#lib/testResponse.js';
@@ -27,10 +27,26 @@ vi.mock('#lib/api.js', () => ({
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
-const gapsPath = '/api/practices/practice-1/engagements/engagement-1/coverage-gaps';
+const nobodyOn = (path: string) =>
+	path.endsWith('/on-call') && !path.includes('coverage')
+		? jsonResponse({
+				noWindowReason: 'nobody_attached',
+				rule: { startRule: 'gestational_week', startWeek: 37, graceDays: 14, overridden: false },
+				doulas: [],
+				gaps: []
+			})
+		: undefined;
+
+const gapsPath ='/api/practices/practice-1/engagements/engagement-1/coverage-gaps';
 
 beforeEach(() => {
 	apiFetchWithSession.mockReset();
+	vi.useFakeTimers({ toFake: ['Date'] });
+	vi.setSystemTime(new Date('2026-11-14T15:00:00Z'));
+});
+
+afterEach(() => {
+	vi.useRealTimers();
 });
 
 /**
@@ -58,7 +74,7 @@ const onCallChanges = () =>
 // (two gaps, so two Changes), then one Change for each Doula's days.
 const GAP_CHANGES = 2;
 const daysChange = (index: number) => onCallChanges().nth(GAP_CHANGES + index);
-const recordGapOpener = () => testPage.getByRole('button', { name: 'Record a time a doula cannot be reached' });
+const recordGapOpener = () => testPage.getByRole('button', { name: 'Record a time a Doula cannot be reached' });
 
 /**
  * The page as setupOnCall renders it, with the gap form opened (#2042).
@@ -130,14 +146,14 @@ describe('the on-call section after a Visit puts a Doula on the birth (#2568)', 
 			return response;
 		});
 		await expect.element(testPage.getByRole('region', { name: 'On call' })).toBeVisible();
-		expect(testPage.getByText('On call Oct 31, 2026 to Nov 13, 2026').elements()).toHaveLength(0);
+		expect(testPage.getByText('On call Sat Oct 31 to Fri Nov 13').elements()).toHaveLength(0);
 
 		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
 		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
 		await testPage.getByRole('button', { name: 'Save Visit' }).click();
 
 		await expect
-			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Oct 31, 2026 to Nov 13, 2026'))
+			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Sat Oct 31 to Fri Nov 13'))
 			.toBeVisible();
 	});
 
@@ -158,7 +174,7 @@ describe('the on-call section after a Visit puts a Doula on the birth (#2568)', 
 		await testPage.getByRole('button', { name: 'Reassign the Visit' }).click();
 
 		await expect
-			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Oct 31, 2026 to Nov 13, 2026'))
+			.element(testPage.getByRole('region', { name: 'On call' }).getByText('On call Sat Oct 31 to Fri Nov 13'))
 			.toBeVisible();
 	});
 });
@@ -168,7 +184,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		await setupOnCall();
 
 		await expect.element(testPage.getByText(/On call from .* to /)).toBeVisible();
-		await expect.element(testPage.getByText(/On call Oct 31, 2026 to Nov 13, 2026/)).toBeVisible();
+		await expect.element(testPage.getByText(/On call Sat Oct 31 to Fri Nov 13/)).toBeVisible();
 	});
 
 	it('shows a gap nobody is covering as the hole it is, beside one somebody is covering', async () => {
@@ -563,7 +579,7 @@ describe('the on-call section on a birth (#1093)', () => {
 	it('draws a Doula who is not an Owner or an Admin no Change on the days, and Change and Clear only on her own gap', async () => {
 		await setupOnCall(undefined, asDoula.props!.data as ComponentProps<typeof Page>['data']);
 
-		await expect.element(testPage.getByText(/On call Oct 31, 2026 to Nov 13, 2026/)).toBeVisible();
+		await expect.element(testPage.getByText(/On call Sat Oct 31 to Fri Nov 13/)).toBeVisible();
 		// The fixture's reader is staff-1: gap-1 is hers, gap-2 is Bo Ng's.
 		expect(onCallChanges().elements()).toHaveLength(1);
 		expect(testPage.getByRole('button', { name: 'Clear', exact: true }).elements()).toHaveLength(1);
@@ -613,6 +629,34 @@ describe('the on-call section on a birth (#1093)', () => {
 			.toBeVisible();
 		await expect.element(testPage.getByText('Not on call', { exact: true })).toBeVisible();
 		expect(testPage.getByText(/this window/).elements()).toHaveLength(0);
+	});
+
+	it('says the window’s days without this year, each in a time element', async () => {
+		await setupOnCall();
+
+		const first = testPage.getByRole('region', { name: 'On call' }).getByRole('time').first();
+		await expect.element(first).toHaveAttribute('datetime', '2026-10-09');
+		await expect.element(first).toHaveTextContent('Fri Oct 9');
+	});
+
+	describe('a birth with no Doula on it', () => {
+		it('offers a Doula who may put herself on a link that focuses the Doula row’s Change', async () => {
+			await setupOnCall(nobodyOn, asDoula.props!.data as ComponentProps<typeof Page>['data']);
+
+			await testPage.getByRole('link', { name: 'Put yourself on this birth' }).click();
+
+			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Change');
+			const describer = document.querySelector(`#${CSS.escape(document.activeElement!.getAttribute('aria-describedby')!)}`);
+			expect(describer?.textContent).toBe('Doula');
+		});
+
+		it('offers a reader who cannot put a Doula on the birth no link', async () => {
+			const asDoulaData = asDoula.props!.data as ComponentProps<typeof Page>['data'];
+			await setupOnCall(nobodyOn, { ...asDoulaData, canAttachSelf: false });
+
+			await expect.element(testPage.getByText('No Doula is on this birth yet.')).toBeVisible();
+			expect(testPage.getByRole('link', { name: /on this birth/ }).elements()).toHaveLength(0);
+		});
 	});
 
 	it('reports a section it could not read, rather than rendering nothing', async () => {

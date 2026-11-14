@@ -61,7 +61,8 @@
 	const session = $derived((page.data as { session: PracticeSession }).session);
 	const canChangeRule = $derived(isOwnerOrAdmin(session));
 	const rosterPath = $derived(resolve('/practices/[practiceId]/on-call', { practiceId }));
-	const settingsHubPath = $derived(resolve('/practices/[practiceId]/settings', { practiceId }));
+	const activityPath = $derived(resolve('/practices/[practiceId]/activity', { practiceId }));
+	const settingsHubPath =$derived(resolve('/practices/[practiceId]/settings', { practiceId }));
 
 	let startRule = $state<OnCallSettings['startRule']>('gestational_week');
 	let startWeek = $state('37');
@@ -254,6 +255,7 @@
 			{#if lastChanged}
 				Last changed by {lastChanged.staffName},
 				<time datetime={lastChanged.at}>{formatActivityTimestamp(lastChanged.at, practiceTimeZone())}</time>
+				<Link href={activityPath} label="See every change" />
 			{:else}
 				Not changed since this Practice was set up.
 			{/if}

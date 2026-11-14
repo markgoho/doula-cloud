@@ -61,9 +61,10 @@ type Entry struct {
 	ReassignedFromName string `json:"reassignedFromName,omitempty"`
 	ReassignedToName   string `json:"reassignedToName,omitempty"`
 
-	// Diff is carried for one action only, invoices_exported (#2871): which
-	// slice of the book left the product, in no Client's name, so the Staff
-	// feed can say what was downloaded. Every other row sends none, which
+	// Diff is carried for three actions only: invoices_exported and
+	// clients_exported (#2871), which slice of the book left the product, in
+	// no Client's name, and practice_on_call_changed, the on-call rule
+	// before and after, so the Staff feed can say what changed. Every other row sends none, which
 	// keeps a diff off the Client portal and out of this feed (#1150).
 	Diff jsontext.Value `json:"diff,omitempty"`
 }

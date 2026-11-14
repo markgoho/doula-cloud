@@ -14,6 +14,7 @@
 import type { Fetcher } from './fetcher.js';
 import { formatCalendarWeekdayDay } from './dates.js';
 import {
+	THIS_WEEK,
 	daysOf,
 	daysSpan,
 	stepDays,
@@ -182,12 +183,19 @@ export const DEFAULT_ON_CALL_DAYS = 30;
  */
 export const MOST_ON_CALL_DAYS = 92;
 
-const PRESETS = [TONIGHT_DAYS, SHORT_ON_CALL_DAYS, DEFAULT_ON_CALL_DAYS] as const;
+const PRESETS = [TONIGHT_DAYS, SHORT_ON_CALL_DAYS, THIS_WEEK, DEFAULT_ON_CALL_DAYS] as const;
+
+const PARAMETER_OF_PRESET = new Map<number, string>([
+	[TONIGHT_DAYS, 'tonight'],
+	[SHORT_ON_CALL_DAYS, String(SHORT_ON_CALL_DAYS)],
+	[THIS_WEEK, 'week']
+]);
+const PRESET_OF_PARAMETER = new Map([...PARAMETER_OF_PRESET].map(([preset, parameter]) => [parameter, preset]));
 
 export const FROM_BEFORE_TODAY = 'Choose today or a later day. On call shows only births still to come.';
 export const TOO_MANY_DAYS = `Choose a range of ${MOST_ON_CALL_DAYS} days or fewer.`;
 
-export type OnCallDaysChoice = 'tonight' | '7' | '30' | 'choose';
+export type OnCallDaysChoice = 'tonight' | '7' | 'week' | '30' | 'choose';
 
 /**
  * The orders the roster is read in: the empty one is tonight's births first,
@@ -233,11 +241,8 @@ export function onCallViewFromParameters(
 	const doula = parameters.get('doula') ?? '';
 	const isOwnDoula = withoutPicker !== undefined && doula !== '' && doula === withoutPicker.staffId;
 	const days = parameters.get('days');
-	let preset: number = DEFAULT_ON_CALL_DAYS;
-	if (days === 'tonight') preset = TONIGHT_DAYS;
-	else if (days === String(SHORT_ON_CALL_DAYS)) preset = SHORT_ON_CALL_DAYS;
 	return {
-		preset,
+		preset: PRESET_OF_PARAMETER.get(days ?? '') ?? DEFAULT_ON_CALL_DAYS,
 		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
 		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
 		doula: withoutPicker ? '' : doula,
@@ -253,10 +258,9 @@ export function onCallHref(basePath: string, view: OnCallView): string {
 	if (view.chosen) {
 		parameters.set('from', view.chosen.from);
 		parameters.set('to', view.chosen.to);
-	} else if (view.preset === TONIGHT_DAYS) {
-		parameters.set('days', 'tonight');
-	} else if (view.preset === SHORT_ON_CALL_DAYS) {
-		parameters.set('days', String(SHORT_ON_CALL_DAYS));
+	} else {
+		const days = PARAMETER_OF_PRESET.get(view.preset);
+		if (days) parameters.set('days', days);
 	}
 	if (view.isMine) parameters.set('mine', 'true');
 	if (view.doula) parameters.set('doula', view.doula);
@@ -301,6 +305,21 @@ export interface OnCallFilters extends Days {
 }
 
 /**
+ * The days a view reads. The roster offers no day before today, so a week
+ * that began before today starts on it.
+ */
+export function onCallDaysOf(
+	view: DaysView,
+	timeZone: string,
+	now: Date
+): { days: Days; errors?: undefined } | { days?: undefined; errors: RangeErrors } {
+	const today = dayIn(now, timeZone);
+	const read = daysOf(view, timeZone, now, onCallLimits(today));
+	if (!read.days || view.chosen || view.preset !== THIS_WEEK || read.days.from >= today) return read;
+	return { days: { ...read.days, from: today } };
+}
+
+/**
  * The narrowing a view reads under, and whether there is anything to read.
  * Days that are not a range are answered in place with their errors and no
  * read. "Mine" beside a different Doula is read as "Mine" and then shown
@@ -312,7 +331,7 @@ export function resolveOnCallRead(
 	ownStaffId: string | undefined,
 	now: Date
 ): { days?: Days; errors?: RangeErrors; filters?: OnCallFilters; isEmpty: boolean } {
-	const read = daysOf(view, timeZone, now, onCallLimits(dayIn(now, timeZone)));
+	const read = onCallDaysOf(view, timeZone, now);
 	if (!read.days) return { errors: read.errors, isEmpty: false };
 	const staffId = view.isMine ? ownStaffId : view.doula || undefined;
 	const filters: OnCallFilters = { ...read.days };
@@ -484,31 +503,57 @@ export function onCallGroup(
 }
 
 /**
- * Who holds the birth tonight, said on every birth that is on call tonight:
- * the Doula holding it, the covering Doula and whom she covers, or nobody.
+ * The reader is "you" wherever she is named; anyone else is her name.
  */
-export function tonightLine(window: RosterWindow): string | undefined {
+export function personWords(staffId: string, name: string, ownStaffId: string | undefined, isLead = false): string {
+	if (staffId !== ownStaffId) return name;
+	return isLead ? 'You' : 'you';
+}
+
+/**
+ * Who holds the birth tonight, the first line of the On call cell on every
+ * birth that is on call tonight: the Doula holding it, the covering Doula and
+ * whom she covers, or nobody.
+ */
+export function tonightLine(window: RosterWindow, ownStaffId?: string): string | undefined {
 	const tonight = window.tonight;
 	if (!tonight) return undefined;
-	if (tonight.isNobody) return 'Nobody tonight';
-	const who = tonight.holders.map((holder) =>
-		holder.coveringFor ? `${holder.name}, covering for ${holder.coveringFor}` : holder.name
-	);
+	if (tonight.isNobody) return 'Tonight: nobody';
+	const who = tonight.holders.map((holder) => {
+		const name = personWords(holder.staffId, holder.name, ownStaffId);
+		if (!holder.coveringFor) return name;
+		const covered = window.gaps.find(
+			(gap) => gap.coveringStaffId === holder.staffId && gap.staffName === holder.coveringFor
+		);
+		return `${name}, covering for ${covered ? personWords(covered.staffId, covered.staffName, ownStaffId) : holder.coveringFor}`;
+	});
 	return `Tonight: ${who.join('; ')}`;
 }
 
 /**
- * Whether the one Doula on the birth is the one holding it tonight, so the
- * screen says "Tonight" on her own line and adds none.
+ * Who covers a gap, in one set of words for the birth's line and the Doulas
+ * table's: the covering Doula by name or "you", "covered" when her name is
+ * not in what the reader received, "nobody covering" when nobody does.
  */
-export function isTonightOnHerLine(window: RosterWindow): boolean {
-	const [holder] = window.tonight?.holders ?? [];
-	return (
-		window.onCall.length === 1 &&
-		window.tonight?.holders.length === 1 &&
-		holder?.staffId === window.onCall[0]?.staffId &&
-		holder?.coveringFor === undefined
-	);
+export function coveringWords(
+	isCovered: boolean,
+	covering: { staffId?: string; name?: string } | undefined,
+	ownStaffId: string | undefined
+): string {
+	if (!isCovered) return 'nobody covering';
+	if (!covering?.staffId || !covering.name) return 'covered';
+	return `${personWords(covering.staffId, covering.name, ownStaffId)} covering`;
+}
+
+export type SharedDays = { from: 'today' | string; to: string } | { day: string } | { isToday: true };
+
+/**
+ * The days two births share, said for an "Also" line: "today to Sun Nov 22"
+ * when they began on or before today, else both days.
+ */
+export function sharedDays(range: DayRange, today: string): SharedDays {
+	if (range.start === range.end) return range.start <= today ? { isToday: true } : { day: range.start };
+	return { from: range.start <= today ? 'today' : range.start, to: range.end };
 }
 
 /**
@@ -539,7 +584,7 @@ export function onCallOrderOptions(isTonightShown: boolean): readonly { value: O
  * The cover line's subject: "You" for the reader's own gap, else her name.
  */
 export function gapSubject(gap: Pick<CoverageGap, 'staffId' | 'staffName'>, ownStaffId: string | undefined): string {
-	return gap.staffId === ownStaffId ? 'You' : gap.staffName;
+	return personWords(gap.staffId, gap.staffName, ownStaffId, true);
 }
 
 /**

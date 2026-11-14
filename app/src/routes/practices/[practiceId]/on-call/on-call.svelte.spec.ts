@@ -43,7 +43,9 @@ const asVariant = (variant: { pageData?: unknown }) => {
 	pageState.data = variant.pageData as Record<string, unknown>;
 };
 
-const arrived = () => (vi.mocked(afterNavigate).mock.calls.at(-1)![0] as () => void)();
+const idle = (staffId: string, name: string) => ({ staffId, name, births: [], unreachable: [], isOnCallTonight: false });
+
+const arrived =() => (vi.mocked(afterNavigate).mock.calls.at(-1)![0] as () => void)();
 
 beforeEach(async () => {
 	// Wide enough for DataTable's <table> rather than the <dl> record view
@@ -112,15 +114,15 @@ describe('the on-call roster', () => {
 		await setup();
 
 		await expect.element(testPage.getByText('Tonight: Jo Park, covering for Ana Ruiz').first()).toBeVisible();
-		await expect.element(testPage.getByText('Nobody tonight').first()).toBeVisible();
-		await expect.element(testPage.getByText('Tonight: Persephone Vandermeulen-Achterberg, CD(DONA)').first()).toBeVisible();
+		await expect.element(testPage.getByText('Tonight: nobody').first()).toBeVisible();
+		await expect.element(testPage.getByText('Tonight: you').first()).toBeVisible();
 	});
 
 	it('flags a Doula on two births at once beside her name, with the other birth and the days they share', async () => {
 		await setup();
 
 		await expect.element(testPage.getByText('On 2 births at once').first()).toBeVisible();
-		await expect.element(testPage.getByText('Also Bea Okafor, until Sun Nov 22').first()).toBeVisible();
+		await expect.element(testPage.getByText('Also Bea Okafor, today to Sun Nov 22').first()).toBeVisible();
 	});
 
 	it('says a birth needs cover with a badge, and says everything that is missing', async () => {
@@ -222,7 +224,7 @@ describe('the on-call roster', () => {
 		for (const name of ['Doula', 'On call for', 'Cannot be reached'])
 			await expect.element(testPage.getByRole('columnheader', { name, exact: true }).last()).toBeVisible();
 		await expect.element(testPage.getByText('Bea Okafor, covering').first()).toBeVisible();
-		await expect.element(testPage.getByText('Anne-Marie Ochieng-Whitfield and Bea Okafor, until Sun Nov 22').first()).toBeVisible();
+		await expect.element(testPage.getByText('Anne-Marie Ochieng-Whitfield and Bea Okafor, today to Sun Nov 22').first()).toBeVisible();
 	});
 
 	it('says in the Doulas table whether a gap is covered, and by whom', async () => {
@@ -258,6 +260,34 @@ describe('the on-call roster', () => {
 		await setup({ data: { ...data, view: { ...data.view, doula: 'staff-1' } } });
 
 		expect(testPage.getByRole('heading', { name: 'Doulas' }).elements()).toHaveLength(0);
+	});
+
+	it('draws no Doulas table under Needing cover, which hides births the table would still list', async () => {
+		await setup({ data: { ...data, view: { ...data.view, needsCover: true } } });
+
+		expect(testPage.getByRole('heading', { name: 'Doulas' }).elements()).toHaveLength(0);
+	});
+
+	it('names the reader as "you" in the line of Doulas on call for no birth', async () => {
+		const session = (pageState.data as { session: object }).session;
+		pageState.data = { session: { ...session, staffId: 'staff-99' } };
+
+		await setup({ data: { ...data, roster: { ...roster, doulas: [...roster.doulas, idle('staff-99', 'Rue Idle'), idle('staff-98', 'Cy Idle')] } } });
+
+		await expect.element(testPage.getByText(/^On call for no birth in these days: .*Cy Idle.* and you\.$/)).toBeVisible();
+	});
+
+	it('says "Nobody" in the On call column and "No Doula yet" beside the badge in the Cover column', async () => {
+		await setup({
+			data: {
+				...data,
+				roster: { ...roster, windows: roster.windows.map((row) => (row.noDoula ? { ...row, tonight: undefined } : row)) }
+			}
+		});
+
+		const row = testPage.getByRole('table', { name: 'Births on call' }).getByRole('row').filter({ hasText: 'No Doula yet' }).first();
+		await expect.element(row.getByRole('cell').nth(0)).toHaveTextContent('Nobody');
+		await expect.element(row.getByRole('cell').nth(3)).toHaveTextContent(/Needs cover\s*No Doula yet/);
 	});
 
 	it('says once, under the result line, which zone the clock times are in when the Practice’s is another', async () => {
@@ -300,11 +330,22 @@ describe('the roster’s filter bar', () => {
 		await expect.element(testPage.getByRole('link', { name: /^Later, Mon Dec 14 to Tue Jan 12, 2027$/ })).toBeVisible();
 	});
 
-	it('draws no Earlier at today, and keeps its place so Later does not move', async () => {
+	it('draws no Earlier at today, and Later follows the Days radios', async () => {
 		await setup();
 
 		expect(testPage.getByRole('link', { name: /^Earlier/ }).elements()).toHaveLength(0);
-		await expect.element(testPage.getByText('Earlier')).not.toBeVisible();
+		expect(testPage.getByText('Earlier').elements()).toHaveLength(0);
+		await expect.element(testPage.getByRole('link', { name: /^Later, / })).toBeVisible();
+	});
+
+	it('offers This week between Tonight and Next 7 days, and applies it as days=week', async () => {
+		await setup();
+
+		const radios = testPage.getByRole('radio').elements().map((radio) => radio.closest('label')?.textContent?.trim());
+		expect(radios.slice(0, 3)).toEqual(['Tonight', 'This week', 'Next 7 days']);
+		await testPage.getByRole('radio', { name: 'This week' }).click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`${onCallPath}?days=week`, { replaceState: false, reset: false }));
 	});
 
 	it('steps later without a full reload, keeping every other filter', async () => {
@@ -362,7 +403,7 @@ describe('the roster’s filter bar', () => {
 		expect(testPage.getByRole('checkbox').elements()).toHaveLength(0);
 		await expect.element(testPage.getByLabelText('Order')).toBeVisible();
 		await expect.element(testPage.getByRole('table', { name: 'Doulas (1)' })).toBeVisible();
-		await expect.element(testPage.getByText('On call for no birth in these days: Bo Ng.')).toBeVisible();
+		expect(testPage.getByText(/On call for no birth in these days/).elements()).toHaveLength(0);
 		expect(testPage.getByText('On 2 births at once').elements()).toHaveLength(0);
 	});
 

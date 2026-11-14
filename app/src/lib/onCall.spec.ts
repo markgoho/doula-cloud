@@ -25,7 +25,10 @@ import {
 	saveNarrowing,
 	TOO_MANY_DAYS,
 	tonightLine,
-	isTonightOnHerLine,
+	coveringWords,
+	onCallDaysOf,
+	personWords,
+	sharedDays,
 	ownStartWords,
 	onCallOrderOptions,
 	gapSubject,
@@ -326,18 +329,20 @@ describe('who holds a birth tonight', () => {
 	it('says nothing for a birth not on call tonight, and names the holder of a one-Doula birth', () => {
 		expect(tonightLine(windowRow())).toBeUndefined();
 		expect(tonightLine(windowRow({ tonight: tonightHeld }))).toBe('Tonight: Maya Primary');
-		expect(isTonightOnHerLine(windowRow({ tonight: tonightHeld }))).toBe(true);
-	});
-
-	it('keeps the line of its own where she is not the only Doula, or covers, or nobody holds it', () => {
-		const covering = { staffId: 'staff-2', name: 'Lena Vasquez', coveringFor: 'Maya Primary' };
-		expect(isTonightOnHerLine(windowRow({ tonight: { holders: [covering], isNobody: false } }))).toBe(false);
-		expect(isTonightOnHerLine(windowRow({ tonight: nobodyTonight }))).toBe(false);
-		expect(isTonightOnHerLine(windowRow())).toBe(false);
 	});
 
 	it('says nobody when nobody does', () => {
-		expect(tonightLine(windowRow({ tonight: nobodyTonight }))).toBe('Nobody tonight');
+		expect(tonightLine(windowRow({ tonight: nobodyTonight }))).toBe('Tonight: nobody');
+	});
+
+	it('says "you" where the holder is the reader, and where the reader is the one covered', () => {
+		expect(tonightLine(windowRow({ tonight: tonightHeld }), 'staff-1')).toBe('Tonight: you');
+		const covering = { staffId: 'staff-2', name: 'Lena Vasquez', coveringFor: 'Maya Primary' };
+		const gap = { id: 'gap-1', engagementId: 'eng-1', staffId: 'staff-1', staffName: 'Maya Primary', startsAt: '', endsAt: '', coveringStaffId: 'staff-2' };
+		const row = windowRow({ tonight: { holders: [covering], isNobody: false }, gaps: [gap] });
+
+		expect(tonightLine(row, 'staff-1')).toBe('Tonight: Lena Vasquez, covering for you');
+		expect(tonightLine(row, 'staff-2')).toBe('Tonight: you, covering for Maya Primary');
 	});
 
 	it('names the covering Doula and whom she covers', () => {
@@ -357,6 +362,55 @@ describe('who holds a birth tonight', () => {
 		});
 
 		expect(tonightLine(two)).toBe('Tonight: Maya Primary');
+	});
+});
+
+describe('the reader and a gap’s cover in words', () => {
+	it('is "you" for the reader, capitalized at the start of a line, and a name for anyone else', () => {
+		expect(personWords('staff-1', 'Maya Primary', 'staff-1')).toBe('you');
+		expect(personWords('staff-1', 'Maya Primary', 'staff-1', true)).toBe('You');
+		expect(personWords('staff-1', 'Maya Primary', 'staff-2')).toBe('Maya Primary');
+		expect(personWords('staff-1', 'Maya Primary', undefined)).toBe('Maya Primary');
+	});
+
+	it('says who covers in one set of words, and "covered" when her name did not arrive', () => {
+		expect(coveringWords(false, undefined, 'staff-1')).toBe('nobody covering');
+		expect(coveringWords(true, { staffId: 'staff-2', name: 'Lena Vasquez' }, 'staff-1')).toBe('Lena Vasquez covering');
+		expect(coveringWords(true, { staffId: 'staff-1', name: 'Maya Primary' }, 'staff-1')).toBe('you covering');
+		expect(coveringWords(true, undefined, 'staff-1')).toBe('covered');
+		expect(coveringWords(true, { staffId: 'staff-2' }, 'staff-1')).toBe('covered');
+	});
+
+	it('says the days two births share from today when they began on or before it', () => {
+		expect(sharedDays({ start: '2026-10-09', end: '2026-10-22' }, TODAY)).toEqual({ from: 'today', to: '2026-10-22' });
+		expect(sharedDays({ start: '2026-12-08', end: '2026-12-18' }, TODAY)).toEqual({ from: '2026-12-08', to: '2026-12-18' });
+		expect(sharedDays({ start: TODAY, end: TODAY }, TODAY)).toEqual({ isToday: true });
+		expect(sharedDays({ start: '2026-10-20', end: '2026-10-20' }, TODAY)).toEqual({ day: '2026-10-20' });
+	});
+});
+
+describe('this week on the roster', () => {
+	const week = view({ preset: 0 });
+
+	it('starts today, since the roster offers no past day, and ends on the Sunday', () => {
+		expect(onCallDaysOf(week, EASTERN, now)).toEqual({ days: { from: '2026-10-17', to: '2026-10-18' } });
+		expect(resolveOnCallRead(week, EASTERN, 'staff-1', now).filters).toEqual({ from: '2026-10-17', to: '2026-10-18' });
+	});
+
+	it('is written and read as days=week', () => {
+		expect(onCallHref(BASE, week)).toBe(`${BASE}?days=week`);
+		expect(onCallViewFromParameters(new URLSearchParams('days=week'), false).preset).toBe(0);
+		expect(isOnCallNarrowed(week)).toBe(true);
+	});
+
+	it('steps later by the whole week and has no earlier step', () => {
+		expect(onCallStep(week, 1, EASTERN, now)?.days).toEqual({ from: '2026-10-19', to: '2026-10-25' });
+		expect(onCallStep(week, -1, EASTERN, now)).toBeUndefined();
+	});
+
+	it('leaves chosen days and other presets as they are', () => {
+		expect(onCallDaysOf(view({ chosen: { from: '2026-10-20', to: '2026-10-22' } }), EASTERN, now).days).toEqual({ from: '2026-10-20', to: '2026-10-22' });
+		expect(onCallDaysOf(view({ preset: 7 }), EASTERN, now).days).toEqual({ from: '2026-10-17', to: '2026-10-23' });
 	});
 });
 

@@ -106,6 +106,14 @@ describe('the on-call rule screen', () => {
 		await expect.element(when).toHaveAttribute('datetime', '2026-11-12T15:02:11Z');
 	});
 
+	it('offers every change to the rule beside who last made one', async () => {
+		await setup();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'See every change' }))
+			.toHaveAttribute('href', '/practices/practice-1/activity');
+	});
+
 	it('says so when the rule has never changed', async () => {
 		// eslint-disable-next-line unicorn/no-null -- the BFF sends null when the rule never changed
 		await setup(jsonResponse({ ...settings, lastChanged: null }));

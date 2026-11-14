@@ -20,7 +20,7 @@
 	import { resolve } from '$app/paths';
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import { addDays, daysOf, daysTag, daysWords, isCalendarDay, rangeErrors as rangeErrorsOf, type RangeErrors } from '#lib/dayRange.js';
+	import { THIS_WEEK, addDays, daysTag, daysWords, isCalendarDay, rangeErrors as rangeErrorsOf, type RangeErrors } from '#lib/dayRange.js';
 	import { formatCalendarWeekdayDay } from '#lib/dates.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import {
@@ -32,11 +32,14 @@
 		atOnceLabel,
 		daysOnCall,
 		daysOnCallText,
+		coveringWords,
 		describeCoverage,
 		gapSubject,
 		isOnCallNarrowed,
-		isTonightOnHerLine,
+		onCallDaysOf,
 		onCallOrderOptions,
+		personWords,
+		sharedDays,
 		ownStartWords,
 		onCallEmptyNextStep,
 		onCallGroup,
@@ -58,7 +61,7 @@
 		type RosterWindow,
 		type UnreachableGap
 	} from '#lib/onCall.js';
-	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
+	import { canNarrowToMine, isAmbientContractor, isOwnerOrAdmin } from '#lib/roles.js';
 	import { practiceZoneNote } from '#lib/practiceZone.js';
 	import { dayIn } from '#lib/zonedTime.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -107,11 +110,16 @@
 	const NEEDS_COVER = 'Needing cover';
 	const UNKNOWN_DOULA = 'that Doula';
 	const NO_DOULA = 'No Doula yet';
+	const NOBODY = 'Nobody';
+	const PRESET_TAGS = new Map<number, string>([
+		[TONIGHT_DAYS, 'Tonight'],
+		[THIS_WEEK, 'This week'],
+		[SHORT_ON_CALL_DAYS, `Next ${SHORT_ON_CALL_DAYS} days`]
+	]);
 	const TO = ' to ';
 	const SEPARATOR = ', ';
 	const ON_CALL_LABEL = 'On call ';
 	const DUE_LABEL = 'Due ';
-	const TONIGHT_LABEL = 'Tonight: ';
 
 	const practiceId = $derived(page.params.practiceId!);
 	const basePath = $derived(resolve('/practices/[practiceId]/on-call', { practiceId: page.params.practiceId! }));
@@ -222,18 +230,19 @@
 	let draftOrder = $state<OnCallOrder>('');
 	let rangeErrors = $state<RangeErrors>({});
 
-	const presetOf = (choice: OnCallDaysChoice) =>
-		choice === 'tonight' ? TONIGHT_DAYS : (choice === '7' ? SHORT_ON_CALL_DAYS : DEFAULT_ON_CALL_DAYS);
+	const PRESET_OF_CHOICE = { tonight: TONIGHT_DAYS, '7': SHORT_ON_CALL_DAYS, week: THIS_WEEK, '30': DEFAULT_ON_CALL_DAYS, choose: DEFAULT_ON_CALL_DAYS } as const;
+	const presetOf = (choice: OnCallDaysChoice) => PRESET_OF_CHOICE[choice];
 	const limits = $derived(onCallLimits(today));
 	const choiceOf = (of: OnCallView): OnCallDaysChoice => {
 		if (of.chosen) return 'choose';
 		if (of.preset === TONIGHT_DAYS) return 'tonight';
+		if (of.preset === THIS_WEEK) return 'week';
 		return of.preset === SHORT_ON_CALL_DAYS ? '7' : '30';
 	};
 
 	function seedDrafts() {
 		draftChoice = choiceOf(view);
-		const shown = view.chosen ?? daysOf(view, timeZone, now).days!;
+		const shown = view.chosen ?? onCallDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
 		toValue = shown.to;
 		isMineChecked = view.isMine;
@@ -266,7 +275,7 @@
 	// Picking "Choose days" starts its fields on the days the choice before it showed.
 	function chooseDays(choice: OnCallDaysChoice) {
 		if (choice === 'choose' && draftChoice !== 'choose') {
-			const shown = daysOf({ preset: presetOf(draftChoice) }, timeZone, now).days!;
+			const shown = onCallDaysOf({ preset: presetOf(draftChoice) }, timeZone, now).days!;
 			fromValue = shown.from;
 			toValue = shown.to;
 		}
@@ -341,12 +350,10 @@
 		const tags: AppliedTag[] = [];
 		const without = (change: Partial<OnCallView>) => onCallHref(basePath, { ...view, ...change });
 		if (view.chosen) {
-			const days = daysOf(view, timeZone, now).days;
+			const days = onCallDaysOf(view, timeZone, now).days;
 			if (days) tags.push({ text: daysTag(days, timeZone, now), href: onCallHref(basePath, withDefaultDays(view)) });
-		} else if (view.preset === TONIGHT_DAYS) {
-			tags.push({ text: 'Tonight', href: onCallHref(basePath, withDefaultDays(view)) });
-		} else if (view.preset === SHORT_ON_CALL_DAYS) {
-			tags.push({ text: `Next ${SHORT_ON_CALL_DAYS} days`, href: onCallHref(basePath, withDefaultDays(view)) });
+		} else if (PRESET_TAGS.has(view.preset)) {
+			tags.push({ text: PRESET_TAGS.get(view.preset)!, href: onCallHref(basePath, withDefaultDays(view)) });
 		}
 		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }) });
 		if (view.needsCover) tags.push({ text: NEEDS_COVER, href: without({ needsCover: false }) });
@@ -375,13 +382,14 @@
 	const resultSummary = $derived.by(() => {
 		if (!roster || !data?.filters) return '';
 		const shown = data.view;
-		const isPicked = shown.doula !== '' && !(shown.isMine && shown.doula === session.staffId);
+		const isOwn = shown.isMine || shown.doula === session.staffId;
+		const isPicked = shown.doula !== '' && !isOwn;
 		return onCallResultSummary(
 			roster,
 			data.filters,
 			timeZone,
 			{
-				isMine: shown.isMine,
+				isMine: isOwn,
 				doulaName: isPicked ? doulaNameOf(shown.doula) : undefined,
 				staffId: data.filters.staffId,
 				needsCover: shown.needsCover,
@@ -420,13 +428,14 @@
 	const doulaOptions = $derived([{ value: '', label: ANY_DOULA }, ...doulaChoices]);
 	const DAYS_OPTIONS: readonly { value: OnCallDaysChoice; label: string }[] = [
 		{ value: 'tonight', label: 'Tonight' },
+		{ value: 'week', label: 'This week' },
 		{ value: '7', label: `Next ${SHORT_ON_CALL_DAYS} days` },
 		{ value: '30', label: `Next ${DEFAULT_ON_CALL_DAYS} days` },
 		{ value: 'choose', label: 'Choose days' }
 	];
 
 	const say = (day: string) => formatCalendarWeekdayDay(day, timeZone, now);
-	const isTonightShown = $derived(daysOf(view, timeZone, now).days?.from === today);
+	const isTonightShown = $derived(onCallDaysOf(view, timeZone, now).days?.from === today);
 	const orderOptions = $derived(onCallOrderOptions(isTonightShown));
 	// The rows answer to the days they were read under, which a newer address may not yet be.
 	const isGrouped = $derived(data?.filters !== undefined && roster !== undefined && data.filters.from === roster.today);
@@ -437,12 +446,15 @@
 	const birthHref = (row: { engagementId: string }) => `${engagementHref(row)}#on-call`;
 	const gapsByNeed = (row: RosterWindow) =>
 		row.gaps.toSorted((a, b) => Number(a.coveringStaffId !== undefined) - Number(b.coveringStaffId !== undefined));
-	const coveringNames = $derived(
-		new Map(roster?.windows.flatMap((row) => row.gaps.map((gap) => [gap.id, gap.coveringStaffName] as const)))
+	const coverings = $derived(
+		new Map(
+			roster?.windows.flatMap((row) =>
+				row.gaps.map((gap) => [gap.id, { staffId: gap.coveringStaffId, name: gap.coveringStaffName }] as const)
+			)
+		)
 	);
-	const coverWords = (gap: UnreachableGap) =>
-		gap.isCovered ? (coveringNames.get(gap.gapId) ? `${coveringNames.get(gap.gapId)} covering` : 'covered') : 'nobody covering';
-	const atOnceNames =(doula: RosterDoula, ids: string[]) =>
+	const coverWords = (gap: UnreachableGap) => coveringWords(gap.isCovered, coverings.get(gap.gapId), session.staffId);
+	const atOnceNames = (doula: RosterDoula, ids: string[]) =>
 		ids
 			.map((id) => doula.births.find((birth) => birth.engagementId === id)?.clientName)
 			.filter((name): name is string => name !== undefined)
@@ -453,7 +465,8 @@
 		{
 			label: 'On call',
 			track: 'calc(26ch + 2 * var(--data-table-cell-inset))',
-			accessor: (row: RosterWindow) => row.onCall.map((doula) => doula.name).join(', ') || NO_DOULA,
+			accessor: (row: RosterWindow) =>
+				row.onCall.map((doula) => personWords(doula.staffId, doula.name, session.staffId, true)).join(', ') || NOBODY,
 			content: onCallCell
 		},
 		{
@@ -516,16 +529,24 @@
 	}
 
 	const isDoulasShown = $derived(
-		roster !== undefined && roster.doulas.length > 1 && data !== undefined && !data.view.isMine && data.view.doula === ''
+		roster !== undefined &&
+			roster.doulas.length > 1 &&
+			data !== undefined &&
+			!data.view.isMine &&
+			!data.view.needsCover &&
+			data.view.doula === ''
 	);
 	const listedDoulas = $derived(
 		(roster?.doulas ?? []).filter((doula) => doula.births.length > 0 || doula.unreachable.length > 0)
 	);
 	const idleDoulas = $derived(
-		(roster?.doulas ?? []).filter((doula) => doula.births.length === 0 && doula.unreachable.length === 0).map((doula) => doula.name)
+		(roster?.doulas ?? [])
+			.filter((doula) => doula.births.length === 0 && doula.unreachable.length === 0)
+			.toSorted((a, b) => Number(a.staffId === session.staffId) - Number(b.staffId === session.staffId))
+			.map((doula) => personWords(doula.staffId, doula.name, session.staffId))
 	);
 	const idleLine = $derived(
-		idleDoulas.length === 0
+		idleDoulas.length === 0 || isAmbientContractor(session)
 			? ''
 			: `On call for no birth in these days: ${idleDoulas.length === 1 ? idleDoulas[0] : `${idleDoulas.slice(0, -1).join(', ')} and ${idleDoulas.at(-1)}`}.`
 	);
@@ -542,25 +563,39 @@
 	{/if}
 {/snippet}
 
+{#snippet shared(range: DayRange)}
+	{@const parts = sharedDays(range, today)}
+	{#if 'isToday' in parts}
+		<time class="day" datetime={today}>today</time>
+	{:else if 'day' in parts}
+		<time class="day" datetime={parts.day}>{say(parts.day)}</time>
+	{:else}
+		{#if parts.from === 'today'}<time class="day" datetime={today}>today</time>{:else}<time class="day" datetime={parts.from}>{say(parts.from)}</time>{/if}{TO}<time class="day" datetime={parts.to}>{say(parts.to)}</time>
+	{/if}
+{/snippet}
+
 {#snippet onCallCell(row: RosterWindow, tableView: DataTableView)}
 	{@const isCard = tableView === 'record'}
+	{@const tonight = tonightLine(row, session.staffId)}
+	{#if tonight}
+		<span class="tonight">{tonight}</span>
+	{/if}
 	<div class="lines">
-		{#if isCard}
-			{@render coverBlock(row)}
-		{/if}
 		{#if row.noDoula}
-			<Text text={NO_DOULA} tone="muted" />
+			{#if !tonight}
+				<Text text={NOBODY} tone="muted" />
+			{/if}
 		{:else}
 			<ul class="lines">
 				{#each row.onCall as doula (doula.staffId)}
 					<li>
 						<span class="who">
-							<span class="name">{#if isTonightOnHerLine(row)}{TONIGHT_LABEL}{/if}{doula.name}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
+							<span class="name">{personWords(doula.staffId, doula.name, session.staffId, true)}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
 							{#if doula.atOnce && doula.atOnce.length > 0}
-								<Badge label={atOnceLabel(doula.atOnce.length)} variant="warning" />
+								<span class="state"><Badge label={atOnceLabel(doula.atOnce.length)} variant="warning" /></span>
 								{#if isCard}
 									{#each doula.atOnce as other (other.engagementId)}
-										<span class="line">Also {other.clientName}, {@render days(other.days, 'until')}</span>
+										<span class="line">Also {other.clientName}, {@render shared(other.days)}</span>
 									{/each}
 								{/if}
 							{/if}
@@ -570,7 +605,7 @@
 						{/if}
 						{#if !isCard}
 							{#each doula.atOnce ?? [] as other (other.engagementId)}
-								<span class="line">Also {other.clientName}, {@render days(other.days, 'until')}</span>
+								<span class="line">Also {other.clientName}, {@render shared(other.days)}</span>
 							{/each}
 						{/if}
 					</li>
@@ -578,15 +613,16 @@
 			</ul>
 		{/if}
 	</div>
-	{#if tonightLine(row) && !isTonightOnHerLine(row)}
-		<p class="line tonight">{tonightLine(row)}</p>
-	{/if}
 {/snippet}
 
 {#snippet daysCell(row: RosterWindow, tableView: DataTableView)}
 	<div class="lines">
 		<span>
-			{#if tableView === 'record'}{ON_CALL_LABEL}{/if}{@render days(row.window, tableView === 'record' ? 'until' : 'Until')}
+			{#if tableView === 'record'}
+				<span aria-hidden="true">{ON_CALL_LABEL}{@render days(row.window, 'until')}</span><span class="visually-hidden">{daysOnCallText(row.window, today, timeZone, now)}</span>
+			{:else}
+				{@render days(row.window, 'Until')}
+			{/if}
 		</span>
 		{#if row.ownStart}
 			<span class="line wraps">{ownStartWords(row.ownStart, roster!.rule)}</span>
@@ -596,34 +632,34 @@
 
 {#snippet dueCell(row: RosterWindow, tableView: DataTableView)}
 	{#if row.dueDate}
-		{#if tableView === 'record'}{DUE_LABEL}{/if}<time class="day" datetime={row.dueDate}>{say(row.dueDate)}</time>
+		{#if tableView === 'record'}<span aria-hidden="true">{DUE_LABEL}</span>{/if}<time class="day" datetime={row.dueDate}>{say(row.dueDate)}</time>
 	{/if}
 {/snippet}
 
-{#snippet coverCell(row: RosterWindow, tableView: DataTableView)}
-	{#if tableView === 'record'}
-		<span class="moved"></span>
-	{:else}
-		{@render coverBlock(row)}
-	{/if}
+{#snippet coverCell(row: RosterWindow)}
+	{@render coverBlock(row)}
 {/snippet}
 
 {#snippet coverBlock(row: RosterWindow)}
 	<div class="lines cover">
 		{#if row.uncovered}
-			<Badge label={describeCoverage(row)} variant="warning" />
+			<span class="state"><Badge label={describeCoverage(row)} variant="warning" /></span>
 		{:else}
 			<span>{describeCoverage(row)}</span>
 		{/if}
-		{#if !row.noDoula}
+		{#if row.noDoula}
+			<span class="line">{NO_DOULA}</span>
+		{:else}
 			{#each row.unstaffedDays as hole (hole.start)}
 				<span class="line">Nobody on call {@render holeDays(hole)}</span>
 			{/each}
 			{#each gapsByNeed(row) as gap (gap.id)}
 				<span class="line">
-					{gapSubject(gap, session.staffId)} cannot be reached <CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {gap.coveringStaffName
-						? `${gap.coveringStaffName} covering`
-						: 'nobody covering'}
+					{gapSubject(gap, session.staffId)} cannot be reached <CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {coveringWords(
+						gap.coveringStaffId !== undefined,
+						{ staffId: gap.coveringStaffId, name: gap.coveringStaffName },
+						session.staffId
+					)}
 				</span>
 			{/each}
 		{/if}
@@ -640,8 +676,8 @@
 			{#each doula.births as birth, index (birth.engagementId)}{index > 0 ? ', ' : ''}{birth.clientName}{birth.covering ? ', covering' : ''}{:else}None{/each}
 		</span>
 		{#each doula.atOnce ?? [] as group (group.engagementIds.join(','))}
-			<Badge label={atOnceLabel(group.engagementIds.length - 1)} variant="warning" />
-			<span class="line">{atOnceNames(doula, group.engagementIds)}, {@render days(group.days, 'until')}</span>
+			<span class="state"><Badge label={atOnceLabel(group.engagementIds.length - 1)} variant="warning" /></span>
+			<span class="line">{atOnceNames(doula, group.engagementIds)}, {@render shared(group.days)}</span>
 		{/each}
 	</div>
 {/snippet}
@@ -700,16 +736,16 @@
 			{#snippet switches()}
 				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline>
 					{#snippet trailing()}
-						<!-- Each steps the days the reader sees by their own length; the days it lands on are in its name. Earlier keeps its box at today, so Later never moves. -->
+						<!-- Each steps the days the reader sees by their own length; the days it lands on are in its name. Earlier is not drawn at today. -->
 						<span class="steps">
-							<span class:held={!earlier}>
+							{#if earlier}
 								<Link
-									href={onCallHref(basePath, earlier?.view ?? view)}
+									href={onCallHref(basePath, earlier.view)}
 									label="Earlier"
-									ariaLabel={earlier ? `Earlier, ${daysWords(earlier.days, timeZone, now)}` : undefined}
-									onClick={(event) => earlier && step(event, earlier.view)}
+									ariaLabel={`Earlier, ${daysWords(earlier.days, timeZone, now)}`}
+									onClick={(event) => step(event, earlier.view)}
 								/>
-							</span>
+							{/if}
 							{#if later}
 								<Link
 									href={onCallHref(basePath, later.view)}
@@ -874,11 +910,6 @@
 			max-inline-size: var(--field-width);
 		}
 
-		/* On a card the cover is drawn under the Client's name, in the On call field; its own field, left empty, is not drawn. */
-		.births :global(.compact-field:has(.moved)) {
-			display: none;
-		}
-
 		/* A birth's row is several lines tall and its link sits mid-row, so the restored row as a whole, not only its link, clears the stuck heading (and a group's heading above it). */
 		.births :global(.table-view > tbody > tr[id]) {
 			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
@@ -895,11 +926,6 @@
 		.steps {
 			display: inline-flex;
 			gap: var(--space-related);
-		}
-
-		/* At today there is no earlier day: Earlier keeps its box, unseen and out of the tab order, so Later stays where it was. */
-		.held {
-			visibility: hidden;
 		}
 
 		section {
@@ -925,6 +951,11 @@
 			gap: var(--space-1);
 		}
 
+		.state {
+			display: flex;
+			align-items: center;
+		}
+
 		.who {
 			display: inline-flex;
 			flex-wrap: wrap;
@@ -936,7 +967,15 @@
 		.line {
 			display: block;
 			color: var(--color-on-surface-variant);
-			font-size: var(--text-small-size);
+			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
+		}
+
+		/* Who holds tonight is the first line of the On call field, on the step the other lines under a name use but in the text's own color. */
+		.tonight {
+			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
+			display: block;
 		}
 
 		/* A sentence wraps inside the column's own width; only a day or a range of days holds one line. */
@@ -944,10 +983,6 @@
 			white-space: normal;
 			inline-size: 24ch;
 			max-inline-size: 100%;
-		}
-
-		p.line {
-			margin: 0;
 		}
 
 		.day {

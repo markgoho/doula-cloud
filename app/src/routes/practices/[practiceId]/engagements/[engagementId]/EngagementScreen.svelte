@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount } from 'svelte';
+	import { onDestroy, onMount, tick } from 'svelte';
 	import type { ListBack } from '#lib/listOrigin.svelte.js';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -72,7 +72,7 @@
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatGapTimes } from '#lib/coverageGap.js';
 	import CoverageGapWhen from '#lib/components/molecules/CoverageGapWhen.svelte';
-	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
+	import { formatCalendarDay, formatCalendarWeekdayDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import { instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
 	import {
 		activityLedgerColumns,
@@ -1816,7 +1816,7 @@
 		gapCoveringStaffId = gap.coveringStaffId ?? '';
 	}
 
-	type OnCallDoulaRow = SummaryListRow & { staffId: string };
+	type OnCallDoulaRow = SummaryListRow & { staffId: string; from?: string; to?: string };
 	type GapRow = SummaryListRow & { gap: CoverageGap };
 
 	async function loadOnCall() {
@@ -1947,14 +1947,31 @@
 	   window to narrow; the endpoint refuses anyone else whatever is drawn.
 	   With no window at all -- after a loss, say (#2220) -- the row names no
 	   window that never was. */
+	const sayDay = (day: string) => formatCalendarWeekdayDay(day, timeZone, gapNow);
+
+	let isDoulaChangeFocused = $state(false);
+	const putDoulaOnWords = $derived.by(() => {
+		if (!canChangeDoula || attachedDoulas.length > 0) return '';
+		return isAttachQuestion ? 'Put a Doula on this birth' : 'Put yourself on this birth';
+	});
+
+	async function focusDoulaChange(event: MouseEvent) {
+		event.preventDefault();
+		isDoulaChangeFocused = false;
+		await tick();
+		isDoulaChangeFocused = true;
+	}
+
 	const onCallDoulaRows = $derived(
 		(onCall?.doulas ?? []).map(
 			(doula): OnCallDoulaRow => ({
 				staffId: doula.staffId,
 				label: doula.name,
+				from: doula.onCallFrom,
+				to: doula.onCallTo,
 				value:
 					doula.onCallFrom && doula.onCallTo
-						? `On call ${formatCalendarDay(doula.onCallFrom)} to ${formatCalendarDay(doula.onCallTo)}`
+						? `On call ${sayDay(doula.onCallFrom)} to ${sayDay(doula.onCallTo)}`
 						: (onCall?.window
 							? 'Not on call for any of this window'
 							: 'Not on call'),
@@ -2273,6 +2290,7 @@
 					variant="link"
 					expanded={openChange === row.change}
 					{describedBy}
+					focusOnAppearing={row.change === 'doula' && isDoulaChangeFocused}
 					onClick={() => toggleChange(row.change!)}
 				/>
 			{/snippet}
@@ -3366,6 +3384,13 @@
 	-->
 	{#if onCallDoulaRows.length > 0}
 		<SummaryList rows={onCallDoulaRows}>
+			{#snippet value(row)}
+				{#if row.from && row.to}
+					On call <time datetime={row.from}>{sayDay(row.from)}</time> to <time datetime={row.to}>{sayDay(row.to)}</time>
+				{:else}
+					{row.value}
+				{/if}
+			{/snippet}
 			{#snippet action(row, describedBy)}
 				<Button
 					label="Change"
@@ -3416,7 +3441,7 @@
 {/snippet}
 
 {#snippet onCallGaps(panel: EngagementOnCall)}
-	<Heading level={3} text="When a doula cannot be reached" />
+	<Heading level={3} text="When a Doula cannot be reached" />
 	{#if gapError}
 		<Notice variant="error" message={gapError} />
 	{/if}
@@ -3427,7 +3452,7 @@
 			message="No times recorded yet."
 			action={canRecordGap && !isGapFormOpen
 				? {
-						label: 'Record a time a doula cannot be reached',
+						label: 'Record a time a Doula cannot be reached',
 						onClick: () => openOnCall('gap'),
 						focusOnAppearing: isGapOpenerRefocused
 					}
@@ -3473,7 +3498,7 @@
 		{#if canRecordGap && !isGapFormOpen}
 			<div>
 				<Button
-					label="Record a time a doula cannot be reached"
+					label="Record a time a Doula cannot be reached"
 					variant="secondary"
 					onClick={() => openOnCall('gap')}
 					focusOnAppearing={isGapOpenerRefocused}
@@ -3601,11 +3626,16 @@
 		<Notice variant="error" message={onCallError} />
 	{:else if onCall}
 		{#if onCall.window}
-			<Text
-				text={`On call from ${formatCalendarDay(onCall.window.start)} to ${formatCalendarDay(onCall.window.end)}.`}
-			/>
+			<p>
+				On call from <time datetime={onCall.window.start}>{sayDay(onCall.window.start)}</time> to <time datetime={onCall.window.end}>{sayDay(onCall.window.end)}</time>.
+			</p>
 		{:else}
 			<Text text={describeNoWindow(onCall.noWindowReason ?? '')} tone="muted" />
+			{#if putDoulaOnWords}
+				<div>
+					<Link href="#engagement-summary" label={putDoulaOnWords} onClick={focusDoulaChange} />
+				</div>
+			{/if}
 		{/if}
 
 		{#if onCallSavedMessage}
