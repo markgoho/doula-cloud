@@ -46,6 +46,7 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Time zone shown | Declined | days only, no times |
 | Clear all filters | Have it | "Clear filters" beside two tags; one tag's × clears it |
 | A next step from an empty result | Have it | "Show all Invoices", and a search's "Search all Invoices for …" |
+| A whole-row click target | Have it (#2888) | a click anywhere on an Invoice's row or card opens it on its Engagement, as Stripe's lists do; the row keeps its one link, named by the Client and the reference, for the keyboard and a screen reader; a click while text is selected or after a drag, and a double-click, open nothing extra, so a reference or an amount can still be selected and copied; a modified or middle click opens the same link in a new tab, as Stripe and Linear readers expect |
 | A saved or default view | Declined | the address is the saved view; Linear saves "personal preferences or … the default" (https://linear.app/docs/display-options) |
 | Filters kept across visits | Declined | the address and the history keep the view |
 | A count beside each filter option | Declined | each count is another read, and GOV.UK's filters show none |

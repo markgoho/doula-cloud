@@ -132,7 +132,7 @@ const linkContentColumns = [
 ];
 
 interface SetupOptions {
-	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string }[];
+	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string; namedByRowLink?: boolean }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowLinkLabel?: (row: Row) => string;
@@ -1478,5 +1478,323 @@ describe('rows grouped under a heading (#2867)', () => {
 		await page.viewport(...NARROW);
 
 		await expect.element(page.getByRole('heading', { level: 2, name: 'Inactive Clients' })).toBeVisible();
+	});
+});
+
+/*
+ * #2888: a click anywhere on a row follows the row's one link. The link is
+ * still the only control: a click that lands on it, on a control inside the
+ * row, or on the reader's own selection is left alone.
+ */
+const linkOfRow = (row: Row) => `/clients/${row.name}`;
+const ROW_TARGET_ACTIONS = { label: 'Actions', onRemove: () => {} };
+
+const namedStatusColumns = [
+	{ label: 'Name', accessor: (row: Row) => row.name },
+	{ label: 'Status', accessor: (row: Row) => row.status, namedByRowLink: true }
+];
+
+function followLinksNowhere() {
+	const followed: string[] = [];
+	const hold = (event: MouseEvent) => {
+		const link = event.target instanceof Element ? event.target.closest('a') : undefined;
+		if (!link) return;
+		event.preventDefault();
+		followed.push(link.getAttribute('href')!);
+	};
+	document.addEventListener('click', hold);
+	return { followed, stop: () => document.removeEventListener('click', hold) };
+}
+
+function cellOf(text: string) {
+	return page.getByRole('cell', { name: text, exact: true });
+}
+
+describe('DataTable.svelte whole-row click target (#2888)', () => {
+	let held: ReturnType<typeof followLinksNowhere>;
+
+	afterEach(() => {
+		held?.stop();
+		vi.restoreAllMocks();
+		getSelection()?.removeAllRanges();
+	});
+
+	async function setupRowTarget(options: SetupOptions = {}) {
+		held = followLinksNowhere();
+		const opened = vi.spyOn(globalThis, 'open').mockReturnValue(globalThis as Window & typeof globalThis);
+		const { container } = await setup({ rowHref: linkOfRow, ...options });
+		return { container, followed: held.followed, opened };
+	}
+
+	it('follows the row link once from a click on any cell of the row', async () => {
+		const { followed } = await setupRowTarget();
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual(['/clients/Ada Lovelace']);
+	});
+
+	it('follows the link once when the click is on the link itself', async () => {
+		const { followed } = await setupRowTarget();
+
+		await page.getByRole('link', { name: 'Grace Hopper' }).click();
+
+		expect(followed).toEqual(['/clients/Grace Hopper']);
+	});
+
+	it('hands the row a hook to its one link, and gives the row no role and no tab stop', async () => {
+		const { container } = await setupRowTarget();
+
+		const rowsOfTable = container.querySelectorAll(':scope .table-view > tbody > tr');
+		expect(container.querySelectorAll(':scope .table-view [data-row-link]')).toHaveLength(rows.length);
+		for (const row of rowsOfTable) {
+			expect(row.hasAttribute('role')).toBe(false);
+			expect(row.hasAttribute('tabindex')).toBe(false);
+			expect(row.querySelectorAll(':scope [data-row-link]')).toHaveLength(1);
+		}
+	});
+
+	it('ignores a click after the first of a double-click, so a word can be selected', async () => {
+		const { followed } = await setupRowTarget();
+
+		await cellOf('Active').dblClick();
+
+		expect(followed).toHaveLength(1);
+	});
+
+	it('ignores a press that moved, so a drag across the row only selects', async () => {
+		const { followed } = await setupRowTarget();
+
+		await userEvent.dragAndDrop(page.getByRole('rowheader', { name: 'Ada Lovelace' }).element(), cellOf('Active').element());
+
+		expect(followed).toEqual([]);
+	});
+
+	it('ignores a click that began on a selection inside the row', async () => {
+		const { followed } = await setupRowTarget();
+		getSelection()!.selectAllChildren(cellOf('Active').element());
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual([]);
+	});
+
+	it('is not held up by a selection in another row', async () => {
+		const { followed } = await setupRowTarget();
+		getSelection()!.selectAllChildren(cellOf('Inactive').element());
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual(['/clients/Ada Lovelace']);
+	});
+
+	it('leaves a click that something else has already handled', async () => {
+		const { followed } = await setupRowTarget();
+		cellOf('Active')
+			.element()
+			.addEventListener('click', (event) => event.preventDefault());
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual([]);
+	});
+
+	it('leaves a link in another cell to itself, and does not follow the row as well', async () => {
+		const { followed } = await setupRowTarget({ columns: linkContentColumns });
+
+		await page.getByRole('link', { name: 'Blocked email addresses' }).first().click();
+
+		expect(followed).toEqual(['/settings/blocked-addresses']);
+	});
+
+	it('leaves the row actions to themselves: a button, and the cell around it', async () => {
+		const onRemove = vi.fn();
+		const { container, followed } = await setupRowTarget({ rowActions: { label: 'Actions', onRemove } });
+
+		await page.getByRole('button', { name: 'Remove' }).first().click();
+		// The cell has no accessible handle apart from its button: case 2 of the spec rules.
+		const actionsCell = container.querySelector(':scope .table-view td.actions') as HTMLElement;
+		await page.elementLocator(actionsCell).click({ position: { x: 2, y: 2 } });
+
+		expect(onRemove).toHaveBeenCalledOnce();
+		expect(followed).toEqual([]);
+	});
+
+	it('draws the pointer over the row and not over the row actions', async () => {
+		const { container } = await setupRowTarget({ rowActions: ROW_TARGET_ACTIONS });
+
+		expect(getComputedStyle(container.querySelector(':scope .table-view tbody tr')!).cursor).toBe('pointer');
+		expect(getComputedStyle(container.querySelector(':scope .table-view td.actions')!).cursor).toBe('default');
+	});
+
+	it('draws no pointer and follows nothing on a row with no link', async () => {
+		const { container, followed } = await setupRowTarget({ rowHref: undefined });
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual([]);
+		expect(getComputedStyle(container.querySelector(':scope .table-view tbody tr')!).cursor).not.toBe('pointer');
+	});
+
+	it('finds the row only as far as the row: a table inside a closed disclosure still follows', async () => {
+		const { followed } = await setupRowTarget({ disclosure: 'All Clients' });
+		await page.getByText('All Clients').click();
+
+		await cellOf('Active').click();
+
+		expect(followed).toEqual(['/clients/Ada Lovelace']);
+	});
+
+	const newTabClicks: [string, { modifiers?: ('Control' | 'Shift' | 'Meta')[]; button?: 'middle' }][] = [
+		['Control', { modifiers: ['Control'] }],
+		['Shift', { modifiers: ['Shift'] }],
+		['Meta', { modifiers: ['Meta'] }],
+		['a middle click', { button: 'middle' }]
+	];
+
+	it.each(newTabClicks)('opens the link in a new tab on %s, with no opener', async (_name, click) => {
+		const { followed, opened } = await setupRowTarget();
+
+		await cellOf('Active').click(click);
+
+		expect(opened).toHaveBeenCalledOnce();
+		expect(opened).toHaveBeenCalledWith(expect.stringContaining('/clients/Ada%20Lovelace'), '_blank', 'noopener');
+		expect(followed).toEqual([]);
+	});
+
+	it('leaves a modified click on the link itself to the browser', async () => {
+		const { opened } = await setupRowTarget();
+
+		await page.getByRole('link', { name: 'Ada Lovelace' }).click({ modifiers: ['Control'] });
+		await page.getByRole('link', { name: 'Ada Lovelace' }).click({ button: 'middle' });
+
+		expect(opened).not.toHaveBeenCalled();
+	});
+
+	it('does not open a new tab from a modified click on the row actions', async () => {
+		const { container, opened } = await setupRowTarget({ rowActions: ROW_TARGET_ACTIONS });
+		const actionsCell = container.querySelector(':scope .table-view td.actions') as HTMLElement;
+
+		await page.elementLocator(actionsCell).click({ position: { x: 2, y: 2 }, modifiers: ['Control'] });
+		await page.elementLocator(actionsCell).click({ position: { x: 2, y: 2 }, button: 'middle' });
+
+		expect(opened).not.toHaveBeenCalled();
+	});
+
+	it('does not follow the row on an Alt click', async () => {
+		const { followed, opened } = await setupRowTarget();
+
+		await cellOf('Active').click({ modifiers: ['Alt'] });
+
+		expect(followed).toEqual([]);
+		expect(opened).not.toHaveBeenCalled();
+	});
+
+	async function setupCard() {
+		const made = await setupRowTarget({ rowActions: ROW_TARGET_ACTIONS, caption: 'People' });
+		await page.viewport(...NARROW);
+		// Both trees hold the same text, and only one is displayed: case 1 of the spec rules.
+		const card = made.container.querySelector(':scope .record-view .record') as HTMLElement;
+		return { ...made, card };
+	}
+
+	describe('as a card', () => {
+		it('follows the card link from a click on its field', async () => {
+			const { card, followed } = await setupCard();
+
+			await page.elementLocator(card.querySelector(':scope dd')!).click();
+
+			expect(followed).toEqual(['/clients/Ada Lovelace']);
+		});
+
+		it('leaves the card actions alone, and draws no pointer over them', async () => {
+			const { card, followed } = await setupCard();
+			const actions = card.querySelector(':scope .record-actions') as HTMLElement;
+
+			await page.elementLocator(actions).click({ position: { x: 2, y: 2 } });
+
+			expect(followed).toEqual([]);
+			expect(getComputedStyle(card).cursor).toBe('pointer');
+			expect(getComputedStyle(actions).cursor).toBe('default');
+		});
+
+		it('draws the table row hover cue on the card', async () => {
+			const { card } = await setupCard();
+			const rest = getComputedStyle(card).backgroundColor;
+
+			await page.elementLocator(card.querySelector(':scope dd')!).hover();
+
+			expect(getComputedStyle(card).backgroundColor).not.toBe(rest);
+		});
+	});
+});
+
+describe('DataTable.svelte row link name carries a column (#2864)', () => {
+	const sameClientTwice: Row[] = [
+		{ name: 'Ada Lovelace', status: 'Mon 9am' },
+		{ name: 'Ada Lovelace', status: 'Tue 9am' }
+	];
+
+	function setupNamed(options: SetupOptions = {}) {
+		return setup({
+			columns: namedStatusColumns,
+			rows: sameClientTwice,
+			rowHref: linkOfRow,
+			rowLinkLabel: (row) => `${row.name}, ${row.status}`,
+			...options
+		});
+	}
+
+	it('names each row of one Client by its own fact, so a list of links tells them apart', async () => {
+		await setupNamed();
+
+		await expect.element(page.getByRole('link', { name: 'Ada Lovelace, Mon 9am', exact: true })).toBeVisible();
+		await expect.element(page.getByRole('link', { name: 'Ada Lovelace, Tue 9am', exact: true })).toBeVisible();
+	});
+
+	it('leaves the same fact out of the cell for a screen reader, so a row says it once', async () => {
+		await setupNamed();
+
+		await expect.element(cellOf('Mon 9am')).not.toBeInTheDocument();
+		await expect.element(page.getByRole('columnheader', { name: 'Status' })).toBeVisible();
+		await expect.element(page.getByText('Mon 9am').first()).toBeVisible();
+	});
+
+	it('hears the fact in the cell when the row has no link', async () => {
+		await setupNamed({ rowHref: undefined, rowLinkLabel: undefined });
+
+		await expect.element(cellOf('Mon 9am')).toBeVisible();
+	});
+
+	it('hides the label of a compact card field with its value', async () => {
+		const { container } = await setupNamed({ recordLayout: 'compact' });
+		await page.viewport(...NARROW);
+
+		const lead = container.querySelector(':scope .record-view .compact-lead')!;
+		expect(lead.querySelector(':scope .visually-hidden')!.getAttribute('aria-hidden')).toBe('true');
+	});
+
+	it('hides the label of a compact card field in the line of fields too', async () => {
+		const { container } = await setupNamed({
+			columns: [
+				{ label: 'Name', accessor: (row: Row) => row.name },
+				{ label: 'Kind', accessor: () => 'Prenatal' },
+				{ label: 'Status', accessor: (row: Row) => row.status, namedByRowLink: true }
+			],
+			recordLayout: 'compact'
+		});
+		await page.viewport(...NARROW);
+
+		const kind = container.querySelector(':scope .record-view .compact-lead .visually-hidden')!;
+		const status = container.querySelector(':scope .record-view .compact-field .visually-hidden')!;
+		expect(kind.hasAttribute('aria-hidden')).toBe(false);
+		expect(status.getAttribute('aria-hidden')).toBe('true');
+	});
+
+	it('leaves a list card’s own label and value heard', async () => {
+		const { container } = await setupNamed({ recordLayout: 'list' });
+		await page.viewport(...NARROW);
+
+		expect(container.querySelector(':scope .record-view .record dd [aria-hidden="true"]')).toBeNull();
 	});
 });

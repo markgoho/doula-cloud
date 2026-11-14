@@ -92,6 +92,11 @@ function setup(properties?: Parameters<typeof render<typeof Page>>[1]) {
 // side of a visually hidden comma, so the words match with any spacing.
 const heard = (text: string) => new RegExp(`^${text.split(/,? /).join(String.raw`\s*,?\s*`)}$`);
 
+// The When cells are drawn and not read (#2864), so no role or name finds
+// them; the table's own `<time>` elements are the cells' content. A fact with
+// no accessible signal, by design.
+const whenTimes = () => [...testPage.getByRole('table', { name: 'Visits' }).element().querySelectorAll('time.when')];
+
 describe('the Practice-wide schedule (#263)', () => {
 	it('lists every scheduled Visit at the Practice, with when, whose and who is covering', async () => {
 		await setup();
@@ -105,9 +110,18 @@ describe('the Practice-wide schedule (#263)', () => {
 		// (ADR-0022), so a screen reader, a hover and a copy-paste all get
 		// the real one; `querySelector` because an attribute has no accessible
 		// query of its own.
-		const whenCell = testPage.getByRole('cell', { name: /^[A-Z][a-z]{2} Sep \d+\s*,\s*\d/ }).first();
-		await expect.element(whenCell).toBeVisible();
-		expect(whenCell.element().querySelector('time')).toHaveAttribute('datetime', earlierVisit.scheduledAt);
+		const when = whenTimes().find((time) => time.getAttribute('datetime') === earlierVisit.scheduledAt);
+		expect(when!.checkVisibility()).toBe(true);
+		expect(when!.textContent).toMatch(/^[A-Z][a-z]{2} Sep \d+\s*,?\s*\d/);
+	});
+
+	// #2864: the day and time are said once, in the link's name; the cell
+	// under "When" is drawn and not read.
+	it('says a Visit’s day and time once, in the link’s name, and not again in the When cell', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('link', { name: startsWith(earlierVisit.clientName) })).toHaveAccessibleName(/, [A-Z][a-z]{2} Sep \d+, \d+:\d\d[ap]m$/);
+		expect(testPage.getByRole('cell', { name: /[ap]m/ }).elements()).toHaveLength(0);
 	});
 
 	it('names each row as the way in to its Visit on the Engagement, told apart by its day (#2747)', async () => {
@@ -135,7 +149,7 @@ describe('the Practice-wide schedule (#263)', () => {
 	it('says a Visit’s year when it is not this one', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: /^Mon Jan 4, 2027\s*,\s*\d+:\d\d[ap]m$/ })).toBeVisible();
+		expect(whenTimes().map((time) => time.textContent)).toContainEqual(expect.stringMatching(/^Mon Jan 4, 2027,?\s*\d+:\d\d[ap]m$/));
 	});
 });
 
@@ -786,11 +800,9 @@ describe('coming back from an Engagement', () => {
 });
 
 const clockEdges = (isYearDay: boolean) =>
-	testPage
-		.getByRole('cell', { name: /[ap]m$/ })
-		.elements()
-		.filter((cell) => /\d{4},/.test(cell.textContent!) === isYearDay)
-		.map((cell) => Math.round(cell.querySelector('.clock')!.getBoundingClientRect().right));
+	whenTimes()
+		.filter((when) => /\d{4},/.test(when.textContent!) === isYearDay)
+		.map((when) => Math.round(when.querySelector('.clock')!.getBoundingClientRect().right));
 
 describe('the Visits’ days and clocks', () => {
 	it('sets the day and the clock in tracks of their own, so every clock ends on one edge', async () => {
