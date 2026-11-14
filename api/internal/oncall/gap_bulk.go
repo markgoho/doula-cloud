@@ -122,6 +122,22 @@ func hitBirths(call staffauth.Call, r *http.Request, settings practiceSettings, 
 	return hits, nil
 }
 
+// hitsOrRefuse is hitBirths with the Practice's settings read first, writing
+// the refusal itself when a read fails.
+func hitsOrRefuse(w http.ResponseWriter, r *http.Request, call staffauth.Call, staffID string, startsAt, endsAt time.Time) (practiceSettings, []gapHit, bool) {
+	settings, err := loadPracticeSettings(r.Context(), call.Tx, call.PracticeID)
+	var hits []gapHit
+	if err == nil {
+		hits, err = hitBirths(call, r, settings, staffID, startsAt, endsAt)
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return practiceSettings{}, nil, false
+	}
+	return settings, hits, true
+}
+
 func later(a, b time.Time) time.Time {
 	if a.After(b) {
 		return a
@@ -179,16 +195,8 @@ func PreviewGapsHandler() http.Handler {
 		if refuseBulkAsk(w, call, staffID, startsAt, endsAt) {
 			return
 		}
-		settings, err := loadPracticeSettings(r.Context(), call.Tx, call.PracticeID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		hits, err := hitBirths(call, r, settings, staffID, *startsAt, *endsAt)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		_, hits, ok := hitsOrRefuse(w, r, call, staffID, *startsAt, *endsAt)
+		if !ok {
 			return
 		}
 		out := GapPreview{Births: []GapPreviewBirth{}}
@@ -252,16 +260,8 @@ func RecordGapsHandler(enq tasknudge.Enqueuer) http.Handler {
 				map[string]string{fieldBirths: MsgNoBirthsChosen})
 			return
 		}
-		settings, err := loadPracticeSettings(r.Context(), call.Tx, call.PracticeID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		hits, err := hitBirths(call, r, settings, req.StaffID, *req.StartsAt, *req.EndsAt)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		settings, hits, ok := hitsOrRefuse(w, r, call, req.StaffID, *req.StartsAt, *req.EndsAt)
+		if !ok {
 			return
 		}
 		writes, ok := matchWrites(hits, req.Births)

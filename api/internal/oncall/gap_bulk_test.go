@@ -54,6 +54,16 @@ func (e *env) record(who reqtest.Option, key string, body oncall.BulkGapRequest)
 		who, reqtest.Header("Idempotency-Key", key), reqtest.JSON(body))
 }
 
+// expectBulkRefusal posts body under key and wants a 400 naming want under field.
+func (e *env) expectBulkRefusal(t *testing.T, key string, body oncall.BulkGapRequest, field, want string) {
+	t.Helper()
+	got := reqtest.Expect[refusal](t, http.MethodPost, e.bulkURL(), http.StatusBadRequest,
+		e.SignedIn, reqtest.Header("Idempotency-Key", key), reqtest.JSON(body))
+	if msg, _ := got.Details[field].(string); msg != want {
+		t.Fatalf("details = %v, want %q under %q", got.Details, want, field)
+	}
+}
+
 func (e *env) gapRows() int {
 	e.T.Helper()
 	return e.count(`SELECT count(*) FROM engagement_coverage_gaps`)
@@ -324,11 +334,7 @@ func TestBulkGap_RefusesWhatItShould(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := reqtest.Expect[refusal](t, http.MethodPost, e.bulkURL(), http.StatusBadRequest,
-				e.SignedIn, reqtest.Header("Idempotency-Key", "k-"+tt.name), reqtest.JSON(tt.body))
-			if got.Details[tt.field] != tt.want {
-				t.Fatalf("details = %v, want %q under %q", got.Details, tt.want, tt.field)
-			}
+			e.expectBulkRefusal(t, "k-"+tt.name, tt.body, tt.field, tt.want)
 		})
 	}
 

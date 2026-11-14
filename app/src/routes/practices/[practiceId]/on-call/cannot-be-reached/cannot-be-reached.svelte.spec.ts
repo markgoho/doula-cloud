@@ -14,11 +14,13 @@ import Which from './+page.svelte';
 import When from './when/+page.svelte';
 import { ownerSession, practiceId, preview, roster, seedDraft } from './journeyFixture.js';
 
+// jscpd:ignore-start -- the three mocks every route spec that fetches opens with, each a one-line module replacement `vi.mock` hoists
 vi.mock('$app/state', () => import('#testing/routePage.js'));
 vi.mock('$app/navigation', () => import('#testing/routePage.js'));
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({ apiFetchWithSession }));
+// jscpd:ignore-end
 
 const base = `/practices/${practiceId}/on-call/cannot-be-reached`;
 const doulaSession = practiceSession(['doula'], { staffId: 'staff-2' });
@@ -292,6 +294,13 @@ function recordWith(response: Response) {
 }
 
 
+async function pressRecordAndExpectCover() {
+	at('/check');
+	render(Check);
+	await testPage.getByRole('button', { name: 'Record it on 2 births' }).click();
+	await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`${base}/cover?changed=true`));
+}
+
 describe('check the time', () => {
 	beforeEach(() => {
 		seedDraft();
@@ -344,12 +353,8 @@ describe('check the time', () => {
 
 	it('goes back to who is covering when the births changed since they were checked', async () => {
 		recordWith(jsonResponse({ message: 'The births on call changed since you checked. Check them again.' }, 409));
-		at('/check');
-		render(Check);
 
-		await testPage.getByRole('button', { name: 'Record it on 2 births' }).click();
-
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`${base}/cover?changed=true`));
+		await pressRecordAndExpectCover();
 	});
 
 	it('says any other refusal on the page and keeps the answers', async () => {
@@ -365,12 +370,8 @@ describe('check the time', () => {
 
 	it('goes back to who is covering when a birth has no answer yet', async () => {
 		draft.update({ cover: {} });
-		at('/check');
-		render(Check);
 
-		await testPage.getByRole('button', { name: 'Record it on 2 births' }).click();
-
-		await vi.waitFor(() => expect(goto).toHaveBeenCalledWith(`${base}/cover?changed=true`));
+		await pressRecordAndExpectCover();
 	});
 
 	it('says a failed read and reads again', async () => {
