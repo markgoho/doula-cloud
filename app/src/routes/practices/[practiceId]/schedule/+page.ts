@@ -3,8 +3,7 @@ import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
 import { streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import {
 	practiceSchedulePath,
-	scheduleDaysOf,
-	scheduleStaffId,
+	resolveScheduleRead,
 	scheduleViewFromParameters,
 	type ResolvedScheduleFilters,
 	type SchedulePage,
@@ -79,13 +78,7 @@ export const load: PageLoad = async ({
 		isOwnerOrAdmin(session) ? undefined : { staffId: session.staffId }
 	);
 	const now = new Date();
-	const timeZone = session.timezone;
-	const read = scheduleDaysOf(view, timeZone, now);
-	const whose = scheduleStaffId(view, session.staffId);
-	const filters: ResolvedScheduleFilters = read.days
-		? { ...read.days, timeZone, staffId: whose.staffId, order: view.order }
-		: { from: '', to: '', timeZone };
-	const isReadable = read.days !== undefined && !whose.isEmpty;
+	const { filters, errors, isReadable } = resolveScheduleRead(view, session.timezone, session.staffId, now);
 	const schedule: Promise<StreamedRead<SchedulePage>> = isReadable
 		? streamRead<SchedulePage>(practiceSchedulePath(params.practiceId, filters), fetch)
 		: Promise.resolve({ isLoaded: true, value: NOTHING });
@@ -95,7 +88,7 @@ export const load: PageLoad = async ({
 	const joined = async (): Promise<StreamedRead<SchedulePageData>> => {
 		const [landed, doulas] = await Promise.all([schedule, roster]);
 		if (!landed.isLoaded) return landed;
-		return { isLoaded: true, value: { page: landed.value, view, filters, now, rangeErrors: read.errors, ...doulas } };
+		return { isLoaded: true, value: { page: landed.value, view, filters, now, rangeErrors: errors, ...doulas } };
 	};
 	return { read: joined() };
 };

@@ -261,6 +261,33 @@ export interface ResolvedScheduleFilters {
 	timeZone: string;
 	staffId?: string;
 	order?: ScheduleOrder;
+	/**
+	The Client's name a reader typed (#2870). It is in no address (#1829), so a read that has one is a POST.
+	*/
+	search?: string;
+}
+
+/**
+ * The narrowing a view reads under, and whether there is anything to read:
+ * days that are not a range, and "Mine" beside a different Doula, are
+ * answered with an empty list and no read, so the BFF is never sent a range
+ * that can never match. `load` and a read the screen owns (a search, which
+ * `load` never sees) both resolve a view here.
+ */
+export function resolveScheduleRead(
+	view: ScheduleView,
+	timeZone: string,
+	ownStaffId: string | undefined,
+	now: Date,
+	search = ''
+): { filters: ResolvedScheduleFilters; errors?: ScheduleRangeErrors; isReadable: boolean } {
+	const read = scheduleDaysOf(view, timeZone, now);
+	const whose = scheduleStaffId(view, ownStaffId);
+	const filters: ResolvedScheduleFilters = read.days
+		? { ...read.days, timeZone, staffId: whose.staffId, order: view.order }
+		: { from: '', to: '', timeZone };
+	if (search) filters.search = search;
+	return { filters, errors: read.errors, isReadable: read.days !== undefined && !whose.isEmpty };
 }
 
 /** The BFF path for one page of the schedule, with the calendar days
@@ -278,15 +305,34 @@ export function practiceSchedulePath(
 	return `/api/practices/${practiceId}/visits?${parameters.toString()}`;
 }
 
-/** Loads one page of the Practice's schedule. Throws with the response
- * body text on a non-2xx response. */
+/** Loads one page of the Practice's schedule. A search -- a Client's name --
+ * makes it a POST with the narrowing and the cursor in the body (#2870): a
+ * name is in no URL, so in no log (#1829). Throws with the response body
+ * text on a non-2xx response. */
 export async function loadPracticeSchedule(
 	fetcher: Fetcher,
 	practiceId: string,
 	filters: ResolvedScheduleFilters,
 	cursor = ''
 ): Promise<SchedulePage> {
-	const response = await fetcher(practiceSchedulePath(practiceId, filters, cursor));
+	let response: Response;
+	if (filters.search) {
+		const range = toInstantRange(filters.from, filters.to, filters.timeZone);
+		response = await fetcher(`/api/practices/${practiceId}/visits/list`, {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({
+				from: range.from,
+				to: range.to,
+				staffId: filters.staffId ?? '',
+				order: filters.order ?? '',
+				search: filters.search,
+				cursor
+			})
+		});
+	} else {
+		response = await fetcher(practiceSchedulePath(practiceId, filters, cursor));
+	}
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -363,6 +409,25 @@ export function scheduleEmptyNextStep(
 	return undefined;
 }
 
+/**
+ * The action an empty search offers (#2870): the same search over a year
+ * ahead, today through today plus 364 days in the Practice's zone, keeping
+ * Mine, the Doula and the order. Nothing where the days already reach that
+ * far.
+ */
+export function scheduleSearchNextStep(
+	view: ScheduleView,
+	search: string,
+	timeZone: string,
+	now: Date
+): { label: string; view: ScheduleView } | undefined {
+	const from = dayIn(now, timeZone);
+	const to = addDays(from, 364);
+	const days = scheduleDaysOf(view, timeZone, now).days;
+	if (days && days.from <= from && days.to >= to) return undefined;
+	return { label: `Look for "${search}" in the next 12 months`, view: { ...view, chosen: { from, to } } };
+}
+
 export interface ScheduleWho {
 	/**
 	The picked Doula's name, when one is.
@@ -376,6 +441,10 @@ export interface ScheduleWho {
 	The order the rows are in; the line ends on its words.
 	*/
 	order?: ScheduleOrder;
+	/**
+	The Client's name the rows were searched for.
+	*/
+	search?: string;
 }
 
 /**
@@ -398,17 +467,19 @@ export function scheduleResultSummary(
 	total?: number
 ): string {
 	const span = scheduleDaysSpan(days, timeZone, now);
+	// The Client's name a reader typed sits right after the Visits it narrows: `2 Visits for "Camille" from ...`.
+	const about = who.search ? ` for "${who.search}"` : '';
 	if (count === 0) {
-		if (who.isMine && who.doulaName) return `No Visits for ${who.doulaName} that are also yours ${span}.`;
-		if (who.isMine) return `You have no Visits ${span}.`;
-		if (who.doulaName) return `No Visits for ${who.doulaName} ${span}.`;
-		return `No Visits ${span}.`;
+		if (who.isMine && who.doulaName) return `No Visits${about} for ${who.doulaName} that are also yours ${span}.`;
+		if (who.isMine) return `You have no Visits${about} ${span}.`;
+		if (who.doulaName) return `No Visits${about} for ${who.doulaName} ${span}.`;
+		return `No Visits${about} ${span}.`;
 	}
 	const ordered = hasMore || count > 1 ? `, ${scheduleOrderWords(who.order)}` : '';
 	if (count === 1) {
 		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 		const one = hasMore ? 'first Visit' : '1 Visit';
-		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)} ${span}${ordered}.`;
+		return `Showing ${owner ? `${owner} ${one}` : (hasMore ? `the ${one}` : one)}${about} ${span}${ordered}.`;
 	}
 	const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 	const whose = owner ? `${owner} ` : '';
@@ -419,8 +490,11 @@ export function scheduleResultSummary(
 				? `the first ${count}${owner ? ` of ${owner}` : ''} Visits`
 				: `the first ${count} of ${whose}${Math.max(total, count)} Visits`;
 	}
-	return `Showing ${what} ${span}${ordered}.`;
+	return `Showing ${what}${about} ${span}${ordered}.`;
 }
+
+// A Client's name as long as a real one runs: a typed search longer than this is the one state that can move the list.
+const SEARCH_RULER = 'Camille Ortiz';
 
 /** The longest wording the result line can say, for the room the filter bar
  * holds for it so the list does not move between results. Days with a year
@@ -432,6 +506,7 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { isMine: true }, now, 9999),
+		scheduleResultSummary(999, true, days, 'UTC', { search: SEARCH_RULER }, now, 9999),
 		scheduleResultSummary(0, false, days, 'UTC', { isMine: true, doulaName: longestDoulaName }, now)
 	].toSorted((a, b) => b.length - a.length)[0];
 }

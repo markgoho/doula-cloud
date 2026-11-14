@@ -12,7 +12,12 @@ import (
 // A cursor decode refuses writes a 400 carrying message and returns
 // ok=false, the caller's signal to return without doing anything else.
 func FromQuery[T any](w http.ResponseWriter, r *http.Request, decode func(string) (T, error), message string) (after *T, ok bool) {
-	raw := r.URL.Query().Get("cursor")
+	return FromCursor(w, r.URL.Query().Get("cursor"), decode, message)
+}
+
+// FromCursor is FromQuery for a cursor the caller already read, from a
+// request body. "" is the first page.
+func FromCursor[T any](w http.ResponseWriter, raw string, decode func(string) (T, error), message string) (after *T, ok bool) {
 	if raw == "" {
 		return nil, true
 	}
@@ -55,7 +60,7 @@ func Fetch[T any](
 	fetch func(after *Cursor) ([]T, error),
 	key func(T) (time.Time, string),
 ) (page Page[T], ok bool) {
-	return fetchPage(w, r, message, Decode, fetch, func(items []T) Page[T] {
+	return fetchPage(w, r.URL.Query().Get("cursor"), message, Decode, fetch, func(items []T) Page[T] {
 		items, next, hasMore := Cut(items, size, key)
 		return Page[T]{Items: items, Next: next, HasMore: hasMore}
 	})
@@ -66,13 +71,12 @@ func Fetch[T any](
 // refusal is written here and reported as ok=false.
 func fetchPage[T, C any](
 	w http.ResponseWriter,
-	r *http.Request,
-	message string,
+	cursor, message string,
 	decode func(string) (C, error),
 	fetch func(after *C) ([]T, error),
 	cut func(items []T) Page[T],
 ) (page Page[T], ok bool) {
-	after, ok := FromQuery(w, r, decode, message)
+	after, ok := FromCursor(w, cursor, decode, message)
 	if !ok {
 		return Page[T]{}, false
 	}

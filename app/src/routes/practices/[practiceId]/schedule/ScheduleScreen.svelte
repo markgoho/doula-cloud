@@ -27,6 +27,8 @@
 		SHORT_SCHEDULE_DAYS,
 		isScheduleNarrowed,
 		loadPracticeSchedule,
+		resolveScheduleRead,
+		scheduleSearchNextStep,
 		scheduleDaysOf,
 		scheduleDaysTag,
 		scheduleDayGroup,
@@ -51,6 +53,7 @@
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
+	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
@@ -86,6 +89,7 @@
 	// What a person reads when a read fails: no status code and no server
 	// text, and that nothing is lost (T8, as on the Clients and Invoices lists).
 	const LOAD_FAILED = 'Your schedule did not load. Nothing you saved is lost.';
+	const SEARCH_FAILED = 'Your search did not run. Nothing you saved is lost.';
 	const LOAD_MORE_FAILED = 'More Visits did not load. Nothing you saved is lost. Try again.';
 	const RESULT_ID = 'schedule-result';
 	const ANY_DOULA = 'Any Doula';
@@ -107,8 +111,85 @@
 			isDoulaPickerOffered ? undefined : { staffId: session.staffId }
 		)
 	);
-	const read = $derived(data);
-	const viewKey = (of: ScheduleView) => scheduleHref('', of);
+	/*
+	 * #2870: the typed Client name is in no URL (#1829). It rides in the
+	 * history entry's state (`goto(url, { state })`), as the Invoices list's
+	 * search does: Back and Forward restore it, a reload drops it. `load` never
+	 * sees history state, so a searched read is this screen's own, a POST with
+	 * the search in its body, and a read key that includes the search is what
+	 * the busy state, the focus and the way back to a row all compare.
+	 */
+	const appliedSearch = $derived((page.state.scheduleSearch ?? '').trim());
+	const viewKey = (of: ScheduleView, search = '') => `${scheduleHref('', of)}\n${search}`;
+	const wantedKey = $derived(viewKey(view, appliedSearch));
+
+	/*
+	 * The read the rows on screen came from: the page's own while no search
+	 * is applied, this screen's own once one is. While a newer narrowing loads
+	 * the rows still answer to the last one, so the result line and the empty
+	 * state never describe rows that are not there.
+	 */
+	let read = $state.raw<SchedulePageData | undefined>(untrack(() => (appliedSearch === '' ? data : undefined)));
+	const readKeyOf = (landed: SchedulePageData) => viewKey(landed.view, landed.filters.search ?? '');
+	// The roster is the page's, whichever read the rows came from.
+	const roster = $derived(data ?? read);
+	$effect(() => {
+		const landed = data;
+		if (!landed || appliedSearch !== '') return;
+		untrack(() => (read = landed));
+	});
+
+	let latestSearch = 0;
+	let isSearching = $state(false);
+	// The searched read that failed, so the list is not left marked busy.
+	let failedKey = $state<string>();
+	$effect(() => {
+		// Any read still running is abandoned, a search removed as well as a new one asked.
+		if (appliedSearch === '') {
+			latestSearch += 1;
+			untrack(() => (isSearching = false));
+			return;
+		}
+		const thisSearch = ++latestSearch;
+		const key = wantedKey;
+		untrack(() => void readSearch(key, thisSearch));
+	});
+	async function readSearch(key: string, thisSearch: number) {
+		const asked = new Date();
+		const asking = view;
+		const resolved = resolveScheduleRead(asking, timeZone, session.staffId, asked, appliedSearch);
+		isSearching = true;
+		failedKey = undefined;
+		try {
+			const first = resolved.isReadable
+				? await loadPracticeSchedule(apiFetchWithSession, practiceId, resolved.filters)
+				: { items: [], hasMore: false };
+			if (thisSearch === latestSearch) {
+				read = {
+					page: first,
+					view: asking,
+					filters: resolved.filters,
+					now: asked,
+					rangeErrors: resolved.errors,
+					doulas: roster?.doulas ?? [],
+					isRosterUnavailable: roster?.isRosterUnavailable ?? false
+				};
+			}
+		} catch {
+			if (thisSearch === latestSearch) {
+				failedKey = key;
+				heldReturn = undefined;
+			}
+		} finally {
+			if (thisSearch === latestSearch) isSearching = false;
+		}
+	}
+	const isReadPending = $derived(appliedSearch === '' ? isReading : isSearching);
+	const hasSearchFailed = $derived(failedKey === wantedKey && (read === undefined || readKeyOf(read) !== wantedKey));
+	// The page's own read stands for the list only while no search is applied.
+	const readFailure = $derived(
+		hasReadFailed && appliedSearch === '' ? LOAD_FAILED : (hasSearchFailed ? SEARCH_FAILED : '')
+	);
 
 	/*
 	 * The instant "Today" is read from: the landed read's own, so a heading and
@@ -120,7 +201,7 @@
 		if (document.visibilityState === 'visible') now = new Date();
 	}
 
-	const doulas = $derived(read?.doulas ?? []);
+	const doulas = $derived(roster?.doulas ?? []);
 	const doulaNameOf = (id: string) => doulas.find((doula) => doula.value === id)?.label ?? UNKNOWN_DOULA;
 
 	/*
@@ -155,9 +236,9 @@
 		pagesLoaded: () => pagesLoaded,
 		rowOf: (to) => (to.hash.startsWith('#visit-') ? to.hash.slice('#visit-'.length) : undefined),
 		restore: (back) => {
-			if (hasReadFailed) return;
+			if (readFailure) return;
 			heldReturn = back;
-			if (!isReading && read && viewKey(read.view) === viewKey(view)) void restoreReturn(back);
+			if (!isReadPending && read && readKeyOf(read) === wantedKey) void restoreReturn(back);
 		}
 	});
 	beforeNavigate(() => {
@@ -227,8 +308,12 @@
 	let draftDoula = $state('');
 	let draftOrder = $state<ScheduleOrder>('');
 	let rangeErrors = $state<ScheduleRangeErrors>({});
+	let draftSearch = $state('');
+	// A field typed in since the navigation began is hers: the seed leaves it.
+	let isSearchTouched = false;
 
 	function seedDrafts() {
+		if (!isSearchTouched) draftSearch = appliedSearch;
 		draftChoice = view.chosen ? 'choose' : (view.preset === SHORT_SCHEDULE_DAYS ? '7' : '30');
 		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
@@ -242,15 +327,18 @@
 	let filterBar = $state<{ focusStatus: () => void }>();
 	let isFocusPending = $state(false);
 	let lastKey: string | undefined;
+	beforeNavigate(() => {
+		isSearchTouched = false;
+	});
 	afterNavigate(() => {
 		seedDrafts();
 		// A change of narrowing lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
-		if (lastKey !== undefined && lastKey !== viewKey(view)) isFocusPending = true;
-		lastKey = viewKey(view);
+		if (lastKey !== undefined && lastKey !== wantedKey) isFocusPending = true;
+		lastKey = wantedKey;
 	});
 	$effect(() => {
-		if (!isFocusPending || !read || viewKey(read.view) !== viewKey(view)) return;
+		if (!isFocusPending || !read || readKeyOf(read) !== wantedKey) return;
 		isFocusPending = false;
 		filterBar?.focusStatus();
 	});
@@ -282,11 +370,11 @@
 	let isApplying = $state(false);
 	// A move to another narrowing: a page already being added is abandoned,
 	// so it never lands in the new list, and Apply answers the press at once.
-	async function show(href: string) {
+	async function show(href: string, search: string) {
 		schedule.abandon();
 		isApplying = true;
 		try {
-			await goto(href);
+			await goto(href, { state: { scheduleSearch: search } });
 		} finally {
 			isApplying = false;
 		}
@@ -304,7 +392,7 @@
 			}
 		}
 		rangeErrors = {};
-		await show(scheduleHref(basePath, draftView));
+		await show(scheduleHref(basePath, draftView), draftSearch.trim());
 	}
 
 	/*
@@ -312,26 +400,29 @@
 	 * the address names, each a link to the list minus that one. The default
 	 * days draw no tag; "Clear filters" goes to the bare path.
 	 */
-	type AppliedTag = { text: string; href: string };
+	// The search is in no address, so a tag hands it on in the history entry's state, or an empty one when it is the search's own.
+	type AppliedTag = { text: string; href: string; search: string };
 	const orderLabel = (order: ScheduleOrder) => SCHEDULE_ORDER_OPTIONS.find((option) => option.value === order)!.label;
 	const appliedTags = $derived.by(() => {
 		const tags: AppliedTag[] = [];
+		const search = appliedSearch;
 		const without = (change: Partial<ScheduleView>) => scheduleHref(basePath, { ...view, ...change });
 		if (view.chosen) {
 			const days = scheduleDaysOf(view, timeZone, now).days;
-			if (days) tags.push({ text: scheduleDaysTag(days, timeZone, now), href: scheduleHref(basePath, withDefaultDays(view)) });
+			if (days) tags.push({ text: scheduleDaysTag(days, timeZone, now), href: scheduleHref(basePath, withDefaultDays(view)), search });
 		} else if (view.preset === SHORT_SCHEDULE_DAYS) {
-			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)) });
+			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)), search });
 		}
-		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }) });
-		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }) });
-		if (view.order) tags.push({ text: `Order: ${orderLabel(view.order)}`, href: without({ order: '' }) });
+		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }), search });
+		if (search) tags.push({ text: `Client: ${search}`, href: scheduleHref(basePath, view), search: '' });
+		if (read && view.doula) tags.push({ text: `Doula: ${doulaNameOf(view.doula)}`, href: without({ doula: '' }), search });
+		if (view.order) tags.push({ text: `Order: ${orderLabel(view.order)}`, href: without({ order: '' }), search });
 		return tags;
 	});
 
 	function removeTag(event: MouseEvent, tag: AppliedTag) {
 		event.preventDefault();
-		void show(tag.href);
+		void show(tag.href, tag.search);
 	}
 
 	/*
@@ -349,7 +440,12 @@
 			schedule.hasMore,
 			read.filters,
 			timeZone,
-			{ isMine, doulaName: isPicked ? doulaNameOf(shown.doula) : undefined, order: shown.order },
+			{
+				isMine,
+				doulaName: isPicked ? doulaNameOf(shown.doula) : undefined,
+				order: shown.order,
+				search: read.filters.search
+			},
 			now,
 			read.page.visitCount
 		);
@@ -359,13 +455,18 @@
 	);
 	// Said once, under the result line, only to a reader whose own zone reads these times differently.
 	const zoneNote = $derived(scheduleZoneNote(timeZone, readerTimeZone(), now));
-	const isBusy = $derived(isApplying || (read !== undefined && viewKey(read.view) !== viewKey(view) && !hasReadFailed));
+	const isBusy = $derived(isApplying || (read !== undefined && readKeyOf(read) !== wantedKey && readFailure === ''));
 	const isEmpty = $derived(read !== undefined && !read.rangeErrors && schedule.items.length === 0);
 
-	// H10: the way on from an empty result, by what narrowed it.
+	// H10: the way on from an empty result, by what narrowed it. A search that found nothing is looked for a year ahead first.
 	const emptyAction = $derived.by((): EmptyStateAction | undefined => {
-		const step = read ? scheduleEmptyNextStep(read.view) : undefined;
-		return step && { label: step.label, href: scheduleHref(basePath, step.view) };
+		if (!read) return undefined;
+		const search = read.filters.search ?? '';
+		const step =
+			(search ? scheduleSearchNextStep(read.view, search, timeZone, now) : undefined) ?? scheduleEmptyNextStep(read.view);
+		if (!step) return undefined;
+		const href = scheduleHref(basePath, step.view);
+		return search ? { label: step.label, onClick: () => void show(href, search) } : { label: step.label, href };
 	});
 
 	// "Try again" runs the read that failed, under the same narrowing.
@@ -373,14 +474,14 @@
 	async function tryAgain() {
 		isRetrying = true;
 		try {
-			await onRetry();
+			await (appliedSearch === '' ? onRetry() : readSearch(wantedKey, ++latestSearch));
 		} finally {
 			isRetrying = false;
 		}
 	}
 
 	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
-	const isDoulaPending = $derived(!read && !hasReadFailed && view.doula !== '');
+	const isDoulaPending = $derived(!read && readFailure === '' && view.doula !== '');
 	const doulaOptions = $derived(isDoulaPending ? [{ value: view.doula, label: '' }] : [{ value: '', label: ANY_DOULA }, ...doulas]);
 	const DAYS_OPTIONS: readonly { value: ScheduleDaysChoice; label: string }[] = [
 		{ value: '7', label: `Next ${SHORT_SCHEDULE_DAYS} days` },
@@ -453,12 +554,12 @@
 			action={basePath}
 			onSubmit={applyFilters}
 			legend="Choose which Visits to show"
-			status={hasReadFailed ? '' : resultSummary}
+			status={readFailure ? '' : resultSummary}
 			statusRuler={resultRuler}
-			statusNote={hasReadFailed ? undefined : zoneNote}
+			statusNote={readFailure ? undefined : zoneNote}
 			statusId={RESULT_ID}
 			empty={isEmpty}
-			clearHref={isScheduleNarrowed(view) ? basePath : undefined}
+			clearHref={appliedSearch !== '' || isScheduleNarrowed(view) ? basePath : undefined}
 			applied={appliedTags.length > 0 ? applied : undefined}
 			appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 			foldsFieldsOnly
@@ -483,6 +584,27 @@
 					</fieldset>
 				{/if}
 			{/snippet}
+			<!-- First in the fields row, in view at every width. Unnamed, so a Client's name never reaches the address (#1829). -->
+			<div class="field search">
+				<LabeledField label="Client" width={20}>
+					{#snippet children({ id, describedBy, invalid, width })}
+						<TextInput
+							{id}
+							{describedBy}
+							{invalid}
+							{width}
+							type="search"
+							maxlength={100}
+							autocomplete="off"
+							value={draftSearch}
+							onInput={(value) => {
+								isSearchTouched = true;
+								draftSearch = value;
+							}}
+						/>
+					{/snippet}
+				</LabeledField>
+			</div>
 			{#if isChoosingDays}
 				<DateRangeFields
 					bind:from={fromValue}
@@ -513,9 +635,9 @@
 		</FilterBar>
 
 		<!-- T8: in place of the list, so no row from another narrowing is read as this one's; the bar keeps the narrowing. -->
-		{#if hasReadFailed}
+		{#if readFailure}
 			<stack-l space="var(--space-related)">
-				<Notice message={LOAD_FAILED} variant="error" />
+				<Notice message={readFailure} variant="error" />
 				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
 			</stack-l>
 		{:else if read}
