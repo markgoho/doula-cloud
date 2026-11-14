@@ -14,6 +14,20 @@
 		type ClientOrder,
 		type OpenEngagement
 	} from '#lib/client.js';
+	import {
+		ANY_DUE,
+		CHOOSE_DAYS,
+		clientsDueFrom,
+		dueAddressParts,
+		dueMonthDays,
+		dueMonthName,
+		dueMonthOptions,
+		dueTag,
+		isDueApplied,
+		type ClientsDue
+	} from '#lib/clientsDue.js';
+	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
+	import { dayIn } from '#lib/zonedTime.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
 	import { keepListReturn, pagesToRestore, putListBack, type ListReturn } from '#lib/listReturn.js';
@@ -34,6 +48,7 @@
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
+	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
@@ -166,18 +181,28 @@ import type { PageProps as PageProperties } from './$types';
 	// #2869: `?order=` is in the address too. A contractor Doula is offered no
 	// order (her bar is not drawn), and the BFF refuses "owed" to her.
 	let appliedOrder = $derived(isContractor ? '' : clientOrderFrom(page.url.searchParams.get('order')));
+	// #2871: `?due=2027-03` or `?dueFrom=&dueTo=`, in the address for the same reasons.
+	// A month or a range the BFF would refuse is read as none.
+	let appliedDue = $derived(isContractor ? ANY_DUE : clientsDueFrom(page.url.searchParams));
 	// Left for the Client hub's Back link, which hands it back (`clientsReturn.ts`).
 	$effect(() => {
 		holdClientsName(appliedName);
 	});
 	const isFiltered = $derived(
-		isShowingEveryone || isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '' || appliedName !== '' || appliedOrder !== ''
+		isShowingEveryone ||
+			isShowingMine ||
+			isShowingOwing ||
+			isShowingNoContract ||
+			appliedDoula !== '' ||
+			isDueApplied(appliedDue) ||
+			appliedName !== '' ||
+			appliedOrder !== ''
 	);
 
-	// Mine, owing, no Contract and a Doula each imply an Engagement, which is
+	// Mine, owing, no Contract, a Doula and a due date each imply an Engagement, which is
 	// all the switch for Clients with no care could add to them, so it is not
 	// drawn beside one. A typed name implies nothing, so it stays.
-	const isImplyingCare = $derived(isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '');
+	const isImplyingCare = $derived(isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '' || isDueApplied(appliedDue));
 
 	// The result line's id, which the table is described by.
 	const RESULT_ID = 'clients-result';
@@ -189,6 +214,7 @@ import type { PageProps as PageProperties } from './$types';
 		owing?: boolean;
 		noContract?: boolean;
 		doula?: string;
+		due?: ClientsDue;
 		order?: ClientOrder;
 	};
 
@@ -196,7 +222,7 @@ import type { PageProps as PageProperties } from './$types';
 	// reaches this address with no script running. `all` stays in the address
 	// beside a narrowing: the BFF ANDs them, and dropping it would untick a box
 	// the person ticked.
-	function clientsPath({ all, mine, owing, noContract, doula, order }: ClientsView): string {
+	function clientsPath({ all, mine, owing, noContract, doula, due = ANY_DUE, order }: ClientsView): string {
 		const base = resolve('/practices/[practiceId]/clients', {
 			practiceId: page.params.practiceId!
 		});
@@ -205,6 +231,7 @@ import type { PageProps as PageProperties } from './$types';
 			owing && 'owes=true',
 			noContract && 'noContract=true',
 			doula && `doula=${encodeURIComponent(doula)}`,
+			...dueAddressParts(due),
 			all && 'all=true',
 			order && `order=${order}`
 		].filter(Boolean);
@@ -219,6 +246,9 @@ import type { PageProps as PageProperties } from './$types';
 			showOwing: isShowingOwing,
 			showNoContract: isShowingNoContract,
 			doula: appliedDoula,
+			due: appliedDue.month,
+			dueFrom: appliedDue.from,
+			dueTo: appliedDue.to,
 			name: appliedName,
 			order: appliedOrder
 		};
@@ -317,6 +347,11 @@ import type { PageProps as PageProperties } from './$types';
 	let draftDoula = $state('');
 	let draftName = $state('');
 	let draftOrder = $state<ClientOrder>('');
+	// A month, `YYYY-MM`, or "Choose days", whose From and To wait for Apply.
+	let draftDue = $state('');
+	let draftFrom = $state('');
+	let draftTo = $state('');
+	let rangeErrors = $state<ScheduleRangeErrors>({});
 	// Once per navigation, never on a re-run of an effect: a box ticked in the
 	// moment before the page hydrated was overwritten by the address it had
 	// not yet been applied to.
@@ -333,6 +368,12 @@ import type { PageProps as PageProperties } from './$types';
 		if (!touched.includes('doula')) draftDoula = appliedDoula;
 		if (!touched.includes('name')) draftName = appliedName;
 		if (!touched.includes('order')) draftOrder = appliedOrder;
+		if (!touched.includes('due')) {
+			draftDue = appliedDue.from ? CHOOSE_DAYS : appliedDue.month;
+			draftFrom = appliedDue.from;
+			draftTo = appliedDue.to;
+			rangeErrors = {};
+		}
 	}
 	seedDrafts();
 	// A page that lands once she has left for another screen is not stamped
@@ -401,6 +442,21 @@ import type { PageProps as PageProperties } from './$types';
 	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
 	let changeApplies = 0;
 
+	const isChoosingDays = $derived(draftDue === CHOOSE_DAYS);
+	const draftDueView = $derived<ClientsDue>(isChoosingDays ? { month: '', from: draftFrom, to: draftTo } : { month: draftDue, from: '', to: '' });
+	const draftRangeErrors = () => scheduleRangeErrors(draftFrom, draftTo);
+
+	// Picking "Choose days" starts its fields on the days of the month the choice before it showed.
+	function chooseDue(value: string) {
+		touched.push('due');
+		if (value === CHOOSE_DAYS && !isChoosingDays) {
+			const { from, to } = dueMonthDays(draftDue || thisMonth);
+			draftFrom = from;
+			draftTo = to;
+		}
+		draftDue = value;
+	}
+
 	// The bar as drawn, typed name included.
 	async function applyDrawn(change?: { replace: boolean }) {
 		// Before the navigation, so a "Load more" already in flight is
@@ -419,6 +475,7 @@ import type { PageProps as PageProperties } from './$types';
 					owing: isOwingChecked,
 					noContract: isNoContractChecked,
 					doula: draftDoula,
+					due: draftDueView,
 					order: draftOrder
 				}),
 				{
@@ -434,14 +491,35 @@ import type { PageProps as PageProperties } from './$types';
 
 	// The filter bar's own form, upgraded to a client-side navigation
 	// (Rule of Least Power).
-	function applyFilters(event: SubmitEvent) {
+	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
+		if (isChoosingDays) {
+			const problems = draftRangeErrors();
+			if (problems.from || problems.to) {
+				rangeErrors = problems;
+				await tick();
+				document.querySelector<HTMLInputElement>(problems.from ? 'input[name="from"]' : 'input[name="to"]')?.focus();
+				return;
+			}
+		}
+		rangeErrors = {};
 		return applyDrawn();
 	}
 
-	// A box, a select or the order applies when changed (#2888); the name waits for Apply.
-	function applyOnChange({ replace }: { replace: boolean }) {
+	// A box, a select or the order applies when changed (#2888); the name and the days wait for Apply,
+	// and "Choose days" alone only opens its fields.
+	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
+		if (isChoosingDays) {
+			if (changed.length === 1 && changed[0] === 'due') return false;
+			const problems = draftRangeErrors();
+			if (problems.from || problems.to) {
+				rangeErrors = problems;
+				return false;
+			}
+		}
+		rangeErrors = {};
 		void applyDrawn({ replace });
+		return true;
 	}
 
 	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
@@ -450,6 +528,19 @@ import type { PageProps as PageProperties } from './$types';
 		if (isDoulaPending) return [{ value: appliedDoula, label: '' }];
 		const named = doulas.some((doula) => doula.value === appliedDoula) ? undefined : everyDoula.find((doula) => doula.value === appliedDoula);
 		return [{ value: '', label: 'Any Doula' }, ...doulas, ...(named ? [named] : [])];
+	});
+	// #2871: this month and the next nine by name, a pregnancy's reach, then "Choose days". A month
+	// the address names beyond them is drawn too, so the select never claims "Any time" for it.
+	const thisMonth = $derived(dayIn(new Date(), practiceTimeZone()).slice(0, 7));
+	const dueOptions = $derived.by(() => {
+		const months = dueMonthOptions(`${thisMonth}-01`);
+		const named = appliedDue.month && months.every((option) => option.value !== appliedDue.month);
+		return [
+			{ value: '', label: 'Any time' },
+			...months,
+			...(named ? [{ value: appliedDue.month, label: dueMonthName(appliedDue.month) }] : []),
+			{ value: CHOOSE_DAYS, label: 'Choose days' }
+		];
 	});
 	// The Doula's name for the result sentence, from the whole roster; "that Doula" only when
 	// the roster could not be read or does not list her.
@@ -471,6 +562,7 @@ import type { PageProps as PageProperties } from './$types';
 			owing: isShowingOwing,
 			noContract: isShowingNoContract,
 			doula: appliedDoula,
+			due: appliedDue,
 			order: appliedOrder
 		};
 		const tags: AppliedTag[] = [];
@@ -481,6 +573,7 @@ import type { PageProps as PageProperties } from './$types';
 		if (isShowingNoContract) add('Active, with no Contract', { noContract: false });
 		if (isShowingMine) add('Mine', { mine: false });
 		if (appliedDoula && isRosterLanded) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
+		if (isDueApplied(appliedDue)) add(dueTag(appliedDue), { due: ANY_DUE });
 		if (isShowingEveryone) add(`Including ${NO_CARE_YET}`, { all: false });
 		if (appliedName) add(`Name: ${appliedName}`, {}, '');
 		return tags;
@@ -505,6 +598,8 @@ import type { PageProps as PageProperties } from './$types';
 	// Doula's) first page of active Clients who owe money and have no Contract. The bar
 	// draws it unseen, so the line reserves one line where that fits on one and two where
 	// it does not.
+	const LONGEST_MONTH: ClientsDue = { month: '2027-09', from: '', to: '' };
+	const longestDoula = $derived(doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '');
 	const longestSummary = $derived(
 		[
 			clientsResultSummary(
@@ -514,10 +609,12 @@ import type { PageProps as PageProperties } from './$types';
 				false,
 				true,
 				true,
-				{ doulaName: doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '' },
+				{ doulaName: longestDoula },
 				9999
 			),
-			clientsResultSummary(99, true, false, true, true, true, {}, 9999)
+			clientsResultSummary(99, true, false, true, true, true, {}, 9999),
+			clientsResultSummary(99, true, false, false, false, false, { doulaName: longestDoula, due: LONGEST_MONTH }, 9999),
+			clientsResultSummary(99, false, false, false, true, false, { doulaName: longestDoula, due: LONGEST_MONTH })
 		].toSorted((a, b) => b.length - a.length)[0]
 	);
 
@@ -541,7 +638,7 @@ import type { PageProps as PageProperties } from './$types';
 			shown.showMine,
 			shown.showOwing,
 			shown.showNoContract,
-			{ doulaName: shownDoulaName, name: shown.name, order: shown.order },
+			{ doulaName: shownDoulaName, name: shown.name, order: shown.order, due: { month: shown.due, from: shown.dueFrom, to: shown.dueTo } },
 			shownTotal
 		)
 	);
@@ -932,7 +1029,9 @@ import type { PageProps as PageProperties } from './$types';
 	const emptyAction = $derived.by((): EmptyStateAction | undefined => {
 		if (isContractor) return { label: 'How to add Clients of your own', href: searchHref() };
 		const { name, order, showMine, showOwing, showNoContract, doula, showAll } = shown;
-		const isNarrowed = showMine || showOwing || showNoContract || doula !== '';
+		const due: ClientsDue = { month: shown.due, from: shown.dueFrom, to: shown.dueTo };
+		const isDue = isDueApplied(due);
+		const isNarrowed = showMine || showOwing || showNoContract || doula !== '' || isDue;
 		if (name) {
 			if (!isNarrowed && showAll) {
 				return hasAnyClient === false
@@ -942,8 +1041,15 @@ import type { PageProps as PageProperties } from './$types';
 			return { label: `Search every Client for "${name}"`, onClick: () => void showList(clientsPath({ all: true, order }), name) };
 		}
 		if (!isNarrowed) return undefined;
+		const isOtherNarrowing = showOwing || showNoContract || doula !== '' || (showMine && !isOnMineByDefault);
+		if (isDue && isOtherNarrowing) {
+			return {
+				label: 'Show Clients due any time',
+				href: clientsPath({ all: showAll, mine: showMine, owing: showOwing, noContract: showNoContract, doula, order })
+			};
+		}
 		if (isOnMineByDefault && showMine) {
-			return showOwing || showNoContract || doula ? { label: 'Show all your Clients', href: clientsPath({ mine: true, order }) } : undefined;
+			return isOtherNarrowing || isDue ? { label: 'Show all your Clients', href: clientsPath({ mine: true, order }) } : undefined;
 		}
 		return { label: 'Show every Client in care', href: clientsPath({ order }) };
 	});
@@ -951,7 +1057,7 @@ import type { PageProps as PageProperties } from './$types';
 	const emptyMessage = $derived.by(() => {
 		if (isContractor) return 'Work reaches you as an Offer, so there are no Clients here yet.';
 		// Narrowed: what was looked for, in the count line's own words.
-		if (shown.showMine || shown.showOwing || shown.showNoContract || shown.doula || shown.name) {
+		if (shown.showMine || shown.showOwing || shown.showNoContract || shown.doula || shown.name || shown.due || shown.dueFrom) {
 			return summary;
 		}
 		if (hasAnyClient && !shown.showAll) {
@@ -1194,7 +1300,7 @@ import type { PageProps as PageProperties } from './$types';
 				appliedCount={appliedTags.length + (isDoulaPending ? 1 : 0)}
 				hasUntaggedFilter={appliedOrder !== ''}
 				foldsFieldsOnly
-				foldLabel={!isImplyingCare || canChooseDoula ? 'More filters and order' : 'Order'}
+				foldLabel={!isImplyingCare || canChooseDoula ? 'More filters and order' : 'Due and order'}
 				order={{
 					options: CLIENT_ORDER_OPTIONS,
 					value: draftOrder,
@@ -1285,6 +1391,17 @@ import type { PageProps as PageProperties } from './$types';
 								{/snippet}
 							</LabeledField>
 						</div>
+					{/if}
+					<!-- #2871: whose Clients and when they are due are the two halves of "Priya has room in March". A month applies when changed; "Choose days" opens From and To, which wait for Apply. -->
+					<div class="field due">
+						<LabeledField label="Due" width={20}>
+							{#snippet children({ id, describedBy, invalid, width })}
+								<Select {id} {describedBy} {invalid} {width} name="due" options={dueOptions} value={draftDue} onChange={chooseDue} />
+							{/snippet}
+						</LabeledField>
+					</div>
+					{#if isChoosingDays}
+						<DateRangeFields bind:from={draftFrom} bind:to={draftTo} fromError={rangeErrors.from} toError={rangeErrors.to} hint="Both days are included." />
 					{/if}
 					{#if !isImplyingCare}
 						<div class="also-narrow">
@@ -1531,8 +1648,16 @@ import type { PageProps as PageProperties } from './$types';
 			max-inline-size: var(--field-width);
 		}
 
+		.name {
+			--field-width: 16ch;
+		}
+
 		.doula {
-			--field-width: 34ch;
+			--field-width: 21ch;
+		}
+
+		.due {
+			--field-width: 18ch;
 		}
 
 		/* The "Also show" box is drawn twice, once for each bar: on the switches row where the bar is wide, in the fold where it is not. */
@@ -1554,7 +1679,8 @@ import type { PageProps as PageProperties } from './$types';
 				display: block;
 			}
 
-			.doula {
+			.doula,
+			.due {
 				flex: none;
 			}
 		}

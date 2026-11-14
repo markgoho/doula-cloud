@@ -22,6 +22,8 @@ import type { ListReturn } from '#lib/listReturn.js';
 import { toApiResponder, toPageState } from '../../../routeFixture.js';
 import { clients, fixture, seedLikeClients, typical } from './page.fixture.js';
 import { heldClientsName } from '#lib/clientsReturn.js';
+import { dueMonthDays, dueMonthOptions } from '#lib/clientsDue.js';
+import { dayIn } from '#lib/zonedTime.js';
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
@@ -125,6 +127,7 @@ beforeEach(() => {
 	pageState.url.searchParams.delete('noContract');
 	pageState.url.searchParams.delete('doula');
 	pageState.url.searchParams.delete('order');
+	for (const key of ['due', 'dueFrom', 'dueTo']) pageState.url.searchParams.delete(key);
 	historyState.clientsName = undefined;
 });
 
@@ -1618,7 +1621,7 @@ describe('the Status column (#264, #2022)', () => {
 		await expect.element(table().getByRole('cell', { name: 'No due date', exact: true })).toBeVisible();
 	});
 
-	it('reads "1 day" in the singular for an Invoice one day late', async () => {
+	it('reads "overdue" for an Invoice one day late, as for one twelve days late', async () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
@@ -1627,10 +1630,10 @@ describe('the Status column (#264, #2022)', () => {
 			})
 		);
 
-		await expect.element(table().getByText('1 day overdue', { exact: true })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice$/ })).toBeVisible();
 	});
 
-	it('reads the days alone, in the Money column, when the late Invoice carries no amount', async () => {
+	it('reads the total in the Money column, whatever the late Invoice carries for an amount', async () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
@@ -1639,7 +1642,7 @@ describe('the Status column (#264, #2022)', () => {
 			})
 		);
 
-		await expect.element(table().getByText('12 days overdue', { exact: true })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice$/ })).toBeVisible();
 	});
 
 	// #2130: the BFF's one count (#2122) decides it, so a late Invoice
@@ -1647,7 +1650,7 @@ describe('the Status column (#264, #2022)', () => {
 	it('reads "Overdue" once the BFF counts the open Invoice late', async () => {
 		await setup();
 
-		await expect.element(table().getByRole('cell', { name: /\$4,500\.00\s*,\s*12 days overdue/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /\$4,500\.00\s*,\s*overdue\s*,\s*1 Invoice/ })).toBeVisible();
 		await expect.element(table().getByText('Owes', { exact: true })).not.toBeInTheDocument();
 	});
 
@@ -1657,7 +1660,7 @@ describe('the Status column (#264, #2022)', () => {
 		const [line] = clients[0].openEngagements ?? [];
 		await setup(
 			jsonResponse({
-				items: [{ ...clients[0], openEngagements: [{ ...line, paymentProcessing: true }] }],
+				items: [{ ...clients[0], owedCents: 0, owedInvoiceCount: 0, openEngagements: [{ ...line, paymentProcessing: true }] }],
 				hasMore: false
 			})
 		);
@@ -1675,7 +1678,7 @@ describe('the Status column (#264, #2022)', () => {
 			})
 		);
 
-		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*owed$/ })).toBeVisible();
+		await expect.element(table().getByRole('cell', { name: /^\$4,500\.00\s*,\s*owed\s*,\s*1 Invoice$/ })).toBeVisible();
 		await expect.element(table().getByText('Owes', { exact: true })).not.toBeInTheDocument();
 		await expect.element(table().getByText(/overdue/i)).not.toBeInTheDocument();
 	});
@@ -1683,7 +1686,8 @@ describe('the Status column (#264, #2022)', () => {
 	// #741: `open` (billed, unpaid) is what "is anything outstanding"
 	// means; a settled Contract's `paid` reads as paid, with nothing to do.
 	it('reads "Paid" rather than "Owes" once nothing is outstanding', async () => {
-		await setup();
+		const settled = clients[0].openEngagements?.at(2);
+		await setup(jsonResponse({ items: [{ ...clients[0], owedCents: 0, owedInvoiceCount: 0, openEngagements: [settled] }], hasMore: false }));
 
 		await expect.element(table().getByText('Owes', { exact: true })).not.toBeInTheDocument();
 		await expect.element(table().getByText(/Paid/)).not.toBeInTheDocument();
@@ -1731,7 +1735,7 @@ describe('the Status column (#264, #2022)', () => {
 		const lines = table().getByRole('listitem');
 
 		await expect.element(lines.nth(0)).toHaveTextContent(/^\s*Birth\s*,\s*Active,\s*·\s*Contract sent\s*$/);
-		await expect.element(table().getByRole('row').nth(1)).toHaveTextContent(/12 days overdue/);
+		await expect.element(table().getByRole('row').nth(1)).toHaveTextContent(/overdue/);
 	});
 
 	// The "Active, with no Contract" filter carries the job of
@@ -1796,7 +1800,15 @@ const isAfter = (first: Element, second: Element) => Boolean(first.compareDocume
 
 describe('the Money column', () => {
 	const [first] = clients[0].openEngagements ?? [];
-	const only = (line: object) => jsonResponse({ items: [{ ...clients[0], openEngagements: [{ ...first, ...line }] }], hasMore: false });
+	// The BFF sums the open Invoices with no payment on their way for every row (#2874), so a settled line owes nothing.
+	const only = (line: object) => {
+		const merged = { ...first, ...line };
+		const isOwed = merged.invoiceStatus === 'open' && !merged.paymentProcessing;
+		return jsonResponse({
+			items: [{ ...clients[0], owedCents: isOwed ? 450_000 : 0, owedInvoiceCount: isOwed ? 1 : 0, openEngagements: [merged] }],
+			hasMore: false
+		});
+	};
 
 	it('follows Status, and is right-aligned like the Date', async () => {
 		await setup();
@@ -1807,8 +1819,8 @@ describe('the Money column', () => {
 	});
 
 	it.each([
-		['an open Invoice', { daysOverdue: 0 }, 'owed'],
-		['a late Invoice', { daysOverdue: 12 }, '12 days overdue'],
+		['an open Invoice', { daysOverdue: 0 }, String.raw`owed\s*,\s*1 Invoice`],
+		['a late Invoice', { daysOverdue: 12 }, String.raw`overdue\s*,\s*1 Invoice`],
 		['a payment on its way', { paymentProcessing: true }, 'payment on its way'],
 		['a paid Invoice', { invoiceStatus: 'paid', daysOverdue: 0 }, 'paid'],
 		// #2849: as the Invoices list says it, through the one `invoiceMoneyState`.
@@ -1845,10 +1857,15 @@ describe('the Money column', () => {
 		expect(record.textContent).toContain('Not yet in care');
 	});
 
-	it('names the kind on each line where a Client holds two, ', async () => {
-		await setup();
+	it('names the kind on each line where a Client holds two and owes nothing in all', async () => {
+		await setup(
+			jsonResponse({
+				items: [{ ...clients[0], owedCents: 0, owedInvoiceCount: 0, openEngagements: [{ ...first, paymentProcessing: true }, ...clients[0].openEngagements!.slice(1)] }],
+				hasMore: false
+			})
+		);
 
-		await expect.element(table().getByText('Birth: $4,500.00, 12 days overdue')).toBeVisible();
+		await expect.element(table().getByText('Birth: $4,500.00, payment on its way')).toBeVisible();
 		await expect.element(table().getByText('Postpartum: Your fee $1,200.00')).toBeVisible();
 		await expect.element(table().getByText('Birth: $1,000.00, paid')).toBeVisible();
 	});
@@ -1856,7 +1873,14 @@ describe('the Money column', () => {
 	it('says "No amount" to a screen reader for a line with no money beside one with some', async () => {
 		await setup(
 			jsonResponse({
-				items: [{ ...clients[0], openEngagements: [first, { ...clients[0].openEngagements![1], feeCents: undefined }] }],
+				items: [
+					{
+						...clients[0],
+						owedCents: 0,
+						owedInvoiceCount: 0,
+						openEngagements: [{ ...first, paymentProcessing: true }, { ...clients[0].openEngagements![1], feeCents: undefined }]
+					}
+				],
 				hasMore: false
 			})
 		);
@@ -2338,7 +2362,7 @@ describe('the Due column', () => {
 	it('mutes "Due" and "Ended" before the day, and starts the column at the left like its words', async () => {
 		await setup();
 
-		await expect.element(testPage.getByText('Due', { exact: true }).first()).toHaveClass('lead');
+		await expect.element(table().getByText('Due', { exact: true }).first()).toHaveClass('lead');
 		await expect.element(testPage.getByText('Ended', { exact: true }).first()).toHaveClass('lead');
 		await expect.element(testPage.getByRole('columnheader', { name: 'Date' })).not.toHaveClass('numeric');
 	});
@@ -2704,7 +2728,16 @@ function changed(changes: Readonly<Partial<Record<number, object>>>) {
 	return seedLikeClients.map((client, index) => {
 		const [line] = client.openEngagements ?? [];
 		const change = changes[index];
-		return change && line ? { ...client, openEngagements: [{ ...line, ...change }] } : client;
+		if (!change || !line) return client;
+		const merged = { ...line, ...change };
+		// What the BFF sums for the row (#2874): an open Invoice with no payment on its way is what a Client owes.
+		const isOwed = merged.invoiceStatus === 'open' && !merged.paymentProcessing;
+		return {
+			...client,
+			owedCents: isOwed ? (merged.invoiceAmountCents ?? 0) : 0,
+			owedInvoiceCount: isOwed ? 1 : 0,
+			openEngagements: [merged]
+		};
 	});
 }
 
@@ -2835,7 +2868,7 @@ describe('the Date column', () => {
 		const row = testPage.getByRole('row', { name: /Wilhelmina/ });
 		await expect.element(row).toHaveTextContent('26 weeks postpartum');
 		await expect.element(row).toHaveTextContent('Ended Nov 30, 2026');
-		await expect.element(testPage.getByText('Due', { exact: true }).first()).toHaveClass('lead');
+		await expect.element(table().getByText('Due', { exact: true }).first()).toHaveClass('lead');
 		await expect.element(testPage.getByRole('columnheader', { name: 'Date' })).toBeVisible();
 		await expect.element(testPage.getByRole('columnheader', { name: 'Due' })).not.toBeInTheDocument();
 	});
@@ -3766,5 +3799,249 @@ describe('the Money cell says what a Client owes in all (#2874)', () => {
 
 		await expect.element(row()).toHaveTextContent(/\$300\.00, paid/);
 		await expect.element(row()).not.toHaveTextContent(/Invoices?\b/);
+	});
+});
+
+const dueField = () => testPage.getByLabelText('Due', { exact: true });
+const days = (name: 'From' | 'To') => testPage.getByLabelText(name, { exact: true });
+
+describe('the "Due" select (#2871)', () => {
+	const base = `/practices/${practiceId}/clients`;
+	const months = dueMonthOptions(dayIn(new Date(), 'America/New_York'));
+	const march = '2027-03';
+
+	it('offers "Any time", this month and the next nine by name, then "Choose days", with nothing on the wire', async () => {
+		await setup();
+
+		await expect.element(dueField()).toHaveValue('');
+		await expect.element(dueField()).toHaveAttribute('name', 'due');
+		const options = dueField().getByRole('option').elements().map((option) => [(option as HTMLOptionElement).value, option.textContent]);
+		expect(options).toEqual([['', 'Any time'], ...months.map((month) => [month.value, month.label]), ['choose', 'Choose days']]);
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+	});
+
+	it('applies a month when changed, so "Priya has room in March" is two actions', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup(undefined, { doulas });
+
+		await doulaField().selectOptions(lena.label);
+		await settledChange();
+		await dueField().selectOptions(months[4]!.label);
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledTimes(2);
+		expect(goto).toHaveBeenLastCalledWith(`${base}?doula=${lena.value}&due=${months[4]!.value}`, expect.objectContaining({ reset: false }));
+	});
+
+	it('opens From and To on "Choose days" and sends nothing, starting them on this month\'s days', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await expect.element(days('From')).not.toBeInTheDocument();
+		await dueField().selectOptions('Choose days');
+		await settledChange();
+
+		expect(goto).not.toHaveBeenCalled();
+		await expect.element(days('From')).toHaveValue(dueMonthDays(months[0]!.value).from);
+		await expect.element(days('To')).toHaveValue(dueMonthDays(months[0]!.value).to);
+		await expect.element(testPage.getByText('Both days are included.')).toBeVisible();
+	});
+
+	it('starts chosen days on the month that was applied', async () => {
+		pageState.url.searchParams.set('due', march);
+		await setup();
+
+		await dueField().selectOptions('Choose days');
+
+		await expect.element(days('From')).toHaveValue('2027-03-01');
+		await expect.element(days('To')).toHaveValue('2027-03-31');
+	});
+
+	it('waits for Apply to send typed days, in the address as `dueFrom` and `dueTo`', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await dueField().selectOptions('Choose days');
+		await days('From').fill('2027-03-01');
+		await days('To').fill('2027-03-15');
+		await settledChange();
+		expect(goto).not.toHaveBeenCalled();
+		await applyFilters();
+
+		expect(goto).toHaveBeenCalledOnce();
+		expect(goto).toHaveBeenCalledWith(`${base}?dueFrom=2027-03-01&dueTo=2027-03-15`, noName);
+	});
+
+	it('says what is wrong with typed days beside them, sends nothing, and goes to the field', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await dueField().selectOptions('Choose days');
+		await days('To').fill('');
+		await applyFilters();
+
+		await expect.element(testPage.getByText('Enter a To day')).toBeVisible();
+		expect(goto).not.toHaveBeenCalled();
+		await vi.waitFor(() => expect(document.activeElement).toBe(days('To').element()));
+	});
+
+	it('does not send another control\'s change while the days are not a range', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await dueField().selectOptions('Choose days');
+		await days('From').fill('');
+		await owing().click();
+		await settledChange();
+
+		expect(goto).not.toHaveBeenCalled();
+		await expect.element(testPage.getByText('Enter a From day')).toBeVisible();
+	});
+
+	it('sends another control\'s change with the typed days once they are a range', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await dueField().selectOptions('Choose days');
+		await owing().click();
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledWith(
+			`${base}?owes=true&dueFrom=${dueMonthDays(months[0]!.value).from}&dueTo=${dueMonthDays(months[0]!.value).to}`,
+			expect.objectContaining({ reset: false })
+		);
+	});
+
+	it('reads `?due=`: selected, sent to the BFF, in a tag, in the count line, with the no-care switch left out', async () => {
+		pageState.url.searchParams.set('due', march);
+
+		await setup();
+
+		await expect.element(dueField()).toHaveValue(march);
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients?due=${march}`);
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Due in March 2027' })).toHaveAttribute('href', base);
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing \d+ Clients due in March 2027, soonest due first, then most recently ended\.$/);
+		await expect.element(testPage.getByRole('checkbox', { name: /Also show/ })).not.toBeInTheDocument();
+	});
+
+	it('draws a month the address names beyond the ten, so the select never claims "Any time" for it', async () => {
+		pageState.url.searchParams.set('due', '2031-05');
+
+		await setup();
+
+		await expect.element(dueField()).toHaveValue('2031-05');
+		await expect.element(dueField().getByRole('option', { name: 'May 2031' })).toBeInTheDocument();
+	});
+
+	it('reads `?dueFrom=&dueTo=`: "Choose days" with both days, a tag in fixed words and the days in the request', async () => {
+		pageState.url.searchParams.set('dueFrom', '2027-03-01');
+		pageState.url.searchParams.set('dueTo', '2027-03-15');
+
+		await setup();
+
+		await expect.element(dueField()).toHaveValue('choose');
+		await expect.element(days('From')).toHaveValue('2027-03-01');
+		await expect.element(days('To')).toHaveValue('2027-03-15');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients?dueFrom=2027-03-01&dueTo=2027-03-15`);
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Due Mar 1 to Mar 15, 2027' })).toBeVisible();
+	});
+
+	it.each([['due', 'March'], ['dueFrom', '2027-03-01']])('reads `?%s=%s` as no narrowing, which the BFF would refuse', async (key, value) => {
+		pageState.url.searchParams.set(key, value);
+
+		await setup();
+
+		await expect.element(dueField()).toHaveValue('');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+	});
+
+	it('is not read for a contractor Doula, whose whole bar is hidden', async () => {
+		pageState.url.searchParams.set('due', march);
+
+		await setup(undefined, { isContractor: true, isDoula: true });
+
+		await expect.element(dueField()).not.toBeInTheDocument();
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+	});
+
+	it('is sent in the body of a Name search, which keeps it out of the address', async () => {
+		pageState.url.searchParams.set('due', march);
+		historyState.clientsName = 'Camille';
+
+		await setup();
+
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients/list`);
+		expect(JSON.parse(requestInit().body as string)).toMatchObject({ name: 'Camille', due: march, dueFrom: '', dueTo: '' });
+	});
+
+	it('is removed by its tag, which keeps every other filter', async () => {
+		pageState.url.searchParams.set('due', march);
+		pageState.url.searchParams.set('owes', 'true');
+
+		await setup();
+
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Due in March 2027' })).toHaveAttribute('href', `${base}?owes=true`);
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Who owe money' })).toHaveAttribute('href', `${base}?due=${march}`);
+	});
+
+	it('puts the Doula in the count line before the month', async () => {
+		pageState.url.searchParams.set('due', march);
+		pageState.url.searchParams.set('doula', lena.value);
+
+		await setup(undefined, { doulas });
+
+		await expect.element(testPage.getByRole('status')).toHaveTextContent(/^Showing Lena Vasquez's \d+ Clients due in March 2027, soonest due first/);
+	});
+
+	describe('an empty result says what was looked for and offers one next step', () => {
+		it('offers every Client in care for a month alone', async () => {
+			pageState.url.searchParams.set('due', march);
+			await setup(nobody);
+
+			await expect.element(testPage.getByText('No Client is due in March 2027. Clear the filters to widen the list.').first()).toBeVisible();
+			await expect.element(nextStepLink('Show every Client in care')).toHaveAttribute('href', base);
+		});
+
+		it('offers the list with every other filter kept and the month dropped', async () => {
+			pageState.url.searchParams.set('due', march);
+			pageState.url.searchParams.set('doula', lena.value);
+			pageState.url.searchParams.set('order', 'name');
+			await setup(nobody, { doulas });
+
+			await expect.element(nextStepLink('Show Clients due any time')).toHaveAttribute('href', `${base}?doula=${lena.value}&order=name`);
+		});
+
+		it('offers a Doula who opens on Mine her own Clients, the month dropped', async () => {
+			pageState.url.searchParams.set('mine', 'true');
+			pageState.url.searchParams.set('due', march);
+			await setup(nobody, { isDoula: true, opensOnMine: true });
+
+			await expect.element(nextStepLink('Show all your Clients')).toHaveAttribute('href', `${base}?mine=true`);
+		});
+
+		it('keeps Mine for an Owner who ticked it, and drops only the month', async () => {
+			pageState.url.searchParams.set('mine', 'true');
+			pageState.url.searchParams.set('due', march);
+			await setup(nobody, { isDoula: true });
+
+			await expect.element(nextStepLink('Show Clients due any time')).toHaveAttribute('href', `${base}?mine=true`);
+		});
+	});
+
+	describe('its fold summary', () => {
+		it('says "Due and order" for a Doula on Mine, who sees no Doula select and no "Also show" box', async () => {
+			pageState.url.searchParams.set('mine', 'true');
+			await setup(undefined, { isDoula: true, opensOnMine: true, canChooseDoula: false });
+			await testPage.viewport(414, 900);
+
+			await expect.element(testPage.getByText('Due and order', { exact: true })).toBeVisible();
+		});
+
+		it('says "More filters and order" otherwise', async () => {
+			await setup(undefined, { isDoula: true, canChooseDoula: false });
+			await testPage.viewport(414, 900);
+
+			await expect.element(testPage.getByText('More filters and order', { exact: true })).toBeVisible();
+		});
 	});
 });

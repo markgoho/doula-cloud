@@ -10,6 +10,7 @@ import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js'
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
 import { RefusalError, refusalError } from './formErrors.js';
+import { ANY_DUE, dueWhen, isDueApplied, type ClientsDue } from './clientsDue.js';
 
 /** One row of the Clients list, Client-shaped: one row per Client, never
  * one per Client+Engagement pair (ADR-0017) -- mirrors the Go BFF's
@@ -144,6 +145,17 @@ export interface LoadClientsOptions {
 	 */
 	doula?: string;
 	/**
+	 * Only the Clients with an open Engagement due in this month, `YYYY-MM`
+	 * (ListHandler's `?due=`, #2871). The BFF refuses it beside `dueFrom`.
+	 */
+	due?: string;
+	/**
+	 * Only the Clients with an open Engagement due from this day, `YYYY-MM-DD`,
+	 * through `dueTo`, both included (`?dueFrom=&dueTo=`, #2871).
+	 */
+	dueFrom?: string;
+	dueTo?: string;
+	/**
 	 * Only the Clients whose name holds this text. Sent in a POST body
 	 * (ListByNameHandler), never in the address (#1829).
 	 */
@@ -175,13 +187,15 @@ export function clientOrderFrom(value: string | null): ClientOrder {
 	return CLIENT_ORDER_OPTIONS.find((option) => option.value === value)?.value ?? '';
 }
 
-function clientsQuery({ cursor, showAll, showMine, showOwing, showNoContract, doula, order }: LoadClientsOptions): string {
+function clientsQuery({ cursor, showAll, showMine, showOwing, showNoContract, doula, due, dueFrom, dueTo, order }: LoadClientsOptions): string {
 	const parts: string[] = [];
 	if (showAll) parts.push('all=true');
 	if (showMine) parts.push('mine=true');
 	if (showOwing) parts.push('owes=true');
 	if (showNoContract) parts.push('noContract=true');
 	if (doula) parts.push(`doula=${encodeURIComponent(doula)}`);
+	if (due) parts.push(`due=${due}`);
+	else if (dueFrom && dueTo) parts.push(`dueFrom=${dueFrom}`, `dueTo=${dueTo}`);
 	if (order) parts.push(`order=${order}`);
 	if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
 	return parts.length > 0 ? `?${parts.join('&')}` : '';
@@ -208,6 +222,9 @@ export async function loadClients(
 					owes: options.showOwing ?? false,
 					noContract: options.showNoContract ?? false,
 					doula: options.doula ?? '',
+					due: options.due ?? '',
+					dueFrom: options.dueFrom ?? '',
+					dueTo: options.dueTo ?? '',
 					order: options.order ?? '',
 					cursor: options.cursor ?? ''
 				})
@@ -311,15 +328,15 @@ export function clientsResultSummary(
 	isShowingMine = false,
 	isShowingOwing = false,
 	isShowingNoContract = false,
-	{ doulaName = '', name = '', order = '' }: { doulaName?: string; name?: string; order?: ClientOrder } = {},
+	{ doulaName = '', name = '', order = '', due = ANY_DUE }: { doulaName?: string; name?: string; order?: ClientOrder; due?: ClientsDue } = {},
 	total?: number
 ): string {
-	const narrowing = { isShowingEveryone, isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name };
-	// Mine, owing, no Contract and a Doula each imply an Engagement, so the switch for the rest
-	// changes nothing beside them.
-	const isImplyingCare = isShowingMine || isShowingOwing || isShowingNoContract || doulaName !== '';
+	const narrowing = { isShowingEveryone, isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name, due };
+	// Mine, owing, no Contract, a Doula and a due date each imply an Engagement, so the switch
+	// for the rest changes nothing beside them.
+	const isImplyingCare = isShowingMine || isShowingOwing || isShowingNoContract || doulaName !== '' || isDueApplied(due);
 	if (count === 0) {
-		if (isShowingMine || isShowingOwing || isShowingNoContract || doulaName || name) {
+		if (isShowingMine || isShowingOwing || isShowingNoContract || doulaName || name || isDueApplied(due)) {
 			const isOnlyAmongCare = name !== '' && !isShowingEveryone && !isImplyingCare;
 			return `${noClientsMessage(narrowing)} ${isOnlyAmongCare ? WIDEN_TO_NO_CARE : CLEAR_FILTERS}`;
 		}
@@ -336,6 +353,7 @@ export function clientsResultSummary(
 		clients = hasMore ? `${count} of ${doulaName}'s ${all}${noun}` : `${doulaName}'s ${count} ${noun}`;
 	} else if (isShowingMine) clients = `${count} of your ${all}${noun}`;
 	const named = name ? ` named "${name}"` : '';
+	const dueWords = isDueApplied(due) ? ` due ${dueWhen(due)}` : '';
 	let traits = '';
 	if (isShowingOwing) {
 		traits = ` ${isPlural ? 'who owe' : 'who owes'} money${isShowingNoContract ? ` and ${isPlural ? 'have' : 'has'} no Contract` : ''}`;
@@ -346,7 +364,7 @@ export function clientsResultSummary(
 	// changes nothing beside them and the line has nothing to say about it. The default list
 	// does not name its group; the list with the switch on says what it adds.
 	const included = isShowingEveryone && !isImplyingCare ? `, including ${NO_CARE_YET}` : '';
-	return `${hasMore ? 'Showing the first' : 'Showing'} ${clients}${named}${traits}${included}, ${ORDER_WORDS[order]}.`;
+	return `${hasMore ? 'Showing the first' : 'Showing'} ${clients}${named}${dueWords}${traits}${included}, ${ORDER_WORDS[order]}.`;
 }
 
 /*
@@ -361,15 +379,17 @@ function noClientsMessage(narrowing: {
 	isShowingNoContract: boolean;
 	doulaName: string;
 	name: string;
+	due: ClientsDue;
 }): string {
-	const { isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name } = narrowing;
+	const { isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name, due } = narrowing;
 	const active = isShowingNoContract ? 'active ' : '';
 	const named = name ? ` named "${name}"` : '';
-	const hasTraits = isShowingOwing || isShowingNoContract;
+	const hasTraits = isShowingOwing || isShowingNoContract || isDueApplied(due);
 	const traits = (isOne: boolean) =>
 		[
 			isShowingOwing && (isOne ? 'owes money' : 'owe money'),
-			isShowingNoContract && (isOne ? 'is missing a Contract' : 'are missing a Contract')
+			isShowingNoContract && (isOne ? 'is missing a Contract' : 'are missing a Contract'),
+			isDueApplied(due) && `${isOne ? 'is' : 'are'} due ${dueWhen(due)}`
 		]
 			.filter(Boolean)
 			.join(' and ');
