@@ -56,6 +56,7 @@
 	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
+	import ShowOnly from '#lib/components/molecules/ShowOnly.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -1410,32 +1411,28 @@
 					drawn or hidden never moves a field, and Apply never moves.
 				-->
 				{#snippet switches()}
-					<!-- One group, so "Clients" is said once, by the page, and each box reads as the end of "Show only". The legend is drawn on the boxes' own row. -->
-					<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- named boxes of a GET form beside the bar's own fields: CheckboxGroup stacks one option to a line and carries its value as an array -->
-					<fieldset>
-						<legend>Show only</legend>
-						<div class="show-only-boxes">
-							<LabeledField label="Who owe money" orientation="inline">
+					<!-- One group, so "Clients" is said once, by the page. -->
+					<ShowOnly>
+						<LabeledField label="Who owe money" orientation="inline">
+							{#snippet children(control)}
+								<Checkbox name="owes" value="true" checked={isOwingChecked} onChange={handleToggleOwing} {...control} />
+							{/snippet}
+						</LabeledField>
+						<!-- The BFF leaves out a Client whose only Engagement is still in Intake, where no Contract is expected. -->
+						<LabeledField label="Active, with no Contract" orientation="inline">
+							{#snippet children(control)}
+								<Checkbox name="noContract" value="true" checked={isNoContractChecked} onChange={handleToggleNoContract} {...control} />
+							{/snippet}
+						</LabeledField>
+						<!-- Beside the Doula select it is the other half of: whose Clients. The BFF ANDs the two, so mine and a Doula is a narrower list. -->
+						{#if canNarrowToMine && (hasMine || isShowingMine)}
+							<LabeledField label="Mine" orientation="inline">
 								{#snippet children(control)}
-									<Checkbox name="owes" value="true" checked={isOwingChecked} onChange={handleToggleOwing} {...control} />
+									<Checkbox name="mine" value="true" checked={isMineChecked} onChange={handleToggleMine} {...control} />
 								{/snippet}
 							</LabeledField>
-							<!-- The BFF leaves out a Client whose only Engagement is still in Intake, where no Contract is expected. -->
-							<LabeledField label="Active, with no Contract" orientation="inline">
-								{#snippet children(control)}
-									<Checkbox name="noContract" value="true" checked={isNoContractChecked} onChange={handleToggleNoContract} {...control} />
-								{/snippet}
-							</LabeledField>
-							<!-- Beside the Doula select it is the other half of: whose Clients. The BFF ANDs the two, so mine and a Doula is a narrower list. -->
-							{#if canNarrowToMine && (hasMine || isShowingMine)}
-								<LabeledField label="Mine" orientation="inline">
-									{#snippet children(control)}
-										<Checkbox name="mine" value="true" checked={isMineChecked} onChange={handleToggleMine} {...control} />
-									{/snippet}
-								</LabeledField>
-							{/if}
-						</div>
-					</fieldset>
+						{/if}
+					</ShowOnly>
 					<!-- Last, so drawing it or not moves nothing. The default list is ADR-0017's: current care, past care, or a pending Request. The BFF ANDs this with a narrowing that implies care (mine, owing, no Contract, a Doula), so ticking it beside one changes nothing and it is not drawn. -->
 					{#if !isImplyingCare}
 						<div class="also-wide">
@@ -1710,14 +1707,6 @@
 
 		.held {
 			visibility: hidden;
-		}
-
-		/* The boxes wrap among themselves beside FilterBar's floated legend. */
-		.show-only-boxes {
-			display: flex;
-			flex-wrap: wrap;
-			align-items: center;
-			gap: var(--space-1) var(--space-related);
 		}
 
 		/* A live birth's "3 weeks postpartum": one phrase, not the two tracks of a day. */

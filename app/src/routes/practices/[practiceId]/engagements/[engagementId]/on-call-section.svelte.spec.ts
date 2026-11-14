@@ -4,6 +4,7 @@
  * roster answers "who is on call tonight" across the Practice; this
  * answers it for one birth, and is where a person changes it.
  */
+// jscpd:ignore-start -- the sibling Engagement specs' import list
 import type { ComponentProps } from 'svelte';
 import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -14,6 +15,7 @@ import '#lib/styles/app.css';
 import Page from './EngagementScreen.svelte';
 import { toApiResponder, toPageState } from '../../../../routeFixture.js';
 import { asDoula, detail as fixtureDetail, fixture, onCallPanel, session } from './page.fixture.js';
+// jscpd:ignore-end
 import { pageState } from '#testing/routePage.js';
 
 vi.mock('$app/state', () => import('#testing/routePage.js'));

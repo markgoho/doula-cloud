@@ -67,6 +67,7 @@
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import ReadFailure from '#lib/components/molecules/ReadFailure.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeInvoiceListData } from '#lib/invoice.js';
@@ -298,15 +299,7 @@
 	const isBusy = $derived(isApplying || (shown !== undefined && !isSameKey(shown, wanted) && readFailure === ''));
 
 	// "Try again" runs the read that failed, under the same view and search.
-	let isRetrying = $state(false);
-	async function tryAgain() {
-		isRetrying = true;
-		try {
-			await (appliedSearch === '' ? onRetry() : readSearch(wanted, ++latestSearch));
-		} finally {
-			isRetrying = false;
-		}
-	}
+	const tryAgain = () => (appliedSearch === '' ? onRetry() : readSearch(wanted, ++latestSearch));
 
 	const isBookEmpty = $derived(
 		shown !== undefined && shown.view === 'all' && shown.search === '' && shown.period === undefined && invoices.items.length === 0
@@ -821,10 +814,7 @@
 
 		<!-- T8: in place of the list, so no row from another view is read as this one's; the bar keeps the view and the search. -->
 		{#if readFailure}
-			<stack-l space="var(--space-related)">
-				<Notice message={readFailure} variant="error" />
-				<Button label="Try again" onClick={tryAgain} loading={isRetrying} />
-			</stack-l>
+			<ReadFailure message={readFailure} onRetry={tryAgain} />
 		{:else if shown}
 			<div class="invoices-table">
 				<DataTable

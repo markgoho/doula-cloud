@@ -550,7 +550,7 @@ describe('while the roster is read', () => {
 		const onRetry = vi.fn(async () => {});
 		await setup({ hasReadFailed: true, onRetry });
 
-		await expect.element(testPage.getByText('Who is on call did not load. Nothing you saved is lost.')).toBeVisible();
+		await expect.element(testPage.getByText('Who is on call did not load.')).toBeVisible();
 		await expect.element(testPage.getByRole('radio', { name: 'Next 7 days' })).toBeChecked();
 		await testPage.getByRole('button', { name: 'Try again' }).click();
 
