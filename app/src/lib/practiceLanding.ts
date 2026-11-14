@@ -15,6 +15,7 @@ import { isOpen, loadInbox, type Offer } from './offer.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { loadPendingRequests } from './engagementRequest.js';
 import { loadClientCount } from './client.js';
+import { loadWaitingVisits, type WaitingVisits } from './waitingVisits.js';
 export type { Fetcher } from './fetcher.js';
 import { creditCount, loadBalance } from './billing.js';
 import { loadConnectStatus, type ConnectStatus } from './payments.js';
@@ -223,6 +224,7 @@ export interface PracticeLanding {
 	requests: Block<RequestHealth>;
 	declined: Block<NoDoulaHealth>;
 	tonight: Block<TonightHealth>;
+	waiting: Block<WaitingVisits>;
 	/** Whether the hub shows the notice that recommends a second factor
 	 * (#1533). The BFF decides it; see `isSecondFactorRecommended`. */
 	secondFactorRecommended: boolean;
@@ -355,7 +357,7 @@ export async function loadPracticeLanding(
 ): Promise<PracticeLanding> {
 	const { roles } = session;
 
-	const [openOffers, clientCount, roster, credit, connect, requests, declined, tonight, secondFactorRecommended] = await Promise.all([
+	const [openOffers, clientCount, roster, credit, connect, requests, declined, tonight, waiting, secondFactorRecommended] = await Promise.all([
 		// An Offer goes to a Doula (#2141), so a caller without the role has
 		// none to answer and the hub draws no inbox for her: nothing to read.
 		isDoula(session) ? readOpenOffers(fetcher, practiceId) : [],
@@ -391,6 +393,7 @@ export async function loadPracticeLanding(
 		canReadRoster(roles)
 			? block(async () => tonightFrom(await loadTonightRoster(fetcher, practiceId)))
 			: undefined,
+		canReadRoster(roles) ? block(() => loadWaitingVisits(fetcher, practiceId)) : undefined,
 		canBeRecommendedASecondFactor(session)
 			? isSecondFactorRecommended(fetcher, practiceId)
 			: false
@@ -407,6 +410,7 @@ export async function loadPracticeLanding(
 		requests,
 		declined,
 		tonight,
+		waiting,
 		secondFactorRecommended
 	};
 }

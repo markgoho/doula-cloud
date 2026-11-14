@@ -53,6 +53,9 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enque
 	ir.ExemptGated("POST /api/practices/{practiceId}/visits/list",
 		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
 		false, staffauth.AnyStaff, ScheduleListHandler())
+	// Every Visit waiting for a new Doula, dated or not (#2874). OwnerAndAdmin:
+	// reassigning is theirs, and a Doula has no use for what others left.
+	g.Get("/api/practices/{practiceId}/visits/waiting", staffauth.OwnerAndAdmin, WaitingVisitsHandler())
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/visits", staffauth.AnyStaff, ListHandler())
 	// Who may be named on a Visit at this Engagement (#911). OwnerAndAdmin,
 	// not AnyStaff: it answers a roster question, and naming a colleague is

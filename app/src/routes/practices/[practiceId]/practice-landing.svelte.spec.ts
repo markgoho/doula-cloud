@@ -74,6 +74,8 @@ function refusal(body: string): Response {
 
 const { practiceId } = fixture.params;
 
+const noneWaiting = { total: 0, datedCount: 0, undatedCount: 0, items: [], hasMore: false };
+
 interface SetupOptions {
 	roles?: string[];
 	clients?: unknown[];
@@ -100,6 +102,7 @@ async function setup({
 	const answers: Record<string, Response | Promise<Response>> = {
 		// Before `offers`: its path holds `/offers` (#2508).
 		'no-doula-yet': jsonResponse({ items: [], hasMore: false }),
+		waiting: jsonResponse(noneWaiting),
 		// The declined Offer has no counterpart in the fixture, which
 		// answers `/offers` with only the still-open one -- so it is
 		// written as a spread onto that same Offer rather than a second
@@ -144,6 +147,11 @@ async function setup({
 // #2234's block, found by its heading.
 function tonight() {
 	return testPage.getByRole('heading', { name: 'Who is free tonight' });
+}
+
+// #2874's line, found by its heading.
+function heading() {
+	return testPage.getByRole('heading', { name: 'Visits that need a new Doula' });
 }
 
 // #1533's notice, found by its heading.
@@ -303,6 +311,87 @@ describe('the Practice landing page', () => {
 			expect(testPage.getByRole('heading', { name: heading }).elements()).toHaveLength(0);
 		}
 		expect(testPage.getByRole('complementary').elements()).toHaveLength(0);
+	});
+
+	describe('visits that need a new Doula (#2874)', () => {
+		const waiting = {
+			total: 3,
+			datedCount: 2,
+			undatedCount: 1,
+			latestScheduledAt: '2099-03-01T03:00:00Z',
+			items: [{ engagementId: 'engagement-4', clientName: 'Anne-Marie Ochieng-Whitfield', undatedCount: 1 }],
+			hasMore: false
+		};
+
+		it('links the dated Visits to the Schedule narrowed to them, over days that hold the last, and names each Engagement holding an undated one', async () => {
+			await setup({ overrides: { waiting: jsonResponse(waiting) } });
+
+			await expect.element(heading()).toBeVisible();
+			const dated = testPage.getByRole('link', { name: '2 Visits on the Schedule' });
+			await expect.element(dated).toBeVisible();
+			const href = dated.element().getAttribute('href')!;
+			expect(href).toContain(`/practices/${practiceId}/schedule?`);
+			expect(href).toContain('needsDoula=true');
+			expect(href).toMatch(/to=2099-(02-28|03-01)/);
+			await expect.element(testPage.getByText('1 Visit with no date yet:')).toBeVisible();
+			const engagement = testPage.getByRole('link', { name: 'Anne-Marie Ochieng-Whitfield' });
+			await expect.element(engagement).toBeVisible();
+			expect(engagement.element().getAttribute('href')).toBe(
+				`/practices/${practiceId}/engagements/engagement-4`
+			);
+		});
+
+		it('keeps to the default days when the last Visit is within them, and says how many each Engagement holds', async () => {
+			const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+			const pat = { engagementId: 'engagement-4', clientName: 'Pat Lee', undatedCount: 3 };
+			await setup({
+				overrides: {
+					waiting: jsonResponse({ ...waiting, latestScheduledAt: tomorrow, undatedCount: 3, items: [pat] })
+				}
+			});
+
+			const dated = testPage.getByRole('link', { name: '2 Visits on the Schedule' });
+			await expect.element(dated).toBeVisible();
+			expect(dated.element().getAttribute('href')).toBe(`/practices/${practiceId}/schedule?needsDoula=true`);
+			await expect.element(testPage.getByRole('link', { name: 'Pat Lee, 3 Visits' })).toBeVisible();
+		});
+
+		it('draws only the Schedule link when every Visit has a date, and only the names when none has', async () => {
+			await setup({ overrides: { waiting: jsonResponse({ ...waiting, total: 2, undatedCount: 0, items: [] }) } });
+			await expect.element(testPage.getByRole('link', { name: '2 Visits on the Schedule' })).toBeVisible();
+			expect(testPage.getByText('with no date yet', { exact: false }).elements()).toHaveLength(0);
+		});
+
+		it('names the undated Engagements when nothing is dated, and says when there are more of them', async () => {
+			await setup({
+				overrides: { waiting: jsonResponse({ ...waiting, total: 1, datedCount: 0, latestScheduledAt: undefined, hasMore: true }) }
+			});
+
+			await expect.element(testPage.getByText('1 Visit with no date yet:')).toBeVisible();
+			await expect.element(testPage.getByText('Showing the first 1 Clients.')).toBeVisible();
+			expect(testPage.getByRole('link', { name: 'Visits on the Schedule', exact: false }).elements()).toHaveLength(0);
+		});
+
+		it('is not drawn when no Visit waits', async () => {
+			await setup();
+
+			await expect.element(testPage.getByRole('heading', { name: 'Recent activity' })).toBeVisible();
+			expect(heading().elements()).toHaveLength(0);
+		});
+
+		it('says so when the Visits cannot be read', async () => {
+			await setup({ overrides: { waiting: refusal('nope') } });
+
+			await expect.element(testPage.getByText('Could not load the Visits that need a new Doula just now.')).toBeVisible();
+		});
+
+		it('is never asked for a Doula without Owner or Admin', async () => {
+			await setup({ roles: ['doula'] });
+
+			await expect.element(testPage.getByRole('heading', { name: 'Clients waiting on a reply' })).toBeVisible();
+			expect(apiFetchWithSession).not.toHaveBeenCalledWith(`/api/practices/${practiceId}/visits/waiting`);
+			expect(heading().elements()).toHaveLength(0);
+		});
 	});
 
 	describe('who is free tonight (#2234)', () => {

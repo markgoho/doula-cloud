@@ -146,6 +146,19 @@ function respondForPopulatedPractice(path: string): Response {
 	// #2508: declines on work nobody has, Owner and Admin only. A birth
 	// with #537's double-barreled names on both sides, beside a
 	// postpartum one declined by an address that never joined.
+	if (path.includes('/visits/waiting')) {
+		return jsonResponse({
+			total: 5,
+			datedCount: 3,
+			undatedCount: 2,
+			latestScheduledAt: '2026-12-20T15:00:00Z',
+			items: [
+				{ engagementId: 'engagement-4', clientName: 'Anne-Marie Ochieng-Whitfield', undatedCount: 1 },
+				{ engagementId: 'engagement-6', clientName: 'Marisol Terrazas', undatedCount: 1 }
+			],
+			hasMore: false
+		});
+	}
 	if (path.includes('/no-doula-yet')) {
 		return jsonResponse({
 			items: [

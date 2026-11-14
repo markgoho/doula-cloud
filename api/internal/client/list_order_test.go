@@ -156,12 +156,12 @@ type owingClient struct {
 	dueOn string
 }
 
-// TestListHandler_OrdersByWhatTheMoneyLinesShowAsOwed is the owed order:
-// the sum over a Client's open Engagements of the amount each line shows as
-// owed (its live Contract's oldest open Invoice, with no payment on its
-// way), most first, then the default key, then id. A paid Invoice, one whose
+// TestListHandler_OrdersByWhatTheClientOwesInAll is the owed order (#2874):
+// the sum of every open Invoice a Client owes, across her open Engagements
+// (live Contracts only, with no payment on its way), most first, then the
+// default key, then id. A paid Invoice, one whose
 // payment is on its way and a voided Contract's add nothing.
-func TestListHandler_OrdersByWhatTheMoneyLinesShowAsOwed(t *testing.T) {
+func TestListHandler_OrdersByWhatTheClientOwesInAll(t *testing.T) {
 	db := testdb.New(t)
 	practiceID, _ := testdb.SeedStaffAtNewPractice(t, db, "staff-owner-owed-order", []string{ownerRole}, "employee")
 
@@ -171,11 +171,9 @@ func TestListHandler_OrdersByWhatTheMoneyLinesShowAsOwed(t *testing.T) {
 		setDueDate(t, db, engagementID, dueOn)
 		contractID := seedClientContract(t, db, engagementID, contractSigned)
 		var owed int64
-		for i, amount := range amounts {
+		for _, amount := range amounts {
 			seedClientInvoice(t, db, practiceID, contractID, "open", amount)
-			if i == 0 {
-				owed = amount
-			}
+			owed += amount
 		}
 		c := owingClient{id: clientID, owed: owed, dueOn: dueOn}
 		all = append(all, c)
@@ -189,8 +187,13 @@ func TestListHandler_OrdersByWhatTheMoneyLinesShowAsOwed(t *testing.T) {
 	seedClientInvoice(t, db, practiceID, seedClientContract(t, db, secondEngagement, contractSigned), "open", 30000)
 	all[len(all)-1].owed = 50000
 
-	// The line shows the oldest open Invoice, 100, never the 400 after it.
+	// Both open Invoices of one Contract add up, 100 and 400, and tie with the
+	// Client above at 500 until the due date decides.
 	owes("Deposit And Balance", "2027-03-01", 10000, 40000)
+
+	// Two smaller Invoices, 200 each, rank above a single 350.
+	owes("Single Larger", "2027-03-02", 35000)
+	owes("Two Smaller", "2027-03-03", 20000, 20000)
 
 	owes("Mid", "2027-03-05", 30000)
 

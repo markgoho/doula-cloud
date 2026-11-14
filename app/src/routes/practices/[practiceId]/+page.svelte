@@ -49,6 +49,14 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { startHref } from './clients/new/intake.js';
 	import {
+		datedWaitingHref,
+		datedWaitingLabel,
+		isWaitingLineShown,
+		undatedWaitingLabel,
+		waitingEngagementLabel,
+		type WaitingVisits
+	} from '#lib/waitingVisits.js';
+	import {
 		activityLedgerColumns,
 		hasLedgerRowClockTime,
 		loadPracticeActivityPage,
@@ -309,6 +317,7 @@
 		/>
 	{/if}
 	{#if isTonightBlockShown(landing!.tonight)}{@render tonightBlock(landing!.tonight)}{/if}
+	{#if isWaitingLineShown(landing!.waiting)}{@render waitingBlock(landing!.waiting)}{/if}
 	<!--
 		#1533: after who is free tonight, before the rest of her work. Only
 		in `primary`, which the empty Practice never draws (ADR-0048); the
@@ -377,6 +386,47 @@
 				<Text text="Could not load who is on call just now." tone="muted" />
 			{:else}
 				<SummaryList rows={tonightRows(tonight)} />
+			{/if}
+		</stack-l>
+	</section>
+{/snippet}
+
+{#snippet waitingBlock(waiting: WaitingVisits | 'unavailable')}
+	<section>
+		<stack-l space="var(--space-3)">
+			<Heading level={2} variant="section" text="Visits that need a new Doula" />
+			{#if waiting === 'unavailable'}
+				<Text text="Could not load the Visits that need a new Doula just now." tone="muted" />
+			{:else}
+				{#if waiting.datedCount > 0}
+					<Link
+						href={datedWaitingHref(
+							resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! }),
+							waiting,
+							new Date(),
+							session.timezone
+						)}
+						label={datedWaitingLabel(waiting)}
+						variant="secondary"
+					/>
+				{/if}
+				{#if waiting.undatedCount > 0}
+					<Text text={`${undatedWaitingLabel(waiting)}:`} tone="variant" />
+					<ul class="declined-list">
+						{#each waiting.items as item (item.engagementId)}
+							<li>
+								<Link
+									href={offerEngagementHref(item.engagementId)}
+									label={waitingEngagementLabel(item)}
+									variant="secondary"
+								/>
+							</li>
+						{/each}
+					</ul>
+					{#if waiting.hasMore}
+						<Text text="Showing the first {waiting.items.length} Clients." tone="muted" />
+					{/if}
+				{/if}
 			{/if}
 		</stack-l>
 	</section>

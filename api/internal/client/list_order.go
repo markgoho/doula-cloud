@@ -37,27 +37,25 @@ func isKnownOrder(order string) bool {
 // name, lower-cased, so "alma" and "Alma" sort together and ties fall to id.
 const nameKeyExpr = `lower(concat_ws(' ', COALESCE(NULLIF(c.preferred_name, ''), c.given_name), NULLIF(c.family_name, '')))`
 
+// owedInvoicesFrom and owedInvoicesWhere are the Invoices a Client owes in
+// all (#2874): every open Invoice with no payment on its way, on the live
+// (non-voided) Contract of each of her open Engagements. The owed order sorts
+// by their sum and the Money cell says their sum and their count, so both read
+// this one definition.
+const (
+	owedInvoicesFrom = `
+	    FROM engagements ge
+	    JOIN contracts gc ON gc.engagement_id = ge.id AND gc.status <> 'voided'
+	    JOIN invoices gi ON gi.contract_id = gc.id`
+	owedInvoicesWhere = `ge.status <> 'completed' AND gi.status = 'open' AND gi.payment_processing_since IS NULL`
+)
+
 // owedJoin is the owed order's key, joined only when that order is asked for:
-// the sum, over the Client's open Engagements, of the amount each Money line
-// shows as owed or overdue. A line shows the Engagement's live Contract's
-// oldest open Invoice while one is open (the rollup query's own choice, #741),
-// and it is owed when no payment on it is on its way. owed.owed_cents is 0 for
-// a Client with none.
+// the sum of the Invoices the Client owes in all, 0 for a Client with none.
 const owedJoin = `
 	LEFT JOIN LATERAL (
-	    SELECT COALESCE(sum(gi.amount_cents) FILTER (WHERE gi.status = 'open' AND gi.payment_processing_since IS NULL), 0)::bigint AS owed_cents
-	    FROM engagements ge
-	    LEFT JOIN LATERAL (
-	        SELECT gc.id FROM contracts gc WHERE gc.engagement_id = ge.id
-	        ORDER BY (gc.status = 'voided'), gc.created_at DESC LIMIT 1
-	    ) gct ON true
-	    LEFT JOIN LATERAL (
-	        SELECT i.status, i.amount_cents, i.payment_processing_since FROM invoices i
-	        WHERE i.contract_id = gct.id
-	        ORDER BY (i.status <> 'open'), (CASE WHEN i.status = 'open' THEN i.created_at END), i.created_at DESC
-	        LIMIT 1
-	    ) gi ON true
-	    WHERE ge.client_id = c.id AND ge.status <> 'completed'
+	    SELECT COALESCE(sum(gi.amount_cents), 0)::bigint AS owed_cents` + owedInvoicesFrom + `
+	    WHERE ge.client_id = c.id AND ` + owedInvoicesWhere + `
 	) owed ON true`
 
 // listKeys names the columns the order and the cursor compare, which differ

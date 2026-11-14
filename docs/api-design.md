@@ -112,11 +112,13 @@ A list a reader can reorder (#2869) takes the order as a query parameter and kee
 4. **Ties break by `id`**, in the direction of the order, so a page boundary never skips or repeats rows that share a sort key. The cursor comparison is `>` for an ascending key and `<` for a descending one, over the whole `(key, id)` tuple.
 5. **The total does not depend on the order.** A count over the same rows reads the same filter whichever order is asked for.
 
+The Visits waiting for a new Doula (`GET /api/practices/{id}/visits/waiting`, Owner and Admin only, #2874) count dated and undated Visits Practice-wide and list the Engagements holding undated ones, by Client name, cursor-paged.
+
 The Schedule (`GET /api/practices/{id}/visits`) is the first list on it: empty is soonest first, `latest` is `ORDER BY v.scheduled_at DESC, v.id DESC`.
 
 The Invoices list (`GET /api/practices/{id}/invoices`, and the `order` field of the `POST .../invoices/list` body) is the second. Empty is the view's own order: sent newest first on the whole book, payment due earliest first on Unpaid and Overdue. The others are `sent-newest`, `sent-oldest`, `due-earliest`, `due-latest`, `amount-largest` and `amount-smallest`. Its cursor is bound to the view and the order as the request named them, so a cursor from another view or order is a 400. Sent, payment due and amount are NOT NULL, so no order has a rule for where a missing value sorts.
 
-The Clients list (`GET /api/practices/{id}/clients`, and the `order` in the body of `POST …/clients/list`) is on it too: empty is soonest due first, then most recently ended; `name` and `name-desc` sort by her lower-cased full name; `owed` sorts by the amount her Money lines show as owed, most first, then the default key. `owed` from a contractor Doula is a 400, since she sees no money.
+The Clients list (`GET /api/practices/{id}/clients`, and the `order` in the body of `POST …/clients/list`) is on it too: empty is soonest due first, then most recently ended; `name` and `name-desc` sort by her lower-cased full name; `owed` sorts by what she owes in all (#2874: the sum of her open Invoices with no payment on its way, which each row also carries as `owedCents` with `owedInvoiceCount`), most first, then the default key. `owed` from a contractor Doula is a 400, since she sees no money.
 
 ---
 
