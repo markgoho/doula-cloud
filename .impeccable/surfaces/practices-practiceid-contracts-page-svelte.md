@@ -72,6 +72,7 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page; "(s
 | More than one signer, or a countersignature | Declined | one Client signs (`GLOSSARY.md:59`); a Practice's countersignature is parked on #2563 |
 | Bulk selection and bulk actions | Later (#2951) | the category's bulk act is reminding several signers at once; it is decided with the reminder. Nothing else on record is done to several Contracts at once |
 | A period, and an export of what the list shows | Later (#2954) | PandaDoc's Date filter, HoneyBook's "sent only This month, This year, or Last year", Stripe's export (https://docs.stripe.com/dashboard/basics). Both readings rejected a decline, as they did on the Invoices list (#2871). No persona has a job on record for a Contracts register by period, so #2954 asks three first and then builds both on the Invoices list's model |
+| A saved view | Declined | the address is the saved view, and the nav's link is each reader's own default; the sibling lists' recorded reason. Two graders named it at the baseline |
 | Grouping, a calendar view | Declined | the views are the grouping, and a Contract book is not read by day |
 | Density and column choice | Declined | no job on record, and no column here is optional to a chaser; both readings accepted |
 | Keyboard shortcuts | Later (#2956) | one decision for the whole app, the founder's, on #2956 |

@@ -14,10 +14,10 @@ Seed: the demo Practice under `dev:full` (Rooted Birth Collective, 14 Doulas). A
 
 Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`, `docs/test-plans`), not research (ADR-0045). The records name the jobs; the action budgets are ours. A press of Apply is an action. A row's link lands at the Engagement's Contract section, as the Invoices list's lands at its Invoices section (#2240).
 
-- **T1 Dee, who to chase:** "Has she signed yet?" On arriving on Contracts, see every Contract that is not signed, with the count stated; in ≤ 2 actions see only those sent and waiting on the Client, the longest wait first, each row with the Client, the day it was sent, how many days it has waited and who sent it. The wait is counted from the day it was sent, never from the day the Draft was made. (`journeys/non-doula-admin.md:119`, `:185`, `personas/non-doula-admin.md:11`)
+- **T1 Dee, who to chase:** "Has she signed yet?" On arriving on Contracts, see every Contract that is not signed (made or sent, never one voided), with the count stated; in ≤ 2 actions see only those sent and waiting on the Client, the longest wait first, each row with the Client, the day it was sent, how many days it has waited and who sent it. The wait is counted from the day it was sent, never from the day the Draft was made. (`journeys/non-doula-admin.md:119`, `:185`, `personas/non-doula-admin.md:11`)
 - **T2 Dee, get it out:** "Get it out today." In ≤ 2 actions see the Contracts made and not sent yet, with their count, none of them said to be waiting on a Client. In 1 action from a row the Engagement opens with its Contract section's heading and either "Send Contract" or the notice that says why it cannot be sent yet, in view at 1280×800. After sending, Back returns to the list with the view and position kept: in the not-sent view the Contract has left it and the count is one lower; in the not-signed view its row reads sent today. (`journeys/non-doula-admin.md:103`, `api/internal/contracts/awaiting.go`)
 - **T3 Renata or Dee, a void to decide:** on arriving, read how many void requests wait for a decision and, for each, the Client, who asked, the whole reason and how long ago, before the Contracts list and without an action. In 1 action from a request the Engagement opens at its Contract section with the request ("… asked to void this Contract: …"), its "Decline" and the "Void this Contract" button in view at 1280×800. After a decline there, Back returns to the list and the request has left the queue. (#971, `test-plans/non-doula-admin.md:91`, `:92`, `:283`, `:284`)
-- **T4 Renata, any Client's Contract:** find one Client's Contract in a book of 31 or more, whatever its state, by typing a part of the name: ≤ 3 actions from arriving (the whole book, the name, Apply; the search reads within the view, as on Invoices), no Client's name in the address (#1829), and Back from the Engagement returns with the view, the search and its results kept. A signed row says the day it was signed and, for a reader the PDF read serves, offers the Signed PDF in 1 action under the Engagement's own label for it; a voided row says so in the Engagement's words. (`journeys/practice-owner.md:4`, `:6`, `worlds/rooted-birth-collective.md:111`, `:166`, `GLOSSARY.md:59`)
+- **T4 Renata, any Client's Contract:** find one Client's Contract in a book of 31 or more, whatever its state, by typing a part of the name: ≤ 3 actions from arriving (the whole book, the name, Apply; the search reads within the view, as on Invoices), no Client's name in the address (#1829), and Back from the Engagement returns with the view, the search and its results kept. A signed row says the day it was signed and, for a reader the PDF read serves, offers the Signed PDF (`GLOSSARY.md`'s name for it) in 1 action, its accessible name the Engagement's own label for it; a voided row says so in the Engagement's words. (`journeys/practice-owner.md:4`, `:6`, `worlds/rooted-birth-collective.md:111`, `:166`, `GLOSSARY.md:59`)
 - **T5 Renata, one Doula's Contracts:** in ≤ 2 actions the list shows only the Contracts on one Doula's Engagements, with a tag that names her and the choice in the address; one action clears it. The address with nothing chosen is the whole Practice, and the nav's link opens the whole Practice for Renata, who is an Owner. (`personas/practice-owner.md:11`, `:31`)
 - **T6 Priya, phone (375px), her own:** signed in as Priya, an employed Doula with no Owner or Admin role (walked as her by `persona-walker`, never judged from Renata's session), the nav offers her Contracts (#2851, decided 2026-11-14: the nav, for every Staff member the read serves), and arriving by it the list opens on the Contracts of her own Engagements ("Mine", which the nav's link turns on for a Doula who is neither Owner nor Admin, as #2870 decided for the Clients list and the Schedule; a tag she can clear to read the whole Practice, which ADR-0008 gives her). The first Contract is whole on the first screen (375×740). 0 actions to hers, ≤ 2 to everyone's. She is shown no queue and no refusal. (#973: "she has no list of what she is waiting on"; #2851; `personas/employed-doula.md:13`)
 - **T7 Lena, a contractor:** signed in as Lena (walked as her), the nav offers her Contracts and the list holds only the Contracts on Engagements she holds a granted attachment on; no other Client's name and no Contract's amount is on the screen or in the list's response; no Doula select and no "Mine" are drawn for her; no signed row offers her the Signed PDF, whose read refuses her; she is shown no queue; and where a view holds nothing for her the screen says so in words, never as an error. (ADR-0008, #973, #2851)
@@ -28,8 +28,8 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
 ## Heuristic checks
 
 1. **Visibility of system status**
-   - a. Loading shows a skeleton within 300ms and nothing moves when the content lands.
-   - b. Every filter change visibly changes the list or says that nothing matched.
+   - a. Loading shows a skeleton within 300ms, and neither the queue, the filter bar nor the Contracts move when the content lands.
+   - b. After every filter change the result line and the rows match what is applied, or the screen says that nothing matched.
    - c. The result line states how many Contracts are shown, and of how many while more exist.
    - d. The result line states the view and the order.
    - e. Every applied filter, and a search, is stated as a tag or in the result line.
@@ -39,7 +39,7 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
    - a. Every label is a word an owner, an office manager or a doula uses.
    - b. No two labels on the screen can be read as the same thing.
    - c. A Contract's state uses the Engagement's words for it: "Draft, not sent yet", "Sent, waiting for the Client to sign", "Signed", "Voided, no longer active", or a shortening of each that keeps its first word. A Draft is never said to be waiting on anyone but the Practice.
-   - d. Every day reads as ADR-0022 writes one, the year only when it is not this one.
+   - d. Every day reads as ADR-0022 writes one, with the year only when it is not this one (`DESIGN.md`, "The Schedule's days"), and no clock time.
    - e. A wait is a count of days ("12 days"), never an instant, and "today" for one sent today.
    - f. The capital on Contract, Client, Doula and Practice follows the domain-noun rule for a Staff screen.
 3. **User control and freedom**
@@ -80,9 +80,9 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
    - c. Table rows have equal rhythm (row heights within 4px of each other, a wrapped reason excepted).
    - d. Cards keep one field order.
    - e. No element on the page carries no information.
-   - f. No fact is said twice in a row, or between the intro, the result line and the table.
+   - f. No fact is said twice in a row or a card, and the intro repeats nothing the result line or a tag states.
    - g. At 1280×800 as Renata, with the seed's three requests waiting, and at 375×740 as Priya, who has no queue, the first Contract (Client, state, and the day or the wait) is wholly on the first screen under the title and the filters.
-   - h. With no request waiting, one line says so and no empty table or heading-and-paragraph block stands above the Contracts.
+   - h. With no request waiting, one line says so and no empty table or heading-and-paragraph block stands above the Contracts (the seed always holds requests, so this is judged from the screen's spec).
 9. **Error recovery**
    - a. T10 passes.
    - b. A view or search with no results says what was looked for and offers the way back to the whole book.
@@ -100,3 +100,5 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
 - The constraints hold: ADR-0021 GOV.UK patterns, ADR-0024 intrinsic layout (no viewport queries), the Voice rules (4, 2).
 
 ## Changes to this rubric
+
+- 2026-11-14, after the baseline round and the design call: T4 asked for the Signed PDF "under the Engagement's own label for it". That label, "Download signed Contract (PDF)", is 30 characters; as a visible cell it widens the table past the 1280px frame, and the list would then draw cards where its siblings draw a table (H4a). The person's job is to get the PDF in one action and to hear what the button does, so the label is the button's accessible name, and a card shows it whole. H2d now names the rule it had stated without a source: the year only when it is not this one is the Schedule's and On call's (`DESIGN.md`), and a day here carries no clock time.
