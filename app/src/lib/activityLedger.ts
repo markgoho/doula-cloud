@@ -18,6 +18,7 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { clientActivityPhrase } from './clientRegister.js';
 import { formatActivityTimestamp, formatCalendarDay, hasClockTime, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
+import { invoicesExportedDetail } from './invoiceExport.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
 import { staffActivityPhrase } from './staffActivityPhrases.js';
@@ -183,6 +184,14 @@ function factChangeText(row: ActivityEntry): string | undefined {
 }
 
 /**
+ * The Invoices download's line (#2871): what left, from the row's diff, after the row's own words.
+ */
+function exportedText(row: ActivityEntry): string | undefined {
+	const detail = row.action === 'invoices_exported' && row.diff ? invoicesExportedDetail(row.diff) : undefined;
+	return detail ? `${staffActivityPhrase(row.action)}. ${detail}` : undefined;
+}
+
+/**
  * The two staff surfaces' event text: the server's own `detail` sentence
  * when the entry carries one (#887), a fact's before and after when the
  * diff carries both (#1423), and the row's own words otherwise (#2006,
@@ -201,7 +210,7 @@ function staffEventText(row: ActivityEntry, timeZone: string): string {
 	}
 	const move =
 		row.reassignedFromName && row.reassignedToName ? { from: row.reassignedFromName, to: row.reassignedToName } : undefined;
-	return factChangeText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit, move);
+	return factChangeText(row) ?? exportedText(row) ?? staffActivityPhrase(row.action, row.subjectName, visit, move);
 }
 
 const DETAIL_VISIT_LEAD = 'Visit';

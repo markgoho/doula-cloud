@@ -14,7 +14,10 @@
 // at all.
 package activityfeed
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Entry is one row of the feed: what it happened to (SubjectKind,
 // SubjectID), what happened (Action), and who did it -- the DTO #486's
@@ -57,6 +60,12 @@ type Entry struct {
 	// action besides.
 	ReassignedFromName string `json:"reassignedFromName,omitempty"`
 	ReassignedToName   string `json:"reassignedToName,omitempty"`
+
+	// Diff is carried for one action only, invoices_exported (#2871): which
+	// slice of the book left the product, in no Client's name, so the Staff
+	// feed can say what was downloaded. Every other row sends none, which
+	// keeps a diff off the Client portal and out of this feed (#1150).
+	Diff json.RawMessage `json:"diff,omitempty"`
 }
 
 // ListResponse is docs/api-design.md section 4's envelope, the same shape

@@ -3,6 +3,7 @@ package activityfeed
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -231,7 +232,8 @@ const personSubjectKind = activity.SubjectMembership
 const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
 	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
-	       a.diff ->> '%[9]s', a.diff ->> '%[10]s'
+	       a.diff ->> '%[9]s', a.diff ->> '%[10]s',
+	       CASE WHEN a.action = '%[11]s' THEN a.diff::text END
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -243,7 +245,8 @@ const listPracticeActivityQueryTemplate = `SELECT a.id, a.subject_kind, a.subjec
 const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.subject_id, a.action, a.actor_kind::text,
 	       %[3]s, subj.name, sc.given_name, sc.preferred_name, sc.family_name, a.created_at,
 	       NULLIF(a.diff ->> '%[7]s', '')::timestamptz, (a.diff ->> '%[8]s')::timestamptz,
-	       a.diff ->> '%[9]s', a.diff ->> '%[10]s'
+	       a.diff ->> '%[9]s', a.diff ->> '%[10]s',
+	       CASE WHEN a.action = '%[11]s' THEN a.diff::text END
 	FROM activity a
 	%[4]s
 	LEFT JOIN staff subj ON a.subject_kind = '%[2]s' AND subj.id = a.subject_id
@@ -256,12 +259,12 @@ const listPracticeActivityAfterQueryTemplate = `SELECT a.id, a.subject_kind, a.s
 var listPracticeActivityQuery = fmt.Sprintf(listPracticeActivityQueryTemplate, //nolint:gosec // all ten interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
 	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt,
-	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter)
+	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter, activity.ActionInvoicesExported)
 
 var listPracticeActivityAfterQuery = fmt.Sprintf(listPracticeActivityAfterQueryTemplate, //nolint:gosec // all ten interpolated values are package-internal constants, not request input
 	practiceBatchSize+1, personSubjectKind, activitypage.SharedActorJoin.Columns, activitypage.SharedActorJoin.Joins,
 	activity.SubjectEngagement, activity.SubjectClient, activity.DiffKeyVisitScheduledAt, activity.DiffKeyVisitCreatedAt,
-	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter)
+	activity.DiffKeyAssignedStaffIDBefore, activity.DiffKeyAssignedStaffIDAfter, activity.ActionInvoicesExported)
 
 // rawEntry is Entry plus the row id fetchPage needs to mint a cursor but
 // never puts in the response, the same shape engagement.activityRow
@@ -368,9 +371,10 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		var staffName, clientGivenName, clientPreferredName, clientFamilyName, operatorName, subjectName sql.NullString
 		var subjectClientGivenName, subjectClientPreferredName, subjectClientFamilyName sql.NullString
 		var visitScheduledAt, visitAddedAt sql.NullTime
+		var exportDiff sql.NullString
 		if err := rows.Scan(&row.cursorID, &row.SubjectKind, &row.SubjectID, &row.Action, &actorKind,
 			&staffName, &clientGivenName, &clientPreferredName, &clientFamilyName, &operatorName, &subjectName,
-			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt, &visitScheduledAt, &visitAddedAt, &row.movedFrom, &row.movedTo); err != nil {
+			&subjectClientGivenName, &subjectClientPreferredName, &subjectClientFamilyName, &row.CreatedAt, &visitScheduledAt, &visitAddedAt, &row.movedFrom, &row.movedTo, &exportDiff); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("activityfeed: scan practice activity row: %w", err)
 		}
@@ -380,6 +384,9 @@ func queryBatch(ctx context.Context, tx *sql.Tx, practiceID string, after *pagec
 		}
 		if visitAddedAt.Valid {
 			row.VisitAddedAt = &visitAddedAt.Time
+		}
+		if exportDiff.Valid {
+			row.Diff = json.RawMessage(exportDiff.String)
 		}
 		// #2111: this feed sets every Client at the Practice side by side,
 		// so a Client actor reads her full name, as the subject name beside
