@@ -31,6 +31,8 @@ const roster = {
 const tonightRoster = {
 	from: '2026-10-31',
 	to: '2026-10-31',
+	today: '2026-10-31',
+	rule: { startRule: 'gestational_week', startWeek: 37, graceDays: 14 },
 	windows: [
 		{
 			engagementId: 'engagement-1',
@@ -39,7 +41,8 @@ const tonightRoster = {
 			onCall: [{ staffId: 'staff-1', name: 'Rowan Petrosyan', from: '2026-10-31', to: '2026-10-31', narrowed: false }],
 			gaps: [],
 			unstaffedDays: [],
-			uncovered: false
+			uncovered: false,
+			tonight: { holders: [{ staffId: 'staff-1', name: 'Rowan Petrosyan' }], isNobody: false }
 		},
 		{
 			engagementId: 'engagement-2',
@@ -48,14 +51,39 @@ const tonightRoster = {
 			onCall: [{ staffId: 'staff-1', name: 'Rowan Petrosyan', from: '2026-10-31', to: '2026-10-31', narrowed: false }],
 			gaps: [],
 			unstaffedDays: [],
-			uncovered: true
+			uncovered: true,
+			tonight: { holders: [], isNobody: true }
+		},
+		{
+			engagementId: 'engagement-3',
+			clientName: 'Tessa Moreau',
+			window: { start: '2026-11-20', end: '2026-12-25' },
+			onCall: [{ staffId: 'staff-2', name: 'Joss Adeyemi', from: '2026-11-20', to: '2026-12-25', narrowed: false }],
+			gaps: [],
+			unstaffedDays: [],
+			uncovered: false
 		}
 	],
 	noWindow: [],
 	doulas: [
-		{ staffId: 'staff-2', name: 'Joss Adeyemi', available: true, concurrentWindows: 0 },
-		{ staffId: 'staff-3', name: 'Marisol Terrazas', available: false, concurrentWindows: 0 },
-		{ staffId: 'staff-1', name: 'Rowan Petrosyan', available: true, concurrentWindows: 2 }
+		{ staffId: 'staff-2', name: 'Joss Adeyemi', births: [], unreachable: [], isOnCallTonight: false },
+		{
+			staffId: 'staff-3',
+			name: 'Marisol Terrazas',
+			births: [],
+			unreachable: [
+				{
+					gapId: 'gap-1',
+					engagementId: 'engagement-1',
+					clientName: 'Casey Estrada',
+					startsAt: '2026-10-31T22:00:00Z',
+					endsAt: '2026-11-01T10:00:00Z',
+					isCovered: true
+				}
+			],
+			isOnCallTonight: false
+		},
+		{ staffId: 'staff-1', name: 'Rowan Petrosyan', births: [], unreachable: [], isOnCallTonight: true }
 	]
 };
 
@@ -234,7 +262,7 @@ describe('loadPracticeLanding', () => {
 
 		expect(fetcher.mock.calls.map(([path]) => path)).toContain('/api/practices/practice-1/on-call');
 		expect(landing.tonight).toEqual({
-			onCall: [{ name: 'Rowan Petrosyan', clients: ['Casey Estrada', 'Quinn Estrada'] }],
+			onCall: [{ name: 'Rowan Petrosyan', clients: ['Casey Estrada'] }],
 			free: ['Joss Adeyemi'],
 			away: ['Marisol Terrazas'],
 			uncovered: ['Quinn Estrada'],

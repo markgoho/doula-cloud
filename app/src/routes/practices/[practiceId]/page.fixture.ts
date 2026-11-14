@@ -93,10 +93,13 @@ const onCallDoula = (staffId: string, name: string) => ({
 	to: '2026-10-31',
 	narrowed: false
 });
+const holds = (staffId: string, name: string) => ({ holders: [{ staffId, name }], isNobody: false });
 
 export const tonightRoster = {
 	from: '2026-10-31',
 	to: '2026-10-31',
+	today: '2026-10-31',
+	rule: { startRule: 'gestational_week', startWeek: 37, graceDays: 14 },
 	windows: [
 		{
 			engagementId: 'engagement-1',
@@ -105,7 +108,8 @@ export const tonightRoster = {
 			onCall: [onCallDoula('staff-1', 'Rowan Petrosyan-Abernathy')],
 			gaps: [],
 			unstaffedDays: [],
-			uncovered: false
+			uncovered: false,
+			tonight: holds('staff-1', 'Rowan Petrosyan-Abernathy')
 		},
 		{
 			engagementId: 'engagement-2',
@@ -114,7 +118,8 @@ export const tonightRoster = {
 			onCall: [onCallDoula('staff-1', 'Rowan Petrosyan-Abernathy')],
 			gaps: [],
 			unstaffedDays: [],
-			uncovered: false
+			uncovered: false,
+			tonight: holds('staff-1', 'Rowan Petrosyan-Abernathy')
 		},
 		{
 			engagementId: 'engagement-3',
@@ -123,15 +128,40 @@ export const tonightRoster = {
 			onCall: [],
 			gaps: [],
 			unstaffedDays: [{ start: '2026-10-31', end: '2026-10-31' }],
-			uncovered: true
+			uncovered: true,
+			tonight: { holders: [], isNobody: true }
 		}
 	],
 	noWindow: [],
 	doulas: [
-		{ staffId: 'staff-2', name: 'Charlene Boateng-Okonkwo', available: true, concurrentWindows: 0 },
-		{ staffId: 'staff-3', name: 'Marisol Terrazas', available: false, concurrentWindows: 0 },
-		{ staffId: 'staff-1', name: 'Rowan Petrosyan-Abernathy', available: true, concurrentWindows: 2 },
-		{ staffId: 'staff-4', name: 'Joss Adeyemi', available: true, concurrentWindows: 0 }
+		{ staffId: 'staff-2', name: 'Charlene Boateng-Okonkwo', births: [], unreachable: [], isOnCallTonight: false },
+		{
+			staffId: 'staff-3',
+			name: 'Marisol Terrazas',
+			births: [],
+			unreachable: [
+				{
+					gapId: 'gap-1',
+					engagementId: 'engagement-4',
+					clientName: 'Camille Boyd',
+					startsAt: '2026-10-31T22:00:00Z',
+					endsAt: '2026-11-01T10:00:00Z',
+					isCovered: false
+				}
+			],
+			isOnCallTonight: false
+		},
+		{
+			staffId: 'staff-1',
+			name: 'Rowan Petrosyan-Abernathy',
+			births: [
+				{ engagementId: 'engagement-1', clientName: 'Anne-Marie Ochieng-Whitfield', covering: false },
+				{ engagementId: 'engagement-2', clientName: 'Quinn Estrada', covering: false }
+			],
+			unreachable: [],
+			isOnCallTonight: true
+		},
+		{ staffId: 'staff-4', name: 'Joss Adeyemi', births: [], unreachable: [], isOnCallTonight: false }
 	]
 };
 

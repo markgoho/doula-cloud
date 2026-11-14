@@ -539,7 +539,6 @@ const ROUTE_FLOORS: Readonly<Record<string, string>> = {
 	'practices/[practiceId]#activity-table': 'Recent activity',
 	'practices/[practiceId]#waiting-table': 'Clients waiting on a reply',
 	'practices/[practiceId]/invoices#invoices-table': 'The invoice list',
-	'practices/[practiceId]/on-call#roster-table': 'The on-call roster',
 	'practices/[practiceId]/staff#members-table': 'Staff members',
 	'practices/[practiceId]/clients#clients-table': 'The Clients list',
 };

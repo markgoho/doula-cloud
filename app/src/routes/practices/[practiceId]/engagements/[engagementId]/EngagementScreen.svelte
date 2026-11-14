@@ -70,6 +70,8 @@
 	import { stampText } from '#lib/stamp.js';
 	import { landOnRow } from '#lib/landOnRow.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
+	import { formatGapTimes } from '#lib/coverageGap.js';
+	import CoverageGapWhen from '#lib/components/molecules/CoverageGapWhen.svelte';
 	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import { instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
 	import {
@@ -1778,10 +1780,12 @@
 	// again once the form has gone. Only Cancel sets it: a recorded gap's
 	// status takes focus instead.
 	let isGapOpenerRefocused = $state(false);
+	let gapBeingChangedId = $state<string | undefined>();
 
 	function openOnCall(change?: OnCallChange) {
 		openOnCallChange = change;
 		isGapOpenerRefocused = false;
+		if (change !== 'gap') clearGapFields();
 		onCallDaysError = '';
 		onCallSavedMessage = '';
 		gapError = '';
@@ -1790,6 +1794,26 @@
 	function toggleDaysChange(staffId: string) {
 		if (isDaysChangeOpen(staffId)) openOnCall();
 		else openOnCall({ staffId });
+	}
+
+	function clearGapFields() {
+		gapBeingChangedId = undefined;
+		gapStaffId = '';
+		gapStartsAt = '';
+		gapEndsAt = '';
+		gapReason = '';
+		gapCoveringStaffId = '';
+		gapSubmission.errors = [];
+	}
+
+	function changeGap(gap: CoverageGap) {
+		openOnCall('gap');
+		gapBeingChangedId = gap.id;
+		gapStaffId = gap.staffId;
+		gapStartsAt = toDatetimeLocalValue(gap.startsAt, timeZone);
+		gapEndsAt = toDatetimeLocalValue(gap.endsAt, timeZone);
+		gapReason = gap.reason ?? '';
+		gapCoveringStaffId = gap.coveringStaffId ?? '';
 	}
 
 	type OnCallDoulaRow = SummaryListRow & { staffId: string };
@@ -1853,18 +1877,26 @@
 				const errors = coverageGapErrors(startsAt, endsAt);
 				if (!startsAt || !endsAt || errors.length > 0) return errors;
 
-				await saveGap(apiFetchWithSession, reference.practiceId, reference.engagementId, {
-					staffId: gapStaffId,
-					startsAt: startsAt.toISOString(),
-					endsAt: endsAt.toISOString(),
-					reason: gapReason === '' ? undefined : gapReason,
-					coveringStaffId: gapCoveringStaffId === '' ? undefined : gapCoveringStaffId
-				});
+				await saveGap(
+					apiFetchWithSession,
+					reference.practiceId,
+					reference.engagementId,
+					{
+						staffId: gapStaffId,
+						startsAt: startsAt.toISOString(),
+						endsAt: endsAt.toISOString(),
+						reason: gapReason === '' ? undefined : gapReason,
+						coveringStaffId:
+							gapCoveringStaffId === '' || gapCoveringStaffId === gapStaffId ? undefined : gapCoveringStaffId
+					},
+					gapBeingChangedId
+				);
 				const name = onCall?.doulas.find((doula) => doula.staffId === gapStaffId)?.name ?? 'the Doula';
+				const verb = gapBeingChangedId ? 'changed' : 'recorded';
 				closeGapForm();
 				void loadActivity();
 				await loadOnCall();
-				onCallSavedMessage = `The time ${name} cannot be reached is recorded.`;
+				onCallSavedMessage = `The time ${name} cannot be reached is ${verb}.`;
 			},
 			async (refusal) => inFieldOrder(await orThrownErrors(gapFieldIds)(refusal))
 		);
@@ -1873,12 +1905,6 @@
 	/* Closes the gap form blank, so it opens with nobody chosen next time
 	   (#1916), and drops whatever it last refused. */
 	function closeGapForm() {
-		gapStaffId = '';
-		gapStartsAt = '';
-		gapEndsAt = '';
-		gapReason = '';
-		gapCoveringStaffId = '';
-		gapSubmission.errors = [];
 		openOnCall();
 	}
 
@@ -1941,16 +1967,38 @@
 		)
 	);
 
+	/* The BFF's own rule (`mayWriteFor`): an Owner or an Admin writes any
+	   gap, a Doula only the one that is about her. */
+	function canWriteGap(gap: CoverageGap): boolean {
+		return isPracticeOwnerOrAdmin || gap.staffId === callerStaffId;
+	}
+
+	const gapNow = new Date();
+	const coverHint =
+		'Leave this unanswered where nobody is covering yet. Every Owner and Admin is told, to arrange cover.';
+
 	const gapRows = $derived(
 		(onCall?.gaps ?? []).map(
 			(gap): GapRow => ({
 				gap,
 				label: gap.staffName,
-				value: `${formatInstant(gap.startsAt, timeZone)} to ${formatInstant(gap.endsAt, timeZone)}`,
-				changes: `the gap for ${gap.staffName}`
+				value: formatGapTimes(gap.startsAt, gap.endsAt, timeZone, gapNow),
+				...(canWriteGap(gap) && { changes: `the gap for ${gap.staffName}` })
 			})
 		)
 	);
+
+	const gapStaffOptions = $derived(
+		(onCall?.doulas ?? [])
+			.filter((doula) => isPracticeOwnerOrAdmin || doula.staffId === callerStaffId)
+			.map((doula) => ({ value: doula.staffId, label: doula.name }))
+	);
+	const gapCoveringOptions = $derived(
+		(onCall?.doulas ?? [])
+			.filter((doula) => doula.staffId !== gapStaffId)
+			.map((doula) => ({ value: doula.staffId, label: doula.name }))
+	);
+	const isGapCoverFirst = $derived((onCall?.gaps ?? []).some((gap) => !gap.coveringStaffName));
 
 	async function loadRoster() {
 		if (!isPracticeOwnerOrAdmin) return;
@@ -3308,6 +3356,246 @@
 	in body text, the actor muted. Last in `sections` (below), matching the
 	design brief's #433 amendment: it sits low on every page it appears on.
 -->
+{#snippet onCallDays()}
+	<!--
+		#2042: GOV.UK's Summary list with row actions, the record-page
+		pattern (govuk-alignment.md, "Sections of a record page"). Each
+		Doula's days are a row; an Owner's or an Admin's Change opens the
+		two dates in place under it, because the first and the last day
+		belong together on one form.
+	-->
+	{#if onCallDoulaRows.length > 0}
+		<SummaryList rows={onCallDoulaRows}>
+			{#snippet action(row, describedBy)}
+				<Button
+					label="Change"
+					variant="link"
+					expanded={isDaysChangeOpen(row.staffId)}
+					{describedBy}
+					onClick={() => toggleDaysChange(row.staffId)}
+				/>
+			{/snippet}
+			{#snippet detail(row)}
+				<StackedForm onSubmit={(event) => saveOnCallDays(event, { staffId: row.staffId, name: row.label })}>
+					{#if onCallDaysError}
+						<Notice variant="error" message={onCallDaysError} />
+					{/if}
+					<!-- An empty date is the window's own (`saveNarrowing`), so the
+					     form says so rather than leaving a blank to guess at. -->
+					<LabeledField label="First day on call" hint="Leave it empty to start when the window does.">
+
+						{#snippet children({ id, describedBy, invalid })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								type="date"
+								value={narrowFrom[row.staffId] ?? ''}
+								onInput={(value) => (narrowFrom[row.staffId] = value)}
+							/>
+						{/snippet}
+					</LabeledField>
+					<LabeledField label="Last day on call" hint="Leave it empty to end when the window does.">
+						{#snippet children({ id, describedBy, invalid })}
+							<TextInput
+								{id}
+								{describedBy}
+								{invalid}
+								type="date"
+								value={narrowTo[row.staffId] ?? ''}
+								onInput={(value) => (narrowTo[row.staffId] = value)}
+							/>
+						{/snippet}
+					</LabeledField>
+					<div><Button type="submit" label="Save on-call days" /></div>
+				</StackedForm>
+			{/snippet}
+		</SummaryList>
+	{/if}
+
+{/snippet}
+
+{#snippet onCallGaps(panel: EngagementOnCall)}
+	<Heading level={3} text="When a doula cannot be reached" />
+	{#if gapError}
+		<Notice variant="error" message={gapError} />
+	{/if}
+	{@const canRecordGap = panel.window !== undefined && gapStaffOptions.length > 0}
+	{@const isGapFormOpen = openOnCallChange === 'gap'}
+	{#if panel.gaps.length === 0}
+		<EmptyState
+			message="No times recorded yet."
+			action={canRecordGap && !isGapFormOpen
+				? {
+						label: 'Record a time a doula cannot be reached',
+						onClick: () => openOnCall('gap'),
+						focusOnAppearing: isGapOpenerRefocused
+					}
+				: undefined}
+		/>
+	{:else}
+		<SummaryList rows={gapRows}>
+			{#snippet value(row)}
+				<stack-l space="var(--space-2)">
+					<span>
+						<CoverageGapWhen startsAt={row.gap.startsAt} endsAt={row.gap.endsAt} {timeZone} now={gapNow} />
+					</span>
+					<div>
+						<Badge
+							label={row.gap.coveringStaffName ? `${row.gap.coveringStaffName} covering` : 'Nobody covering'}
+							variant={row.gap.coveringStaffName ? 'success' : 'warning'}
+						/>
+					</div>
+					{#if row.gap.reason}
+						<Text text={row.gap.reason} step="body-sm" tone="variant" />
+					{/if}
+				</stack-l>
+			{/snippet}
+			{#snippet action(row, describedBy)}
+				<cluster-l space="var(--space-3)">
+					<Button
+						label="Change"
+						variant="link"
+						expanded={isGapFormOpen && gapBeingChangedId === row.gap.id}
+						{describedBy}
+						onClick={() => changeGap(row.gap)}
+					/>
+					<Button
+						label="Clear"
+						variant="secondary"
+						size="sm"
+						{describedBy}
+						onClick={() => clearCoverageGap(row.gap)}
+					/>
+				</cluster-l>
+			{/snippet}
+		</SummaryList>
+		{#if canRecordGap && !isGapFormOpen}
+			<div>
+				<Button
+					label="Record a time a doula cannot be reached"
+					variant="secondary"
+					onClick={() => openOnCall('gap')}
+					focusOnAppearing={isGapOpenerRefocused}
+				/>
+			</div>
+		{/if}
+	{/if}
+
+	{#if canRecordGap && isGapFormOpen}
+		<StackedForm onSubmit={submitCoverageGap}>
+			{#if gapSubmission.errors.length > 0}
+				<ErrorSummary errors={gapSubmission.errors} />
+			{/if}
+			<LabeledField
+				id={gapFieldIds.staffId}
+				label="Doula who cannot be reached"
+				error={gapSubmission.errorFor(gapFieldIds.staffId)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<Select
+						{id}
+						{describedBy}
+						{invalid}
+						options={gapStaffOptions}
+						placeholder="Choose a Doula"
+						bind:value={gapStaffId}
+						required
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField
+				id={gapFieldIds.startsAt}
+				label="From"
+				error={gapSubmission.errorFor(gapFieldIds.startsAt)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="datetime-local"
+						value={gapStartsAt}
+						onInput={(value) => (gapStartsAt = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<LabeledField
+				id={gapFieldIds.endsAt}
+				label="Until"
+				error={gapSubmission.errorFor(gapFieldIds.endsAt)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						type="datetime-local"
+						value={gapEndsAt}
+						onInput={(value) => (gapEndsAt = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			{#if gapStaffId === ''}
+				<LabeledField
+					id={gapFieldIds.coveringStaffId}
+					label="Who is covering"
+					hint={coverHint}
+				>
+					{#snippet children({ id, describedBy, invalid })}
+						<Select {id} {describedBy} {invalid} options={[]} placeholder="Choose the Doula first" disabled />
+					{/snippet}
+				</LabeledField>
+			{:else if gapCoveringOptions.length === 0}
+				<stack-l space="var(--space-label)">
+					<Text text="Who is covering" step="label" />
+					<Text
+						text="Nobody else is on this birth yet, so nobody can cover. Put another Doula on this birth first."
+						tone="variant"
+					/>
+				</stack-l>
+			{:else}
+				<LabeledField
+					id={gapFieldIds.coveringStaffId}
+					label="Who is covering"
+					hint={coverHint}
+					error={gapSubmission.errorFor(gapFieldIds.coveringStaffId)}
+				>
+					{#snippet children({ id, describedBy, invalid })}
+						<Select
+							{id}
+							{describedBy}
+							{invalid}
+							options={[{ value: '', label: 'Nobody yet' }, ...gapCoveringOptions]}
+							bind:value={gapCoveringStaffId}
+						/>
+					{/snippet}
+				</LabeledField>
+			{/if}
+			<LabeledField
+				id={gapFieldIds.reason}
+				label="Reason"
+				hint="Optional. Staff at this Practice can read it; the Client never does."
+				error={gapSubmission.errorFor(gapFieldIds.reason)}
+			>
+				{#snippet children({ id, describedBy, invalid })}
+					<TextInput
+						{id}
+						{describedBy}
+						{invalid}
+						value={gapReason}
+						onInput={(value) => (gapReason = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+			<cluster-l space="var(--space-3)">
+				<Button type="submit" label={gapBeingChangedId ? 'Save the gap' : 'Record the gap'} loading={gapSubmission.isSubmitting} />
+				<Button label="Cancel" variant="secondary" onClick={cancelGapForm} />
+			</cluster-l>
+		</StackedForm>
+	{/if}
+{/snippet}
+
 {#snippet onCallSection()}
 	{#if onCallError}
 		<Notice variant="error" message={onCallError} />
@@ -3320,221 +3608,16 @@
 			<Text text={describeNoWindow(onCall.noWindowReason ?? '')} tone="muted" />
 		{/if}
 
-		<!--
-			#2042: GOV.UK's Summary list with row actions, the record-page
-			pattern (govuk-alignment.md, "Sections of a record page"). Each
-			Doula's days are a row; an Owner's or an Admin's Change opens the
-			two dates in place under it, because the first and the last day
-			belong together on one form.
-		-->
-		{#if onCallDoulaRows.length > 0}
-			<SummaryList rows={onCallDoulaRows}>
-				{#snippet action(row, describedBy)}
-					<Button
-						label="Change"
-						variant="link"
-						expanded={isDaysChangeOpen(row.staffId)}
-						{describedBy}
-						onClick={() => toggleDaysChange(row.staffId)}
-					/>
-				{/snippet}
-				{#snippet detail(row)}
-					<StackedForm onSubmit={(event) => saveOnCallDays(event, { staffId: row.staffId, name: row.label })}>
-						{#if onCallDaysError}
-							<Notice variant="error" message={onCallDaysError} />
-						{/if}
-						<!-- An empty date is the window's own (`saveNarrowing`), so the
-						     form says so rather than leaving a blank to guess at. -->
-						<LabeledField label="First day on call" hint="Leave it empty to start when the window does.">
-
-							{#snippet children({ id, describedBy, invalid })}
-								<TextInput
-									{id}
-									{describedBy}
-									{invalid}
-									type="date"
-									value={narrowFrom[row.staffId] ?? ''}
-									onInput={(value) => (narrowFrom[row.staffId] = value)}
-								/>
-							{/snippet}
-						</LabeledField>
-						<LabeledField label="Last day on call" hint="Leave it empty to end when the window does.">
-							{#snippet children({ id, describedBy, invalid })}
-								<TextInput
-									{id}
-									{describedBy}
-									{invalid}
-									type="date"
-									value={narrowTo[row.staffId] ?? ''}
-									onInput={(value) => (narrowTo[row.staffId] = value)}
-								/>
-							{/snippet}
-						</LabeledField>
-						<div><Button type="submit" label="Save on-call days" /></div>
-					</StackedForm>
-				{/snippet}
-			</SummaryList>
-		{/if}
-
 		{#if onCallSavedMessage}
 			<Notice variant="status" message={onCallSavedMessage} isFocusedOnAppear />
 		{/if}
 
-		<Heading level={3} text="When a doula cannot be reached" />
-		{#if gapError}
-			<Notice variant="error" message={gapError} />
-		{/if}
-		{@const canRecordGap = onCall.window !== undefined && onCall.doulas.length > 0}
-		{@const isGapFormOpen = openOnCallChange === 'gap'}
-		<!-- One secondary opener; the form, and its one primary, only when asked. -->
-		{#if onCall.gaps.length === 0}
-			<EmptyState
-				message="No times recorded yet."
-				action={canRecordGap && !isGapFormOpen
-					? {
-							label: 'Record a time a doula cannot be reached',
-							onClick: () => openOnCall('gap'),
-							focusOnAppearing: isGapOpenerRefocused
-						}
-					: undefined}
-			/>
+		{#if isGapCoverFirst}
+			{@render onCallGaps(onCall)}
+			{@render onCallDays()}
 		{:else}
-			<!-- Clear is secondary, and small: it ends a gap rather than
-			     destroying a record, and the row's own words say whose. -->
-			<SummaryList rows={gapRows}>
-				{#snippet value(row)}
-					<stack-l space="var(--space-2)">
-						<span>{row.value}</span>
-						<div>
-							<Badge
-								label={row.gap.coveringStaffName ? `${row.gap.coveringStaffName} covering` : 'Nobody covering'}
-								variant={row.gap.coveringStaffName ? 'success' : 'warning'}
-							/>
-						</div>
-						{#if row.gap.reason}
-							<Text text={row.gap.reason} step="body-sm" tone="variant" />
-						{/if}
-					</stack-l>
-				{/snippet}
-				{#snippet action(row, describedBy)}
-					<Button
-						label="Clear"
-						variant="secondary"
-						size="sm"
-						{describedBy}
-						onClick={() => clearCoverageGap(row.gap)}
-					/>
-				{/snippet}
-			</SummaryList>
-			{#if canRecordGap && !isGapFormOpen}
-				<div>
-					<Button
-						label="Record a time a doula cannot be reached"
-						variant="secondary"
-						onClick={() => openOnCall('gap')}
-						focusOnAppearing={isGapOpenerRefocused}
-					/>
-				</div>
-			{/if}
-		{/if}
-
-		{#if canRecordGap && isGapFormOpen}
-			{@const panel = onCall}
-			<StackedForm onSubmit={submitCoverageGap}>
-				{#if gapSubmission.errors.length > 0}
-					<ErrorSummary errors={gapSubmission.errors} />
-				{/if}
-				<LabeledField
-					id={gapFieldIds.staffId}
-					label="Doula who cannot be reached"
-					error={gapSubmission.errorFor(gapFieldIds.staffId)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							options={panel.doulas.map((doula) => ({ value: doula.staffId, label: doula.name }))}
-							placeholder="Choose a Doula"
-							bind:value={gapStaffId}
-							required
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField
-					id={gapFieldIds.startsAt}
-					label="From"
-					error={gapSubmission.errorFor(gapFieldIds.startsAt)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							type="datetime-local"
-							value={gapStartsAt}
-							onInput={(value) => (gapStartsAt = value)}
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField
-					id={gapFieldIds.endsAt}
-					label="Until"
-					error={gapSubmission.errorFor(gapFieldIds.endsAt)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							type="datetime-local"
-							value={gapEndsAt}
-							onInput={(value) => (gapEndsAt = value)}
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField
-					id={gapFieldIds.coveringStaffId}
-					label="Who is covering"
-					hint="Leave this unanswered where nobody is covering yet. Every owner and admin is told so they can arrange it."
-					error={gapSubmission.errorFor(gapFieldIds.coveringStaffId)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<Select
-							{id}
-							{describedBy}
-							{invalid}
-							options={[
-								{ value: '', label: 'Nobody yet' },
-								...panel.doulas
-									.filter((doula) => doula.staffId !== gapStaffId)
-									.map((doula) => ({ value: doula.staffId, label: doula.name }))
-							]}
-							bind:value={gapCoveringStaffId}
-						/>
-					{/snippet}
-				</LabeledField>
-				<LabeledField
-					id={gapFieldIds.reason}
-					label="Reason"
-					hint="Optional, and read only by this Practice."
-					error={gapSubmission.errorFor(gapFieldIds.reason)}
-				>
-					{#snippet children({ id, describedBy, invalid })}
-						<TextInput
-							{id}
-							{describedBy}
-							{invalid}
-							value={gapReason}
-							onInput={(value) => (gapReason = value)}
-						/>
-					{/snippet}
-				</LabeledField>
-				<cluster-l space="var(--space-3)">
-					<Button type="submit" label="Record the gap" loading={gapSubmission.isSubmitting} />
-					<Button label="Cancel" variant="secondary" onClick={cancelGapForm} />
-				</cluster-l>
-			</StackedForm>
+			{@render onCallDays()}
+			{@render onCallGaps(onCall)}
 		{/if}
 	{:else}
 		<Skeleton label="Loading who is on call" />

@@ -54,6 +54,10 @@ async function setupOnCall(
 // asked for inside its region.
 const onCallChanges = () =>
 	testPage.getByRole('region', { name: 'On call' }).getByRole('button', { name: 'Change', exact: true });
+// The fixture's gap nobody covers puts the gap list above the Doulas' days
+// (two gaps, so two Changes), then one Change for each Doula's days.
+const GAP_CHANGES = 2;
+const daysChange = (index: number) => onCallChanges().nth(GAP_CHANGES + index);
 const recordGapOpener = () => testPage.getByRole('button', { name: 'Record a time a doula cannot be reached' });
 
 /**
@@ -176,6 +180,38 @@ describe('the on-call section on a birth (#1093)', () => {
 			.toBeVisible();
 	});
 
+	it('draws a gap’s times with their clock, in the Practice’s zone', async () => {
+		await setupOnCall();
+
+		await expect
+			.element(testPage.getByRole('region', { name: 'On call' }).getByText('Sat Oct 17, 6:00pm', { exact: false }))
+			.toBeVisible();
+	});
+
+	it('changes a gap: opens the form filled and saves it with a PUT to that gap', async () => {
+		const puts: { path: string; body: Record<string, unknown> }[] = [];
+		await setupOnCall((path, init) => {
+			if (init?.method === 'PUT' && path.startsWith(gapsPath)) {
+				puts.push({ path, body: JSON.parse(String(init.body)) });
+				return jsonResponse({ id: 'gap-1' });
+			}
+			return;
+		});
+
+		await onCallChanges().first().click();
+
+		await expect.element(gapStaffField()).toHaveValue('staff-1');
+		await expect.element(testPage.getByLabelText('From', { exact: true })).toHaveValue('2026-10-17T18:00');
+		await expect.element(testPage.getByLabelText('Until', { exact: true })).toHaveValue('2026-10-18T06:00');
+		await coveringField().selectOptions('Bo Ng');
+		await testPage.getByRole('button', { name: 'Save the gap' }).click();
+
+		await vi.waitFor(() => expect(puts).toHaveLength(1));
+		expect(puts[0]!.path).toBe(`${gapsPath}/gap-1`);
+		expect(puts[0]!.body.coveringStaffId).toBe('staff-2');
+		await expect.element(testPage.getByText(/cannot be reached is changed\./)).toBeVisible();
+	});
+
 	it('records a gap for a doula on the birth, and reads the section back', async () => {
 		const posted = await setupGapFormRecordingPosts();
 
@@ -238,23 +274,52 @@ describe('the on-call section on a birth (#1093)', () => {
 				.toHaveAttribute('href', '#coverage-gap-staff');
 		});
 
-		it('lists every on-call Doula under Who is covering while none is chosen, and leaves out the one chosen', async () => {
+		it('waits to list who can cover until the Doula is chosen, then leaves her out', async () => {
 			await setupGapForm();
 
-			// An option in a closed <select> is not drawn, so it is counted
-			// rather than asked whether it is visible.
-			await expect.element(coveringField()).toBeVisible();
-			expect(optionNames(coveringField())).toEqual([
-				'Nobody yet',
-				'Persephone Vandermeulen-Achterberg, CD(DONA)',
-				'Bo Ng'
-			]);
+			await expect.element(coveringField()).toBeDisabled();
+			expect(optionNames(coveringField())).toEqual(['Choose the Doula first']);
 
 			await gapStaffField().selectOptions('Bo Ng');
 
+			// An option in a closed <select> is not drawn, so it is counted
+			// rather than asked whether it is visible.
 			await vi.waitFor(() =>
 				expect(optionNames(coveringField())).toEqual(['Nobody yet', 'Persephone Vandermeulen-Achterberg, CD(DONA)'])
 			);
+		});
+
+		it('says nobody can cover, and draws no select, when nobody else is on the birth', async () => {
+			const alone = { ...onCallPanel, doulas: [onCallPanel.doulas[0]!], gaps: [] };
+			await setupGapForm((path) =>
+				path.endsWith('/on-call') && !path.includes('coverage') ? jsonResponse(alone) : undefined
+			);
+
+			await gapStaffField().selectOptions('Persephone Vandermeulen-Achterberg, CD(DONA)');
+
+			await expect
+				.element(
+					testPage.getByText(
+						'Nobody else is on this birth yet, so nobody can cover. Put another Doula on this birth first.'
+					)
+				)
+				.toBeVisible();
+			expect(coveringField().query()).toBeNull();
+		});
+
+		it('gives the reason and cover questions their hints', async () => {
+			await setupGapForm();
+
+			await expect
+				.element(testPage.getByText('Optional. Staff at this Practice can read it; the Client never does.'))
+				.toBeVisible();
+			await expect
+				.element(
+					testPage.getByText(
+						'Leave this unanswered where nobody is covering yet. Every Owner and Admin is told, to arrange cover.'
+					)
+				)
+				.toBeVisible();
 		});
 	});
 
@@ -406,13 +471,13 @@ describe('the on-call section on a birth (#1093)', () => {
 			expect(testPage.getByRole('button', { name: 'Record the gap' }).query()).toBeNull();
 			expect(testPage.getByLabelText('First day on call').query()).toBeNull();
 			await expect
-				.element(onCallChanges().first())
+				.element(daysChange(0))
 				.toHaveAccessibleDescription(/on-call days for Persephone/);
 		});
 
 		it('opens one Doula’s two dates under her row, and closes them again', async () => {
 			await setupOnCall();
-			const change = onCallChanges().nth(1);
+			const change = daysChange(1);
 
 			await change.click();
 
@@ -428,7 +493,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		it('closes the gap form when a Change opens, so one form is open at a time', async () => {
 			await setupGapForm();
 
-			await onCallChanges().first().click();
+			await daysChange(0).click();
 
 			expect(testPage.getByRole('button', { name: 'Record the gap' }).query()).toBeNull();
 			await expect.element(recordGapOpener()).toBeVisible();
@@ -470,7 +535,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			return;
 		});
 
-		await onCallChanges().nth(1).click();
+		await daysChange(1).click();
 		await testPage.getByLabelText('First day on call').fill('2026-10-20');
 		await testPage.getByRole('button', { name: 'Save on-call days' }).click();
 
@@ -488,18 +553,28 @@ describe('the on-call section on a birth (#1093)', () => {
 				: undefined
 		);
 
-		await onCallChanges().nth(1).click();
+		await daysChange(1).click();
 		await testPage.getByRole('button', { name: 'Save on-call days' }).click();
 
 		await expect.element(testPage.getByText('The first day must be inside the window.')).toBeVisible();
 		await expect.element(testPage.getByLabelText('First day on call')).toBeVisible();
 	});
 
-	it('draws no Change for a reader who is not an Owner or an Admin', async () => {
+	it('draws a Doula who is not an Owner or an Admin no Change on the days, and Change and Clear only on her own gap', async () => {
 		await setupOnCall(undefined, asDoula.props!.data as ComponentProps<typeof Page>['data']);
 
 		await expect.element(testPage.getByText(/On call Oct 31, 2026 to Nov 13, 2026/)).toBeVisible();
-		expect(onCallChanges().elements()).toHaveLength(0);
+		// The fixture's reader is staff-1: gap-1 is hers, gap-2 is Bo Ng's.
+		expect(onCallChanges().elements()).toHaveLength(1);
+		expect(testPage.getByRole('button', { name: 'Clear', exact: true }).elements()).toHaveLength(1);
+		await expect.element(onCallChanges().first()).toHaveAccessibleDescription(/the gap for Persephone/);
+	});
+
+	it('lists only herself under Doula who cannot be reached for a Doula who is not an Owner or an Admin', async () => {
+		await setupOnCall(undefined, asDoula.props!.data as ComponentProps<typeof Page>['data']);
+		await recordGapOpener().click();
+
+		expect(optionNames(gapStaffField())).toEqual(['Choose a Doula', 'Persephone Vandermeulen-Achterberg, CD(DONA)']);
 	});
 
 	it('says plainly why a birth has no window, rather than drawing an empty one', async () => {
@@ -515,7 +590,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		);
 
 		await expect
-			.element(testPage.getByText('No due date recorded, so there is no window to work out.'))
+			.element(testPage.getByText('No due date yet, so there are no on-call days.'))
 			.toBeVisible();
 	});
 
@@ -534,7 +609,7 @@ describe('the on-call section on a birth (#1093)', () => {
 		);
 
 		await expect
-			.element(testPage.getByText('The pregnancy ended before the on-call window would have opened.'))
+			.element(testPage.getByText('The pregnancy ended before on call would have started.'))
 			.toBeVisible();
 		await expect.element(testPage.getByText('Not on call', { exact: true })).toBeVisible();
 		expect(testPage.getByText(/this window/).elements()).toHaveLength(0);

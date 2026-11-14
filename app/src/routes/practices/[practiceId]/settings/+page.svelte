@@ -89,7 +89,7 @@
 					{ key: 'clientFields', label: 'Client Fields', value: '', changes: 'the Client Fields', href: resolve('/practices/[practiceId]/settings/client-fields', { practiceId }) },
 					{ key: 'planTemplates', label: 'Plan Templates', value: '', changes: 'the Plan Templates', href: resolve('/practices/[practiceId]/settings/plan-templates', { practiceId }) },
 					{ key: 'contractTemplate', label: 'Contract Template', value: '', changes: 'the Contract Template', href: resolve('/practices/[practiceId]/settings/contract-template', { practiceId }) },
-					{ key: 'onCall', label: 'On call', value: '', changes: 'when on call starts and ends', href: resolve('/practices/[practiceId]/settings/on-call', { practiceId }) }
+					{ key: 'onCall', label: 'On-call rule', value: '', changes: 'when on call starts and ends', href: resolve('/practices/[practiceId]/settings/on-call', { practiceId }) }
 				]
 			},
 			{

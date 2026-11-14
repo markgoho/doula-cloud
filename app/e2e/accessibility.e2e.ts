@@ -1019,7 +1019,7 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		key: 'practices/[practiceId]/settings/on-call',
 		archetype: 'F',
 		url: (s) => `/practices/${s.practiceId}/settings/on-call`,
-		h1: 'On call'
+		h1: 'On-call rule'
 	},
 	{
 		key: 'practices/[practiceId]/settings/timezone',

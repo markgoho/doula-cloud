@@ -416,7 +416,7 @@ describe('the Practice landing page', () => {
 					'on-call': jsonResponse({
 						...tonightRoster,
 						windows: [],
-						doulas: tonightRoster.doulas.map((doula) => ({ ...doula, available: true, concurrentWindows: 1 }))
+						doulas: tonightRoster.doulas.map((doula) => ({ ...doula, unreachable: [], isOnCallTonight: true }))
 					})
 				}
 			});

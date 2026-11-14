@@ -12,14 +12,23 @@
  * few drinks on Saturday night" -- so it alone carries instants.
  */
 import type { Fetcher } from './fetcher.js';
-import { apiErrorMessage } from './apiErrorMessage.js';
-import { refusalError } from './formErrors.js';
+import { formatCalendarWeekdayDay } from './dates.js';
+import {
+	daysOf,
+	daysSpan,
+	stepDays,
+	type Days,
+	type DaysStep,
+	type DaysView,
+	type RangeErrors,
+	type RangeLimits
+} from './dayRange.js';
+import { parseRefusal, refusalError } from './formErrors.js';
 import type { OnCallSettings } from './onCallRule.js';
-import { addDays, DEFAULT_SCHEDULE_DAYS } from './visitSchedule.js';
 import { dayIn } from './zonedTime.js';
 
 /** One live coverage gap, as the roster and the Engagement panel show
- * it. Mirrors the Go BFF's oncall.Gap. */
+ * it. Mirrors the Go BFF's oncall.Gap. The roster sends no `reason`. */
 export interface CoverageGap {
 	id: string;
 	engagementId: string;
@@ -41,6 +50,16 @@ export interface DayRange {
 }
 
 /**
+ * Another birth a Doula holds on the same days, and the days both are hers
+ * in the range.
+ */
+export interface AtOnceBirth {
+	engagementId: string;
+	clientName: string;
+	days: DayRange;
+}
+
+/**
  * One Doula and the part of a window she is on call for.
  */
 export interface RosterOnCall {
@@ -49,20 +68,40 @@ export interface RosterOnCall {
 	from: string;
 	to: string;
 	narrowed: boolean;
+	atOnce?: AtOnceBirth[];
 }
 
 /**
- * One birth with a live window in the range.
+ * Who holds a birth tonight: the Doula whose days include today, or the one
+ * covering her gap.
+ */
+export interface TonightHolder {
+	staffId: string;
+	name: string;
+	coveringFor?: string;
+}
+
+export interface Tonight {
+	holders: TonightHolder[];
+	isNobody: boolean;
+}
+
+/**
+ * One birth with on-call days in the range, or with none yet because no
+ * Doula is on it.
  */
 export interface RosterWindow {
 	engagementId: string;
 	clientName: string;
-	dueDate?: string;
+	dueDate?: string | null;
 	window: DayRange;
+	ownStart?: { startRule: OnCallSettings['startRule']; startWeek?: number };
+	noDoula?: boolean;
 	onCall: RosterOnCall[];
 	gaps: CoverageGap[];
 	unstaffedDays: DayRange[];
 	uncovered: boolean;
+	tonight?: Tonight;
 }
 
 /**
@@ -72,21 +111,38 @@ export interface NoWindowRow {
 	engagementId: string;
 	clientName: string;
 	reason: string;
+	doulas?: { staffId: string; name: string }[];
 }
 
-/** One Doula on the Practice's roster. `concurrentWindows` is absent
- * where the reader may not hold it -- a contractor reading about a
- * colleague. */
+export interface UnreachableGap {
+	gapId: string;
+	engagementId: string;
+	clientName: string;
+	startsAt: string;
+	endsAt: string;
+	isCovered: boolean;
+}
+
+/**
+ * One Doula on the Practice's roster: the births she is on call for or
+ * covers a gap on, the births whose days she shares, and the gaps of hers
+ * in force. `atOnce` is absent where the reader may not hold it, a
+ * contractor reading about a colleague.
+ */
 export interface RosterDoula {
 	staffId: string;
 	name: string;
-	available: boolean;
-	concurrentWindows?: number;
+	births: { engagementId: string; clientName: string; covering: boolean }[];
+	atOnce?: { days: DayRange; engagementIds: string[] }[];
+	unreachable: UnreachableGap[];
+	isOnCallTonight: boolean;
 }
 
 export interface Roster {
 	from: string;
 	to: string;
+	today: string;
+	rule: OnCallSettings;
 	windows: RosterWindow[];
 	noWindow: NoWindowRow[];
 	doulas: RosterDoula[];
@@ -114,60 +170,204 @@ export interface EngagementDoula {
 	onCallTo?: string;
 }
 
+export const TONIGHT_DAYS = 1;
+export const SHORT_ON_CALL_DAYS = 7;
+
+/** How many days ahead the roster looks when the address names none: today
+ * through today plus 29, the Schedule's own 30 (#2026). */
+export const DEFAULT_ON_CALL_DAYS = 30;
+
 /**
- * The days a reader chose, as the URL carries them.
+ * The longest range the BFF serves.
  */
-export interface RosterRange {
-	from: string;
-	to: string;
+export const MOST_ON_CALL_DAYS = 92;
+
+const PRESETS = [TONIGHT_DAYS, SHORT_ON_CALL_DAYS, DEFAULT_ON_CALL_DAYS] as const;
+
+export const FROM_BEFORE_TODAY = 'Choose today or a later day. On call shows only births still to come.';
+export const TOO_MANY_DAYS = `Choose a range of ${MOST_ON_CALL_DAYS} days or fewer.`;
+
+export type OnCallDaysChoice = 'tonight' | '7' | '30' | 'choose';
+
+/**
+ * The orders the roster is read in: the empty one is tonight's births first,
+ * then by due date.
+ */
+export type OnCallOrder = '' | 'cover';
+
+export const COVER_FIRST: OnCallOrder = 'cover';
+
+export const ON_CALL_ORDER_OPTIONS: readonly { value: OnCallOrder; label: string }[] = [
+	{ value: '', label: 'Tonight first' },
+	{ value: COVER_FIRST, label: 'Needing cover first' }
+];
+
+/** What the address says, before any day is worked out: a preset or two
+ * typed days, and which births. */
+export interface OnCallView extends DaysView {
+	/**
+	The reader's own births.
+	*/
+	isMine: boolean;
+	/**
+	One Doula's births: a Staff id, or empty.
+	*/
+	doula: string;
+	/**
+	Only the births that need cover.
+	*/
+	needsCover: boolean;
+	order: OnCallOrder;
 }
 
-/** The days the screen opens on when the URL names none: today through
- * the next 30 days, the same window the Practice-wide schedule opens on
- * (#2026). Today is the Practice's day, not the reader's (ADR-0036). It
- * opened on today alone, and a birth's on-call window rarely starts on
- * the day a reader looks, so a first visit was always empty (Cognitive
- * Bias: a default is never neutral). Tonight is the first row; a reader
- * narrows from there. */
-export function defaultRange(now: Date, timeZone: string): RosterRange {
-	const today = dayIn(now, timeZone);
-	return { from: today, to: addDays(today, DEFAULT_SCHEDULE_DAYS) };
-}
-
-/** Reads the range off a URL's search parameters, falling back to the
- * default range for a day the URL does not name. */
-export function rangeFromParameters(
-	parameters: Pick<URLSearchParams, 'get'>,
-	timeZone: string,
-	now: Date
-): RosterRange {
-	const fallback = defaultRange(now, timeZone);
+/** Reads the narrowing off a URL's search parameters. `canMine` is whether
+ * this reader is offered "Mine"; a reader not offered the Doula picker
+ * (`withoutPicker`, carrying her own Staff id) has no roster to name anyone,
+ * so her own id in `doula` is "Mine" and any other is ignored. */
+export function onCallViewFromParameters(
+	parameters: Pick<URLSearchParams, 'get' | 'has'>,
+	canMine: boolean,
+	withoutPicker?: { staffId: string | undefined }
+): OnCallView {
+	const hasChosen = parameters.has('from') || parameters.has('to');
+	const doula = parameters.get('doula') ?? '';
+	const isOwnDoula = withoutPicker !== undefined && doula !== '' && doula === withoutPicker.staffId;
+	const days = parameters.get('days');
+	let preset: number = DEFAULT_ON_CALL_DAYS;
+	if (days === 'tonight') preset = TONIGHT_DAYS;
+	else if (days === String(SHORT_ON_CALL_DAYS)) preset = SHORT_ON_CALL_DAYS;
 	return {
-		from: parameters.get('from') ?? fallback.from,
-		to: parameters.get('to') ?? fallback.to,
+		preset,
+		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
+		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
+		doula: withoutPicker ? '' : doula,
+		needsCover: !withoutPicker && parameters.get('cover') === 'needed',
+		order: parameters.get('order') === COVER_FIRST ? COVER_FIRST : ''
 	};
 }
 
-/** The screen's own URL for a range. Only a day the reader actually
- * chose is written, so the unnarrowed roster stays a clean path. */
-export function rosterHref(
-	basePath: string,
-	range: RosterRange,
-	timeZone: string,
-	now: Date
-): string {
-	const fallback = defaultRange(now, timeZone);
+/** The screen's own URL for a view. Only what a reader chose is written, so
+ * the default stays a clean path and `days=30` is never written. */
+export function onCallHref(basePath: string, view: OnCallView): string {
 	const parameters = new URLSearchParams();
-	if (range.from && range.from !== fallback.from)
-		parameters.set('from', range.from);
-	if (range.to && range.to !== fallback.to) parameters.set('to', range.to);
+	if (view.chosen) {
+		parameters.set('from', view.chosen.from);
+		parameters.set('to', view.chosen.to);
+	} else if (view.preset === TONIGHT_DAYS) {
+		parameters.set('days', 'tonight');
+	} else if (view.preset === SHORT_ON_CALL_DAYS) {
+		parameters.set('days', String(SHORT_ON_CALL_DAYS));
+	}
+	if (view.isMine) parameters.set('mine', 'true');
+	if (view.doula) parameters.set('doula', view.doula);
+	if (view.needsCover) parameters.set('cover', 'needed');
+	if (view.order) parameters.set('order', view.order);
 	const query = parameters.toString();
 	return query ? `${basePath}?${query}` : basePath;
 }
 
-export function rosterPath(practiceId: string, range: RosterRange): string {
-	const parameters = new URLSearchParams({ from: range.from, to: range.to });
+/**
+ * The view on the days the screen opens on, keeping the rest.
+ */
+export function withDefaultDays(view: OnCallView): OnCallView {
+	return { ...view, preset: DEFAULT_ON_CALL_DAYS, chosen: undefined };
+}
+
+/**
+Whether the address names anything beyond the default days.
+*/
+export function isOnCallNarrowed(view: OnCallView): boolean {
+	return view.preset !== DEFAULT_ON_CALL_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.needsCover || view.order !== '';
+}
+
+/**
+ * The refusals a chosen range meets before the BFF is asked: From before
+ * today, and more days than it serves. Said on the fields in the words the
+ * BFF uses.
+ */
+export function onCallLimits(today: string): RangeLimits {
+	return {
+		earliest: { day: today, message: FROM_BEFORE_TODAY },
+		longest: { days: MOST_ON_CALL_DAYS, message: TOO_MANY_DAYS }
+	};
+}
+
+/** What the BFF is asked: two calendar days that are always present, and
+ * whose births. */
+export interface OnCallFilters extends Days {
+	staffId?: string;
+	needsCover?: boolean;
+	order?: OnCallOrder;
+}
+
+/**
+ * The narrowing a view reads under, and whether there is anything to read.
+ * Days that are not a range are answered in place with their errors and no
+ * read. "Mine" beside a different Doula is read as "Mine" and then shown
+ * empty (`isEmpty`), so the BFF is never sent a range that can never match.
+ */
+export function resolveOnCallRead(
+	view: OnCallView,
+	timeZone: string,
+	ownStaffId: string | undefined,
+	now: Date
+): { days?: Days; errors?: RangeErrors; filters?: OnCallFilters; isEmpty: boolean } {
+	const read = daysOf(view, timeZone, now, onCallLimits(dayIn(now, timeZone)));
+	if (!read.days) return { errors: read.errors, isEmpty: false };
+	const staffId = view.isMine ? ownStaffId : view.doula || undefined;
+	const filters: OnCallFilters = { ...read.days };
+	if (staffId) filters.staffId = staffId;
+	if (view.needsCover) filters.needsCover = true;
+	if (view.order) filters.order = view.order;
+	return { days: read.days, filters, isEmpty: view.isMine && view.doula !== '' && view.doula !== ownStaffId };
+}
+
+export function rosterPath(practiceId: string, filters: OnCallFilters): string {
+	const parameters = new URLSearchParams({ from: filters.from, to: filters.to });
+	if (filters.staffId) parameters.set('staffId', filters.staffId);
+	if (filters.needsCover) parameters.set('cover', 'needed');
+	if (filters.order) parameters.set('order', filters.order);
 	return `/api/practices/${practiceId}/on-call?${parameters.toString()}`;
+}
+
+/**
+ * Why the BFF refused a roster's days, per field, from a 400's `details`.
+ * Nothing for a refusal that is not about the days.
+ */
+export async function rosterRangeErrors(response: Response): Promise<RangeErrors | undefined> {
+	if (response.status !== 400) return undefined;
+	const { details } = await parseRefusal(response, { opaque5xx: false });
+	const errors: RangeErrors = {};
+	if (details?.from) errors.from = details.from;
+	if (details?.to) errors.to = details.to;
+	return Object.keys(errors).length > 0 ? errors : undefined;
+}
+
+export type OnCallStep = DaysStep<OnCallView>;
+
+/**
+ * The days one step earlier (`-1`) or later (`1`): the days the reader sees
+ * moved by their own length. Earlier stops at today, because the roster
+ * shows only births still to come.
+ */
+export function onCallStep(view: OnCallView, direction: -1 | 1, timeZone: string, now: Date): OnCallStep | undefined {
+	const today = dayIn(now, timeZone);
+	return stepDays(view, direction, timeZone, now, PRESETS, today, onCallLimits(today));
+}
+
+/**
+ * The action an empty result offers, by what narrowed it: the days the
+ * screen opens on first, then every Doula's births, then every birth.
+ */
+export function onCallEmptyNextStep(view: OnCallView): { label: string; view: OnCallView } | undefined {
+	if (view.preset !== DEFAULT_ON_CALL_DAYS || view.chosen) {
+		return { label: `Show the next ${DEFAULT_ON_CALL_DAYS} days`, view: withDefaultDays(view) };
+	}
+	if (view.isMine || view.doula) {
+		return { label: "Show every Doula's births", view: { ...view, isMine: false, doula: '' } };
+	}
+	if (view.needsCover) return { label: 'Show every birth', view: { ...view, needsCover: false } };
+	return undefined;
 }
 
 export function engagementOnCallPath(
@@ -189,7 +389,7 @@ export function narrowingPath(
 	return `/api/practices/${practiceId}/engagements/${engagementId}/attachments/${staffId}/on-call`;
 }
 
-/** Why a birth has no window, said to the person reading the roster
+/** Why a birth has no on-call days, said to the person reading the roster
  * rather than in the model's own words. Every reason the BFF can give
  * has a sentence here, and an unknown one is a plain statement rather
  * than a thrown error: a roster that refuses to render because the BFF
@@ -198,10 +398,13 @@ export function narrowingPath(
 export function describeNoWindow(reason: string): string {
 	switch (reason) {
 		case 'no_due_date': {
-			return 'No due date recorded, so there is no window to work out.';
+			return 'No due date yet, so there are no on-call days.';
+		}
+		case 'no_due_date_no_doula': {
+			return 'No due date and no Doula yet.';
 		}
 		case 'nobody_attached': {
-			return 'No doula is on this work yet.';
+			return 'No Doula is on this birth yet.';
 		}
 		case 'postpartum': {
 			return 'Postpartum care is not on-call work.';
@@ -212,67 +415,197 @@ export function describeNoWindow(reason: string): string {
 		case 'ended_before_start': {
 			// The BFF gives this reason after a loss and after an early live
 			// birth alike (#2220), so it says what is true of both.
-			return 'The pregnancy ended before the on-call window would have opened.';
+			return 'The pregnancy ended before on call would have started.';
 		}
 		default: {
-			return 'There is no on-call window for this work.';
+			return 'There are no on-call days for this work.';
 		}
 	}
 }
 
-/** What one window's state says out loud, for the reader scanning the
- * roster and for the live region that announces a narrowing change. */
-export function describeCoverage(window: RosterWindow): string {
-	if (!window.uncovered) {
-		return window.onCall.length === 1
-			? 'Covered'
-			: `Covered by ${window.onCall.length}`;
-	}
-	const uncoveredGaps = window.gaps.filter(
-		(gap) => gap.coveringStaffId === undefined
-	).length;
-	if (uncoveredGaps > 0) {
-		return uncoveredGaps === 1
-			? 'A gap needs cover'
-			: `${uncoveredGaps} gaps need cover`;
-	}
-	return 'Nobody on call for part of this';
+/** What one birth's cover says out loud. The lines under it, what is
+ * missing, are the screen's. */
+export function describeCoverage(window: Pick<RosterWindow, 'uncovered'>): string {
+	return window.uncovered ? 'Needs cover' : 'Covered';
 }
 
-/** The roster's own summary line: what the reader is looking at, in
- * words, because a bare count reads as nothing having happened. */
-export function rosterSummary(roster: Roster): string {
-	if (roster.windows.length === 0) {
-		return 'No births are on call in these days.';
-	}
-	const births =
-		roster.windows.length === 1 ? '1 birth' : `${roster.windows.length} births`;
-	const uncovered = roster.windows.filter((window) => window.uncovered).length;
-	if (uncovered === 0) {
-		return `${births} on call, all covered.`;
-	}
-	return `${births} on call, ${uncovered} needing cover.`;
+/**
+ * The rule in force, said where the days are read.
+ */
+export function onCallRuleSentence(rule: OnCallSettings): string {
+	const opens =
+		rule.startRule === 'gestational_week'
+			? `On call opens at week ${rule.startWeek} of pregnancy`
+			: 'On call opens on the day a Doula takes the birth';
+	if (rule.graceDays === 0) return `${opens} and ends on the due date.`;
+	return `${opens} and runs ${rule.graceDays} ${rule.graceDays === 1 ? 'day' : 'days'} past the due date.`;
 }
 
-/** Every Doula carrying more than one live window in the range, which
- * is the "is anyone covering two births at once" half of the screen. */
-export function doublyBooked(roster: Roster): RosterDoula[] {
-	return roster.doulas.filter((doula) => (doula.concurrentWindows ?? 0) > 1);
+/**
+ * How a birth's days are said: "Until Fri Dec 18" when they began on or
+ * before today, else the two days.
+ */
+export type DaysOnCall = { until: string } | { day: string } | { from: string; to: string };
+
+export function daysOnCall(range: DayRange, today: string): DaysOnCall {
+	if (range.start <= today) return { until: range.end };
+	return range.start === range.end ? { day: range.start } : { from: range.start, to: range.end };
 }
 
-/** Loads the roster for a range. Throws with the response body's own
- * message; the route's `load` maps status codes to SvelteKit errors
- * before calling this. */
-export async function loadRoster(
-	fetcher: Fetcher,
-	practiceId: string,
-	range: RosterRange
-): Promise<Roster> {
-	const response = await fetcher(rosterPath(practiceId, range));
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
+/**
+ * The same words as text: "Until Fri Dec 18", "Mon Nov 23 to Fri Dec 18".
+ */
+export function daysOnCallText(range: DayRange, today: string, timeZone: string, now: Date): string {
+	const say = (day: string) => formatCalendarWeekdayDay(day, timeZone, now);
+	const days = daysOnCall(range, today);
+	if ('until' in days) return `Until ${say(days.until)}`;
+	if ('day' in days) return say(days.day);
+	return `${say(days.from)} to ${say(days.to)}`;
+}
+
+/**
+ * Where the group headings go: only when the days include today. By default
+ * the births on call tonight and then the ones starting later; under
+ * "Needing cover first" the births that need cover and then the covered.
+ */
+export function onCallGroup(
+	window: RosterWindow,
+	order: OnCallOrder,
+	today: string,
+	timeZone: string,
+	now: Date
+): { key: string; label: string } {
+	if (order === COVER_FIRST) {
+		return window.uncovered ? { key: 'cover', label: 'Needing cover' } : { key: 'covered', label: 'Covered' };
 	}
-	return response.json();
+	return window.tonight
+		? { key: 'tonight', label: `Tonight, ${formatCalendarWeekdayDay(today, timeZone, now)}` }
+		: { key: 'later', label: 'Starting later' };
+}
+
+/**
+ * Who holds the birth tonight, said only where it adds a fact: a covering
+ * Doula, several Doulas on the birth, or nobody.
+ */
+export function tonightLine(window: RosterWindow): string | undefined {
+	const tonight = window.tonight;
+	if (!tonight) return undefined;
+	if (tonight.isNobody) return 'Nobody tonight';
+	const isCovered = tonight.holders.some((holder) => holder.coveringFor !== undefined);
+	if (!isCovered && window.onCall.length < 2) return undefined;
+	const who = tonight.holders.map((holder) =>
+		holder.coveringFor ? `${holder.name}, covering for ${holder.coveringFor}` : holder.name
+	);
+	return `Tonight: ${who.join('; ')}`;
+}
+
+/**
+ * How many births a Doula holds on one day, as the badge says it.
+ */
+export function atOnceLabel(others: number): string {
+	return `On ${others + 1} births at once`;
+}
+
+export interface OnCallWho {
+	/**
+	The reader's own births are asked for.
+	*/
+	isMine?: boolean;
+	/**
+	The picked Doula's name, when one is.
+	*/
+	doulaName?: string;
+	/**
+	The Staff id whose births are asked for, for the one line that counts Doulas.
+	*/
+	staffId?: string;
+	/**
+	Only the births that need cover.
+	*/
+	needsCover?: boolean;
+	order?: OnCallOrder;
+}
+
+interface SummaryCounts {
+	births: number;
+	needCover: number;
+	tonightNobody: number;
+	atOnce: number;
+	isTonightShown: boolean;
+}
+
+function plural(count: number, one: string, many: string): string {
+	return count === 1 ? one : many;
+}
+
+function summaryOf(counts: SummaryCounts, span: string, who: OnCallWho): string {
+	if (counts.births === 0) {
+		if (who.needsCover) return `No births need cover ${span}.`;
+		if (who.isMine) return `You are on call for no births ${span}.`;
+		if (who.doulaName) return `No births for ${who.doulaName} ${span}.`;
+		return `No births on call ${span}.`;
+	}
+	const whose = who.isMine ? 'your ' : (who.doulaName ? `${who.doulaName}'s ` : '');
+	const ordered =
+		who.order === COVER_FIRST ? 'needing cover first' : (counts.isTonightShown ? 'tonight first' : 'soonest due first');
+	const what = `${counts.births} ${plural(counts.births, 'birth', 'births')}`;
+	const state = who.needsCover ? ` that ${plural(counts.births, 'needs', 'need')} cover` : ' on call';
+	const sentences = [`Showing ${whose}${what}${state} ${span}, ${ordered}.`];
+	if (!who.needsCover) {
+		if (counts.needCover === 0) sentences.push('Every one is covered.');
+		else if (counts.tonightNobody === 0) {
+			sentences.push(`${counts.needCover} ${plural(counts.needCover, 'needs', 'need')} cover.`);
+		} else if (counts.needCover === 1) sentences.push('1 needs cover, tonight.');
+		else sentences.push(`${counts.needCover} need cover, ${counts.tonightNobody} of them tonight.`);
+	}
+	if (counts.atOnce > 0) {
+		if (who.isMine) sentences.push('You are on two births at once.');
+		else if (who.doulaName) sentences.push(`${who.doulaName} is on two births at once.`);
+		else sentences.push(`${counts.atOnce} ${plural(counts.atOnce, 'Doula', 'Doulas')} on two births at once.`);
+	}
+	return sentences.join(' ');
+}
+
+/** What the result line says: how many births, how many need cover and how
+ * many of those tonight, who is on two births at once, the days, whose, and
+ * the order. */
+export function onCallResultSummary(
+	roster: Roster,
+	days: Days,
+	timeZone: string,
+	who: OnCallWho = {},
+	now: Date = new Date()
+): string {
+	const doulas = roster.doulas.filter(
+		(doula) => (doula.atOnce?.length ?? 0) > 0 && (who.staffId === undefined || doula.staffId === who.staffId)
+	);
+	return summaryOf(
+		{
+			births: roster.windows.length,
+			needCover: roster.windows.filter((window) => window.uncovered).length,
+			tonightNobody: roster.windows.filter((window) => window.tonight?.isNobody).length,
+			atOnce: doulas.length,
+			isTonightShown: days.from === roster.today
+		},
+		daysSpan(days, timeZone, now),
+		who
+	);
+}
+
+/** The longest wording the result line can say, for the room the filter bar
+ * holds for it so the list does not move between results. */
+export function onCallResultRuler(longestDoulaName: string): string {
+	const days = { from: '2000-09-29', to: '2000-12-29' };
+	const now = new Date(1999, 0, 1);
+	const span = daysSpan(days, 'UTC', now);
+	const many = { births: 999, needCover: 999, tonightNobody: 999, atOnce: 999, isTonightShown: true };
+	return [
+		summaryOf(many, span, { doulaName: longestDoulaName }),
+		summaryOf(many, span, { doulaName: longestDoulaName, order: COVER_FIRST }),
+		summaryOf(many, span, { isMine: true }),
+		summaryOf(many, span, {}),
+		summaryOf({ ...many, births: 0 }, span, { doulaName: longestDoulaName })
+	].toSorted((a, b) => b.length - a.length)[0]!;
 }
 
 /**
