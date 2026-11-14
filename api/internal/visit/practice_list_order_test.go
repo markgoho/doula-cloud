@@ -89,10 +89,7 @@ func TestPracticeSchedule_RefusesAnUnknownOrder(t *testing.T) {
 // the order it was minted in, both ways round.
 func TestPracticeSchedule_RefusesACursorFromTheOtherOrder(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
-	for i := range 31 {
-		seedScheduledVisit(t, e.DB, e.Engagement.ID, e.Staff.ID, base.Add(time.Duration(i)*time.Minute))
-	}
+	e.seedOverOnePage()
 
 	soonest := e.readSchedule(nil)
 	latest := e.readSchedule(latestFirst())

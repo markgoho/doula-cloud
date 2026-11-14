@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"time"
-
-	"doula-cloud/api/internal/apierr"
 )
 
 // Keyed is a position in a list a reader can order more than one way
@@ -67,23 +65,15 @@ func FetchKeyed[T, C any](
 	fetch func(after *C) ([]T, error),
 	key func(T) ([]string, string),
 ) (page Page[T], ok bool) {
-	after, ok := FromQuery(w, r, decode, message)
-	if !ok {
-		return Page[T]{}, false
-	}
-	items, err := fetch(after)
-	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-		return Page[T]{}, false
-	}
-	items, hasMore := Trim(items, size)
-	if !hasMore {
-		return Page[T]{Items: items}, true
-	}
-	keys, id := key(items[len(items)-1])
-	next := EncodeKeyed(order, keys, id)
-	return Page[T]{Items: items, Next: &next, HasMore: true}, true
+	return fetchPage(w, r, message, decode, fetch, func(items []T) Page[T] {
+		items, hasMore := Trim(items, size)
+		if !hasMore {
+			return Page[T]{Items: items}
+		}
+		keys, id := key(items[len(items)-1])
+		next := EncodeKeyed(order, keys, id)
+		return Page[T]{Items: items, Next: &next, HasMore: true}
+	})
 }
 
 // TimeKey is a timestamp as a sort key value.

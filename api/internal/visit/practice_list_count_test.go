@@ -22,6 +22,15 @@ func wantVisitCount(t *testing.T, page visit.PracticeScheduleResponse, want int)
 	}
 }
 
+// seedOverOnePage books 31 Visits a minute apart, one more than a page holds.
+func (e *env) seedOverOnePage() {
+	e.T.Helper()
+	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
+	for i := range 31 {
+		seedScheduledVisit(e.T, e.DB, e.Engagement.ID, e.Staff.ID, base.Add(time.Duration(i)*time.Minute))
+	}
+}
+
 // pagedRows walks every page of the schedule and returns the rows it holds.
 func (e *env) pagedRows(params url.Values) int {
 	e.T.Helper()
@@ -55,10 +64,7 @@ func TestPracticeSchedule_FirstPageCarriesTheTotalOfTheNarrowing(t *testing.T) {
 
 func TestPracticeSchedule_TotalIsWholeListNotThePageAndLaterPagesOmitIt(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	base := time.Now().UTC().Add(time.Hour).Truncate(time.Second)
-	for i := range 31 {
-		seedScheduledVisit(t, e.DB, e.Engagement.ID, e.Staff.ID, base.Add(time.Duration(i)*time.Minute))
-	}
+	e.seedOverOnePage()
 
 	first := e.readSchedule(nil)
 	if len(first.Items) != 30 {
