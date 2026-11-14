@@ -637,6 +637,11 @@ func disableJIT(ctx context.Context, tx *sql.Tx) error {
 // ?doula (re-run 2026-11-13 in WSL, 5,000 Clients each with a signed Contract
 // and an open Invoice, disableJIT on), all under the 500 ms ceiling, so no
 // index and no migration.
+// Re-run 2026-11-14 (#2891): with the Contract a plain join the owed and
+// overdue first pages took 89.5 s and 106.5 s, the planner estimating one
+// Contract under the RLS check and scanning contracts_engagement_id_active_key
+// unkeyed 5,000 times; with the Contract a LATERAL ... LIMIT 1 (owedInvoicesFrom)
+// they take 138.7 ms and 130.4 ms (later pages 134.0 ms and 128.8 ms).
 func listClientsQuery(practiceID string, filters listFilters, order string, after *listAfter) (string, []any) {
 	from, args := clientsFromWhere(practiceID, filters, order)
 	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter

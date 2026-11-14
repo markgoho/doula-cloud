@@ -8,6 +8,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { IconName } from './components/atoms/Icon/manifest.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarDay } from './dates.js';
@@ -858,6 +859,14 @@ export function invoiceRowStatusLabel(invoice: InvoiceStanding): string {
 export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'warning' | 'success' | 'error' | 'neutral' {
 	if (invoice.paymentProcessing) return 'info';
 	return invoice.daysOverdue > 0 ? 'error' : invoiceStatusVariant(invoice.status);
+}
+
+/** The Badge icon beside invoiceRowStatusLabel where it is not the variant's
+ * own: Owed is neutral like Void, so it takes the receipt and the two are told
+ * apart by more than the word (#2891). */
+export function invoiceRowStatusIcon(invoice: InvoiceStanding): IconName | undefined {
+	const isOwed = !invoice.paymentProcessing && invoice.daysOverdue <= 0 && invoice.status === 'open';
+	return isOwed ? 'receipt' : undefined;
 }
 
 /** Whether a Staff list says an Invoice's state after its amount as a badge,

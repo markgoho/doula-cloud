@@ -17,9 +17,10 @@
 	interface Properties {
 		label: string;
 		variant: 'info' | 'success' | 'warning' | 'error' | 'neutral';
+		icon?: IconName;
 	}
 
-	let { label, variant }: Properties = $props();
+	let { label, variant, icon }: Properties = $props();
 
 	const iconByVariant: Record<Properties['variant'], IconName> = {
 		info: 'info',
@@ -31,7 +32,7 @@
 </script>
 
 <span class={variant}>
-	<Icon name={iconByVariant[variant]} size={16} />
+	<Icon name={icon ?? iconByVariant[variant]} size={16} />
 	{label}
 </span>
 

@@ -98,4 +98,12 @@ describe('the icon each variant draws (#2843)', () => {
 
 		expect(await drawnIcon('error')).not.toBe(tag.querySelector('svg')!.getHTML());
 	});
+
+	it('is the one it is given when a badge names an icon (#2891)', async () => {
+		const { container: receipt } = await render(Icon, { name: 'receipt', size: 16 });
+		const { container } = await setup({ variant: 'neutral', icon: 'receipt' });
+
+		expect(container.querySelector('svg')!.getHTML()).toBe(receipt.querySelector('svg')!.getHTML());
+		expect(await drawnIcon('neutral')).not.toBe(receipt.querySelector('svg')!.getHTML());
+	});
 });

@@ -49,6 +49,7 @@
 		type ContractBilling,
 		paymentRecordedMessage,
 		invoiceRowStatusLabel,
+		invoiceRowStatusIcon,
 		invoiceRowStatusVariant,
 		calendarDayIn,
 		termsDueDay,
@@ -673,7 +674,7 @@
 	Overdue included, from the BFF's one count.
 -->
 {#snippet invoiceStatus(invoice: InvoiceStanding)}
-	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} />
+	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} icon={invoiceRowStatusIcon(invoice)} />
 {/snippet}
 
 <!--
