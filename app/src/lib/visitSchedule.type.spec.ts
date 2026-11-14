@@ -71,11 +71,13 @@ describe('the Visit type (#2888): the address and the read', () => {
 		expect(new URL(practiceSchedulePath('p', filters), 'https://example.test').searchParams.get('type')).toBe('postpartum');
 		expect(new URL(practiceSchedulePath('p', { ...filters, type: undefined }), 'https://example.test').searchParams.has('type')).toBe(false);
 
+		// jscpd:ignore-start -- the fetcher stub the sibling specs repeat
 		const fetcher = vi.fn<(path: string, init?: RequestInit) => Promise<Response>>(async () =>
 			jsonResponse({ items: [], hasMore: false }, 200)
 		);
 		await loadPracticeSchedule(fetcher, 'p', { ...filters, search: 'Camille' });
 		expect(JSON.parse(fetcher.mock.calls[0][1]!.body as string).type).toBe('postpartum');
+		// jscpd:ignore-end
 	});
 });
 
