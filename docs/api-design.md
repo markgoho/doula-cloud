@@ -259,7 +259,7 @@ When adding or modifying an HTTP endpoint in `api/`:
 
 ### Writing a CSV: `csvsafe`
 
-Every CSV the BFF writes goes through `csvsafe.NewWriter` (`api/internal/csvsafe`, #2894), never `encoding/csv` directly: the Practice export (`api/internal/export`) and the Invoices export (#2871) share it. Its `Write` prefixes a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return with `'`, so text a Client or Staff member typed cannot run as a spreadsheet formula (OWASP "CSV Injection"). `Cell` guards one value for a caller that builds its own record.
+Every CSV the BFF writes goes through `csvsafe.NewWriter` (`api/internal/csvsafe`, #2894), never `encoding/csv` directly: the Practice export (`api/internal/export`), the Invoices export (#2871) and the Clients export (#2891) share it. Its `Write` prefixes a cell that starts with `=`, `+`, `-`, `@`, a tab or a carriage return with `'`, so text a Client or Staff member typed cannot run as a spreadsheet formula (OWASP "CSV Injection"). `Cell` guards one value for a caller that builds its own record.
 
 Amount columns are not exempt as columns; a plain negative decimal (`-500`, `-5.00`) is exempt by value shape. A refund or credit in an amount column stays a number a spreadsheet can sum, and a cell like `-5+cmd` is still guarded, so no column can be forgotten and none can smuggle a formula. The archive's README says what the leading `'` means.
 

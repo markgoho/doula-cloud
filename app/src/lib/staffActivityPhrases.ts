@@ -170,6 +170,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	practice_on_call_changed: fixed('On-call settings changed'),
 	practice_data_exported: fixed('Practice data downloaded'),
 	invoices_exported: fixed('Invoices downloaded'),
+	clients_exported: fixed('Clients downloaded'),
 	practice_deletion_requested: fixed('Practice set to be deleted'),
 	practice_deletion_restored: fixed('Practice deletion canceled'),
 	practice_deletion_finalized: fixed('Practice deleted'),

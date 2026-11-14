@@ -89,6 +89,7 @@ const (
 	ActionPracticeOnCallChanged       PracticeAction = "practice_on_call_changed"
 	ActionPracticeDataExported        PracticeAction = "practice_data_exported"
 	ActionInvoicesExported            PracticeAction = "invoices_exported"
+	ActionClientsExported             PracticeAction = "clients_exported"
 	ActionPracticeDeletionRequested   PracticeAction = "practice_deletion_requested"
 	ActionPracticeDeletionRestored    PracticeAction = "practice_deletion_restored"
 	ActionPracticeDeletionFinalized   PracticeAction = "practice_deletion_finalized"

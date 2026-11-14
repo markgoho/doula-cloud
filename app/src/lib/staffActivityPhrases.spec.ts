@@ -18,6 +18,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['care_phase_changed', 'Care phase changed for Amara', 'Care phase changed for the Client'],
 	['care_plan_edited', 'Care Plan for Amara changed', 'Care Plan for the Client changed'],
 	['care_plan_started', 'Care Plan for Amara started', 'Care Plan for the Client started'],
+	['clients_exported', 'Clients downloaded', 'Clients downloaded'],
 	['contract_amount_overridden', 'Contract price for Amara changed by hand', 'Contract price for the Client changed by hand'],
 	[
 		'contract_amount_repriced',
