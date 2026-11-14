@@ -3,21 +3,17 @@ package client
 import (
 	"bytes"
 	"context"
-	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
-	"time"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/csvexport"
 	"doula-cloud/api/internal/csvsafe"
 	"doula-cloud/api/internal/pagecursor"
-	"doula-cloud/api/internal/practicetimezone"
-	"doula-cloud/api/internal/ratelimit"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -26,16 +22,6 @@ import (
 // address, Care Plan, Birth Plan or clinical field.
 var clientsExportHeader = []string{
 	"Client", "Kind", "Status", "Contract", "Owed", "Invoices owed", "Days overdue", "Due or birth date", "Doula",
-}
-
-// clientsExportRules limits the export as a heavy endpoint
-// (docs/api-design.md section 6): every call reads every Client the request
-// matches. One Staff member's session, 30 an hour, is a person downloading a
-// few views of the book, well below a script's rate. The count is taken on
-// the request's own transaction, because the route sits behind
-// staffauth.Middleware, which holds the request's one pool connection.
-var clientsExportRules = []ratelimit.Rule{
-	ratelimit.SessionCookieRule(30, time.Hour),
 }
 
 // clientsExportScope is the diff of the one Activity row a download writes:
@@ -57,73 +43,45 @@ type clientsExportScope struct {
 }
 
 // ExportHandler answers a POST of the Clients list's own body, a ListRequest
-// whose cursor it ignores, with every Client it matches as a CSV (#2891), in the list's order and
-// under the list's own checks, so what leaves is what the screen showed. It
-// is a POST so a name, which is a Client's, stays out of the URL (#1829).
+// whose cursor it ignores, with every Client it matches as a CSV (#2891), in
+// the list's order and under the list's own checks, so what leaves is what
+// the screen showed. It is a POST so a name, which is a Client's, stays out of
+// the URL (#1829). The rate limit, the Activity row clients_exported and the
+// response are csvexport's.
 //
 // One row per Client, as the list draws her (ADR-0017): a Client with a
 // Birth line and a Postpartum line is one row whose Kind, Status, Contract,
 // Due or birth date cells hold each line in turn, joined by "; ", so Owed is
 // never counted twice by a spreadsheet's sum and the file's rows are the
-// list's Clients.
-//
-// The CSV is built whole before anything is written: the one Activity row,
-// clients_exported, goes in the same transaction as the read, and a read that
-// failed answers 500 with no file and no row. Must be mounted behind
-// staffauth.Middleware, for the Owner and Admin roles.
+// list's Clients. Must be mounted behind staffauth.Middleware, for the Owner
+// and Admin roles.
 func ExportHandler() http.Handler {
-	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		if !ratelimit.Enforce(w, r, c.Tx, "clients_export", clientsExportRules) {
-			return
-		}
+	spec := csvexport.Spec{Limit: "clients_export", Action: activity.ActionClientsExported, File: "clients"}
+	return csvexport.Handler(spec, func(w http.ResponseWriter, r *http.Request, c staffauth.Call, _ csvexport.Env) (csvexport.File, bool) {
 		req, ok := decodeListRequest(w, r)
 		if !ok {
-			return
+			return csvexport.File{}, false
 		}
 		filters, ok := filtersFor(w, c, req)
 		if !ok {
-			return
+			return csvexport.File{}, false
 		}
-		zone, err := practicetimezone.Load(r.Context(), c.Tx, c.PracticeID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		now := clock.Now(r.Context())
-
 		list, err := listEveryClient(r.Context(), c, filters, req)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
+			return csvexport.File{}, false
 		}
-		body := writeClientsCSV(list)
-
-		diff, _ := json.Marshal(clientsExportScope{
-			All: req.All, Mine: req.Mine, Owes: req.Owes, NoContract: req.NoContract, DoulaID: req.Doula,
-			Due: req.Due, DueFrom: req.DueFrom, DueTo: req.DueTo, Order: req.Order,
-			Rows: len(list), Searched: req.Name != "",
-		})
-		if err := activity.Record(r.Context(), c.Tx, activity.Entry{
-			PracticeID:  c.PracticeID,
-			SubjectKind: activity.SubjectPractice,
-			SubjectID:   c.PracticeID,
-			Action:      string(activity.ActionClientsExported),
-			Diff:        diff,
-			Actor:       activity.StaffActor(c.StaffID),
-			CreatedAt:   now,
-		}); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
-		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="clients-%s.csv"`, now.In(zone).Format(time.DateOnly)))
-		w.Header().Set("Client-Count", strconv.Itoa(len(list)))
-		_, _ = w.Write(body)
-	}, staffauth.NotAmbientContractor())
+		return csvexport.File{
+			Body: writeClientsCSV(list),
+			Diff: clientsExportScope{
+				All: req.All, Mine: req.Mine, Owes: req.Owes, NoContract: req.NoContract, DoulaID: req.Doula,
+				Due: req.Due, DueFrom: req.DueFrom, DueTo: req.DueTo, Order: req.Order,
+				Rows: len(list), Searched: req.Name != "",
+			},
+			Headers: map[string]string{"Client-Count": strconv.Itoa(len(list))},
+		}, true
+	})
 }
 
 // listEveryClient reads the list's own query a page at a time from the first

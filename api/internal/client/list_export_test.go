@@ -1,10 +1,7 @@
 package client_test
 
 import (
-	"encoding/csv"
-	"encoding/json/v2"
 	"fmt"
-	"io"
 	"net/http"
 	"slices"
 	"strconv"
@@ -12,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/csvexport/exporttest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
 	"doula-cloud/api/internal/testdb"
@@ -22,8 +19,6 @@ import (
 var clientsExportColumns = []string{
 	"Client", "Kind", "Status", "Contract", "Owed", "Invoices owed", "Days overdue", "Due or birth date", "Doula",
 }
-
-const clientsExportActivity = `SELECT diff::text FROM activity WHERE practice_id = $1 AND action = 'clients_exported' ORDER BY created_at`
 
 func newOwnerEnv(t *testing.T, opts ...envOption) *env {
 	t.Helper()
@@ -37,37 +32,12 @@ func (e *env) exportRequest(req client.ListRequest) *http.Response {
 
 func (e *env) exportRows(req client.ListRequest) [][]string {
 	e.T.Helper()
-	resp := e.exportRequest(req)
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusOK {
-		e.T.Fatalf("export status = %d, want 200", resp.StatusCode)
-	}
-	rows, err := csv.NewReader(resp.Body).ReadAll()
-	if err != nil {
-		e.T.Fatalf("read export: %v", err)
-	}
-	return rows
+	return exporttest.Read(e.T, func() *http.Response { return e.exportRequest(req) })
 }
 
 func (e *env) exportDiffs() []string {
 	e.T.Helper()
-	rows, err := e.DB.Admin.QueryContext(e.T.Context(), clientsExportActivity, e.Practice.ID)
-	if err != nil {
-		e.T.Fatalf("read export activity: %v", err)
-	}
-	defer func() { _ = rows.Close() }()
-	var diffs []string
-	for rows.Next() {
-		var d string
-		if err := rows.Scan(&d); err != nil {
-			e.T.Fatalf("scan export activity: %v", err)
-		}
-		diffs = append(diffs, d)
-	}
-	if err := rows.Err(); err != nil {
-		e.T.Fatalf("read export activity: %v", err)
-	}
-	return diffs
+	return exporttest.Diffs(e.T, e.DB, e.Practice.ID, "clients_exported")
 }
 
 func TestExportClients_WritesTheNineColumnsAndNothingElse(t *testing.T) {
@@ -252,18 +222,7 @@ func TestExportClients_AnswersAFileNamedForThePracticesDayAndCountsItsRows(t *te
 	resp := e.exportRequest(client.ListRequest{})
 	defer func() { _ = resp.Body.Close() }()
 
-	if got := resp.Header.Get("Content-Type"); got != "text/csv; charset=utf-8" {
-		t.Fatalf("Content-Type = %q", got)
-	}
-	if got := resp.Header.Get("Content-Disposition"); got != `attachment; filename="clients-2026-11-14.csv"` {
-		t.Fatalf("Content-Disposition = %q", got)
-	}
-	if got := resp.Header.Get("Client-Count"); got != "1" {
-		t.Fatalf("Client-Count = %q, want 1", got)
-	}
-	if resp.Header.Get("RateLimit-Limit") != "30" || resp.Header.Get("RateLimit-Remaining") != "29" {
-		t.Fatalf("headers = %v, want 30 and 29", resp.Header)
-	}
+	exporttest.RequireFile(t, resp, "clients-2026-11-14.csv", "Client-Count", "1")
 }
 
 func TestExportClients_RecordsWhoWhenWhatAndNeverTheSearch(t *testing.T) {
@@ -276,34 +235,8 @@ func TestExportClients_RecordsWhoWhenWhatAndNeverTheSearch(t *testing.T) {
 
 	e.exportRows(client.ListRequest{Name: "quinn", Doula: doula, Owes: false, NoContract: true, DueFrom: "2026-12-01", DueTo: "2026-12-31", Order: orderName})
 
-	var subjectKind, subjectID, actorStaff, diff string
-	var actorIsStaff bool
-	var at time.Time
-	if err := e.DB.Admin.QueryRowContext(t.Context(),
-		`SELECT subject_kind, subject_id::text, (actor_kind = 'staff'), actor_staff_id::text, created_at, diff::text
-		   FROM activity WHERE practice_id = $1 AND action = 'clients_exported'`, e.Practice.ID,
-	).Scan(&subjectKind, &subjectID, &actorIsStaff, &actorStaff, &at, &diff); err != nil {
-		t.Fatalf("read the export's Activity row: %v", err)
-	}
-	if subjectKind != "practice" || subjectID != e.Practice.ID || !actorIsStaff || actorStaff != e.Staff.ID || !at.Equal(now) {
-		t.Fatalf("row = %s %s by %s at %s", subjectKind, subjectID, actorStaff, at)
-	}
-	var scope map[string]any
-	if err := json.Unmarshal([]byte(diff), &scope); err != nil {
-		t.Fatalf("diff %s: %v", diff, err)
-	}
 	want := map[string]any{"noContract": true, "doulaId": doula, "dueFrom": "2026-12-01", "dueTo": "2026-12-31", "order": orderName, "rows": 1.0, "searched": true}
-	if len(scope) != len(want) {
-		t.Fatalf("diff = %s, want exactly %v", diff, want)
-	}
-	for k, v := range want {
-		if scope[k] != v {
-			t.Fatalf("diff[%s] = %v, want %v (diff %s)", k, scope[k], v, diff)
-		}
-	}
-	if strings.Contains(strings.ToLower(diff), "quinn") {
-		t.Fatalf("diff %s holds the search's text", diff)
-	}
+	exporttest.RequireRecorded(t, e.DB, e.Practice.ID, e.Staff.ID, "clients_exported", now, want, "quinn")
 }
 
 func TestExportClients_NoNarrowingRecordsTheBareBook(t *testing.T) {
@@ -337,28 +270,12 @@ func TestExportClients_ARefusedRequestWritesNoRow(t *testing.T) {
 }
 
 func TestExportClients_OnlyAnOwnerOrAnAdmin(t *testing.T) {
-	cases := []struct {
-		role fixture.RoleCase
-		want int
-	}{
-		{fixture.OwnerCase, http.StatusOK},
-		{fixture.AdminCase, http.StatusOK},
-		{fixture.EmployeeDoulaCase, http.StatusForbidden},
-		{fixture.ContractorDoulaCase, http.StatusForbidden},
-	}
-	for _, tc := range cases {
-		t.Run(tc.role.Name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.role.Opts...))
-			reqtest.ExpectStatus(t, http.MethodPost, e.PracticeURL("/clients/export"), tc.want, e.SignedIn, reqtest.JSON(client.ListRequest{}))
-			wantRows := 0
-			if tc.want == http.StatusOK {
-				wantRows = 1
-			}
-			if got := len(e.exportDiffs()); got != wantRows {
-				t.Fatalf("activity rows = %d, want %d", got, wantRows)
-			}
-		})
-	}
+	exporttest.RequireOwnerAndAdminOnly(t, func(t *testing.T, role fixture.RoleCase) (int, int) {
+		e := newEnv(t, signedInAs(role.Opts...))
+		resp := e.exportRequest(client.ListRequest{})
+		_ = resp.Body.Close()
+		return resp.StatusCode, len(e.exportDiffs())
+	})
 }
 
 func TestExportClients_ContractorAdminIsAnsweredAsTheListAnswersHer(t *testing.T) {
@@ -384,31 +301,7 @@ func TestExportClients_AnotherPracticesClientsStayOut(t *testing.T) {
 
 func TestExportClients_RateLimitedAsAHeavyEndpoint(t *testing.T) {
 	e := newOwnerEnv(t)
-	for range 30 {
-		resp := e.exportRequest(client.ListRequest{})
-		_, _ = io.Copy(io.Discard, resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK {
-			t.Fatalf("status = %d, want 200 inside the limit", resp.StatusCode)
-		}
-	}
-
-	resp := e.exportRequest(client.ListRequest{})
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("31st status = %d, want 429", resp.StatusCode)
-	}
-	if resp.Header.Get("RateLimit-Limit") != "30" || resp.Header.Get("RateLimit-Remaining") != "0" {
-		t.Fatalf("headers = %v, want RateLimit-Limit 30 and RateLimit-Remaining 0", resp.Header)
-	}
-	if secs, err := strconv.Atoi(resp.Header.Get("Retry-After")); err != nil || secs <= 0 {
-		t.Fatalf("Retry-After = %q, want seconds to wait", resp.Header.Get("Retry-After"))
-	}
-	var body apierr.APIError
-	if err := json.UnmarshalRead(resp.Body, &body); err != nil || body.Code != apierr.CodeRateLimited {
-		t.Fatalf("body = %+v (%v), want RATE_LIMITED", body, err)
-	}
-	if got := len(e.exportDiffs()); got != 30 {
-		t.Fatalf("activity rows = %d, want the 30 that were served", got)
-	}
+	exporttest.RequireRateLimited(t, func() *http.Response {
+		return e.exportRequest(client.ListRequest{})
+	}, func() int { return len(e.exportDiffs()) })
 }
