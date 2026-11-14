@@ -3477,6 +3477,10 @@ describe('the count line in a narrow and a wide bar', () => {
 const settledChange = () => new Promise((resolve) => setTimeout(resolve, 450));
 
 describe('the Clients list applies untyped controls when changed (#2888)', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it('reads once for a ticked box, keeps focus on it, and sends the Name as drawn', async () => {
 		goto.mockResolvedValue(undefined);
 		await setup();
@@ -3532,10 +3536,11 @@ describe('the Clients list applies untyped controls when changed (#2888)', () =>
 	it('still lets Apply send the bar once', async () => {
 		goto.mockResolvedValue(undefined);
 		await setup();
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
 		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
 		await applyFilters();
-		await settledChange();
+		await vi.advanceTimersByTimeAsync(450);
 
 		expect(goto).toHaveBeenCalledOnce();
 		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, noName);
