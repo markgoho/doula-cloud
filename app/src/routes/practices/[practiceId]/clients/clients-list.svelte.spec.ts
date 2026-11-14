@@ -826,6 +826,7 @@ describe('the "Order" select (#2869)', () => {
 		await expect.element(options.nth(1)).toHaveTextContent('Name, A to Z');
 		await expect.element(options.nth(2)).toHaveTextContent('Name, Z to A');
 		await expect.element(options.nth(3)).toHaveTextContent('Most owed first');
+		await expect.element(options.nth(4)).toHaveTextContent('Most overdue first');
 		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
 	});
 
@@ -896,6 +897,7 @@ describe('the "Order" select (#2869)', () => {
 		['name', 'Name, A to Z', 'Name', 'ascending', 'by name, A to Z'],
 		['name-desc', 'Name, Z to A', 'Name', 'descending', 'by name, Z to A'],
 		['owed', 'Most owed first', 'Money', 'descending', 'most owed first'],
+		['overdue', 'Most overdue first', 'Money', 'descending', 'most overdue first'],
 		['', 'Soonest due first', 'Date', 'ascending', 'soonest due first, then most recently ended']
 	])('reads `?order=%s`: selected, sent to the BFF, sorted on %s %s and worded "%s"', async (order, label, column, direction, words) => {
 		if (order) pageState.url.searchParams.set('order', order);
@@ -2574,7 +2576,7 @@ describe('the rows of a typical page', () => {
 
 		await expect.element(testPage.getByRole('cell', { name: 'Joss Adeyemi, Lena Vasquez', exact: true }).first()).toBeVisible();
 		await expect.element(testPage.getByRole('cell', { name: /Ended Nov 2, 2026/ })).toBeVisible();
-		await expect.element(testPage.getByText('overdue', { exact: true }).first()).toBeVisible();
+		await expect.element(testPage.getByText('62 days overdue', { exact: true }).first()).toBeVisible();
 		const heights = rowHeights();
 		expect(heights.length).toBe(8);
 		expect(heights.filter((height) => Math.abs(height - 40) > 4), `row heights ${heights.map((height) => Math.round(height))}`).toStrictEqual([]);
@@ -2800,17 +2802,19 @@ describe('the Money column’s state', () => {
 		}
 	});
 
-	it('draws owed in the amber badge and overdue in the red one; a settled state stays plain', async () => {
+	it('draws overdue in the red badge; owed, not yet due, and a settled state stay plain words (#2891)', async () => {
 		await renderListScreen({ width: 1280, height: 900, respond: () => jsonResponse({ items: seedLikeClients, hasMore: false }) });
 		await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
 
-		const hue = (text: string) => {
-			const badge = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span')].find((element) => element.textContent?.trim() === text);
-			return badge ? getComputedStyle(badge).getPropertyValue('--badge-hue').trim() : undefined;
-		};
-		expect(hue('owed')).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-warning').trim());
-		expect(hue('overdue')).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim());
-		expect(hue('overdue')).not.toBe(hue('owed'));
+		const badges = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span[class]')].filter((element) => /overdue/.test(element.textContent ?? ''));
+		expect(badges.length).toBeGreaterThan(0);
+		for (const badge of badges) {
+			expect(getComputedStyle(badge).getPropertyValue('--badge-hue').trim()).toBe(getComputedStyle(document.documentElement).getPropertyValue('--color-error').trim());
+		}
+		const states = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state')];
+		const owed = states.filter((state) => state.textContent?.trim().startsWith('owed'));
+		expect(owed.length).toBeGreaterThan(0);
+		for (const state of owed) expect(state.querySelector('svg')).toBeNull();
 	});
 
 	it('says the fact once to a screen reader: in the Money cell, never in Status', async () => {
@@ -2820,14 +2824,14 @@ describe('the Money column’s state', () => {
 		const row = testPage.getByRole('row', { name: new RegExp(TYPICAL_CLIENTS[6].name) }).element();
 		expect(row.textContent!.match(/overdue/g)).toHaveLength(1);
 		expect(row.querySelector('td.grows')!.textContent).not.toMatch(/overdue|Owes/i);
-		expect(row.querySelector('td.numeric')!.textContent).toMatch(/\$[\d,.]+\s*,\s*overdue\s*,\s*1 Invoice/);
+		expect(row.querySelector('td.numeric')!.textContent).toMatch(/\$[\d,.]+\s*,\s*12 days overdue\s*,\s*1 Invoice/);
 	});
 
 	it('gives the widest badge its track', async () => {
 		await renderListScreen({ width: 1280, height: 900, respond: () => jsonResponse({ items: seedLikeClients, hasMore: false }) });
 		await expect.element(testPage.getByRole('rowheader', { name: TYPICAL_CLIENTS[0].name })).toBeVisible();
 
-		const badge = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span')].find((element) => element.textContent?.trim() === 'overdue')!;
+		const badge = [...document.querySelectorAll<HTMLElement>('table.table-view .money .state span')].find((element) => element.textContent?.trim() === '62 days overdue')!;
 		expect(badge.getBoundingClientRect().width).toBeLessThanOrEqual(badge.closest('.state')!.getBoundingClientRect().width);
 	});
 });
@@ -3326,15 +3330,18 @@ describe('the table’s first column', () => {
 });
 
 describe('the amount on a record card', () => {
-	it('keeps "$1,500.00" and its "owed" badge each whole at 375px', async () => {
+	it('keeps "$1,500.00" and its "owed" each whole at 375px', async () => {
 		await renderListScreen({ width: 375, height: 740 });
 
 		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
 		await expect.element(group).toBeVisible();
 		const amount = group.getByText('$1,500.00').first().element();
 		expect(amount.getClientRects().length).toBe(1);
-		const owed = group.getByText('owed', { exact: true }).first().element();
-		expect(owed.getClientRects().length).toBe(1);
+		const state = [...document.querySelectorAll<HTMLElement>('.record-money .state')].find((element) => element.checkVisibility() && element.textContent?.trim().startsWith('owed'))!;
+		const word = [...state.childNodes].find((node) => node.nodeType === Node.TEXT_NODE && node.textContent === 'owed')!;
+		const range = document.createRange();
+		range.selectNodeContents(word);
+		expect(range.getClientRects().length).toBe(1);
 	});
 
 	// A dot between two facts only ever follows a fact on its line: where the
@@ -3772,6 +3779,7 @@ const owingClient = (owedCents: number, owedInvoiceCount: number, daysOverdue = 
 	name: 'Quinn Owing',
 	owedCents,
 	owedInvoiceCount,
+	oldestOverdueDays: daysOverdue,
 	openEngagements: [
 		{
 			engagementId: 'engagement-owing',
@@ -3790,7 +3798,7 @@ const owingRow = () => testPage.getByRole('row', { name: /Quinn Owing/ });
 describe('the Money cell says what a Client owes in all (#2874)', () => {
 	const row = owingRow;
 
-	it('says the total and the count of Invoices, in the amber badge', async () => {
+	it('says the total and the count of Invoices, owed as a plain word', async () => {
 		await setup(jsonResponse({ items: [owingClient(50_000, 2)], hasMore: false }));
 
 		await expect.element(row()).toHaveTextContent(/\$500\.00, owed,\s*2 Invoices/);
@@ -3802,10 +3810,25 @@ describe('the Money cell says what a Client owes in all (#2874)', () => {
 		await expect.element(row()).toHaveTextContent(/\$300\.00, owed,\s*1 Invoice(?!s)/);
 	});
 
-	it('marks the total overdue, in the red badge, when an open Invoice is late', async () => {
+	it('marks the total overdue, in the red badge with the oldest Invoice’s days, when an open Invoice is late', async () => {
 		await setup(jsonResponse({ items: [owingClient(50_000, 2, 12)], hasMore: false }));
 
-		await expect.element(row()).toHaveTextContent(/\$500\.00, overdue,\s*2 Invoices/);
+		await expect.element(row()).toHaveTextContent(/\$500\.00, 12 days overdue,\s*2 Invoices/);
+		await expect.element(row().getByText('12 days overdue', { exact: true })).toBeVisible();
+	});
+
+	it('says one day in the singular', async () => {
+		await setup(jsonResponse({ items: [owingClient(50_000, 1, 1)], hasMore: false }));
+
+		await expect.element(row()).toHaveTextContent(/\$500\.00, 1 day overdue,\s*1 Invoice/);
+	});
+
+	it('keeps the count for a screen reader in the table, where the badge fills the state track, and shows it on a card', async () => {
+		await setup(jsonResponse({ items: [owingClient(50_000, 2, 62)], hasMore: false }));
+
+		const counts = [...document.querySelectorAll<HTMLElement>('.owed-total .count')];
+		expect(counts.find((element) => element.closest('table'))!.classList.contains('visually-hidden')).toBe(true);
+		expect(counts.find((element) => !element.closest('table'))!.classList.contains('visually-hidden')).toBe(false);
 	});
 
 	it('says the total once on a card, with its count', async () => {

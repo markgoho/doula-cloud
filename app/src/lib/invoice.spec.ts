@@ -139,8 +139,8 @@ describe('invoiceMoneyState (DESIGN.md, "Money is said once")', () => {
 });
 
 describe('invoiceStateBadge (DESIGN.md, "Money is said once")', () => {
-	it('gives owed the amber badge, and overdue and written off the red one, as the Engagement does', () => {
-		expect(invoiceStateBadge({ status: 'open', daysOverdue: 0 })).toBe('warning');
+	it('gives owed no badge, and overdue and written off the red one, as the Engagement does', () => {
+		expect(invoiceStateBadge({ status: 'open', daysOverdue: 0 })).toBeUndefined();
 		expect(invoiceStateBadge({ status: 'open', daysOverdue: 4 })).toBe('error');
 		expect(invoiceStateBadge({ status: 'uncollectible', daysOverdue: 0 })).toBe('error');
 	});
@@ -644,7 +644,7 @@ describe('formatAmount', () => {
 
 describe('invoiceStatusVariant (#2059)', () => {
 	it('wears each status as a Badge variant, an unknown one neutral', () => {
-		expect(invoiceStatusVariant('open')).toBe('warning');
+		expect(invoiceStatusVariant('open')).toBe('neutral');
 		expect(invoiceStatusVariant('paid')).toBe('success');
 		expect(invoiceStatusVariant('uncollectible')).toBe('error');
 		expect(invoiceStatusVariant('void')).toBe('neutral');

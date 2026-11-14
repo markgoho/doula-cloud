@@ -36,8 +36,9 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
 | A list-level export, print or copy | Later | decided with the Invoices export (#2871); no record of a roster leaving the product |
 | Row actions without opening the record | Declined | the Client's page and its Engagement hold the actions, one step from the row |
-| A reader-chosen order (soonest due first, most owed first; Name, A to Z or Z to A) | Have it | Linear and Stripe give the reader a chosen order beside the filters; soonest due first stays the default, stated in the result line |
+| A reader-chosen order (soonest due first, most owed first, most overdue first; Name, A to Z or Z to A) | Have it | Linear and Stripe give the reader a chosen order beside the filters; soonest due first stays the default, stated in the result line |
 | Sort by Money (most owed first) | Have it | both readings rejected "the 'Who owe money' box does it": a yes-or-no narrowing gives the set, not the ranking |
+| An order by lateness ("Most overdue first") | Have it (#2891) | "who's furthest behind?" was Dee's question in the #2891 round's walk, two of three graders found the list could not answer it, and "Most owed first" ranks by amount, not by lateness; the BFF serves `?order=overdue` with a cursor, ranking by the earliest payment-due day among the Invoices a Client owes in all, Clients with nothing overdue after, and the Money cell says that Invoice's days ("62 days overdue") |
 | Sort by Doula | Declined | a Client can have several Doulas, so there is no one key |
 | Search by name | Have it | Name (T5; #1829) |
 | Grouping by Doula | Declined | a Client can have several Doulas, so there is no one key; the Doula column and the Doula select show them |

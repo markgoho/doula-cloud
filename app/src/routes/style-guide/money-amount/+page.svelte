@@ -4,7 +4,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 
 	const states = [
-		{ amount: '$1,500.00', state: { word: 'owed', variant: 'warning' as const } },
+		{ amount: '$1,500.00', state: { word: 'owed' } },
 		{ amount: '$950.00', state: { word: '120 days overdue', variant: 'error' as const } },
 		{ amount: '$2,400.00', state: { word: 'written off', variant: 'error' as const } },
 		{ amount: '$475.00', state: { word: 'paid' } },
@@ -17,7 +17,7 @@
 <stack-l space="var(--space-6)">
 	<Heading level={2} variant="section" text="Money amount" />
 	<Text
-		text="One Invoice's money on a Staff list: the amount, then its state. Amber owed and red overdue or written off are badges; every other state is a plain word. The Clients list and the Invoices list both draw their Money cell with it."
+		text="One Invoice's money on a Staff list: the amount, then its state. Red overdue and written off are badges; every other state, owed included, is a plain word. The Clients list and the Invoices list both draw their Money cell with it."
 		tone="variant"
 	/>
 

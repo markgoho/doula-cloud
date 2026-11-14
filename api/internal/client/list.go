@@ -87,6 +87,12 @@ type ListItem struct {
 	OwedCents        *int64 `json:"owedCents,omitempty"`
 	OwedInvoiceCount *int   `json:"owedInvoiceCount,omitempty"`
 
+	// OldestOverdueDays is how many whole Practice days late the oldest of
+	// those Invoices is (overdue.Days), 0 when none is late, absent for a
+	// contractor Doula. "Most overdue first" orders by the same Invoice's due
+	// instant, so the count says what the order ranked by.
+	OldestOverdueDays *int `json:"oldestOverdueDays,omitempty"`
+
 	// sortAt is this Client's place in the list's order, encoded as one time
 	// by dueSortJoin. It is the cursor's time.
 	sortAt time.Time
@@ -95,6 +101,9 @@ type ListItem struct {
 	// lines show as owed, 0 unless the owed order was asked for.
 	sortName  string
 	owedCents int64
+	// overdueAt is the overdue order's key (overdueJoinTemplate), noOverdueAt
+	// unless that order was asked for.
+	overdueAt time.Time
 }
 
 // OpenEngagement is one rollup line of ListItem.OpenEngagements.
@@ -296,7 +305,7 @@ func filtersFor(w http.ResponseWriter, c staffauth.Call, req ListRequest) (listF
 		apierr.WriteError(w, msgInvalidOrder, http.StatusBadRequest)
 		return listFilters{}, false
 	}
-	if req.Order == orderOwed && c.Reader.IsAmbientContractor() {
+	if (req.Order == orderOwed || req.Order == orderOverdue) && c.Reader.IsAmbientContractor() {
 		apierr.WriteError(w, msgOwedOrderContractor, http.StatusBadRequest)
 		return listFilters{}, false
 	}
@@ -326,6 +335,17 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 	filters, ok := filtersFor(w, c, req)
 	if !ok {
 		return
+	}
+	var zone *time.Location
+	if !c.Reader.IsAmbientContractor() {
+		loaded, err := practicetimezone.Load(r.Context(), c.Tx, c.PracticeID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		zone = loaded
+		filters.overdueFrom = overdue.From(clock.Now(r.Context()), zone)
 	}
 
 	var after *listAfter
@@ -366,7 +386,7 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		return
 	}
 
-	if err := attachOwedTotals(r.Context(), c.Tx, list, c.Reader); err != nil {
+	if err := attachOwedTotals(r.Context(), c.Tx, list, c.Reader, zone); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return
@@ -483,6 +503,9 @@ type listFilters struct {
 	// due is ?due or ?dueFrom and ?dueTo: Clients with an open Engagement
 	// due in the range.
 	due dueRange
+	// overdueFrom is overdue.From at the request's instant, the cutoff the
+	// overdue order's join binds. Set only when that order is asked for.
+	overdueFrom time.Time
 }
 
 // doulaParam checks the doula filter, writing a 400 and returning false when it is not
@@ -609,7 +632,7 @@ func listClientsQuery(practiceID string, filters listFilters, order string, afte
 	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
 		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at,
-		        ` + nameKeyExpr + `, ` + owedColumn(order) + `
+		        ` + nameKeyExpr + `, ` + owedColumn(order) + `, ` + overdueColumn(order) + `
 		 ` + from
 	return withListPage(query, args, "AND", order, after, ambientKeys)
 }
@@ -623,12 +646,25 @@ func owedColumn(order string) string {
 	return "0::bigint"
 }
 
-// joinFor is the join the order's key needs, if any, after dueSortJoin.
-func joinFor(order string) string {
-	if order == orderOwed {
-		return owedJoin
+// overdueColumn is the select-list value of the overdue key: the joined
+// instant when the overdue order is asked for, noOverdueAt when no join was made.
+func overdueColumn(order string) string {
+	if order == orderOverdue {
+		return "late.overdue_at"
 	}
-	return ""
+	return noOverdueAt
+}
+
+// joinFor is the join the order's key needs, if any, after dueSortJoin, and the
+// bind argument it adds at placeholder index next.
+func joinFor(order string, filters listFilters, next int) (string, []any) {
+	switch order {
+	case orderOwed:
+		return owedJoin, nil
+	case orderOverdue:
+		return fmt.Sprintf(overdueJoinTemplate, next), []any{filters.overdueFrom}
+	}
+	return "", nil
 }
 
 // clientsFromWhere is the rows the ambient-reach list holds, from FROM on,
@@ -637,12 +673,13 @@ func joinFor(order string) string {
 // for no order, so it carries no join an order's key needs.
 func clientsFromWhere(practiceID string, filters listFilters, order string) (string, []any) {
 	narrow, narrowArgs := filters.narrowing(5)
+	join, joinArgs := joinFor(order, filters, 5+len(narrowArgs))
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
-	from := `FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + joinFor(order) + `
+	from := `FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + join + `
 		 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND (NOT $2 OR ` + hasWorkExpr + `)
 		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
 		   AND ` + narrow
-	return from, append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+	return from, append(append([]any{practiceID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...), joinArgs...)
 }
 
 // attachedClientsFromWhere is clientsFromWhere narrowed to Clients staffID
@@ -650,17 +687,18 @@ func clientsFromWhere(practiceID string, filters listFilters, order string) (str
 // joins one row per attachment, so a reader of it takes DISTINCT c.id.
 func attachedClientsFromWhere(practiceID, staffID string, filters listFilters, order string) (string, []any) {
 	narrow, narrowArgs := filters.narrowing(6)
+	join, joinArgs := joinFor(order, filters, 6+len(narrowArgs))
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	from := `FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     ` + portalinvite.HerAccessJoin + dueSortJoin + joinFor(order) + `
+		     ` + portalinvite.HerAccessJoin + dueSortJoin + join + `
 		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
 		       AND ea.state = 'granted'
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
 		       AND (NOT $4 OR ` + owesExpr + `) AND (NOT $5 OR ` + noContractExpr + `)
 		       AND ` + narrow
-	return from, append([]any{practiceID, staffID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...)
+	return from, append(append([]any{practiceID, staffID, filters.withWorkOnly, filters.owes, filters.noContract}, narrowArgs...), joinArgs...)
 }
 
 // countListedClients is how many Clients the list holds under filters,
@@ -707,7 +745,7 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		            ` + portalinvite.HerAccessColumns + `,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
 		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at,
-		            ` + nameKeyExpr + ` AS sort_name, ` + owedColumn(order) + ` AS owed_cents
+		            ` + nameKeyExpr + ` AS sort_name, ` + owedColumn(order) + ` AS owed_cents, ` + overdueColumn(order) + ` AS overdue_at
 		     ` + from + `
 		 ) attached`
 	query, args = withListPage(query, args, "WHERE", order, after, attachedKeys)
@@ -1035,9 +1073,10 @@ func scanListItems(ctx context.Context, rows *sql.Rows) ([]ListItem, error) {
 		var sortAt time.Time
 		var sortName string
 		var owedCents int64
+		var overdueAt time.Time
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
-			&accessState, &expiresAt, &delivery, &item.EmailSuppressed, &pendingKinds, &sortAt, &sortName, &owedCents,
+			&accessState, &expiresAt, &delivery, &item.EmailSuppressed, &pendingKinds, &sortAt, &sortName, &owedCents, &overdueAt,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
@@ -1050,6 +1089,7 @@ func scanListItems(ctx context.Context, rows *sql.Rows) ([]ListItem, error) {
 		item.sortAt = sortAt
 		item.sortName = sortName
 		item.owedCents = owedCents
+		item.overdueAt = overdueAt
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

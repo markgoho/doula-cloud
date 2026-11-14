@@ -2,7 +2,7 @@
 	/*
 	 * One Invoice's money on a Staff list (DESIGN.md, "Money is said once"):
 	 * its amount, then its state, a badge where the state asks something of
-	 * the reader (amber owed, red overdue or written off) and a plain word
+	 * the reader (red overdue or written off) and a plain word (owed, not yet due, included)
 	 * otherwise. The Clients list and the Invoices list draw their Money
 	 * cells with it, so the two cannot drift apart again (#2746); the state
 	 * comes from `invoiceMoneyState`.
@@ -18,7 +18,7 @@
 
 	interface Properties {
 		amount: string;
-		state?: { word: string; variant?: 'warning' | 'error' };
+		state?: { word: string; variant?: 'error' };
 		isTracked?: boolean;
 	}
 

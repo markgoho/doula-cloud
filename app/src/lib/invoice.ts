@@ -760,13 +760,14 @@ export function invoiceStatusLabel(status: string): string {
 
 /** Which Badge variant each status wears (#2059), kept beside the labels
  * so a status and its color are decided in one place. Owed (the stored
- * 'open') needs the Client to pay, so it is the warning, the amber of what
- * needs someone to act; Written off (the stored 'uncollectible') is a
- * collection that failed, so it is the error (red means late or failed, and nothing else);
- * Draft and Void are settled with no money moving, so they are neutral. An
- * unknown status is neutral too. */
-const invoiceStatusVariants: Record<string, 'warning' | 'success' | 'error' | 'neutral'> = {
-	open: 'warning',
+ * 'open') is money not yet due, which asks nothing of the reader, so it is
+ * neutral (#2891); it turns red as Overdue when it is late. Written off (the
+ * stored 'uncollectible') is a collection that failed, so it is the error
+ * (red means late or failed, and nothing else); Draft and Void are settled
+ * with no money moving, so they are neutral. An unknown status is neutral
+ * too. */
+const invoiceStatusVariants: Record<string, 'success' | 'error' | 'neutral'> = {
+	open: 'neutral',
 	paid: 'success',
 	uncollectible: 'error'
 };
@@ -861,12 +862,12 @@ export function invoiceRowStatusVariant(invoice: InvoiceStanding): 'info' | 'war
 
 /** Whether a Staff list says an Invoice's state after its amount as a badge,
  * and in which color (DESIGN.md, "Money is said once"): the Engagement's
- * own color, kept only where it asks something of the reader -- amber owed,
- * red overdue or written off. Every other state is a plain word, so it has
- * none. The Clients list and the Invoices list both read it (#2746). */
-export function invoiceStateBadge(invoice: InvoiceStanding): 'warning' | 'error' | undefined {
-	const variant = invoiceRowStatusVariant(invoice);
-	return variant === 'warning' || variant === 'error' ? variant : undefined;
+ * own color, kept only where it asks something of the reader -- red overdue
+ * or written off. Every other state, owed not yet due included (#2891), is a
+ * plain word, so it has none. The Clients list and the Invoices list both
+ * read it (#2746). */
+export function invoiceStateBadge(invoice: InvoiceStanding): 'error' | undefined {
+	return invoiceRowStatusVariant(invoice) === 'error' ? 'error' : undefined;
 }
 
 /**
@@ -940,7 +941,7 @@ export function invoiceStateWord(
  * fact alone, for a card whose date line already says "Paid". */
 export function invoiceMoneyState(
 	invoice: InvoiceStanding & { refundedCents?: number }
-): { word: string; variant?: 'warning' | 'error'; refund?: string } {
+): { word: string; variant?: 'error'; refund?: string } {
 	const refunded = invoice.refundedCents ?? 0;
 	if (invoice.status === 'paid' && !invoice.paymentProcessing && refunded > 0) {
 		const refund = `${formatAmount(refunded)} refunded`;

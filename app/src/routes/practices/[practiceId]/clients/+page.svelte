@@ -180,7 +180,7 @@ import type { PageProps as PageProperties } from './$types';
 	let appliedDoula = $derived(page.url.searchParams.get('doula') ?? '');
 	let appliedName = $derived((page.state.clientsName ?? '').trim());
 	// #2869: `?order=` is in the address too. A contractor Doula is offered no
-	// order (her bar is not drawn), and the BFF refuses "owed" to her.
+	// order (her bar is not drawn), and the BFF refuses "owed" and "overdue" to her.
 	let appliedOrder = $derived(isContractor ? '' : clientOrderFrom(page.url.searchParams.get('order')));
 	// #2871: `?due=2027-03` or `?dueFrom=&dueTo=`, in the address for the same reasons.
 	// A month or a range the BFF would refuse is read as none.
@@ -656,7 +656,7 @@ import type { PageProps as PageProperties } from './$types';
 
 	// A line's status: its care phase and its Contract, plain words. The money
 	// is not here: the Money column says it once, with the badge that carries its
-	// meaning (an amber "owed", a red "12 days overdue"), and a screen reader
+	// meaning (the plain word "owed", a red "12 days overdue"), and a screen reader
 	// hears it once there.
 	const contractFacts: Record<string, string> = {
 		draft: 'Contract draft',
@@ -763,13 +763,13 @@ import type { PageProps as PageProperties } from './$types';
 
 	// What the Client owes in all (#2874): the BFF's sum and count of her open Invoices with no
 	// payment on its way, said once. Red where any Engagement's oldest open Invoice is late.
-	type OwedTotal = { amount: string; count: number; word: 'owed' | 'overdue'; variant: 'warning' | 'error' };
+	type OwedTotal = { amount: string; count: number; word: string; isLate: boolean };
 	function owedTotal(client: ClientListItem): OwedTotal | undefined {
 		const count = client.owedInvoiceCount ?? 0;
 		if (count === 0 || client.owedCents === undefined) return undefined;
-		const isLate = (client.openEngagements ?? []).some((line) => line.invoiceStatus === 'open' && !line.paymentProcessing && (line.daysOverdue ?? 0) > 0);
 		const amount = formatAmount(client.owedCents);
-		return isLate ? { amount, count, word: 'overdue', variant: 'error' } : { amount, count, word: 'owed', variant: 'warning' };
+		const days = client.oldestOverdueDays ?? 0;
+		return days > 0 ? { amount, count, word: `${days} ${days === 1 ? 'day' : 'days'} overdue`, isLate: true } : { amount, count, word: 'owed', isLate: false };
 	}
 
 	function moneyLines(client: ClientListItem): MoneyLine[] {
@@ -911,7 +911,8 @@ import type { PageProps as PageProperties } from './$types';
 			'': { column: columnSet.date.label, direction: 'ascending' },
 			name: { column: columnSet.name.label, direction: 'ascending' },
 			'name-desc': { column: columnSet.name.label, direction: 'descending' },
-			owed: { column: columnSet.money.label, direction: 'descending' }
+			owed: { column: columnSet.money.label, direction: 'descending' },
+			overdue: { column: columnSet.money.label, direction: 'descending' }
 		}[shown.order] as { column: string; direction: 'ascending' | 'descending' }
 	);
 
@@ -1201,7 +1202,7 @@ import type { PageProps as PageProperties } from './$types';
 
 <!-- What the Client owes in all and how many Invoices make it: "$500.00 owed, 2 Invoices". -->
 {#snippet owedTotalValue(total: OwedTotal, isTracked: boolean)}
-	<span class="owed-total money" class:tracked={isTracked}><span class="amount">{total.amount}</span><span class="visually-hidden">, </span><span class="state"><Badge label={total.word} variant={total.variant} /><span class="visually-hidden">, </span><span class="count">{total.count} {total.count === 1 ? 'Invoice' : 'Invoices'}</span></span></span>
+	<span class="owed-total money" class:tracked={isTracked}><span class="amount">{total.amount}</span><span class="visually-hidden">&#44;&#32;</span><span class="state">{#if total.isLate}<Badge label={total.word} variant="error" />{:else}{total.word}{/if}<span class="visually-hidden">&#44;&#32;</span><span class="count" class:visually-hidden={isTracked && total.isLate}>{total.count} {total.count === 1 ? 'Invoice' : 'Invoices'}</span></span></span>
 {/snippet}
 
 <!-- The amount and its state (`MoneyAmount`, the Invoices list's too); a fee is the words "Your fee" and the amount. -->

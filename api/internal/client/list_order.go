@@ -17,17 +17,18 @@ const (
 	orderName     = "name"
 	orderNameDesc = "name-desc"
 	orderOwed     = "owed"
+	orderOverdue  = "overdue"
 )
 
 const (
-	msgInvalidOrder        = "The order must be empty, name, name-desc or owed."
-	msgOwedOrderContractor = "You contract for this Practice, so you cannot order Clients by what they owe. Money is the Practice's to see."
+	msgInvalidOrder        = "The order must be empty, name, name-desc, owed or overdue."
+	msgOwedOrderContractor = "You contract for this Practice, so you cannot order Clients by what they owe or by what is late. Money is the Practice's to see."
 	msgInvalidCursor       = "invalid cursor"
 )
 
 func isKnownOrder(order string) bool {
 	switch order {
-	case orderDue, orderName, orderNameDesc, orderOwed:
+	case orderDue, orderName, orderNameDesc, orderOwed, orderOverdue:
 		return true
 	}
 	return false
@@ -58,15 +59,31 @@ const owedJoin = `
 	    WHERE ge.client_id = c.id AND ` + owedInvoicesWhere + `
 	) owed ON true`
 
+// noOverdueAt is the overdue order's key for a Client with nothing overdue: a
+// time past every due date, so such a Client sorts after every Client who has
+// something late, and among themselves by the default order's key.
+const noOverdueAt = `'9999-12-31T00:00:00Z'::timestamptz`
+
+// overdueJoinTemplate is the overdue order's key, joined only when that order
+// is asked for: the earliest payment-due instant among the Invoices the Client
+// owes in all that are overdue before the cutoff (overdue.From) bound at the
+// placeholder it is filled with, noOverdueAt for a Client with none. The Money
+// cell's day count reads the same Invoices (attachOwedTotals).
+const overdueJoinTemplate = `
+	LEFT JOIN LATERAL (
+	    SELECT COALESCE(min(gi.due_at), ` + noOverdueAt + `) AS overdue_at` + owedInvoicesFrom + `
+	    WHERE ge.client_id = c.id AND ` + owedInvoicesWhere + ` AND gi.due_at < $%d
+	) late ON true`
+
 // listKeys names the columns the order and the cursor compare, which differ
 // between the ambient query and the attached one's outer SELECT.
 type listKeys struct {
-	name, at, id, owed string
+	name, at, id, owed, late string
 }
 
 var (
-	ambientKeys  = listKeys{name: nameKeyExpr, at: "due.sort_at", id: "c.id", owed: "owed.owed_cents"}
-	attachedKeys = listKeys{name: "sort_name", at: "sort_at", id: "id", owed: "owed_cents"}
+	ambientKeys  = listKeys{name: nameKeyExpr, at: "due.sort_at", id: "c.id", owed: "owed.owed_cents", late: "late.overdue_at"}
+	attachedKeys = listKeys{name: "sort_name", at: "sort_at", id: "id", owed: "owed_cents", late: "overdue_at"}
 )
 
 // listAfter is the position a keyed cursor decodes to: the key values of the
@@ -74,6 +91,7 @@ var (
 type listAfter struct {
 	name string
 	owed int64
+	late time.Time
 	at   time.Time
 	id   string
 }
@@ -101,16 +119,32 @@ func decodeListCursor(order string) func(string) (listAfter, error) {
 			if after.at, err = pagecursor.ParseTimeKey(c.Keys[1]); err != nil {
 				return listAfter{}, fmt.Errorf("client: list cursor: %w", err)
 			}
+		case orderOverdue:
+			err = parseTimeKeys(c.Keys, &after.late, &after.at)
 		default:
-			if len(c.Keys) != 1 {
-				return listAfter{}, errors.New("client: list cursor: wrong key count")
-			}
-			if after.at, err = pagecursor.ParseTimeKey(c.Keys[0]); err != nil {
-				return listAfter{}, fmt.Errorf("client: list cursor: %w", err)
-			}
+			err = parseTimeKeys(c.Keys, &after.at)
+		}
+		if err != nil {
+			return listAfter{}, fmt.Errorf("client: list cursor: %w", err)
 		}
 		return after, nil
 	}
+}
+
+// parseTimeKeys reads each of keys as a time into the destination at its place,
+// and refuses a cursor that holds any other number of keys.
+func parseTimeKeys(keys []string, into ...*time.Time) error {
+	if len(keys) != len(into) {
+		return errors.New("wrong key count")
+	}
+	for i, dst := range into {
+		t, err := pagecursor.ParseTimeKey(keys[i])
+		if err != nil {
+			return fmt.Errorf("key %d: %w", i, err)
+		}
+		*dst = t
+	}
+	return nil
 }
 
 // cursorKeys is the sort key values of item under order, the cursor's keys.
@@ -120,6 +154,8 @@ func (item ListItem) cursorKeys(order string) []string {
 		return []string{item.sortName}
 	case orderOwed:
 		return []string{strconv.FormatInt(item.owedCents, 10), pagecursor.TimeKey(item.sortAt)}
+	case orderOverdue:
+		return []string{pagecursor.TimeKey(item.overdueAt), pagecursor.TimeKey(item.sortAt)}
 	}
 	return []string{pagecursor.TimeKey(item.sortAt)}
 }
@@ -152,6 +188,11 @@ func withListPage(query string, args []any, joiner, order string, after *listAft
 			fmt.Fprintf(&out, " %s (%s < %s OR (%s = %s AND (%s, %s) > (%s, %s)))", joiner, k.owed, owed, k.owed, owed, k.at, k.id, bind(after.at), bind(after.id))
 		}
 		fmt.Fprintf(&out, " ORDER BY %s DESC, %s, %s", k.owed, k.at, k.id)
+	case orderOverdue:
+		if after != nil {
+			fmt.Fprintf(&out, " %s (%s, %s, %s) > (%s, %s, %s)", joiner, k.late, k.at, k.id, bind(after.late), bind(after.at), bind(after.id))
+		}
+		fmt.Fprintf(&out, " ORDER BY %s, %s, %s", k.late, k.at, k.id)
 	default:
 		if after != nil {
 			fmt.Fprintf(&out, " %s (%s, %s) > (%s, %s)", joiner, k.at, k.id, bind(after.at), bind(after.id))

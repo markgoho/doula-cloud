@@ -341,6 +341,9 @@ func TestListHandler_ContractorReadsByNameButNotByWhatIsOwed(t *testing.T) {
 	if status := listByNameStatus(t, srv.URL, session, practiceID, client.ListRequest{Order: orderOwed}); status != http.StatusBadRequest {
 		t.Errorf("POST order=owed as a contractor: status = %d, want 400", status)
 	}
+	if status := listStatus(t, srv.URL, session, practiceID, "?order=overdue"); status != http.StatusBadRequest {
+		t.Errorf("GET order=overdue as a contractor: status = %d, want 400", status)
+	}
 }
 
 // TestListHandler_RefusesAnUnknownOrderAndACursorFromAnotherOrder: a link
@@ -377,6 +380,10 @@ func TestListHandler_RefusesAnUnknownOrderAndACursorFromAnotherOrder(t *testing.
 		"owed, one key":                {orderOwed, pagecursor.EncodeKeyed(orderOwed, []string{"100"}, id)},
 		"owed, not an amount":          {orderOwed, pagecursor.EncodeKeyed(orderOwed, []string{"lots", now}, id)},
 		"owed, not a time":             {orderOwed, pagecursor.EncodeKeyed(orderOwed, []string{"100", "soon"}, id)},
+		"owed cursor in overdue order": {orderOverdue, *readClients(t, srv.URL, session, practiceID, "?order=owed").NextCursor},
+		"overdue, one key":             {orderOverdue, pagecursor.EncodeKeyed(orderOverdue, []string{now}, id)},
+		"overdue, not a time":          {orderOverdue, pagecursor.EncodeKeyed(orderOverdue, []string{notATime, now}, id)},
+		"overdue, no tie-break time":   {orderOverdue, pagecursor.EncodeKeyed(orderOverdue, []string{now, notATime}, id)},
 	} {
 		if status := listStatus(t, srv.URL, session, practiceID, "?order="+c.order+"&cursor="+c.cursor); status != http.StatusBadRequest {
 			t.Errorf("GET %s: status = %d, want 400", name, status)
