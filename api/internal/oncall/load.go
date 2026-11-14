@@ -85,10 +85,11 @@ func ownStartOf(rule sql.NullString, week sql.NullInt16) *OwnStart {
 // engagementsFilter narrows loadEngagements. Both fields are the empty
 // string when unused.
 type engagementsFilter struct {
-	// contractorStaffID is set only for an ambient contractor Doula, and
-	// confines the read to Engagements she holds an open, granted
-	// Attachment on -- in the query, so nothing else is ever read.
-	contractorStaffID string
+	// attachedStaffID confines the read to Engagements this Staff member
+	// holds an open, granted Attachment on -- in the query, so nothing else
+	// is ever read. The roster sets it for an ambient contractor Doula; the
+	// bulk gap act sets it to the Doula it records for.
+	attachedStaffID string
 	// engagementID confines the read to one Engagement.
 	engagementID string
 	// unattendedOn, when set, also reads the live births nobody holds a
@@ -139,7 +140,7 @@ const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.prefer
 // no particular order.
 func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, settings practiceSettings, filter engagementsFilter) ([]engagementOnCall, error) {
 	rows, err := tx.QueryContext(ctx, engagementsSelect,
-		practiceID, nullableID(filter.contractorStaffID), nullableID(filter.engagementID), filter.unattendedOn != "")
+		practiceID, nullableID(filter.attachedStaffID), nullableID(filter.engagementID), filter.unattendedOn != "")
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("oncall: list on-call engagements: %w", err)

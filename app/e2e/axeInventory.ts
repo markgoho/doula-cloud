@@ -29,11 +29,17 @@ export const SCANNED_ELSEWHERE: ScannedElsewhere[] = [];
 /*
  * Not scanned, and each is a decision rather than an oversight.
  */
+const CANNOT_BE_REACHED_REASON =
+	"The act's later pages (#2934) are reached only with a Doula on a birth with days on call and a time already answered, and the e2e Practice has no birth on call. Each is swept at 320px by the route continuum check on hostile content and specified in cannot-be-reached.svelte.spec.ts.";
+
 export const NOT_SCANNED: ListedRoute[] = [
 	{
 		route: 'style-guide/*',
 		reason:
 			'Sixty-odd component demo pages. They are not archetype routes, and scanning them would roughly triple the run for no additional archetype coverage. Every component on them is already scanned in the place a person meets it.'
 	},
-	{ route: 'demo/*', reason: "SvelteKit's own scaffolding, not a screen in the product." }
+	{ route: 'demo/*', reason: "SvelteKit's own scaffolding, not a screen in the product." },
+	{ route: 'practices/[practiceId]/on-call/cannot-be-reached/when', reason: CANNOT_BE_REACHED_REASON },
+	{ route: 'practices/[practiceId]/on-call/cannot-be-reached/cover', reason: CANNOT_BE_REACHED_REASON },
+	{ route: 'practices/[practiceId]/on-call/cannot-be-reached/check', reason: CANNOT_BE_REACHED_REASON }
 ];

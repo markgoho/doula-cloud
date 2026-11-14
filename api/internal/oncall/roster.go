@@ -178,7 +178,7 @@ func RosterHandler() http.Handler {
 
 		filter := engagementsFilter{}
 		if c.Reader.IsAmbientContractor() {
-			filter.contractorStaffID = c.StaffID
+			filter.attachedStaffID = c.StaffID
 		}
 		resp, err := buildRoster(r.Context(), c.Tx, c.PracticeID, settings, q, filter)
 		if err != nil {

@@ -29,6 +29,8 @@ var roleFreeWriteRoutes = map[string]string{
 	"PUT /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps/{gapId}":    reasonPerGap,
 	"DELETE /api/practices/{practiceId}/engagements/{engagementId}/coverage-gaps/{gapId}": reasonPerGap,
 
+	"POST /api/practices/{practiceId}/coverage-gaps": "the bulk form of the gap writes above: a Doula records a time for herself and an Owner or an Admin for a named Doula (oncall.refuseBulkAsk), and the births come only from the named Doula's own Attachments in the query, so it is an identity rule rather than a role list",
+
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/messages":                   reasonReachNotRole,
 	"POST /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}":           reasonReachNotRole,
 	"PUT /api/practices/{practiceId}/engagements/{engagementId}/plans/{planType}":            reasonReachNotRole,

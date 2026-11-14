@@ -998,6 +998,12 @@ const STAFF_ROUTES: SeededRoute<StaffSeed>[] = [
 		h1: 'On call'
 	},
 	{
+		key: 'practices/[practiceId]/on-call/cannot-be-reached',
+		archetype: 'E',
+		url: (s) => `/practices/${s.practiceId}/on-call/cannot-be-reached`,
+		h1: 'Which Doula cannot be reached?'
+	},
+	{
 		key: 'practices/[practiceId]/schedule',
 		archetype: 'C',
 		url: (s) => `/practices/${s.practiceId}/schedule`,

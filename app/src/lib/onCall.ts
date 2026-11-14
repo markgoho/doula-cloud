@@ -28,6 +28,11 @@ import { parseRefusal, refusalError } from './formErrors.js';
 import type { OnCallSettings } from './onCallRule.js';
 import { dayIn } from './zonedTime.js';
 
+/**
+The load dependency the roster is read under, so an act that changes it can read it again.
+*/
+export const ON_CALL_READ = 'app:on-call';
+
 /** One live coverage gap, as the roster and the Engagement panel show
  * it. Mirrors the Go BFF's oncall.Gap. The roster sends no `reason`. */
 export interface CoverageGap {
