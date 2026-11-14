@@ -44,4 +44,4 @@ Return EXACTLY:
 4. Findings: every failed check from both rubrics, ranked by how much it hurts a real person's job (craft findings ranked below usability ones unless they hurt reading), each with a concrete fix.
 5. Expected and missing: the list you wrote before reading the surface brief, each item with where the expectation comes from; then, having read the brief's Category baseline, mark each item built, declined (quote the reason, and say whether it holds for a reader that product has trained), or not in the baseline.
 
-Do not edit files. Do not spawn agents. Run plain single shell commands only. Budget about 30 minutes.
+Do not edit files. Do not spawn agents. Run plain single shell commands only. Budget 25 minutes. At 25 minutes stop gathering evidence and write the report from what you have: a check you did not reach is marked "unverified" with the reason and is not counted as a fail.
