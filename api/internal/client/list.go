@@ -228,6 +228,9 @@ func ListHandler() http.Handler {
 			Owes:       queryFlag(r, "owes"),
 			NoContract: queryFlag(r, "noContract"),
 			Doula:      doula,
+			Due:        query.Get("due"),
+			DueFrom:    query.Get("dueFrom"),
+			DueTo:      query.Get("dueTo"),
 			Order:      query.Get("order"),
 			Cursor:     query.Get("cursor"),
 		})
@@ -244,6 +247,9 @@ type ListRequest struct {
 	NoContract bool   `json:"noContract"`
 	Doula      string `json:"doula"`
 	Name       string `json:"name"`
+	Due        string `json:"due"`
+	DueFrom    string `json:"dueFrom"`
+	DueTo      string `json:"dueTo"`
 	Order      string `json:"order"`
 	Cursor     string `json:"cursor"`
 }
@@ -287,7 +293,12 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)
 		return
 	}
+	due, ok := dueParams(w, req.Due, req.DueFrom, req.DueTo)
+	if !ok {
+		return
+	}
 	filters := listFilters{
+		due:   due,
 		doula: req.Doula,
 		name:  req.Name,
 		// Narrowing to who owes or who lacks a Contract is a question about
@@ -449,6 +460,9 @@ type listFilters struct {
 	doula string
 	// name is ?q, trimmed, "" for none.
 	name string
+	// due is ?due or ?dueFrom and ?dueTo: Clients with an open Engagement
+	// due in the range.
+	due dueRange
 }
 
 // doulaParam checks the doula filter, writing a 400 and returning false when it is not
@@ -492,14 +506,15 @@ const doulaExpr = `($%[1]d::uuid IS NULL OR EXISTS (
 	  AND da.staff_id = $%[1]d::uuid AND da.state = 'granted'
 ))`
 
-// narrowing is the ?doula and ?q conditions as SQL, with their two bind
+// narrowing is the ?doula, ?q and due conditions as SQL, with their four bind
 // arguments numbered from first, to be ANDed into either list query.
 func (f listFilters) narrowing(first int) (string, []any) {
 	var doula any
 	if f.doula != "" {
 		doula = f.doula
 	}
-	return fmt.Sprintf(doulaExpr, first) + " AND " + nameMatchExpr(first+1), []any{doula, textmatch.Contains(f.name)}
+	args := append([]any{doula, textmatch.Contains(f.name)}, f.due.args()...)
+	return fmt.Sprintf(doulaExpr, first) + " AND " + nameMatchExpr(first+1) + " AND " + dueNarrowing(first+2), args
 }
 
 // queryFlag is whether the address carries name=true.
@@ -597,7 +612,7 @@ func joinFor(order string) string {
 }
 
 // clientsFromWhere is the rows the ambient-reach list holds, from FROM on,
-// with its bind arguments $1 to $6. The page and the count (#2867) both read
+// with its bind arguments $1 to $8. The page and the count (#2867) both read
 // it, so the total is of the rows and never of a looser set. The count asks
 // for no order, so it carries no join an order's key needs.
 func clientsFromWhere(practiceID string, filters listFilters, order string) (string, []any) {
@@ -611,7 +626,7 @@ func clientsFromWhere(practiceID string, filters listFilters, order string) (str
 }
 
 // attachedClientsFromWhere is clientsFromWhere narrowed to Clients staffID
-// holds an open, granted attachment on, with its bind arguments $1 to $7. It
+// holds an open, granted attachment on, with its bind arguments $1 to $9. It
 // joins one row per attachment, so a reader of it takes DISTINCT c.id.
 func attachedClientsFromWhere(practiceID, staffID string, filters listFilters, order string) (string, []any) {
 	narrow, narrowArgs := filters.narrowing(6)

@@ -120,6 +120,8 @@ The Invoices list (`GET /api/practices/{id}/invoices`, and the `order` field of 
 
 The Clients list (`GET /api/practices/{id}/clients`, and the `order` in the body of `POST …/clients/list`) is on it too: empty is soonest due first, then most recently ended; `name` and `name-desc` sort by her lower-cased full name; `owed` sorts by what she owes in all (#2874: the sum of her open Invoices with no payment on its way, which each row also carries as `owedCents` with `owedInvoiceCount`), most first, then the default key. `owed` from a contractor Doula is a 400, since she sees no money.
 
+The Clients list also narrows to a due month (#2871): `due=2027-03`, or `dueFrom` and `dueTo` (YYYY-MM-DD, inclusive), on the GET and in the POST body. A Client is in when one of her open Engagements has a `due_date` in the range, a date with no zone, so no conversion. It composes with every other filter, `mine`, the Doula and the order, and `clientCount` follows it. A malformed value, `due` beside `dueFrom` or `dueTo`, one of `dueFrom` and `dueTo` without the other, and `dueTo` before `dueFrom` are each a 400 with `details` keyed by the field.
+
 ---
 
 ## 5. Keep Default Payloads Lean (Use `?include=`)
