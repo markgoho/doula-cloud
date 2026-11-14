@@ -2,6 +2,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { takeOutcome } from '#lib/outcome.js';
+	import { ListBack } from '#lib/listOrigin.svelte.js';
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
@@ -17,6 +18,16 @@
 	// What the save that led here did, if one did (#1710). Taken while the
 	// navigation runs, which ends before the read lands.
 	const outcome = takeOutcome(page.url);
+
+	// #2864: the list the page was opened from, read while the navigation
+	// runs, so the loading frame and the page name the same one.
+	const back = new ListBack(
+		() => ({
+			schedule: resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! }),
+			invoices: resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! })
+		}),
+		() => page.url.pathname
+	);
 
 	// EngagementScreen's sections, in its order. Offers is an Owner's or
 	// an Admin's (#2258); Doula fees stands once the Engagement read says
@@ -59,12 +70,13 @@
 {:else if engagement.failure}
 	<FailedRead kind={engagement.failure} />
 {:else if engagement.value}
-	<EngagementScreen data={{ ...data, ...engagement.value }} {outcome} />
+	<EngagementScreen data={{ ...data, ...engagement.value }} {outcome} {back} />
 {:else}
 	<RecordDetail
 		title=""
-		backHref={resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! })}
-		backLabel="Clients"
+		backHref={back.href(resolve('/practices/[practiceId]/clients', { practiceId: page.params.practiceId! }))}
+		backLabel={back.label('Clients')}
+		onBack={back.go}
 		isContentsShown
 		{summaryRows}
 		summaryLinks={['View Client']}

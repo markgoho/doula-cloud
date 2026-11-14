@@ -12,6 +12,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
+	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -104,6 +105,9 @@
 	 * screen's own, a POST with the search in its body.
 	 */
 	const appliedSearch = $derived((page.state.invoicesSearch ?? '').trim());
+	$effect(() => {
+		holdListSearch('invoices', appliedSearch);
+	});
 	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string };
 	const isSameKey = (a: ReadKey | undefined, b: ReadKey) =>
 		a?.view === b.view && a.order === b.order && a.search === b.search;
