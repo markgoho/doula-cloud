@@ -140,15 +140,41 @@ export interface LoadClientsOptions {
 	 * (ListByNameHandler), never in the address (#1829).
 	 */
 	name?: string;
+	/**
+	 * The order the reader chose (ListHandler's `?order=`, #2869); empty is the
+	 * list's own, soonest due first.
+	 */
+	order?: ClientOrder;
 }
 
-function clientsQuery({ cursor, showAll, showMine, showOwing, showNoContract, doula }: LoadClientsOptions): string {
+/**
+ * The orders the Clients list is read in (#2869). The empty one is the
+ * list's own; "owed" is not offered to a reader who sees no money.
+ */
+export type ClientOrder = '' | 'name' | 'name-desc' | 'owed';
+
+export const CLIENT_ORDER_OPTIONS: readonly { value: ClientOrder; label: string }[] = [
+	{ value: '', label: 'Soonest due first' },
+	{ value: 'name', label: 'Name, A to Z' },
+	{ value: 'name-desc', label: 'Name, Z to A' },
+	{ value: 'owed', label: 'Most owed first' }
+];
+
+/**
+ * The order an address names: one the list offers, or the list's own.
+ */
+export function clientOrderFrom(value: string | null): ClientOrder {
+	return CLIENT_ORDER_OPTIONS.find((option) => option.value === value)?.value ?? '';
+}
+
+function clientsQuery({ cursor, showAll, showMine, showOwing, showNoContract, doula, order }: LoadClientsOptions): string {
 	const parts: string[] = [];
 	if (showAll) parts.push('all=true');
 	if (showMine) parts.push('mine=true');
 	if (showOwing) parts.push('owes=true');
 	if (showNoContract) parts.push('noContract=true');
 	if (doula) parts.push(`doula=${encodeURIComponent(doula)}`);
+	if (order) parts.push(`order=${order}`);
 	if (cursor) parts.push(`cursor=${encodeURIComponent(cursor)}`);
 	return parts.length > 0 ? `?${parts.join('&')}` : '';
 }
@@ -174,6 +200,7 @@ export async function loadClients(
 					owes: options.showOwing ?? false,
 					noContract: options.showNoContract ?? false,
 					doula: options.doula ?? '',
+					order: options.order ?? '',
 					cursor: options.cursor ?? ''
 				})
 			})
@@ -243,7 +270,12 @@ export async function loadDoulaCounts(fetcher: Fetcher, practiceId: string): Pro
 	return response.json();
 }
 
-const ORDER_SUFFIX = ', soonest due first, then most recently ended';
+const ORDER_WORDS: Record<ClientOrder, string> = {
+	'': 'soonest due first, then most recently ended',
+	name: 'by name, A to Z',
+	'name-desc': 'by name, Z to A',
+	owed: 'most owed first'
+};
 const CLEAR_FILTERS = 'Clear the filters to widen the list.';
 /**
  * The default list holds a Client with any Engagement, in any status, so current
@@ -271,7 +303,7 @@ export function clientsResultSummary(
 	isShowingMine = false,
 	isShowingOwing = false,
 	isShowingNoContract = false,
-	{ doulaName = '', name = '' }: { doulaName?: string; name?: string } = {},
+	{ doulaName = '', name = '', order = '' }: { doulaName?: string; name?: string; order?: ClientOrder } = {},
 	total?: number
 ): string {
 	const narrowing = { isShowingEveryone, isShowingMine, isShowingOwing, isShowingNoContract, doulaName, name };
@@ -306,7 +338,7 @@ export function clientsResultSummary(
 	// changes nothing beside them and the line has nothing to say about it. The default list
 	// does not name its group; the list with the switch on says what it adds.
 	const included = isShowingEveryone && !isImplyingCare ? `, including ${NO_CARE_YET}` : '';
-	return `${hasMore ? 'Showing the first' : 'Showing'} ${clients}${named}${traits}${included}${ORDER_SUFFIX}.`;
+	return `${hasMore ? 'Showing the first' : 'Showing'} ${clients}${named}${traits}${included}, ${ORDER_WORDS[order]}.`;
 }
 
 /*

@@ -8,6 +8,7 @@ import {
 	loadClients,
 	mergeClient,
 	searchClients,
+	clientOrderFrom,
 	type ClientEditFields
 } from './client.js';
 import { jsonResponse as response } from './testResponse.js';
@@ -127,6 +128,7 @@ describe('loadClients', () => {
 			showNoContract: true,
 			doula: 'staff-1',
 			name: 'Anne & Marie 100%',
+			order: 'name',
 			cursor: 'next-page'
 		});
 
@@ -141,6 +143,7 @@ describe('loadClients', () => {
 			owes: true,
 			noContract: true,
 			doula: 'staff-1',
+			order: 'name',
 			cursor: 'next-page'
 		});
 	});
@@ -157,6 +160,7 @@ describe('loadClients', () => {
 			owes: false,
 			noContract: false,
 			doula: '',
+			order: '',
 			cursor: ''
 		});
 	});
@@ -378,6 +382,30 @@ describe('mergeClient', () => {
 		await expect(
 			mergeClient(fetcher, 'practice-1', 'client-1', editFields, 'client-2')
 		).rejects.toThrow('this client record has already been merged into another');
+	});
+});
+
+describe('the Clients list order (#2869)', () => {
+	it('puts the order in the address of a GET, before the cursor', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { order: 'owed', cursor: 'next-page' });
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/clients?order=owed&cursor=next-page');
+	});
+
+	it('reads an order the list offers, and anything else as its own', () => {
+		expect(clientOrderFrom('name')).toBe('name');
+		expect(clientOrderFrom('name-desc')).toBe('name-desc');
+		expect(clientOrderFrom('owed')).toBe('owed');
+		expect(clientOrderFrom('newest')).toBe('');
+		expect(clientOrderFrom('')).toBe('');
+	});
+
+	it('ends the result line on the order\'s own words', () => {
+		expect(clientsResultSummary(30, true, false, false, false, false, { order: 'name' })).toBe('Showing the first 30 Clients, by name, A to Z.');
+		expect(clientsResultSummary(2, false, false, false, false, false, { order: 'name-desc' })).toBe('Showing 2 Clients, by name, Z to A.');
+		expect(clientsResultSummary(2, false, false, false, true, false, { order: 'owed' })).toBe('Showing 2 Clients who owe money, most owed first.');
 	});
 });
 

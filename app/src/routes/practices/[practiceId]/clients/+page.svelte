@@ -4,11 +4,14 @@
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
+		CLIENT_ORDER_OPTIONS,
+		clientOrderFrom,
 		clientsResultSummary,
 		loadClients,
 		NO_CARE_YET,
 		UNKNOWN_DOULA,
 		type ClientListItem,
+		type ClientOrder,
 		type OpenEngagement
 	} from '#lib/client.js';
 	import { RefusalError } from '#lib/formErrors.js';
@@ -152,12 +155,15 @@ import type { PageProps as PageProperties } from './$types';
 	// together are simply a narrower list.
 	let appliedDoula = $derived(page.url.searchParams.get('doula') ?? '');
 	let appliedName = $derived((page.state.clientsName ?? '').trim());
+	// #2869: `?order=` is in the address too. A contractor Doula is offered no
+	// order (her bar is not drawn), and the BFF refuses "owed" to her.
+	let appliedOrder = $derived(isContractor ? '' : clientOrderFrom(page.url.searchParams.get('order')));
 	// Left for the Client hub's Back link, which hands it back (`clientsReturn.ts`).
 	$effect(() => {
 		holdClientsName(appliedName);
 	});
 	const isFiltered = $derived(
-		isShowingEveryone || isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '' || appliedName !== ''
+		isShowingEveryone || isShowingMine || isShowingOwing || isShowingNoContract || appliedDoula !== '' || appliedName !== '' || appliedOrder !== ''
 	);
 
 	// Mine, owing, no Contract and a Doula each imply an Engagement, which is
@@ -175,13 +181,14 @@ import type { PageProps as PageProperties } from './$types';
 		owing?: boolean;
 		noContract?: boolean;
 		doula?: string;
+		order?: ClientOrder;
 	};
 
 	// The names are the ones the filter bar's own fields carry, so its form
 	// reaches this address with no script running. `all` stays in the address
 	// beside a narrowing: the BFF ANDs them, and dropping it would untick a box
 	// the person ticked.
-	function clientsPath({ all, mine, owing, noContract, doula }: ClientsView): string {
+	function clientsPath({ all, mine, owing, noContract, doula, order }: ClientsView): string {
 		const base = resolve('/practices/[practiceId]/clients', {
 			practiceId: page.params.practiceId!
 		});
@@ -190,7 +197,8 @@ import type { PageProps as PageProperties } from './$types';
 			owing && 'owes=true',
 			noContract && 'noContract=true',
 			doula && `doula=${encodeURIComponent(doula)}`,
-			all && 'all=true'
+			all && 'all=true',
+			order && `order=${order}`
 		].filter(Boolean);
 		return parts.length > 0 ? `${base}?${parts.join('&')}` : base;
 	}
@@ -203,7 +211,8 @@ import type { PageProps as PageProperties } from './$types';
 			showOwing: isShowingOwing,
 			showNoContract: isShowingNoContract,
 			doula: appliedDoula,
-			name: appliedName
+			name: appliedName,
+			order: appliedOrder
 		};
 	}
 
@@ -299,6 +308,7 @@ import type { PageProps as PageProperties } from './$types';
 	let isNoContractChecked = $state(false);
 	let draftDoula = $state('');
 	let draftName = $state('');
+	let draftOrder = $state<ClientOrder>('');
 	// Once per navigation, never on a re-run of an effect: a box ticked in the
 	// moment before the page hydrated was overwritten by the address it had
 	// not yet been applied to.
@@ -314,6 +324,7 @@ import type { PageProps as PageProperties } from './$types';
 		if (!touched.includes('noContract')) isNoContractChecked = isShowingNoContract;
 		if (!touched.includes('doula')) draftDoula = appliedDoula;
 		if (!touched.includes('name')) draftName = appliedName;
+		if (!touched.includes('order')) draftOrder = appliedOrder;
 	}
 	seedDrafts();
 	// A page that lands once she has left for another screen is not stamped
@@ -394,7 +405,8 @@ import type { PageProps as PageProperties } from './$types';
 					mine: isMineChecked,
 					owing: isOwingChecked,
 					noContract: isNoContractChecked,
-					doula: draftDoula
+					doula: draftDoula,
+					order: draftOrder
 				}),
 				{ state: { clientsName: draftName.trim() } }
 			);
@@ -418,13 +430,15 @@ import type { PageProps as PageProperties } from './$types';
 	// address (#1829), so removing any other filter hands it on in the history
 	// entry's state, and removing the name hands on an empty one.
 	type AppliedTag = { text: string; href: string; name: string };
+	const orderLabel = (order: ClientOrder) => CLIENT_ORDER_OPTIONS.find((option) => option.value === order)!.label;
 	const appliedTags = $derived.by(() => {
 		const view: ClientsView = {
 			all: isShowingEveryone,
 			mine: isShowingMine,
 			owing: isShowingOwing,
 			noContract: isShowingNoContract,
-			doula: appliedDoula
+			doula: appliedDoula,
+			order: appliedOrder
 		};
 		const tags: AppliedTag[] = [];
 		const add = (text: string, without: ClientsView, name = appliedName) => {
@@ -436,6 +450,7 @@ import type { PageProps as PageProperties } from './$types';
 		if (appliedDoula) add(`Doula: ${doulaNameOf(appliedDoula)}`, { doula: '' });
 		if (isShowingEveryone) add(`Including ${NO_CARE_YET}`, { all: false });
 		if (appliedName) add(`Name: ${appliedName}`, {}, '');
+		if (appliedOrder) add(`Order: ${orderLabel(appliedOrder)}`, { order: '' });
 		return tags;
 	});
 
@@ -487,7 +502,7 @@ import type { PageProps as PageProperties } from './$types';
 			shown.showMine,
 			shown.showOwing,
 			shown.showNoContract,
-			{ doulaName: shownDoulaName, name: shown.name },
+			{ doulaName: shownDoulaName, name: shown.name, order: shown.order },
 			shownTotal
 		)
 	);
@@ -726,6 +741,18 @@ import type { PageProps as PageProperties } from './$types';
 		columnSet.date,
 		...(hasDoulaColumn ? [columnSet.doula] : [])
 	]);
+
+	// The column the rows on screen are in order by (`aria-sort`, #2869): the
+	// Name column for the name orders, Money for owed, and Date, which says the
+	// due or ended day, for the list's own.
+	const orderedBy = $derived(
+		{
+			'': { column: columnSet.date.label, direction: 'ascending' },
+			name: { column: columnSet.name.label, direction: 'ascending' },
+			'name-desc': { column: columnSet.name.label, direction: 'descending' },
+			owed: { column: columnSet.money.label, direction: 'descending' }
+		}[shown.order] as { column: string; direction: 'ascending' | 'descending' }
+	);
 
 	// The Client detail hub (#494) -- DataTable links only its first
 	// column, per rowHref's own contract.
@@ -1067,6 +1094,14 @@ import type { PageProps as PageProperties } from './$types';
 				applied={appliedTags.length > 0 ? applied : undefined}
 				appliedCount={appliedTags.length}
 				foldsFieldsOnly
+				order={{
+					options: CLIENT_ORDER_OPTIONS,
+					value: draftOrder,
+					onChange: (value) => {
+						touched.push('order');
+						draftOrder = value as ClientOrder;
+					}
+				}}
 				{isBusy}
 				statusId={RESULT_ID}
 			>
@@ -1180,6 +1215,7 @@ import type { PageProps as PageProperties } from './$types';
 				isEmptyMessageSpoken={isContractor || emptyMessage !== summary}
 				caption="Clients"
 				columnWidths="one-line"
+				{orderedBy}
 				recordLayout="compact"
 				describedBy={isContractor ? undefined : RESULT_ID}
 				{isBusy}

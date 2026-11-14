@@ -116,6 +116,8 @@ The Schedule (`GET /api/practices/{id}/visits`) is the first list on it: empty i
 
 The Invoices list (`GET /api/practices/{id}/invoices`, and the `order` field of the `POST .../invoices/list` body) is the second. Empty is the view's own order: sent newest first on the whole book, payment due earliest first on Unpaid and Overdue. The others are `sent-newest`, `sent-oldest`, `due-earliest`, `due-latest`, `amount-largest` and `amount-smallest`. Its cursor is bound to the view and the order as the request named them, so a cursor from another view or order is a 400. Sent, payment due and amount are NOT NULL, so no order has a rule for where a missing value sorts.
 
+The Clients list (`GET /api/practices/{id}/clients`, and the `order` in the body of `POST …/clients/list`) is on it too: empty is soonest due first, then most recently ended; `name` and `name-desc` sort by her lower-cased full name; `owed` sorts by the amount her Money lines show as owed, most first, then the default key. `owed` from a contractor Doula is a 400, since she sees no money.
+
 ---
 
 ## 5. Keep Default Payloads Lean (Use `?include=`)

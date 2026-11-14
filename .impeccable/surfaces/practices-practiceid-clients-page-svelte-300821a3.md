@@ -36,8 +36,8 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
 | A list-level export, print or copy | Later | decided with the Invoices export (#2871); no record of a roster leaving the product |
 | Row actions without opening the record | Declined | the Client's page and its Engagement hold the actions, one step from the row |
-| A reader-chosen order (soonest due first, most owed first; Name, A to Z or Z to A) | Build (#2869) | Linear and Stripe give the reader a chosen order beside the filters; soonest due first stays the default, stated in the result line |
-| Sort by Money (most owed first) | Build (#2869) | both readings rejected "the 'Who owe money' box does it": a yes-or-no narrowing gives the set, not the ranking |
+| A reader-chosen order (soonest due first, most owed first; Name, A to Z or Z to A) | Have it | Linear and Stripe give the reader a chosen order beside the filters; soonest due first stays the default, stated in the result line |
+| Sort by Money (most owed first) | Have it | both readings rejected "the 'Who owe money' box does it": a yes-or-no narrowing gives the set, not the ranking |
 | Sort by Doula | Declined | a Client can have several Doulas, so there is no one key |
 | Search by name | Have it | Name (T5; #1829) |
 | Grouping by Doula | Declined | a Client can have several Doulas, so there is no one key; the Doula column and the Doula select show them |
@@ -55,6 +55,6 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Column resize | Declined | it fights the intrinsic layout (ADR-0024) |
 | Inline status change | Declined | a Client's status follows the Engagement |
 
-The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
+The order was built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

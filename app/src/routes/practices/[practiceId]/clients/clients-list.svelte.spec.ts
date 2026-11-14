@@ -124,6 +124,7 @@ beforeEach(() => {
 	pageState.url.searchParams.delete('owes');
 	pageState.url.searchParams.delete('noContract');
 	pageState.url.searchParams.delete('doula');
+	pageState.url.searchParams.delete('order');
 	historyState.clientsName = undefined;
 });
 
@@ -777,6 +778,163 @@ describe('the "Doula" select', () => {
 		await applyFilters();
 
 		expect(goto).toHaveBeenLastCalledWith(`/practices/${practiceId}/clients?mine=true&doula=${kimiko.value}`, noName);
+	});
+});
+
+const orderField = () => testPage.getByLabelText('Order', { exact: true });
+
+describe('the "Order" select (#2869)', () => {
+	const base = `/practices/${practiceId}/clients`;
+
+	it('offers the list\'s own order first, then the name orders and most owed, with nothing on the wire', async () => {
+		await setup();
+
+		await expect.element(orderField()).toHaveValue('');
+		await expect.element(orderField()).toHaveAttribute('name', 'order');
+		const options = orderField().getByRole('option');
+		await expect.element(options.nth(0)).toHaveTextContent('Soonest due first');
+		await expect.element(options.nth(1)).toHaveTextContent('Name, A to Z');
+		await expect.element(options.nth(2)).toHaveTextContent('Name, Z to A');
+		await expect.element(options.nth(3)).toHaveTextContent('Most owed first');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+	});
+
+	it('is not drawn for a contractor Doula, whose whole bar is hidden, and her address never sends "owed"', async () => {
+		pageState.url.searchParams.set('order', 'owed');
+
+		await setup(undefined, { isContractor: true, isDoula: true });
+
+		await expect.element(orderField()).not.toBeInTheDocument();
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+		pageState.url.searchParams.delete('order');
+	});
+
+	it('navigates to `?order=` once chosen and applied, and back when the list\'s own is chosen', async () => {
+		await setup();
+
+		await orderField().selectOptions('Name, A to Z');
+		expect(goto).not.toHaveBeenCalled();
+		await applyFilters();
+		expect(goto).toHaveBeenLastCalledWith(`${base}?order=name`, noName);
+
+		await orderField().selectOptions('Most owed first');
+		await applyFilters();
+		expect(goto).toHaveBeenLastCalledWith(`${base}?order=owed`, noName);
+
+		await orderField().selectOptions('Soonest due first');
+		await applyFilters();
+		expect(goto).toHaveBeenLastCalledWith(base, noName);
+	});
+
+	it('travels with every other filter, last in the address', async () => {
+		await setup(undefined, { doulas });
+
+		await orderField().selectOptions('Name, Z to A');
+		await doulaField().selectOptions(lena.label);
+		await owing().click();
+		await applyFilters();
+
+		expect(goto).toHaveBeenLastCalledWith(`${base}?owes=true&doula=${lena.value}&order=name-desc`, noName);
+	});
+
+	it('is kept by a Name search, which rides in the history entry and sends the order in its body', async () => {
+		pageState.url.searchParams.set('order', 'name');
+		historyState.clientsName = 'Camille';
+
+		await setup();
+
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients/list`);
+		expect(JSON.parse(requestInit().body as string)).toMatchObject({ name: 'Camille', order: 'name' });
+		await nameField().fill('Cam');
+		await applyFilters();
+		expect(goto).toHaveBeenLastCalledWith(`${base}?order=name`, { state: { clientsName: 'Cam' } });
+		pageState.url.searchParams.delete('order');
+	});
+
+	it.each([
+		['name', 'Name, A to Z', 'Name', 'ascending', 'by name, A to Z'],
+		['name-desc', 'Name, Z to A', 'Name', 'descending', 'by name, Z to A'],
+		['owed', 'Most owed first', 'Money', 'descending', 'most owed first'],
+		['', 'Soonest due first', 'Date', 'ascending', 'soonest due first, then most recently ended']
+	])('reads `?order=%s`: selected, sent to the BFF, sorted on %s %s and worded "%s"', async (order, label, column, direction, words) => {
+		if (order) pageState.url.searchParams.set('order', order);
+
+		await setup();
+
+		await expect.element(orderField()).toHaveValue(order);
+		expect(requestUrl()).toBe(order ? `/api/practices/${practiceId}/clients?order=${order}` : `/api/practices/${practiceId}/clients`);
+		await expect.element(testPage.getByRole('columnheader', { name: column })).toHaveAttribute('aria-sort', direction);
+		expect(testPage.getByRole('columnheader').elements().filter((header) => header.hasAttribute('aria-sort'))).toHaveLength(1);
+		await expect.element(status()).toHaveTextContent(new RegExp(String.raw`, ${words}\.$`));
+		pageState.url.searchParams.delete('order');
+		expect(label).not.toBe('');
+	});
+
+	it('reads an order the list does not offer as its own', async () => {
+		pageState.url.searchParams.set('order', 'newest');
+
+		await setup();
+
+		await expect.element(orderField()).toHaveValue('');
+		expect(requestUrl()).toBe(`/api/practices/${practiceId}/clients`);
+		await expect.element(tags()).not.toBeInTheDocument();
+		pageState.url.searchParams.delete('order');
+	});
+
+	it('draws a tag, "Order: Name, A to Z", whose × leads to the list without it and keeps the rest', async () => {
+		pageState.url.searchParams.set('order', 'name');
+		pageState.url.searchParams.set('owes', 'true');
+
+		await setup();
+
+		const tag = tags().getByRole('link', { name: 'Remove filter: Order Name, A to Z' });
+		await expect.element(tag).toHaveTextContent('Order: Name, A to Z');
+		await expect.element(tag).toHaveAttribute('href', `${base}?owes=true`);
+		await expect
+			.element(tags().getByRole('link', { name: 'Remove filter: Who owe money' }))
+			.toHaveAttribute('href', `${base}?order=name`);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).toHaveAttribute('href', base);
+		pageState.url.searchParams.delete('order');
+		pageState.url.searchParams.delete('owes');
+	});
+
+	it('is the one tag a bare order leaves, so "Clear filters" is not drawn beside it', async () => {
+		pageState.url.searchParams.set('order', 'owed');
+
+		await setup();
+
+		await expect.element(tags().getByRole('link', { name: 'Remove filter: Order Most owed first' })).toHaveAttribute('href', base);
+		await expect.element(testPage.getByRole('link', { name: 'Clear filters' })).not.toBeInTheDocument();
+		pageState.url.searchParams.delete('order');
+	});
+
+	it('goes back to what the address says when another tag is removed, and Apply sends what the select shows', async () => {
+		pageState.url.searchParams.set('owes', 'true');
+		await setup();
+
+		await orderField().selectOptions('Name, A to Z');
+		await tags().getByRole('link', { name: 'Remove filter: Who owe money' }).click();
+		pageState.url.searchParams.delete('owes');
+		navigation.onBefore();
+		navigation.onMove?.({});
+
+		await expect.element(orderField()).toHaveValue('');
+		await applyFilters();
+		expect(String(goto.mock.lastCall![0])).not.toContain('order=');
+	});
+
+	it('is sent again by "Load more", whose cursor belongs to it', async () => {
+		pageState.url.searchParams.set('order', 'name');
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' }));
+		await setupLoadMoreRace();
+		await expect.element(testPage.getByRole('rowheader', { name: clients[0].name })).toBeVisible();
+
+		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ items: [clients[1]], hasMore: false }));
+		await testPage.getByRole('button', { name: 'Load more' }).click();
+
+		await expect.element(testPage.getByRole('rowheader', { name: clients[1].name })).toBeVisible();
+		expect(requestUrl(1)).toBe(`/api/practices/${practiceId}/clients?order=name&cursor=cursor-1`);
+		pageState.url.searchParams.delete('order');
 	});
 });
 
@@ -2213,13 +2371,6 @@ async function renderListScreen({
 
 const rectOf = (locator: Located) => locator.element().getBoundingClientRect();
 
-// The vertical center of an element's words, apart from the box that holds them.
-const centerOfWords = (element: Element) => {
-	const range = document.createRange();
-	range.selectNodeContents(element);
-	const box = range.getBoundingClientRect();
-	return box.top + box.height / 2;
-};
 
 const rowHeights = () =>
 	testPage
@@ -2233,6 +2384,10 @@ const rowHeights = () =>
 // was before the tags (decision 4 of 2026-11-08): the first card is still reached within it.
 const TAG_ROW = 60;
 
+// The Order select (#2869) shares the line Apply was alone on, so the first card sits lower by what
+// that line grew, and the tag wraps under them: measured 2026-11-13 at 375px, 28px lower with no filter on.
+const ORDER_ROW = 28;
+
 describe('the list at a phone’s width', () => {
 	// Rubric T4: with one filter on, the first Client's card sits fully on the
 	// first screen at 375px, and at 320px its name and status line show.
@@ -2243,7 +2398,7 @@ describe('the list at a phone’s width', () => {
 		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
 		await expect.element(group).toBeVisible();
 		const first = group.element().firstElementChild!.getBoundingClientRect();
-		expect(first.bottom).toBeLessThanOrEqual(740 + TAG_ROW);
+		expect(first.bottom).toBeLessThanOrEqual(740 + TAG_ROW + ORDER_ROW);
 		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
 	});
 
@@ -2282,24 +2437,17 @@ describe('the list at a phone’s width', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Tell us what you think.' })).toBeVisible();
 	});
 
-	it('puts Apply and the one tag on one row, with Apply no wider than its words', async () => {
+	it('puts Order and Apply on one row, with Apply no wider than its words, and the one tag under them', async () => {
 		pageState.url.searchParams.set('owes', 'true');
 		await renderListScreen({ width: 375, height: 740 });
 
+		const order = rectOf(testPage.getByLabelText('Order', { exact: true }));
 		const apply = rectOf(testPage.getByRole('button', { name: 'Apply' }));
 		const tag = rectOf(testPage.getByRole('link', { name: 'Remove filter: Who owe money' }));
 		expect(apply.width).toBeLessThan(375 / 2);
-		expect(Math.abs(apply.top + apply.height / 2 - (tag.top + tag.height / 2))).toBeLessThanOrEqual(1);
-		expect(tag.left).toBeGreaterThan(apply.right);
-	});
-
-	it('centers the words of the tag on the words of Apply', async () => {
-		pageState.url.searchParams.set('owes', 'true');
-		await renderListScreen({ width: 375, height: 740 });
-
-		const apply = testPage.getByRole('button', { name: 'Apply' }).element();
-		const tag = testPage.getByRole('link', { name: 'Remove filter: Who owe money' }).element();
-		expect(Math.abs(centerOfWords(apply) - centerOfWords(tag))).toBeLessThanOrEqual(1);
+		expect(apply.left).toBeGreaterThan(order.right);
+		expect(Math.abs(apply.top + apply.height / 2 - (order.top + order.height / 2))).toBeLessThanOrEqual(2);
+		expect(tag.top).toBeGreaterThanOrEqual(apply.bottom - 1);
 	});
 
 	it('reads a record as the name, the status, then the due date and the Doula with their labels', async () => {
@@ -2450,6 +2598,7 @@ const states: [string, () => void][] = [
 async function measureState(width: number, apply: () => void) {
 	pageState.url.searchParams.delete('owes');
 	pageState.url.searchParams.delete('doula');
+	pageState.url.searchParams.delete('order');
 	historyState.clientsName = undefined;
 	apply();
 	await renderListScreen({ width, height: 800 });
@@ -3048,7 +3197,7 @@ describe('what the applied filter has already said', () => {
 		const group = testPage.getByRole('group', { name: 'Clients', exact: true });
 		await expect.element(group).toBeVisible();
 		const first = group.element().firstElementChild!.getBoundingClientRect();
-		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740 + TAG_ROW);
+		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740 + TAG_ROW + ORDER_ROW);
 	});
 });
 

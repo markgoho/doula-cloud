@@ -176,7 +176,8 @@
 		 * select, submitted with Apply as the form field `order`, and the last
 		 * field before Apply at every width. It never folds, and a bar that
 		 * folds whole draws it inside the fold as it does every field. `value`
-		 * is the order the address names; the empty value is the list's own
+		 * is the order the select shows, the route's draft, which it seeds from the
+		 * address and puts back in step after a move; the empty value is the list's own
 		 * order and is left out of the address. `onChange` reports a pick
 		 * before Apply, for a route that builds its address from its own state.
 		 */

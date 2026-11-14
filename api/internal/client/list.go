@@ -82,6 +82,11 @@ type ListItem struct {
 	// sortAt is this Client's place in the list's order, encoded as one time
 	// by dueSortJoin. It is the cursor's time.
 	sortAt time.Time
+	// sortName and owedCents are the keys the name and owed orders compare
+	// (list_order.go): the lower-cased name, and the amount the row's Money
+	// lines show as owed, 0 unless the owed order was asked for.
+	sortName  string
+	owedCents int64
 }
 
 // OpenEngagement is one rollup line of ListItem.OpenEngagements.
@@ -185,12 +190,16 @@ type ListResponse struct {
 // return the unnarrowed list already returns. Must be mounted behind
 // staffauth.Middleware.
 //
-// Ordering is one key per Client from her open Engagements, then id: births
-// not yet ended by due date ascending (a birth past its due date first, then
-// the soonest), then ended pregnancies by the day they ended, most recent
-// first, then Clients with neither. dueSortJoin holds the encoding. A cursor's
-// tuple has to be the sort key (#446), and pagecursor.Cursor only carries
-// (time, id), so the key rides as a time.
+// Ordering is ?order= (#2869). The empty order is one key per Client from her
+// open Engagements, then id: births not yet ended by due date ascending (a
+// birth past its due date first, then the soonest), then ended pregnancies by
+// the day they ended, most recent first, then Clients with neither.
+// dueSortJoin holds the encoding. "name" and "name-desc" order by her name,
+// and "owed" by what her Money lines show as owed, most first, then the
+// default key (list_order.go). A cursor's tuple has to be the sort key
+// (#446), so pagecursor.Keyed carries it, bound to the order it was minted
+// for. An unknown order is a 400, and so is "owed" from a contractor Doula,
+// who sees no money.
 func ListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		query := r.URL.Query()
@@ -211,6 +220,7 @@ func ListHandler() http.Handler {
 			Owes:       queryFlag(r, "owes"),
 			NoContract: queryFlag(r, "noContract"),
 			Doula:      doula,
+			Order:      query.Get("order"),
 			Cursor:     query.Get("cursor"),
 		})
 	})
@@ -226,6 +236,7 @@ type ListRequest struct {
 	NoContract bool   `json:"noContract"`
 	Doula      string `json:"doula"`
 	Name       string `json:"name"`
+	Order      string `json:"order"`
 	Cursor     string `json:"cursor"`
 }
 
@@ -256,6 +267,14 @@ func ListByNameHandler() http.Handler {
 // serveList answers the Clients list for filters already read and checked
 // by either entry point.
 func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
+	if !isKnownOrder(req.Order) {
+		apierr.WriteError(w, msgInvalidOrder, http.StatusBadRequest)
+		return
+	}
+	if req.Order == orderOwed && c.Reader.IsAmbientContractor() {
+		apierr.WriteError(w, msgOwedOrderContractor, http.StatusBadRequest)
+		return
+	}
 	if req.Owes && c.Reader.IsAmbientContractor() {
 		apierr.WriteError(w, "You contract for this Practice, so you cannot filter Clients by what they owe. Money is the Practice's to see.", http.StatusForbidden)
 		return
@@ -270,11 +289,11 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		noContract:   req.NoContract,
 	}
 
-	var after *pagecursor.Cursor
+	var after *listAfter
 	if req.Cursor != "" {
-		cur, err := pagecursor.Decode(req.Cursor)
+		cur, err := decodeListCursor(req.Order)(req.Cursor)
 		if err != nil {
-			apierr.WriteError(w, "invalid cursor", http.StatusBadRequest)
+			apierr.WriteError(w, msgInvalidCursor, http.StatusBadRequest)
 			return
 		}
 		after = &cur
@@ -284,9 +303,9 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 	var err error
 	attached := c.Reader.IsAmbientContractor() || req.Mine
 	if attached {
-		list, err = listAttachedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, filters, after)
+		list, err = listAttachedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, filters, req.Order, after)
 	} else {
-		list, err = listClients(r.Context(), c.Tx, c.PracticeID, filters, after)
+		list, err = listClients(r.Context(), c.Tx, c.PracticeID, filters, req.Order, after)
 	}
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -294,9 +313,13 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 		return
 	}
 
-	list, next, hasMore := pagecursor.Cut(list, pageSize, func(v ListItem) (time.Time, string) {
-		return v.sortAt, v.ClientID
-	})
+	list, hasMore := pagecursor.Trim(list, pageSize)
+	var next *string
+	if hasMore {
+		last := list[len(list)-1]
+		cursor := pagecursor.EncodeKeyed(req.Order, last.cursorKeys(req.Order), last.ClientID)
+		next = &cursor
+	}
 
 	if err := attachOpenEngagements(r.Context(), c.Tx, c.PracticeID, list, c.Reader, c.StaffID); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -473,12 +496,12 @@ func queryFlag(r *http.Request, name string) bool {
 // listClients is the ambient-reach query -- Owner, Admin, or employee
 // Doula -- filtered by practiceID explicitly, on top of the RLS scoping
 // staffauth.Middleware already set up on tx.
-func listClients(ctx context.Context, tx *sql.Tx, practiceID string, filters listFilters, after *pagecursor.Cursor) ([]ListItem, error) {
+func listClients(ctx context.Context, tx *sql.Tx, practiceID string, filters listFilters, order string, after *listAfter) ([]ListItem, error) {
 	if err := disableJIT(ctx, tx); err != nil {
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return nil, err
 	}
-	query, args := listClientsQuery(practiceID, filters, after)
+	query, args := listClientsQuery(practiceID, filters, order, after)
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -525,29 +548,48 @@ func disableJIT(ctx context.Context, tx *sql.Tx) error {
 // lateral's min(), dueSortJoin): the same nodes, the same Index Scan once per
 // Client, total cost 412,838 for the default later page, and the default
 // first page in the same tens of ms, so the figures above stand.
-func listClientsQuery(practiceID string, filters listFilters, after *pagecursor.Cursor) (string, []any) {
-	from, args := clientsFromWhere(practiceID, filters)
+// #2869 added the name orders (the same Seq Scan and top-N Sort, 42.1 ms first
+// page and 14.5 ms a later page) and the owed order, which joins owedJoin: two
+// more Index Scans per Client (5,000 loops each, the Contract and the Invoice),
+// then the same Sort; 111.0 ms first page, 92.6 ms a later page, 16.9 ms with
+// ?doula (re-run 2026-11-13 in WSL, 5,000 Clients each with a signed Contract
+// and an open Invoice, disableJIT on), all under the 500 ms ceiling, so no
+// index and no migration.
+func listClientsQuery(practiceID string, filters listFilters, order string, after *listAfter) (string, []any) {
+	from, args := clientsFromWhere(practiceID, filters, order)
 	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, ''), ` + hasWorkExpr + `,
-		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at
+		        ` + portalinvite.HerAccessColumns + `, ` + emailSuppressedExpr + `, ` + pendingRequestKindsExpr + `, due.sort_at,
+		        ` + nameKeyExpr + `, ` + owedColumn(order) + `
 		 ` + from
-	if after != nil {
-		query += ` AND (due.sort_at, c.id) > ($7, $8) ORDER BY due.sort_at, c.id LIMIT $9`
-		args = append(args, after.At, after.ID, pageSize+1)
-	} else {
-		query += ` ORDER BY due.sort_at, c.id LIMIT $7`
-		args = append(args, pageSize+1)
+	return withListPage(query, args, "AND", order, after, ambientKeys)
+}
+
+// owedColumn is the select-list value of the owed key: the joined sum when
+// the owed order is asked for, and 0 when no join was made.
+func owedColumn(order string) string {
+	if order == orderOwed {
+		return "owed.owed_cents"
 	}
-	return query, args
+	return "0::bigint"
+}
+
+// joinFor is the join the order's key needs, if any, after dueSortJoin.
+func joinFor(order string) string {
+	if order == orderOwed {
+		return owedJoin
+	}
+	return ""
 }
 
 // clientsFromWhere is the rows the ambient-reach list holds, from FROM on,
 // with its bind arguments $1 to $6. The page and the count (#2867) both read
-// it, so the total is of the rows and never of a looser set.
-func clientsFromWhere(practiceID string, filters listFilters) (string, []any) {
+// it, so the total is of the rows and never of a looser set. The count asks
+// for no order, so it carries no join an order's key needs.
+func clientsFromWhere(practiceID string, filters listFilters, order string) (string, []any) {
 	narrow, narrowArgs := filters.narrowing(5)
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
-	from := `FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + `
+	from := `FROM clients c` + portalinvite.HerAccessJoin + dueSortJoin + joinFor(order) + `
 		 WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND (NOT $2 OR ` + hasWorkExpr + `)
 		   AND (NOT $3 OR ` + owesExpr + `) AND (NOT $4 OR ` + noContractExpr + `)
 		   AND ` + narrow
@@ -557,13 +599,13 @@ func clientsFromWhere(practiceID string, filters listFilters) (string, []any) {
 // attachedClientsFromWhere is clientsFromWhere narrowed to Clients staffID
 // holds an open, granted attachment on, with its bind arguments $1 to $7. It
 // joins one row per attachment, so a reader of it takes DISTINCT c.id.
-func attachedClientsFromWhere(practiceID, staffID string, filters listFilters) (string, []any) {
+func attachedClientsFromWhere(practiceID, staffID string, filters listFilters, order string) (string, []any) {
 	narrow, narrowArgs := filters.narrowing(6)
 	//nolint:gosec // narrow is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	from := `FROM clients c
 		     JOIN engagements e ON e.client_id = c.id
 		     JOIN engagement_attachments ea ON ea.engagement_id = e.id
-		     ` + portalinvite.HerAccessJoin + dueSortJoin + `
+		     ` + portalinvite.HerAccessJoin + dueSortJoin + joinFor(order) + `
 		     WHERE c.practice_id = $1 AND c.standing IN ('live', 'erased') AND ea.staff_id = $2
 		       AND ea.state = 'granted'
 		       AND (NOT $3 OR ` + hasWorkExpr + `)
@@ -580,10 +622,10 @@ func countListedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 	var query string
 	var args []any
 	if attached {
-		from, a := attachedClientsFromWhere(practiceID, staffID, filters)
+		from, a := attachedClientsFromWhere(practiceID, staffID, filters, orderDue)
 		query, args = `SELECT count(DISTINCT c.id) `+from, a //nolint:gosec // from is built from this file's own constants; every value rides args
 	} else {
-		from, a := clientsFromWhere(practiceID, filters)
+		from, a := clientsFromWhere(practiceID, filters, orderDue)
 		query, args = `SELECT count(*) `+from, a //nolint:gosec // from is built from this file's own constants; every value rides args
 	}
 	var n int
@@ -599,7 +641,7 @@ func countListedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID str
 // via any of their Engagements -- ADR-0008's contractor column. DISTINCT
 // because a contractor may be attached to more than one Engagement for
 // the same Client.
-func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, filters listFilters, after *pagecursor.Cursor) ([]ListItem, error) {
+func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID string, filters listFilters, order string, after *listAfter) ([]ListItem, error) {
 	// DISTINCT is wrapped in a subquery rather than applied at the top
 	// level: Postgres requires a plain SELECT DISTINCT's ORDER BY
 	// expressions to appear literally in the select list, and sorting by
@@ -609,22 +651,17 @@ func listAttachedClients(ctx context.Context, tx *sql.Tx, practiceID, staffID st
 		// coverage:ignore reason: DB failure, not exercised by unit tests
 		return nil, err
 	}
-	from, args := attachedClientsFromWhere(practiceID, staffID, filters)
+	from, args := attachedClientsFromWhere(practiceID, staffID, filters, order)
 	//nolint:gosec // from is built from this file's own constants and a numeric placeholder index; every value rides args as a bind parameter
 	query := `SELECT * FROM (
 		     SELECT DISTINCT c.id, c.given_name, c.preferred_name, c.family_name, COALESCE(c.email, '') AS email, ` + hasWorkExpr + ` AS has_work,
 		            ` + portalinvite.HerAccessColumns + `,
 		            ` + emailSuppressedExpr + ` AS email_suppressed,
-		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at
+		            ` + pendingRequestKindsExpr + ` AS pending_request_kinds, due.sort_at,
+		            ` + nameKeyExpr + ` AS sort_name, ` + owedColumn(order) + ` AS owed_cents
 		     ` + from + `
 		 ) attached`
-	if after != nil {
-		query += ` WHERE (sort_at, id) > ($8, $9) ORDER BY sort_at, id LIMIT $10`
-		args = append(args, after.At, after.ID, pageSize+1)
-	} else {
-		query += ` ORDER BY sort_at, id LIMIT $8`
-		args = append(args, pageSize+1)
-	}
+	query, args = withListPage(query, args, "WHERE", order, after, attachedKeys)
 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -947,9 +984,11 @@ func scanListItems(ctx context.Context, rows *sql.Rows) ([]ListItem, error) {
 		var expiresAt sql.NullTime
 		var pendingKinds sql.NullString
 		var sortAt time.Time
+		var sortName string
+		var owedCents int64
 		if err := rows.Scan(
 			&item.ClientID, &givenName, &preferredName, &familyName, &item.Email, &item.HasWork,
-			&accessState, &expiresAt, &delivery, &item.EmailSuppressed, &pendingKinds, &sortAt,
+			&accessState, &expiresAt, &delivery, &item.EmailSuppressed, &pendingKinds, &sortAt, &sortName, &owedCents,
 		); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("client: scan list item: %w", err)
@@ -960,6 +999,8 @@ func scanListItems(ctx context.Context, rows *sql.Rows) ([]ListItem, error) {
 			item.PendingRequestKinds = strings.Split(pendingKinds.String, ",")
 		}
 		item.sortAt = sortAt
+		item.sortName = sortName
+		item.owedCents = owedCents
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {

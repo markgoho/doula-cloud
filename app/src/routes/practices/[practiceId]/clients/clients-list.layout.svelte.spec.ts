@@ -392,11 +392,12 @@ describe('the columns between filter states', () => {
 		expect(Object.keys(states.noContract)).not.toContain('Money');
 	});
 
-	// At 1024px the fields leave Apply's line no room for a tag and "Clear filters", so
-	// one filter's take the line under it. At 1280px the bar holds the longest wording on one line.
+	// At 1024px the fields, with Order (#2869), leave Apply's line no room for a tag and "Clear
+	// filters", so one filter's take the line under it and the table moves by that line (62px).
+	// At 1280px the bar holds the longest wording on one line and one tag beside Apply.
 	it.each([
 		[1280, 1, 1],
-		[1024, 2, 1]
+		[1024, 2, 64]
 	])('reserves the count line its longest wording needs and holds the table still across filter states, at %ipx', async (width, lines, oneFilter) => {
 		const tops: number[] = [];
 		const heights: number[] = [];
