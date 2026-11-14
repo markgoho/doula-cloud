@@ -76,6 +76,26 @@ describe('the Invoices list applies untyped controls when changed (#2888)', () =
 		expect(goto).toHaveBeenCalledWith(`${path}?order=amount-largest`, expect.objectContaining({ state: { invoicesSearch: 'Anne' } }));
 	});
 
+	it.each([
+		['with an input event', async (search: ReturnType<typeof testPage.getByRole>) => search.fill('')],
+		['without an input event', async (search: ReturnType<typeof testPage.getByRole>) => void ((search.element() as HTMLInputElement).value = '')]
+	])('clears an applied search the reader emptied %s, on a change and on Apply', async (_how, empty) => {
+		pageState.state = { invoicesSearch: 'Anne' };
+		await testPage.viewport(1440, 900);
+		render(Page, { data });
+		const search = testPage.getByRole('searchbox', { name: 'Reference or Client' });
+		await expect.element(search).toHaveValue('Anne');
+
+		await empty(search);
+		await radio('Overdue').click();
+		await settled();
+		expect(goto).toHaveBeenLastCalledWith(`${path}?show=overdue`, expect.objectContaining({ state: { invoicesSearch: '' } }));
+
+		await empty(search);
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenLastCalledWith(`${path}?show=overdue`, { state: { invoicesSearch: '' } });
+	});
+
 	it('does not read for the search until Apply', async () => {
 		await setupChange();
 

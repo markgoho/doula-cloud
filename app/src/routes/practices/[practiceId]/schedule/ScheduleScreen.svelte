@@ -21,6 +21,7 @@
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { THIS_WEEK } from '#lib/dayRange.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
+	import { typedIn } from '#lib/typedIn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
 	import { readerTimeZone, zoneNote as zoneNoteOf } from '#lib/zonedTime.js';
@@ -322,6 +323,7 @@
 	let draftOrder = $state<ScheduleOrder>('');
 	let rangeErrors = $state<ScheduleRangeErrors>({});
 	let draftSearch = $state('');
+	let searchField = $state<HTMLElement>();
 	// A field typed in since the navigation began is hers: the seed leaves it.
 	let isSearchTouched = false;
 
@@ -415,7 +417,7 @@
 			}
 		}
 		rangeErrors = {};
-		void show(scheduleHref(basePath, draftView), draftSearch.trim(), { replace });
+		void show(scheduleHref(basePath, draftView), typedIn(searchField, draftSearch), { replace });
 		return true;
 	}
 
@@ -431,7 +433,7 @@
 			}
 		}
 		rangeErrors = {};
-		await show(scheduleHref(basePath, draftView), draftSearch.trim());
+		await show(scheduleHref(basePath, draftView), typedIn(searchField, draftSearch));
 	}
 
 	/*
@@ -709,7 +711,7 @@
 				</div>
 			{/snippet}
 			<!-- First in the fields row, in view at every width. Unnamed, so a Client's name never reaches the address (#1829). -->
-			<div class="field search">
+			<div class="field search" bind:this={searchField}>
 				<LabeledField label="Client" width={20}>
 					{#snippet children({ id, describedBy, invalid, width })}
 						<TextInput

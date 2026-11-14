@@ -867,6 +867,17 @@ describe('the "Order" select (#2869)', () => {
 		expect(goto).toHaveBeenLastCalledWith(`${base}?owes=true&doula=${lena.value}&order=name-desc`, noName);
 	});
 
+	it('clears a held Name search the reader emptied without an input event, on Apply', async () => {
+		historyState.clientsName = 'Camille';
+
+		await setup();
+
+		await expect.element(nameField()).toHaveValue('Camille');
+		(nameField().element() as HTMLInputElement).value = '';
+		await applyFilters();
+		expect(goto).toHaveBeenLastCalledWith(base, noName);
+	});
+
 	it('is kept by a Name search, which rides in the history entry and sends the order in its body', async () => {
 		pageState.url.searchParams.set('order', 'name');
 		historyState.clientsName = 'Camille';
@@ -3512,6 +3523,19 @@ const settledChange = () => new Promise((resolve) => setTimeout(resolve, 450));
 describe('the Clients list applies untyped controls when changed (#2888)', () => {
 	afterEach(() => {
 		vi.useRealTimers();
+	});
+
+	it('clears a held Name emptied without an input event when a box changes', async () => {
+		goto.mockResolvedValue(undefined);
+		historyState.clientsName = 'Camille';
+		await setup();
+		await expect.element(nameField()).toHaveValue('Camille');
+
+		(nameField().element() as HTMLInputElement).value = '';
+		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, expect.objectContaining({ state: { clientsName: '' } }));
 	});
 
 	it('reads once for a ticked box, keeps focus on it, and sends the Name as drawn', async () => {
