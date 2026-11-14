@@ -1,3 +1,11 @@
+import {
+	downloadedWordsOf,
+	exportFailedWords,
+	exportFilename as exportFilenameOf,
+	requestCsvExport,
+	type CsvExportKind,
+	type CsvExportResult
+} from './csvExport.js';
 import type { Fetcher } from './fetcher.js';
 import { invoiceOrderPhrase, type InvoiceOrder, type InvoicesView } from './invoice.js';
 import { invoicePeriodWords, type InvoiceDays } from './invoicePeriod.js';
@@ -13,14 +21,15 @@ export interface InvoicesExportScope {
 	days?: InvoiceDays;
 }
 
-export const EXPORT_FAILED = 'Your Invoices did not download. Nothing you saved is lost.';
-const EXPORT_NOT_ALLOWED = 'Your role cannot download Invoices.';
+const INVOICES: CsvExportKind = {
+	plural: 'Invoices',
+	singular: 'Invoice',
+	path: 'invoices',
+	countHeader: 'Invoice-Count',
+	fallbackName: 'invoices.csv'
+};
 
-function tooManyDownloads(retryAfter: string | null): string {
-	const minutes = Math.ceil(Number(retryAfter) / 60);
-	const wait = minutes > 0 ? `Try again in ${minutes} ${minutes === 1 ? 'minute' : 'minutes'}.` : 'Try again later.';
-	return `You have downloaded Invoices too many times this hour. ${wait}`;
-}
+export const EXPORT_FAILED = exportFailedWords(INVOICES.plural);
 
 const VIEW_WORDS: Record<string, string> = { all: 'All', unpaid: 'Unpaid', overdue: 'Overdue' };
 
@@ -49,64 +58,28 @@ export function invoicesExportedDetail(diff: Record<string, unknown>): string | 
  * how many Invoices are in it.
  */
 export function downloadedWords(filename: string, count: number): string {
-	return `Downloaded ${filename}, ${count} ${count === 1 ? 'Invoice' : 'Invoices'}.`;
+	return downloadedWordsOf(INVOICES, filename, count);
 }
-
-const FALLBACK_NAME = 'invoices.csv';
 
 /**
  * The file name the server gave, from `Content-Disposition`.
  */
 export function exportFilename(disposition: string | null | undefined): string {
-	return /filename="([^"]+)"/.exec(disposition ?? '')?.[1] ?? FALLBACK_NAME;
+	return exportFilenameOf(disposition, INVOICES.fallbackName);
 }
 
-export type InvoicesExportResult = { blob: Blob; filename: string; count: number } | { refusal: string };
-
-/**
- * Asks for every Invoice the scope matches as a CSV. A refusal, and a
- * connection that is not there, come back as the words a person reads, never
- * a status code: money is not offline (ADR-0059).
- */
-export async function requestInvoicesExport(
-	fetcher: Fetcher,
-	practiceId: string,
-	scope: InvoicesExportScope
-): Promise<InvoicesExportResult> {
-	try {
-		const response = await fetcher(`/api/practices/${practiceId}/invoices/export`, {
-			method: 'POST',
-			headers: { 'Content-Type': 'application/json' },
-			body: JSON.stringify({
-				view: scope.view,
-				search: scope.search,
-				...(scope.order && { order: scope.order }),
-				...(scope.days && { sentFrom: scope.days.from, sentTo: scope.days.to })
-			})
-		});
-		if (response.status === 429) return { refusal: tooManyDownloads(response.headers.get('Retry-After')) };
-		if (response.status === 403) return { refusal: EXPORT_NOT_ALLOWED };
-		if (!response.ok) return { refusal: EXPORT_FAILED };
-		return {
-			blob: await response.blob(),
-			filename: exportFilename(response.headers.get('Content-Disposition')),
-			count: Number(response.headers.get('Invoice-Count'))
-		};
-	} catch {
-		return { refusal: EXPORT_FAILED };
-	}
-}
+export type InvoicesExportResult = CsvExportResult;
 
 /**
- * Hands the file to the browser as a download.
+ * Asks for every Invoice the scope matches as a CSV.
  */
-export function saveFile(blob: Blob, filename: string) {
-	const url = URL.createObjectURL(blob);
-	const link = document.createElement('a');
-	link.href = url;
-	link.download = filename;
-	document.body.append(link);
-	link.click();
-	link.remove();
-	URL.revokeObjectURL(url);
+export function requestInvoicesExport(fetcher: Fetcher, practiceId: string, scope: InvoicesExportScope): Promise<InvoicesExportResult> {
+	return requestCsvExport(fetcher, practiceId, INVOICES, {
+		view: scope.view,
+		search: scope.search,
+		...(scope.order && { order: scope.order }),
+		...(scope.days && { sentFrom: scope.days.from, sentTo: scope.days.to })
+	});
 }
+
+export { saveFile } from './csvExport.js';

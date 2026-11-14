@@ -1060,6 +1060,9 @@ describe('the table and its result line', () => {
 		testPage.getByRole('link', { name: 'Find or add a Client' }).element().focus();
 		await userEvent.keyboard('{Tab}');
 
+		await expect.element(testPage.getByRole('button', { name: 'Download CSV' })).toHaveFocus();
+		await userEvent.keyboard('{Tab}');
+
 		await expect.element(testPage.getByRole('link', { name: 'Skip to results' })).toHaveFocus();
 		await userEvent.keyboard('{Enter}');
 

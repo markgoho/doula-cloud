@@ -308,6 +308,14 @@ const ORDER_WORDS: Record<ClientOrder, string> = {
 	owed: 'most owed first',
 	overdue: 'most overdue first'
 };
+/**
+ * The words for an order the list was asked for by name, or none for a name
+ * it does not offer and for its own order.
+ */
+export function clientOrderPhrase(name: string): string | undefined {
+	const isOffered = name !== '' && CLIENT_ORDER_OPTIONS.some((option) => option.value === name);
+	return isOffered ? ORDER_WORDS[name as ClientOrder] : undefined;
+}
 const CLEAR_FILTERS = 'Clear the filters to widen the list.';
 /**
  * The default list holds a Client with any Engagement, in any status, so current

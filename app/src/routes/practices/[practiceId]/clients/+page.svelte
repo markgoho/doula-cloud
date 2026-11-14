@@ -29,6 +29,10 @@
 	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
 	import { dayIn } from '#lib/zonedTime.js';
 	import { typedIn } from '#lib/typedIn.js';
+	import { clientsDownloadedWords, requestClientsExport } from '#lib/clientExport.js';
+	import { saveFile } from '#lib/csvExport.js';
+	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import type { PracticeSession } from '../+layout.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
 	import { keepListReturn, pagesToRestore, putListBack, type ListReturn } from '#lib/listReturn.js';
@@ -645,6 +649,56 @@
 		)
 	);
 
+	/*
+	 * #2891: the export reads the list's applied narrowing, name included, as a
+	 * POST so a Client's name stays out of the address, and it needs script to
+	 * hand the file over, so with none the button is not drawn. Money is not
+	 * offline (ADR-0059): a refusal is said in place and the button stays for
+	 * another try.
+	 */
+	const session = $derived((page.data as { session?: PracticeSession }).session);
+	let isScripted = $state(false);
+	onMount(() => {
+		isScripted = true;
+	});
+	let isExporting = $state(false);
+	let exportRefusal = $state('');
+	let downloaded = $state.raw<{ key: typeof shown; words: string }>();
+	const downloadedWords = $derived(loadedKey === filterKey && downloaded && downloaded.key === shown ? downloaded.words : '');
+	const isExportDrawn = $derived(isScripted && !isContractor && session !== undefined && isOwnerOrAdmin(session));
+	// Drawn from the first frame so the title row never changes height when the list lands; there is nothing to download until it has.
+	const hasExportRows = $derived(isReady && !error && clients.items.length > 0);
+	const exportCount = $derived(clients.hasMore ? shownTotal : clients.items.length);
+	const exportDescription = $derived(
+		exportCount === undefined
+			? 'A spreadsheet of every Client this list shows.'
+			: `A spreadsheet of the ${exportCount} ${exportCount === 1 ? 'Client' : 'Clients'} this list shows.`
+	);
+	async function downloadCsv() {
+		isExporting = true;
+		exportRefusal = '';
+		downloaded = undefined;
+		const key = shown;
+		const result = await requestClientsExport(apiFetchWithSession, page.params.practiceId!, {
+			all: shown.showAll,
+			mine: shown.showMine,
+			owes: shown.showOwing,
+			noContract: shown.showNoContract,
+			doula: shown.doula,
+			name: shown.name,
+			due: shown.due,
+			dueFrom: shown.dueFrom,
+			dueTo: shown.dueTo,
+			order: shown.order
+		});
+		isExporting = false;
+		if ('refusal' in result) exportRefusal = result.refusal;
+		else {
+			saveFile(result.blob, result.filename);
+			downloaded = { key, words: clientsDownloadedWords(result.filename, result.count) };
+		}
+	}
+
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
 	// She can hold one of each kind at once, hence the join rather than a
 	// single value.
@@ -1218,6 +1272,27 @@
 	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.state}<MoneyAmount amount="" state={line.state} />{/if}{:else if line.state}<MoneyAmount amount={line.amount} state={line.state} isTracked />{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
 {/snippet}
 
+{#snippet downloadControl(noteId: string)}
+	<Button
+		label="Download CSV"
+		variant="secondary"
+		loading={isExporting}
+		ariaDisabled={!hasExportRows}
+		describedBy={noteId}
+		onClick={downloadCsv}
+	/>
+	<span class="visually-hidden" id={noteId}>{exportDescription}</span>
+{/snippet}
+
+{#snippet exportNotices()}
+	{#if exportRefusal}
+		<Notice variant="error" message={exportRefusal} />
+	{/if}
+	{#if downloadedWords}
+		<Notice variant="status" message={downloadedWords} />
+	{/if}
+{/snippet}
+
 {#snippet actions()}
 	<!--
 		Once the Practice holds a Client record, this link lands on the
@@ -1233,17 +1308,22 @@
 		ADR-0017's amendment of 2026-10-02). +page.ts decides which, from
 		the count of records, not from the filtered rows below.
 	-->
-	{#if hasAnyClient === undefined}
-		<!-- The link's own box, drawn invisible and out of reach, so the page does not
-		     move when the read lands and the real link takes its place. -->
-		<span class="reserve" aria-hidden="true" inert>
+	<div class="actions-row">
+		{#if hasAnyClient === undefined}
+			<!-- The link's own box, drawn invisible and out of reach, so the page does not
+			     move when the read lands and the real link takes its place. -->
+			<span class="reserve" aria-hidden="true" inert>
+				<Link href={searchHref()} label="Find or add a Client" variant="start" />
+			</span>
+		{:else if hasAnyClient}
 			<Link href={searchHref()} label="Find or add a Client" variant="start" />
-		</span>
-	{:else if hasAnyClient}
-		<Link href={searchHref()} label="Find or add a Client" variant="start" />
-	{:else}
-		<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" variant="start" />
-	{/if}
+		{:else}
+			<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" variant="start" />
+		{/if}
+		{#if isExportDrawn}
+			<div class="export-button">{@render downloadControl('clients-export-note')}</div>
+		{/if}
+	</div>
 {/snippet}
 
 {#snippet alsoShow(isReserve: boolean)}
@@ -1294,6 +1374,8 @@
 	     the page's sections; the bar's own rows sit closer still, so the table
 	     reads as apart from the controls and the count as part of the group. -->
 	<stack-l space="var(--space-related)">
+		<!-- Under the title row, with the button still there to try again. -->
+		{@render exportNotices()}
 		<!-- #2603: a contractor Doula is attached only through an Offer she accepted (ADR-0008), so the switch could never add a row to her list. -->
 		{#if !isContractor}
 			<FilterBar
@@ -1464,6 +1546,12 @@
 		{:else}
 			<Skeleton variant="row" lines={8} label="Loading Clients" />
 		{/if}
+
+		<!-- Where the title row has no room for it beside the heading and the link, the button
+		     is here, so the first card stays on the first screen of a phone. -->
+		{#if isExportDrawn}
+			<div class="export-narrow">{@render downloadControl('clients-export-note-narrow')}</div>
+		{/if}
 	</stack-l>
 {/snippet}
 
@@ -1592,6 +1680,27 @@
 			display: flex;
 			align-items: center;
 			gap: var(--space-1);
+		}
+
+		.actions-row {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-group);
+		}
+
+		.export-narrow {
+			display: none;
+		}
+
+		@container (width < 36rem) {
+			.export-button {
+				display: none;
+			}
+
+			.export-narrow {
+				display: block;
+			}
 		}
 
 		.reserve {
