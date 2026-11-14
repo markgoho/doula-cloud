@@ -131,6 +131,15 @@
 		 * layout. One per table.
 		 */
 		grows?: boolean;
+		/**
+		 * The width this column is held at in a `columnWidths="one-line"`
+		 * table, a CSS length with the cell's own insets in it: the room its
+		 * busiest real value takes, so the columns after it start at one place
+		 * whichever rows are shown. A longer value takes its own width. On the
+		 * `grows` column it is the width that column wraps down from where the
+		 * frame runs out. Read only by that layout.
+		 */
+		track?: string;
 	}
 
 	interface RowActions<T> {
@@ -229,6 +238,14 @@
 		 */
 		recordLayout?: 'list' | 'compact';
 		/**
+		 * How the records sit in the room the frame has. `auto`, the default,
+		 * is cards at the reading measure, two to a line where the frame holds
+		 * two. `fill` lets each card take its share of the whole frame, in as
+		 * many columns as hold 38ch. `one` is one card to a line at every
+		 * width, for a list read in time order, down and never across.
+		 */
+		recordColumns?: 'auto' | 'fill' | 'one';
+		/**
 		 * What the table is, in a few words a screen reader reads on reaching
 		 * it, never drawn: a visually hidden `<caption>`, and the same words
 		 * as the record view's accessible name, since that view is the
@@ -305,6 +322,7 @@
 		isEmptyMessageSpoken = true,
 		columnWidths = 'content',
 		recordLayout = 'list',
+		recordColumns = 'auto',
 		caption,
 		describedBy,
 		hasRowHeader = true,
@@ -490,7 +508,9 @@
 							aria-sort={orderedBy?.column === column.label ? orderedBy.direction : undefined}
 							class:numeric={column.numeric}
 							class:wraps={column.wraps}
-							class:grows={column.grows}>{column.label}</th
+							class:grows={column.grows}
+							class:tracked={column.track !== undefined}
+							style:--column-track={column.track}>{column.label}</th
 						>
 					{/each}
 					{#if rowActions}
@@ -557,7 +577,7 @@
 		     rule (below) never actually hid, in both the browser this was
 		     built against and the test suite -- a real div doesn't have that
 		     failure mode. -->
-		<div class="record-view" role={caption ? 'group' : undefined} aria-label={caption} aria-describedby={describedBy} aria-busy={isBusy}>
+		<div class="record-view" class:fill={recordColumns === 'fill'} class:one={recordColumns === 'one'} role={caption ? 'group' : undefined} aria-label={caption} aria-describedby={describedBy} aria-busy={isBusy}>
 			{#each groups as group (group.start)}
 			{#if group.label !== undefined}
 				<svelte:element this={`h${groupHeadingLevel}`} class="group-title">{group.label}</svelte:element>
@@ -635,7 +655,12 @@
 	{/if}
 
 	{#if hasMore && onLoadMore}
-		<Button label="Load more" variant="secondary" loading={isLoadingMore} onClick={loadMore} />
+		<Button
+			label={loadMoreError ? 'Try again' : 'Load more'}
+			variant="secondary"
+			loading={isLoadingMore}
+			onClick={loadMore}
+		/>
 	{/if}
 </stack-l>
 {/snippet}
@@ -726,16 +751,24 @@
 			white-space: nowrap;
 		}
 
+		.table-view.one-line {
+			--data-table-cell-inset: var(--space-2);
+		}
+
 		.table-view.one-line th.grows::after {
-			--grows-padding: calc(2 * var(--data-table-cell-inset, var(--space-3)));
+			--grows-padding: calc(2 * var(--data-table-cell-inset));
 
 			content: '';
 			display: grid;
-			grid-template-columns: minmax(0, calc(var(--data-table-grows-track, 0ch) - var(--grows-padding)));
+			grid-template-columns: minmax(0, calc(var(--column-track, 0ch) - var(--grows-padding)));
 		}
 
 		.table-view.one-line th.grows:first-child::after {
-			--grows-padding: var(--data-table-cell-inset, var(--space-3));
+			--grows-padding: var(--data-table-cell-inset);
+		}
+
+		.table-view.one-line thead th.tracked:not(.grows) {
+			min-inline-size: var(--column-track);
 		}
 
 		/* Rows that are about to be replaced (`isBusy`) dim a little, so a
@@ -781,6 +814,18 @@
 
 		.record-view:has(.compact-lead) {
 			gap: var(--space-related);
+		}
+
+		.record-view.fill {
+			grid-template-columns: repeat(auto-fill, minmax(min(100%, 38ch), 1fr));
+		}
+
+		.record-view.fill .record {
+			max-inline-size: none;
+		}
+
+		.record-view.one {
+			grid-template-columns: minmax(0, 1fr);
 		}
 
 		/* "Compact rows, airy forms": the brief's Density section fixes a

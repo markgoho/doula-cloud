@@ -450,11 +450,13 @@
 	 * days run in the order they happen: raised, then the one that matters
 	 * for the row's state, with its kind in its own words.
 	 */
+	const INSET = 'var(--data-table-cell-inset)';
 	const columns = [
-		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName, grows: true },
+		{ label: 'Client', accessor: (invoice: PracticeInvoice) => invoice.clientName, grows: true, track: '16ch' },
 		{
 			label: 'Money',
 			numeric: true,
+			track: `calc(8ch + var(--space-1) + var(--money-state-track) + 2 * ${INSET})`,
 			accessor: (invoice: PracticeInvoice) => `${formatAmount(invoice.amountCents)}, ${invoiceMoneyState(invoice).word}`,
 			content: moneyCell
 		},
@@ -462,6 +464,7 @@
 			// #271: a by-hand Invoice's own per-Practice sequence, or Stripe's
 			// own `number` -- a check "for invoice ___" is matched against this.
 			label: 'Invoice',
+			track: `calc(27ch + 2 * ${INSET})`,
 			accessor: (invoice: PracticeInvoice) =>
 				`${invoice.reference}, ${kindLabel(invoice.engagementKind)}${billedSpoken(invoice)}${billedLabel(invoice)}`,
 			content: referenceCell
@@ -470,11 +473,12 @@
 			// #2146: the day raised, in the Practice's zone -- the Sent day
 			// the Engagement's own Invoices section shows.
 			label: 'Sent',
+			track: `calc(11ch + 2 * ${INSET})`,
 			accessor: (invoice: PracticeInvoice) => formatCalendarDay(invoice.raisedOn),
 			content: raisedCell
 		},
 		// H2 (ADR-0015): no bare "due", the pregnancy's word on the Clients list.
-		{ label: 'Payment', accessor: dateText, content: dateCell }
+		{ label: 'Payment', track: `calc(23ch + 2 * ${INSET})`, accessor: dateText, content: dateCell }
 	];
 
 	// #2240: to the Invoice itself in its Engagement's Invoices section,
@@ -730,11 +734,6 @@
 		   `DataTable.svelte`'s floor comment says why the floor is the route's own. */
 		.invoices-table {
 			container: invoices-table / inline-size;
-			--data-table-cell-inset: var(--space-2);
-			/* The Client column's track, a long two-word name ("Hannah Sorensen"
-			   outran 15ch by 2px at a 1440px window), so the Money starts at one
-			   place in every view. */
-			--data-table-grows-track: 16ch;
 		}
 
 		.invoices-table > :global(*) {
@@ -748,27 +747,6 @@
 				--data-table-table-display: table;
 				--data-table-records-display: none;
 			}
-		}
-
-		/* Money, Invoice, Sent and Payment (`columns`' second to fifth) are each
-		   as wide as the longest value they can say, a four-figure amount and
-		   its state's track, "INV-0000 · Postpartum · By hand" and "Payment due
-		   Nov 30, 2026", whatever rows are shown, so every column starts and the
-		   amounts end at one place in every view. */
-		.invoices-table :global(thead th:nth-child(2)) {
-			min-inline-size: calc(8ch + var(--space-1) + var(--money-state-track) + 2 * var(--data-table-cell-inset));
-		}
-
-		.invoices-table :global(thead th:nth-child(3)) {
-			min-inline-size: calc(27ch + 2 * var(--data-table-cell-inset));
-		}
-
-		.invoices-table :global(thead th:nth-child(4)) {
-			min-inline-size: calc(11ch + 2 * var(--data-table-cell-inset));
-		}
-
-		.invoices-table :global(thead th:nth-child(5)) {
-			min-inline-size: calc(23ch + 2 * var(--data-table-cell-inset));
 		}
 
 		/* The header ends where the amounts do (`MoneyAmount`'s two tracks). */

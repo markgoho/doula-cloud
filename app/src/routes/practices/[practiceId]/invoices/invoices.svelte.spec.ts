@@ -297,11 +297,13 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect
 			.element(testPage.getByRole('alert'))
 			.toHaveTextContent('More Invoices did not load. Nothing you saved is lost. Try again.');
+		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('invalid cursor')).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('link', { name: openInvoice.clientName })).toBeVisible();
 
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse(cleoPage));
-		await testPage.getByRole('button', { name: 'Load more' }).click();
+		await testPage.getByRole('button', { name: 'Try again' }).click();
 
 		await expect.element(testPage.getByRole('link', { name: 'Cleo' })).toBeVisible();
 		await expect.element(testPage.getByRole('alert')).not.toBeInTheDocument();

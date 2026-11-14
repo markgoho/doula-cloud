@@ -514,11 +514,12 @@
 	 * column position.
 	 */
 	const columns = [
-		{ label: 'Client', accessor: (visit: ScheduledVisit) => visit.clientName, grows: true },
+		{ label: 'Client', accessor: (visit: ScheduledVisit) => visit.clientName, grows: true, track: '15.2ch' },
 		{ label: 'When', accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: whenCell },
-		{ label: 'Type', accessor: (visit: ScheduledVisit) => visitTypeLabel(visit.type) },
+		{ label: 'Type', track: 'calc(10ch + 2 * var(--data-table-cell-inset))', accessor: (visit: ScheduledVisit) => visitTypeLabel(visit.type) },
 		{
 			label: 'Doula',
+			track: '42ch',
 			accessor: (visit: ScheduledVisit) => visitDoulaText(visit.staffName, visit.isOffEngagement),
 			content: doulaCell
 		}
@@ -716,6 +717,7 @@
 						describedBy={RESULT_ID}
 						columnWidths="one-line"
 						recordLayout="compact"
+						recordColumns="one"
 						rowGroup={(visit) => scheduleDayGroup(visit.scheduledAt, timeZone, now)}
 						groupHeadingLevel={2}
 						orderedBy={{ column: 'When', direction: read.view.order ? 'descending' : 'ascending' }}
@@ -758,31 +760,6 @@
 		/* The Client field starts narrow so it shares a line with the fold's summary on a phone, and takes what the line has left. */
 		.search {
 			flex-basis: 12ch;
-		}
-
-		/* The Client's track, the Clients list's Name track (a long two-word name). */
-		.schedule-table {
-			/* The room a cell keeps either side, as on the Clients and Invoices lists. */
-			--data-table-cell-inset: var(--space-2);
-			/* The Client's track: the longest name the seed holds, so no narrowing is the one a name widens. */
-			--data-table-grows-track: 15.2ch;
-		}
-
-		/* The Type's track: "Postpartum", so the Doula starts at one place whichever types the days hold. */
-		.schedule-table :global(.table-view tr:not(.group-heading) > :is(th, td):nth-child(3)) {
-			min-inline-size: calc(10ch + 2 * var(--data-table-cell-inset));
-		}
-
-		/* The Doula's track: a long name with the "No longer on this work" badge, so
-		   the table is as wide with one Doula's Visits as with all of them. */
-		.schedule-table :global(.table-view tr:not(.group-heading) > :is(th, td):last-child) {
-			min-inline-size: 42ch;
-		}
-
-		/* Visits are a list in time order, so below the table they are one card
-		   to a line, read down and never across, as the Clients list's are. */
-		.schedule-table :global(.record-view) {
-			grid-template-columns: minmax(0, 1fr);
 		}
 	}
 </style>
