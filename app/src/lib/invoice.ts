@@ -13,6 +13,7 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarDay } from './dates.js';
 import { refusalError } from './formErrors.js';
 import { formatMoney } from './money.js';
+import { invoicePeriodQuery, invoicePeriodWords, INVOICE_PERIOD_RULER, type InvoiceDays, type InvoicePeriod } from './invoicePeriod.js';
 
 export interface Invoice {
 	id: string;
@@ -261,10 +262,11 @@ export function invoiceOrderedBy(order: InvoiceOrder, view: InvoicesView): { col
  * The query string that names a view and an order, empty for the whole
  * book in its own order.
  */
-export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = ''): string {
+export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = '', period?: InvoicePeriod): string {
 	const query = new URLSearchParams();
 	if (view !== 'all') query.set('show', view);
 	if (order) query.set('order', order);
+	for (const [name, value] of invoicePeriodQuery(period)) query.set(name, value);
 	const text = query.toString();
 	return text ? `?${text}` : '';
 }
@@ -276,6 +278,13 @@ export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = ''):
 export interface PracticeInvoiceListData extends PracticeInvoicePage {
 	view: InvoicesView;
 	order: InvoiceOrder;
+	/**
+	 * The period the address named, and the two days it was read as in the
+	 * Practice's zone (#2871), which every later page asks for again.
+	 */
+	period?: InvoicePeriod;
+	days?: InvoiceDays;
+	now?: Date;
 }
 
 /** The Practice-wide Invoice list's path -- exported so the route's
@@ -286,7 +295,8 @@ export function practiceInvoicesPath(
 	practiceId: string,
 	cursor?: string,
 	view: InvoicesView = 'all',
-	order: InvoiceOrder = ''
+	order: InvoiceOrder = '',
+	days?: InvoiceDays
 ): string {
 	const path = `/api/practices/${practiceId}/invoices`;
 	const query = new URLSearchParams();
@@ -295,6 +305,10 @@ export function practiceInvoicesPath(
 	}
 	if (order) {
 		query.set('order', order);
+	}
+	if (days) {
+		query.set('sentFrom', days.from);
+		query.set('sentTo', days.to);
 	}
 	if (cursor) {
 		query.set('cursor', cursor);
@@ -315,15 +329,22 @@ export async function loadPracticeInvoices(
 	cursor?: string,
 	view: InvoicesView = 'all',
 	search = '',
-	order: InvoiceOrder = ''
+	order: InvoiceOrder = '',
+	days?: InvoiceDays
 ): Promise<PracticeInvoicePage> {
 	const response = search
 		? await fetcher(`/api/practices/${practiceId}/invoices/list`, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ view, search, cursor: cursor ?? '', ...(order && { order }) })
+				body: JSON.stringify({
+					view,
+					search,
+					cursor: cursor ?? '',
+					...(order && { order }),
+					...(days && { sentFrom: days.from, sentTo: days.to })
+				})
 			})
-		: await fetcher(practiceInvoicesPath(practiceId, cursor, view, order));
+		: await fetcher(practiceInvoicesPath(practiceId, cursor, view, order, days));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
@@ -944,6 +965,14 @@ const VIEW_ORDER: Record<InvoicesView, string> = {
 	overdue: 'longest overdue first'
 };
 
+/**
+ * An order the reader chose, in the words the result line ends on.
+ */
+export function invoiceOrderPhrase(name: string): string | undefined {
+	const named = INVOICE_ORDER_NAMES.find((order) => order === name);
+	return named && INVOICE_ORDERS[named].words;
+}
+
 // The words the line ends on: the view's own, or the order the reader chose.
 function orderWords(view: InvoicesView, order: InvoiceOrder): string {
 	return order === '' ? VIEW_ORDER[view] : INVOICE_ORDERS[order].words;
@@ -965,22 +994,35 @@ export function invoicesResultSummary(
 	hasMore: boolean,
 	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>,
 	search = '',
-	order: InvoiceOrder = ''
+	order: InvoiceOrder = '',
+	days?: InvoiceDays
 ): string {
 	const words = orderWords(view, order);
 	const kind = view === 'all' ? '' : `${view} `;
+	const sent = days ? ` sent ${invoicePeriodWords(days)}` : '';
 	if (search) {
-		if (shown === 0) return `No ${kind}Invoice matches "${search}".`;
+		if (shown === 0) return `No ${kind}Invoice${sent} matches "${search}".`;
 		const matching = `matching "${search}"`;
-		if (hasMore) return `Showing the first ${shown} ${kind}Invoices ${matching}, ${words}.`;
-		if (shown === 1) return `Showing 1 ${kind}Invoice ${matching}, ${words}.`;
-		return `Showing ${shown} ${kind}Invoices ${matching}, ${words}.`;
+		if (hasMore) return `Showing the first ${shown} ${kind}Invoices${sent} ${matching}, ${words}.`;
+		if (shown === 1) return `Showing 1 ${kind}Invoice${sent} ${matching}, ${words}.`;
+		return `Showing ${shown} ${kind}Invoices${sent} ${matching}, ${words}.`;
 	}
-	if (shown === 0) return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
+	if (shown === 0) {
+		if (days) return `No ${kind}Invoices${sent}.`;
+		return view === 'all' ? 'No Invoices yet.' : `No Invoice is ${view}.`;
+	}
 	const total = { all: counts.invoiceCount, unpaid: counts.outstandingCount, overdue: counts.overdueCount }[view];
-	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices, ${words}.`;
-	if (shown === 1) return `Showing 1 ${kind}Invoice, ${words}.`;
-	return `Showing ${shown} ${kind}Invoices, ${words}.`;
+	if (hasMore) return `Showing the first ${shown} of ${Math.max(total, shown)} ${kind}Invoices${sent}, ${words}.`;
+	if (shown === 1) return `Showing 1 ${kind}Invoice${sent}, ${words}.`;
+	return `Showing ${shown} ${kind}Invoices${sent}, ${words}.`;
+}
+
+/**
+ * The one line over the totals while a period is applied (#2871): whose
+ * figures they are, since they count only what was sent in it.
+ */
+export function invoiceTotalsNote(days: InvoiceDays): string {
+	return `Totals for Invoices sent ${invoicePeriodWords(days)}.`;
 }
 
 /** The longest wording the result line can say, which the filter bar
@@ -988,7 +1030,7 @@ export function invoicesResultSummary(
 export const INVOICES_RESULT_RULER = (['all', 'unpaid', 'overdue'] as const)
 	.flatMap((view) =>
 		(['', ...Object.keys(INVOICE_ORDERS)] as InvoiceOrder[]).map((order) =>
-			invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 }, '', order)
+			invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 }, '', order, INVOICE_PERIOD_RULER)
 		)
 	)
 	.toSorted((a, b) => b.length - a.length)[0];

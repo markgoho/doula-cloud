@@ -124,6 +124,23 @@ export const narrowedToOverdue: RouteVariant<RouteParameters> = {
 };
 
 /*
+ * #2871: a period applied, so the totals' one line over them, the period's
+ * tag beside the view's and the longest result line are measured too.
+ */
+export const inPeriod: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide invoice list, narrowed to a period and a view',
+	url: 'https://example.test/practices/practice-1/invoices?show=unpaid&sentFrom=2026-08-01&sentTo=2026-11-30',
+	props: {
+		data: {
+			...data,
+			view: 'unpaid',
+			period: { days: { from: '2026-08-01', to: '2026-11-30' } },
+			days: { from: '2026-08-01', to: '2026-11-30' }
+		}
+	}
+};
+
+/*
  * #2746: a view and a typed search together, so the applied tags row holds
  * two tags, one of them as long as a Client's full hyphenated name, and
  * must wrap rather than push the page sideways at 320px. The search rides
@@ -218,7 +235,7 @@ export const clientsCannotPayWhileLoading: RouteVariant<RouteParameters> = {
 
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide invoice list',
-	variants: [narrowedToOverdue, searched, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
+	variants: [narrowedToOverdue, inPeriod, searched, typical, loading, clientsCannotPay, clientsCannotPayWhileLoading],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	url: 'https://example.test/practices/practice-1/invoices',

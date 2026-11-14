@@ -23,17 +23,19 @@ const emptyBook = {
 	overdueCount: 0
 };
 
+const parent = async () => ({ session: { timezone: 'America/New_York' } });
+
 describe('invoices/+page.ts load', () => {
 	it('fetches the Practice-wide invoices path and hands over the page', async () => {
 		const { fetchMock } = setup(200, emptyBook);
 
-		const data = await load({ depends: () => {}, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
+		const data = await load({ depends: () => {}, parent, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		expect(fetchMock).toHaveBeenCalledWith(
 			'/api/practices/practice-1/invoices',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'all', order: '' });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'all', order: '', now: expect.any(Date) });
 	});
 
 	// #768: the narrowing is in the URL, so the load reads it there and
@@ -43,6 +45,7 @@ describe('invoices/+page.ts load', () => {
 
 		const data = await load({
 			depends: () => {},
+			parent,
 			params: { practiceId: 'practice-1' },
 			url: new URL('https://example.test/practices/practice-1/invoices?show=overdue')
 		} as Parameters<typeof load>[0]);
@@ -51,7 +54,7 @@ describe('invoices/+page.ts load', () => {
 			'/api/practices/practice-1/invoices?overdue=true',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'overdue', order: '' });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'overdue', order: '', now: expect.any(Date) });
 	});
 
 	// #2249: the screen has changed by the time a refusal lands, so the
@@ -70,6 +73,7 @@ describe('invoices/+page.ts load', () => {
 
 		const data = await load({
 			depends: () => {},
+			parent,
 			params: { practiceId: 'practice-1' },
 			url: new URL(`https://example.test/practices/practice-1/invoices?${query}`)
 		} as Parameters<typeof load>[0]);
@@ -78,13 +82,36 @@ describe('invoices/+page.ts load', () => {
 			`/api/practices/practice-1/invoices${path}`,
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view, order });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view, order, now: expect.any(Date) });
 	});
+
+	// jscpd:ignore-start -- each case of this load spec restates the one call under test
+	// #2871: the BFF takes two days, so a preset is counted here in the Practice's zone.
+	it.each([
+		['sent=last-year', '?sentFrom=2025-01-01&sentTo=2025-12-31', { preset: 'last-year' }, { from: '2025-01-01', to: '2025-12-31' }],
+		['sentFrom=2026-10-03&sentTo=2026-10-17&show=unpaid', '?unpaid=true&sentFrom=2026-10-03&sentTo=2026-10-17', { days: { from: '2026-10-03', to: '2026-10-17' } }, { from: '2026-10-03', to: '2026-10-17' }]
+	] as const)('reads %s into the days the BFF is asked for', async (query, path, period, days) => {
+		vi.useFakeTimers({ toFake: ['Date'] });
+		vi.setSystemTime(new Date('2026-11-14T12:00:00Z'));
+		const { fetchMock } = setup(200, emptyBook);
+
+		const data = await load({
+			depends: () => {},
+			parent,
+			params: { practiceId: 'practice-1' },
+			url: new URL(`https://example.test/practices/practice-1/invoices?${query}`)
+		} as Parameters<typeof load>[0]);
+
+		expect(fetchMock).toHaveBeenCalledWith(`/api/practices/practice-1/invoices${path}`, expect.anything());
+		await expect(loadedValue(data)).resolves.toMatchObject({ period, days });
+		vi.useRealTimers();
+	});
+	// jscpd:ignore-end
 
 	it('hands a refusal to the screen rather than throwing mid-load', async () => {
 		setup(403, { code: 'FORBIDDEN', message: 'not permitted to read this' });
 
-		const data = await load({ depends: () => {}, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
+		const data = await load({ depends: () => {}, parent, params: { practiceId: 'practice-1' }, url: new URL('https://example.test/practices/practice-1/invoices') } as Parameters<typeof load>[0]);
 
 		await expect(settledRead(data)).resolves.toMatchObject({ isLoaded: false, response: { status: 403 } });
 	});

@@ -291,6 +291,18 @@ describe('activityLedgerColumns', () => {
 		});
 	});
 
+	// #2871: the download's row says what left, never the search's text.
+	it('says what an Invoices download took, from its diff', () => {
+		const what = activityLedgerColumns('America/New_York')[1];
+		const diff = { view: 'unpaid', sentFrom: '2026-10-01', sentTo: '2026-10-31', rows: 14, searched: true };
+
+		expect(what.accessor(entry({ action: 'invoices_exported', diff }))).toBe(
+			'Invoices downloaded. 14 Invoices: Unpaid, sent in October 2026, with a search'
+		);
+		expect(what.accessor(entry({ action: 'invoices_exported' }))).toBe('Invoices downloaded');
+		expect(what.accessor(entry({ action: 'invoices_exported', diff: { nope: true } }))).toBe('Invoices downloaded');
+	});
+
 	it("says the row's own words for an entry carrying no detail (#2006)", () => {
 		const what = activityLedgerColumns('America/New_York')[1];
 

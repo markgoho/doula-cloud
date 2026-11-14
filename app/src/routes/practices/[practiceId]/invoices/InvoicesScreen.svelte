@@ -8,8 +8,24 @@
 	 * filter a `FilterBar` and the book a `DataTable`, the pieces the
 	 * Clients list is built from (#2746).
 	 */
-	import { untrack } from 'svelte';
+	import { onMount, tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
+	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
+	import Select from '#lib/components/atoms/Select.svelte';
+	import {
+		INVOICE_PERIOD_OPTIONS,
+		invoicePeriodChoiceOf,
+		invoicePeriodDays,
+		invoicePeriodKey,
+		invoicePeriodOf,
+		invoicePeriodWords,
+		type InvoiceDays,
+		type InvoicePeriod,
+		type InvoicePeriodChoice
+	} from '#lib/invoicePeriod.js';
+	import { requestInvoicesExport, saveFile } from '#lib/invoiceExport.js';
+	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
+	import { readerTimeZone } from '#lib/zonedTime.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
@@ -28,6 +44,7 @@
 		invoiceOrderedBy,
 		invoiceOrderOf,
 		invoiceOrderOptions,
+		invoiceTotalsNote,
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
@@ -108,10 +125,16 @@
 	$effect(() => {
 		holdListSearch('invoices', appliedSearch);
 	});
-	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string };
+	// #2871: the period the address names, and the Practice's zone it is counted in.
+	const period = $derived(invoicePeriodOf(page.url.searchParams));
+	const timeZone = $derived(session?.timezone ?? readerTimeZone());
+	const mountedAt = new Date();
+	const now = $derived(data?.now ?? mountedAt);
+	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string; period?: InvoicePeriod };
 	const isSameKey = (a: ReadKey | undefined, b: ReadKey) =>
-		a?.view === b.view && a.order === b.order && a.search === b.search;
-	const wanted = $derived<ReadKey>({ view, order, search: appliedSearch });
+		a?.view === b.view && a.order === b.order && a.search === b.search && invoicePeriodKey(a.period) === invoicePeriodKey(b.period);
+	const wanted = $derived<ReadKey>({ view, order, search: appliedSearch, period });
+	const wantedDays = $derived(invoicePeriodDays(period, timeZone, now));
 
 	/*
 	 * What the rows on screen were read under, and the latest page read for
@@ -126,6 +149,8 @@
 	 */
 	let shown = $state.raw<ReadKey>();
 	let book = $state.raw<PracticeInvoicePage>();
+	// The two days the rows on screen were read as, which every later page asks for again.
+	let shownDays = $state.raw<InvoiceDays>();
 	// The searched read that failed, so the list is not left marked busy.
 	let failedKey = $state.raw<ReadKey>();
 	let isApplying = $state(false);
@@ -141,7 +166,7 @@
 		loadPage: async (cursor) => {
 			const under = shown!;
 			try {
-				const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search, under.order);
+				const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search, under.order, shownDays);
 				if (shown === under) book = next;
 				return next;
 			} catch {
@@ -151,8 +176,9 @@
 		failureMessage: LOAD_MORE_FAILED
 	});
 
-	function adopt(first: PracticeInvoicePage, key: ReadKey) {
+	function adopt(first: PracticeInvoicePage, key: ReadKey, days: InvoiceDays | undefined) {
 		shown = key;
+		shownDays = days;
 		invoices.reset(first);
 		book = first;
 		pagesLoaded = 1;
@@ -230,7 +256,7 @@
 		untrack(() => {
 			if (landed === adopted && shown?.search === '') return;
 			adopted = landed;
-			adopt(landed, { view: landed.view, order: landed.order, search: '' });
+			adopt(landed, { view: landed.view, order: landed.order, search: '', period: landed.period }, landed.days);
 		});
 	});
 
@@ -246,8 +272,9 @@
 	async function readSearch(key: ReadKey, thisSearch: number) {
 		isSearching = true;
 		try {
-			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search, key.order);
-			if (thisSearch === latestSearch) adopt(first, key);
+			const days = invoicePeriodDays(key.period, timeZone, now);
+			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search, key.order, days);
+			if (thisSearch === latestSearch) adopt(first, key, days);
 		} catch {
 			if (thisSearch === latestSearch) {
 				failedKey = key;
@@ -280,7 +307,7 @@
 	}
 
 	const isBookEmpty = $derived(
-		shown !== undefined && shown.view === 'all' && shown.search === '' && invoices.items.length === 0
+		shown !== undefined && shown.view === 'all' && shown.search === '' && shown.period === undefined && invoices.items.length === 0
 	);
 
 	// "on 17 Invoices" is one phrase: it wraps whole, after or under its figure.
@@ -336,6 +363,10 @@
 	let draftView = $state<InvoicesView>('all');
 	let draftOrder = $state<InvoiceOrder>('');
 	let draftSearch = $state('');
+	let draftChoice = $state<InvoicePeriodChoice>('');
+	let fromValue = $state('');
+	let toValue = $state('');
+	let rangeErrors = $state<ScheduleRangeErrors>({});
 	let isSearchTouched = false;
 	let filterBar = $state<{ focusStatus: () => void }>();
 	let isFocusPending = $state(false);
@@ -343,6 +374,10 @@
 	function seedDrafts() {
 		draftView = view;
 		draftOrder = order;
+		draftChoice = invoicePeriodChoiceOf(period);
+		fromValue = period && 'days' in period ? period.days.from : '';
+		toValue = period && 'days' in period ? period.days.to : '';
+		rangeErrors = {};
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
@@ -381,16 +416,36 @@
 		}
 	}
 
-	const drawnHref = () => `${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView))}`;
+	const draftPeriod = $derived<InvoicePeriod | undefined>(
+		draftChoice === '' ? undefined : (draftChoice === 'choose' ? { days: { from: fromValue, to: toValue } } : { preset: draftChoice })
+	);
+	const isChoosingDays = $derived(draftChoice === 'choose');
+
+	const drawnHref = () => `${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView), draftPeriod)}`;
+
+	// Two typed days that are not a range are said beside them; the others send as drawn.
+	function hasRangeProblem(): boolean {
+		const problems = isChoosingDays ? scheduleRangeErrors(fromValue, toValue) : {};
+		rangeErrors = problems;
+		return Boolean(problems.from || problems.to);
+	}
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
+		if (hasRangeProblem()) {
+			await tick();
+			document.querySelector<HTMLInputElement>(rangeErrors.from ? 'input[name="from"]' : 'input[name="to"]')?.focus();
+			return;
+		}
 		await showFilter(drawnHref(), draftSearch.trim());
 	}
 
-	// A radio or the order applies when changed (#2888); the search waits for Apply.
-	function applyOnChange({ replace }: { replace: boolean }) {
+	// A radio, a select or the order applies when changed (#2888); the search and typed days wait for Apply, and "Choose days" alone only opens its fields.
+	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
+		if (isChoosingDays && changed.length === 1 && changed[0] === 'sent') return false;
+		if (hasRangeProblem()) return false;
 		void showFilter(drawnHref(), draftSearch.trim(), { replace });
+		return true;
 	}
 
 	/*
@@ -405,10 +460,13 @@
 		const tags: AppliedTag[] = [];
 		const viewTag = VIEW_OPTIONS.find((option) => option.value === view)?.tag;
 		if (viewTag) {
-			tags.push({ text: viewTag, href: `${invoicesHref}${invoicesViewQuery('all', orderForView(order, 'all'))}`, search: appliedSearch });
+			tags.push({ text: viewTag, href: `${invoicesHref}${invoicesViewQuery('all', orderForView(order, 'all'), period)}`, search: appliedSearch });
+		}
+		if (wantedDays) {
+			tags.push({ text: `Sent ${invoicePeriodWords(wantedDays)}`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: appliedSearch });
 		}
 		if (appliedSearch) {
-			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: '' });
+			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view, order, period)}`, search: '' });
 		}
 		return tags;
 	});
@@ -420,18 +478,68 @@
 
 	const resultSummary = $derived(
 		shown && book
-			? invoicesResultSummary(shown.view, invoices.items.length, invoices.hasMore, book, shown.search, shown.order)
+			? invoicesResultSummary(shown.view, invoices.items.length, invoices.hasMore, book, shown.search, shown.order, shownDays)
 			: ''
 	);
 
 	// The result line's id, which the table is described by.
 	const RESULT_ID = 'invoices-result';
+	const TOTALS_NOTE_ID = 'invoices-totals-note';
+
+	// #2871: the figures are the period's while one is applied, and a line says so.
+	const totalsDays = $derived(book ? shownDays : wantedDays);
+
+	/*
+	 * #2871: the export reads the list's applied view, search, order and period,
+	 * as a POST so the search, which can be a Client's name, stays out of the
+	 * address, and it needs script to hand the file over, so with none the
+	 * button is not drawn. Money is not offline (ADR-0059): a refusal is said in
+	 * place and the button stays for another try.
+	 */
+	let isScripted = $state(false);
+	onMount(() => {
+		isScripted = true;
+	});
+	let isExporting = $state(false);
+	let exportRefusal = $state('');
+	const isExportDrawn = $derived(isScripted && session !== undefined && isOwnerOrAdmin(session));
+	// Drawn from the first frame so the title row never changes height when the list lands; there is nothing to download until it has.
+	const hasExportRows = $derived(shown !== undefined && !isBookEmpty && readFailure === '');
+	// The result line's own count, or none where a search leaves it unknown.
+	const exportCount = $derived.by(() => {
+		if (!shown || !book) return;
+		if (!invoices.hasMore) return invoices.items.length;
+		if (shown.search !== '') return;
+		return { all: book.invoiceCount, unpaid: book.outstandingCount, overdue: book.overdueCount }[shown.view];
+	});
+	const exportDescription = $derived(
+		exportCount === undefined
+			? 'A spreadsheet of every Invoice this list shows.'
+			: `A spreadsheet of the ${exportCount} ${exportCount === 1 ? 'Invoice' : 'Invoices'} this list shows.`
+	);
+	async function downloadCsv() {
+		if (!shown) return;
+		isExporting = true;
+		exportRefusal = '';
+		const result = await requestInvoicesExport(apiFetchWithSession, page.params.practiceId!, {
+			view: shown.view,
+			search: shown.search,
+			order: shown.order,
+			days: shownDays
+		});
+		isExporting = false;
+		if ('refusal' in result) exportRefusal = result.refusal;
+		else saveFile(result.blob, result.filename);
+	}
 
 	// H10: a search that found nothing in a narrowed view is run again over every
 	// Invoice, keeping the text she typed (in history state, never the address).
 	const emptyListAction = $derived.by((): EmptyStateAction => {
 		const search = shown?.search ?? '';
-		const allHref = `${invoicesHref}${invoicesViewQuery('all', orderForView(shown?.order ?? '', 'all'))}`;
+		const allHref = `${invoicesHref}${invoicesViewQuery('all', orderForView(shown?.order ?? '', 'all'), shown?.period)}`;
+		if (search === '' && shown?.period) {
+			return { label: 'Show Invoices sent any time', href: `${invoicesHref}${invoicesViewQuery(shown.view, shown.order)}` };
+		}
 		if (search === '' || shown?.view === 'all') return { label: 'Show all Invoices', href: allHref };
 		return { label: `Search all Invoices for "${search}"`, onClick: () => void showFilter(allHref, search) };
 	});
@@ -592,9 +700,17 @@
 	<!-- A read that failed before any landed has no figures to wait for. -->
 	{#if !isBookEmpty && (book || !readFailure)}
 		<div class="totals">
-			<SummaryList rows={totals.slice(0, 2)} value={total} isCompact />
-			<SummaryList rows={totals.slice(2)} value={total} isCompact />
+			{#if totalsDays}
+				<p class="totals-note" id={TOTALS_NOTE_ID}>{invoiceTotalsNote(totalsDays)}</p>
+			{/if}
+			<SummaryList rows={totals.slice(0, 2)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
+			<SummaryList rows={totals.slice(2)} value={total} isCompact describedBy={totalsDays ? TOTALS_NOTE_ID : undefined} />
 		</div>
+	{/if}
+
+	<!-- Under the title row, with the button still there to try again. -->
+	{#if exportRefusal}
+		<Notice variant="error" message={exportRefusal} />
 	{/if}
 
 	<!--
@@ -631,6 +747,7 @@
 				appliedCount={appliedTags.length}
 				hasUntaggedFilter={order !== ''}
 				foldsFieldsOnly
+				foldLabel="More filters"
 				order={{ options: invoiceOrderOptions(draftView), value: draftOrder, onChange: (value) => (draftOrder = value as InvoiceOrder) }}
 				{isBusy}
 			>
@@ -649,6 +766,33 @@
 					/>
 				{/snippet}
 				{@render searchField()}
+				{#snippet folded()}
+					<div class="field sent">
+						<LabeledField label="Sent" width={20}>
+							{#snippet children({ id, describedBy, invalid, width })}
+								<Select
+									{id}
+									{describedBy}
+									{invalid}
+									{width}
+									name="sent"
+									options={INVOICE_PERIOD_OPTIONS}
+									value={draftChoice}
+									onChange={(chosen) => (draftChoice = chosen as InvoicePeriodChoice)}
+								/>
+							{/snippet}
+						</LabeledField>
+					</div>
+					{#if isChoosingDays}
+						<DateRangeFields
+							bind:from={fromValue}
+							bind:to={toValue}
+							fromError={rangeErrors.from}
+							toError={rangeErrors.to}
+							hint="Both days are included."
+						/>
+					{/if}
+				{/snippet}
 			</FilterBar>
 		{/if}
 
@@ -689,7 +833,23 @@
 	</stack-l>
 {/snippet}
 
-<ListPage title="Invoices" {content} />
+{#snippet actions()}
+	{#if isExportDrawn}
+		<div class="download">
+			<Button
+				label="Download CSV"
+				variant="secondary"
+				loading={isExporting}
+				ariaDisabled={!hasExportRows}
+				describedBy="invoices-export-note"
+				onClick={downloadCsv}
+			/>
+			<span class="visually-hidden" id="invoices-export-note">{exportDescription}</span>
+		</div>
+	{/if}
+{/snippet}
+
+<ListPage title="Invoices" {content} {actions} />
 
 <style>
 	@layer components {
@@ -732,6 +892,20 @@
 
 		.reserve {
 			visibility: hidden;
+		}
+
+		/* The title row holds a start button's height, a little under a button's
+		   target, so the button takes the difference out of its own margin and the
+		   row, and the list under it, stay where they were. */
+		.download {
+			margin-block: calc((var(--start-button-block-size) - var(--hit-target-min)) / 2);
+		}
+
+		.totals-note {
+			flex: 1 0 100%;
+			margin: 0 0 var(--space-label);
+			color: var(--color-on-surface-variant);
+			font-size: var(--text-meta-size);
 		}
 
 		/* The invoice list's content floor (#1945, #1981), measured on this

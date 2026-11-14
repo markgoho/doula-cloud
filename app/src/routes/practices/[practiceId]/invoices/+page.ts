@@ -6,6 +6,7 @@ import {
 	type PracticeInvoiceListData,
 	type PracticeInvoicePage
 } from '#lib/invoice.js';
+import { invoicePeriodDays, invoicePeriodOf } from '#lib/invoicePeriod.js';
 import type { PageLoad } from './$types';
 
 export const _INVOICES_READ = 'app:invoices';
@@ -18,12 +19,13 @@ export const _INVOICES_READ = 'app:invoices';
  * types this URL gets a 403, which the screen draws as the page
  * `practices/+error.svelte` would.
  */
-export const load: PageLoad = ({
+export const load: PageLoad = async ({
 	params,
 	url,
 	fetch,
-	depends
-}): { read: Promise<StreamedRead<PracticeInvoiceListData>> } => {
+	depends,
+	parent
+}): Promise<{ read: Promise<StreamedRead<PracticeInvoiceListData>> }> => {
 	// The screen's "Try again" runs this read again (#2746).
 	depends(_INVOICES_READ);
 	// #768, #2746: the view is in the address, not a control the page holds
@@ -33,12 +35,20 @@ export const load: PageLoad = ({
 	// ask for the same view.
 	const view = invoicesViewOf(url.searchParams);
 	const order = invoiceOrderOf(url.searchParams, view);
-	const path = practiceInvoicesPath(params.practiceId, undefined, view, order);
+	// #2871: the BFF takes two days, so a preset is counted here, in the Practice's zone.
+	const period = invoicePeriodOf(url.searchParams);
+	const now = new Date();
+	const { session } = await parent();
+	const days = invoicePeriodDays(period, session.timezone, now);
+	const path = practiceInvoicesPath(params.practiceId, undefined, view, order, days);
 	return {
 		read: mapRead(streamRead<PracticeInvoicePage>(path, fetch), (invoices) => ({
 			...invoices,
 			view,
-			order
+			order,
+			period,
+			days,
+			now
 		}))
 	};
 };

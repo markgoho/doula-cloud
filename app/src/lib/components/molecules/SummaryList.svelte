@@ -95,14 +95,19 @@
 		 * track wraps inside it. For rows with no action, tag or detail.
 		 */
 		isCompact?: boolean;
+		/**
+		 * The id of a line that says whose figures these are, such as the
+		 * Invoices list's "Totals for Invoices sent in October 2026."
+		 */
+		describedBy?: string;
 	}
 
-	let { rows, value, action, detail, isBordered = false, isStacked = false, isCompact = false }: Properties = $props();
+	let { rows, value, action, detail, isBordered = false, isStacked = false, isCompact = false, describedBy }: Properties = $props();
 
 	const listId = $props.id();
 </script>
 
-<dl class:bordered={isBordered} class:stacked={isStacked} class:compact={isCompact}>
+<dl class:bordered={isBordered} class:stacked={isStacked} class:compact={isCompact} aria-describedby={describedBy}>
 	<!--
 		Keyed on index, not on the label (#464): a record can show the same
 		label twice -- two phone numbers, two Practice-defined fields a

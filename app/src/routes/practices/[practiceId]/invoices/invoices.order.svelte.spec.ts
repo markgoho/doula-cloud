@@ -205,7 +205,7 @@ describe('the Order select’s place (#2869)', () => {
 			pageState.state = {};
 			await testPage.viewport(width, 900);
 			await render(Page, { data: { ...data, view } });
-			if (width < 672) await testPage.getByText('Order', { exact: true }).first().click();
+			if (width < 672) await testPage.getByText('More filters', { exact: true }).first().click();
 
 			for (const label of optionLabels()) {
 				await orderSelect().selectOptions(label!);
@@ -222,7 +222,7 @@ describe('the Order select’s place (#2869)', () => {
 		await testPage.viewport(375, 740);
 
 		const apply = applyBox();
-		const summary = testPage.getByText('Order', { exact: true }).first().element().getBoundingClientRect();
+		const summary = testPage.getByText('More filters', { exact: true }).first().element().getBoundingClientRect();
 		expect(Math.abs(apply.top - summary.top), 'the summary shares Apply’s line').toBeLessThanOrEqual(2);
 		const first = document.querySelector('.invoices-table .record')!.getBoundingClientRect();
 		expect(first.bottom, `first card ${Math.round(first.top)}-${Math.round(first.bottom)}`).toBeLessThanOrEqual(740);
