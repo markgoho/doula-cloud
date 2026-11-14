@@ -131,6 +131,9 @@ async function renderListScreen({
 			hasMine: Promise.resolve(true),
 			hasAnyClient,
 			doulas: Promise.resolve(doulas),
+			everyDoula: Promise.resolve(doulas),
+			canChooseDoula: true,
+			opensOnMine: false,
 			session: { practiceId, staffId: 'staff-1', practiceName: 'Riverside Doula Collective', roles: [], isContractor: false, timezone: 'America/New_York' }
 		}
 	});
@@ -354,6 +357,8 @@ describe('the table at the windows a laptop and a desktop give', () => {
 const withoutMoney = {
 	items: seedLikeClients.map((client) => ({
 		...client,
+		owedCents: undefined,
+		owedInvoiceCount: undefined,
 		openEngagements: client.openEngagements?.map((line) => ({
 			...line,
 			invoiceStatus: undefined,

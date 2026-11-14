@@ -25,7 +25,7 @@
  */
 import { apiFetch } from '#lib/api.js';
 import { hasAnyClient, loadDoulaCounts, type DoulaCounts } from '#lib/client.js';
-import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
+import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin, opensOnMine, type LabeledValue } from '#lib/roles.js';
 import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
 import type { PageLoad } from './$types';
 
@@ -44,6 +44,12 @@ export interface ClientsListGate {
 	// and an Admin's to read (ADR-0008), so it is empty for everyone else and
 	// the filter is not drawn.
 	doulas: Promise<LabeledValue[]>;
+	// Every Doula on the roster, the ones who hold no Client included, so a shared link names her.
+	everyDoula: Promise<LabeledValue[]>;
+	// Whether she may choose a Doula (an Owner or an Admin), which draws the select before the roster lands.
+	canChooseDoula: boolean;
+	// Whether the list opens on "Mine" for her, which decides what an empty result offers.
+	opensOnMine: boolean;
 }
 
 /*
@@ -71,18 +77,22 @@ async function hasMineFrom(counts: Promise<DoulaCounts | undefined>): Promise<bo
  * `hasAnyClientRecord` gives. A Doula is left out only when the counts were
  * read and hold nothing for her.
  */
-async function loadDoulas(practiceId: string, fetcher: typeof globalThis.fetch, counts: Promise<DoulaCounts | undefined>): Promise<LabeledValue[]> {
+async function loadRoster(practiceId: string, fetcher: typeof globalThis.fetch): Promise<LabeledValue[]> {
 	try {
 		const response = await apiFetch(staffPath(practiceId), undefined, fetcher);
 		if (!response.ok) return [];
-		const options = doulaOptions(doulasOf((await response.json()) as Roster));
-		const read = await counts;
-		const held = read?.doulas;
-		if (!held) return options;
-		return options.filter((option) => (held[option.value] ?? 0) > 0);
+		return doulaOptions(doulasOf((await response.json()) as Roster));
 	} catch {
 		return [];
 	}
+}
+
+async function holdingClients(roster: Promise<LabeledValue[]>, counts: Promise<DoulaCounts | undefined>): Promise<LabeledValue[]> {
+	const options = await roster;
+	const read = await counts;
+	const held = read?.doulas;
+	if (!held) return options;
+	return options.filter((option) => (held[option.value] ?? 0) > 0);
 }
 
 /*
@@ -105,7 +115,10 @@ export const load: PageLoad = async ({ params, parent, fetch }): Promise<Clients
 	const wantsMine = !isContractor && isDoula(session) && session.hasOtherDoulas !== false;
 	const wantsMarks = isOwnerOrAdmin(session);
 	const counts = wantsMine || wantsMarks ? loadCounts(params.practiceId, fetch) : Promise.resolve(undefined);
+	const roster = wantsMarks ? loadRoster(params.practiceId, fetch) : Promise.resolve([]);
 	return {
+		canChooseDoula: wantsMarks,
+		opensOnMine: opensOnMine(session),
 		isContractor,
 		isOwner: isOwner(session),
 		isDoula: isDoula(session),
@@ -113,6 +126,7 @@ export const load: PageLoad = async ({ params, parent, fetch }): Promise<Clients
 		hasMine: wantsMine ? hasMineFrom(counts) : Promise.resolve(false),
 		// A contractor Doula has no header link, so nothing turns on it.
 		hasAnyClient: isContractor ? Promise.resolve(true) : hasAnyClientRecord(params.practiceId, fetch),
-		doulas: wantsMarks ? loadDoulas(params.practiceId, fetch, counts) : Promise.resolve([])
+		doulas: holdingClients(roster, counts),
+		everyDoula: roster
 	};
 };

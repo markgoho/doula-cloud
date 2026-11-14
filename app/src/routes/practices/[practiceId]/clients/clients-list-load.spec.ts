@@ -131,6 +131,25 @@ describe('the Doulas the list can be narrowed to', () => {
 		await expect(result.doulas).resolves.toEqual([{ value: 'staff-1', label: 'Kimiko Nakashima' }]);
 	});
 
+	it('keeps every Doula on the roster apart from the ones who hold a Client, to name a shared link', async () => {
+		answer(jsonResponse(roster));
+
+		const { result } = await runLoad(['owner']);
+
+		await expect(result.everyDoula).resolves.toEqual([
+			{ value: 'staff-1', label: 'Kimiko Nakashima' },
+			{ value: 'staff-3', label: 'Lena Vasquez' }
+		]);
+		expect(result.canChooseDoula).toBe(true);
+	});
+
+	it('are not chosen by a Doula, and her list opens on Mine', async () => {
+		const { result } = await runLoad(['doula']);
+
+		expect(result).toMatchObject({ canChooseDoula: false, opensOnMine: true });
+		await expect(result.everyDoula).resolves.toEqual([]);
+	});
+
 	it('reads the counts once, however many Doulas there are', async () => {
 		answer(jsonResponse(roster));
 
