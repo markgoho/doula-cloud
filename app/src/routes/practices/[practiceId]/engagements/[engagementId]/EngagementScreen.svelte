@@ -3446,6 +3446,16 @@
 
 {/snippet}
 
+{#snippet putAnotherDoulaOn()}
+	{#if isAttachQuestion}
+		<div>
+			<Link href="#engagement-summary" label="Put another Doula on this birth" onClick={focusDoulaChange} />
+		</div>
+	{:else if !isPracticeOwnerOrAdmin}
+		<Text text="Only an Owner or Admin can put another Doula on this birth." tone="variant" />
+	{/if}
+{/snippet}
+
 {#snippet onCallGaps(panel: EngagementOnCall)}
 	<Heading level={3} text="When a Doula cannot be reached" />
 	{#if gapError}
@@ -3501,6 +3511,9 @@
 				</cluster-l>
 			{/snippet}
 		</SummaryList>
+		{#if isGapCoverFirst && !isGapFormOpen}
+			{@render putAnotherDoulaOn()}
+		{/if}
 		{#if canRecordGap && !isGapFormOpen}
 			<div>
 				<Button
@@ -3580,10 +3593,8 @@
 			{:else if gapCoveringOptions.length === 0}
 				<stack-l space="var(--space-label)">
 					<Text text="Who is covering" step="label" />
-					<Text
-						text="Nobody else is on this birth yet, so nobody can cover. Put another Doula on this birth first."
-						tone="variant"
-					/>
+					<Text text="Nobody else is on this birth yet, so nobody can cover." tone="variant" />
+					{@render putAnotherDoulaOn()}
 				</stack-l>
 			{:else}
 				<LabeledField

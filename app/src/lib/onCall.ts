@@ -511,6 +511,21 @@ export function personWords(staffId: string, name: string, ownStaffId: string | 
 }
 
 /**
+ * A birth with one Doula, holding it tonight herself: the tonight line
+ * already names her, so the row says her name once.
+ */
+export function isTonightTheOnlyName(window: RosterWindow): boolean {
+	const holders = window.tonight?.holders ?? [];
+	const only = window.onCall[0];
+	return (
+		window.onCall.length === 1 &&
+		holders.length === 1 &&
+		holders[0]!.staffId === only?.staffId &&
+		holders[0]!.coveringFor === undefined
+	);
+}
+
+/**
  * Who holds the birth tonight, the first line of the On call cell on every
  * birth that is on call tonight: the Doula holding it, the covering Doula and
  * whom she covers, or nobody.
@@ -572,9 +587,10 @@ export function ownStartWords(own: NonNullable<RosterWindow['ownStart']>, rule: 
 }
 
 /**
- * The Order control's first option and the result line say the same words:
- * tonight first while today is in the days shown, soonest due first when it
- * is not.
+ * The Order control's first option: tonight first while today is in the days
+ * shown, soonest due first when it is not. The result line says the same with
+ * the one thing the option has no room for, "nobody tonight first", because a
+ * longer option widens the bar's Order select and moves Apply.
  */
 export function onCallOrderOptions(isTonightShown: boolean): readonly { value: OnCallOrder; label: string }[] {
 	return [{ value: '', label: isTonightShown ? 'Tonight first' : 'Soonest due first' }, ON_CALL_ORDER_OPTIONS[1]!];
@@ -628,14 +644,18 @@ function plural(count: number, one: string, many: string): string {
 
 function summaryOf(counts: SummaryCounts, span: string, who: OnCallWho): string {
 	if (counts.births === 0) {
-		if (who.needsCover) return `No births need cover ${span}.`;
+		if (who.needsCover) {
+			if (who.isMine) return `You have no births that need cover ${span}.`;
+			if (who.doulaName) return `${who.doulaName} has no births that need cover ${span}.`;
+			return `No births need cover ${span}.`;
+		}
 		if (who.isMine) return `You are on call for no births ${span}.`;
 		if (who.doulaName) return `No births for ${who.doulaName} ${span}.`;
 		return `No births on call ${span}.`;
 	}
 	const whose = who.isMine ? 'your ' : (who.doulaName ? `${who.doulaName}'s ` : '');
 	const ordered =
-		who.order === COVER_FIRST ? 'needing cover first' : (counts.isTonightShown ? 'tonight first' : 'soonest due first');
+		who.order === COVER_FIRST ? 'needing cover first' : (counts.isTonightShown ? 'nobody tonight first' : 'soonest due first');
 	const what = `${counts.births} ${plural(counts.births, 'birth', 'births')}`;
 	const state = who.needsCover ? ` that ${plural(counts.births, 'needs', 'need')} cover` : ' on call';
 	const sentences = [`Showing ${whose}${what}${state} ${span}, ${ordered}.`];
@@ -644,7 +664,7 @@ function summaryOf(counts: SummaryCounts, span: string, who: OnCallWho): string 
 		else if (counts.tonightNobody === 0) {
 			sentences.push(`${counts.needCover} ${plural(counts.needCover, 'needs', 'need')} cover.`);
 		} else if (counts.needCover === 1) sentences.push('1 needs cover, tonight.');
-		else sentences.push(`${counts.needCover} need cover, ${counts.tonightNobody} of them tonight.`);
+		else sentences.push(`${counts.needCover} need cover, ${counts.tonightNobody} tonight.`);
 	}
 	if (counts.atOnce > 0) {
 		if (who.isMine) sentences.push('You are on two births at once.');

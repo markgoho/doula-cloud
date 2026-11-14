@@ -38,6 +38,7 @@
 		describeCoverage,
 		gapSubject,
 		isOnCallNarrowed,
+		isTonightTheOnlyName,
 		onCallDaysOf,
 		onCallOrderOptions,
 		personWords,
@@ -242,7 +243,13 @@
 		return of.preset === SHORT_ON_CALL_DAYS ? '7' : '30';
 	};
 
+	// The key of the days a step landed on: the fields stay shut for them, so the bar does not move.
+	let steppedKey: string | undefined;
+	let isStepped = $state(false);
+
 	function seedDrafts() {
+		isStepped = view.chosen !== undefined && (isStepped || steppedKey === wantedKey);
+		steppedKey = undefined;
 		draftChoice = choiceOf(view);
 		const shown = view.chosen ?? onCallDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
@@ -269,6 +276,7 @@
 
 	// Picking "Choose days" starts its fields on the days the choice before it showed.
 	function chooseDays(choice: OnCallDaysChoice) {
+		isStepped = false;
 		if (choice === 'choose' && draftChoice !== 'choose') {
 			const shown = onCallDaysOf({ preset: presetOf(draftChoice) }, timeZone, now).days!;
 			fromValue = shown.from;
@@ -286,7 +294,9 @@
 		order: draftOrder
 	});
 
-	const isChoosingDays = $derived(draftChoice === 'choose');
+	// While the days typed are refused, the rows and the result line still answer the days before them, so neither is drawn.
+	const isRangeRefused = $derived(Boolean(rangeErrors.from || rangeErrors.to));
+	const isChoosingDays = $derived(draftChoice === 'choose' && !isStepped);
 
 	let isApplying = $state(false);
 	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
@@ -358,6 +368,7 @@
 	const later = $derived(onCallStep(view, 1, timeZone, now));
 	function step(event: MouseEvent, to: OnCallView) {
 		event.preventDefault();
+		steppedKey = isChoosingDays ? undefined : viewKey(to);
 		void show(onCallHref(basePath, to));
 	}
 
@@ -409,8 +420,8 @@
 	const doulaOptions = $derived([{ value: '', label: ANY_DOULA }, ...doulaChoices]);
 	const DAYS_OPTIONS: readonly { value: OnCallDaysChoice; label: string }[] = [
 		{ value: 'tonight', label: 'Tonight' },
-		{ value: 'week', label: 'This week' },
 		{ value: '7', label: `Next ${SHORT_ON_CALL_DAYS} days` },
+		{ value: 'week', label: 'This week' },
 		{ value: '30', label: `Next ${DEFAULT_ON_CALL_DAYS} days` },
 		{ value: 'choose', label: 'Choose days' }
 	];
@@ -556,6 +567,7 @@
 {#snippet onCallCell(row: RosterWindow, tableView: DataTableView)}
 	{@const isCard = tableView === 'record'}
 	{@const tonight = tonightLine(row, session.staffId)}
+	{@const isNamedOnce = isTonightTheOnlyName(row)}
 	{#if tonight}
 		<span class="tonight">{tonight}</span>
 	{/if}
@@ -567,9 +579,13 @@
 		{:else}
 			<ul class="lines">
 				{#each row.onCall as doula (doula.staffId)}
+					{@const isDaysOnOwnLine = doula.narrowed && (!isCard || isNamedOnce)}
 					<li>
+						{#if !isNamedOnce || (doula.atOnce?.length ?? 0) > 0}
 						<span class="who">
-							<span class="name">{personWords(doula.staffId, doula.name, session.staffId, true)}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
+							{#if !isNamedOnce}
+								<span class="name">{personWords(doula.staffId, doula.name, session.staffId, true)}{#if isCard && doula.narrowed}{SEPARATOR}{@render days({ start: doula.from, end: doula.to }, 'until')}{/if}</span>
+							{/if}
 							{#if doula.atOnce && doula.atOnce.length > 0}
 								<span class="state"><Badge label={atOnceLabel(doula.atOnce.length)} variant="warning" /></span>
 								{#if isCard}
@@ -579,7 +595,8 @@
 								{/if}
 							{/if}
 						</span>
-						{#if doula.narrowed && !isCard}
+						{/if}
+						{#if isDaysOnOwnLine}
 							<span class="line">{@render days({ start: doula.from, end: doula.to }, 'Until')}</span>
 						{/if}
 						{#if !isCard}
@@ -692,7 +709,7 @@
 			onSubmit={applyFilters}
 			onChangeApply={applyOnChange}
 			legend="Choose which births to show"
-			status={readFailure ? '' : resultSummary}
+			status={readFailure || isRangeRefused ? '' : resultSummary}
 			statusRuler={resultRuler}
 			statusNote={readFailure ? undefined : zoneNote}
 			statusId={RESULT_ID}
@@ -704,13 +721,13 @@
 			foldsFieldsOnly
 			novalidate
 			foldsSwitches
-			isForcedOpen={Boolean(rangeErrors.from || rangeErrors.to)}
+			isForcedOpen={isRangeRefused}
 			foldLabel={canMine || isOwnerView ? 'Days and filters' : 'Days and order'}
 			order={{ options: orderOptions, value: view.order, onChange: (value) => (draftOrder = value as OnCallOrder) }}
 			{isBusy}
 		>
 			{#snippet switches()}
-				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={draftChoice} onChange={chooseDays} isInline>
+				<RadioGroup legend="Days" name="days" options={DAYS_OPTIONS} value={isStepped ? undefined : draftChoice} onChange={chooseDays} isInline>
 					{#snippet trailing()}
 						<!-- Each steps the days the reader sees by their own length; the days it lands on are in its name. Earlier is not drawn at today. -->
 						<span class="steps">
@@ -786,7 +803,7 @@
 		{#if readFailure}
 			<ReadFailure message={readFailure} {onRetry} />
 		{:else if data}
-			{#if roster && !data.rangeErrors}
+			{#if roster && !data.rangeErrors && !isRangeRefused}
 				<div class="births">
 					<DataTable
 						{columns}
@@ -798,7 +815,7 @@
 						emptyMessage={resultSummary}
 						{emptyAction}
 						isEmptyMessageSpoken={false}
-						caption="Births on call"
+						caption={`Births on call (${roster.windows.length})`}
 						describedBy={RESULT_ID}
 						columnWidths="one-line"
 						recordLayout="compact"
@@ -872,6 +889,10 @@
 		/* A birth's row is several lines tall and its link sits mid-row, so the restored row as a whole, not only its link, clears the stuck heading (and a group's heading above it). */
 		.births :global(.table-view > tbody > tr[id]) {
 			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
+		}
+
+		.births :global(.table-view > tbody > tr > :is(th, td)) {
+			vertical-align: top;
 		}
 
 		.births :global(.table-view > tbody > tr.opens-group[id]) {

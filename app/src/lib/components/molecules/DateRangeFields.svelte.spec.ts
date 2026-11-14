@@ -90,12 +90,12 @@ describe('DateRangeFields', () => {
 		await expect.element(page.getByLabelText('To')).toHaveAccessibleDescription('Enter a day');
 	});
 
-	it('limits both boxes to the earliest and latest day it is given', async () => {
+	it('limits both boxes to the earliest day and the To box to the latest day it is given', async () => {
 		await render(DateRangeFields, { from: '2026-10-26', to: '2026-11-25', earliest: '2026-10-26', latest: '2027-01-25' });
 
 		await expect.element(page.getByLabelText('From')).toHaveAttribute('min', '2026-10-26');
 		await expect.element(page.getByLabelText('To')).toHaveAttribute('min', '2026-10-26');
-		await expect.element(page.getByLabelText('From')).toHaveAttribute('max', '2027-01-25');
+		await expect.element(page.getByLabelText('From')).not.toHaveAttribute('max');
 		await expect.element(page.getByLabelText('To')).toHaveAttribute('max', '2027-01-25');
 	});
 

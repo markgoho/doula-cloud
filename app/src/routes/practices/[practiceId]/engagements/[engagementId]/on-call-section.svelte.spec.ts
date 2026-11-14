@@ -316,13 +316,27 @@ describe('the on-call section on a birth (#1093)', () => {
 			await gapStaffField().selectOptions('Persephone Vandermeulen-Achterberg, CD(DONA)');
 
 			await expect
-				.element(
-					testPage.getByText(
-						'Nobody else is on this birth yet, so nobody can cover. Put another Doula on this birth first.'
-					)
-				)
+				.element(testPage.getByText('Nobody else is on this birth yet, so nobody can cover.'))
 				.toBeVisible();
+			await expect.element(testPage.getByRole('link', { name: 'Put another Doula on this birth' })).toBeVisible();
 			expect(coveringField().query()).toBeNull();
+		});
+
+		it('offers an Owner or Admin the way to put another Doula on a birth with a gap nobody covers', async () => {
+			await setupOnCall();
+
+			await testPage.getByRole('link', { name: 'Put another Doula on this birth' }).click();
+
+			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Change');
+		});
+
+		it('tells a Doula who can put another Doula on the birth', async () => {
+			await setupOnCall(undefined, asDoula.props!.data as ComponentProps<typeof Page>['data']);
+
+			await expect
+				.element(testPage.getByText('Only an Owner or Admin can put another Doula on this birth.'))
+				.toBeVisible();
+			expect(testPage.getByRole('link', { name: 'Put another Doula on this birth' }).elements()).toHaveLength(0);
 		});
 
 		it('gives the reason and cover questions their hints', async () => {
