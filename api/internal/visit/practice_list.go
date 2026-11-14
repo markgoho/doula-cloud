@@ -38,7 +38,7 @@ const (
 	MsgInvalidTo     = "to must be an RFC3339 timestamp"
 	MsgEmptyRange    = "to must be after from"
 	MsgInvalidCursor = "invalid cursor"
-	MsgInvalidOrder  = "order must be empty or latest"
+	MsgInvalidOrder  = "The order must be empty or latest."
 )
 
 // The orders the schedule reads in (#2869). The empty name is the view's
