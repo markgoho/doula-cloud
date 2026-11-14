@@ -22,6 +22,9 @@ Object.assign(pageState, toPageState(fixture));
 
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
+const takeOutcome = vi.hoisted(() => vi.fn());
+vi.mock('#lib/outcome.js', () => ({ takeOutcome, gotoWithOutcome: vi.fn() }));
+
 vi.mock('$app/navigation', () => ({
 	goto: vi.fn(),
 	afterNavigate: vi.fn(),
@@ -677,5 +680,44 @@ describe('how a Doula reads it', () => {
 
 		await expect.element(testPage.getByRole('link', { name: 'Remove filter: Mine' })).toBeVisible();
 		await expect.element(testPage.getByRole('status')).toHaveTextContent(/Showing your 6 births on call/);
+	});
+});
+
+describe('recording a time you cannot be reached (#2934)', () => {
+	it('offers an Owner the act for a Doula, carrying the roster’s view and the Doula it was narrowed to', async () => {
+		setAddress('?days=7&doula=staff-2');
+
+		await setup({ data: { ...data, view: { ...data.view, preset: 7, doula: 'staff-2' } } });
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Record a time a Doula cannot be reached' }))
+			.toHaveAttribute('href', `${onCallPath}/cannot-be-reached?back=days%3D7%26doula%3Dstaff-2&doula=staff-2`);
+	});
+
+	it('offers a Doula the act for herself, and a contractor too', async () => {
+		asVariant(asDoula);
+		const { unmount } = await setup();
+		await expect.element(testPage.getByRole('link', { name: 'Record a time you cannot be reached' })).toBeVisible();
+		unmount();
+
+		asVariant(asContractor);
+		await setup({ data: asContractor.props!.data as OnCallPageData });
+		await expect.element(testPage.getByRole('link', { name: 'Record a time you cannot be reached' })).toBeVisible();
+	});
+
+	it('offers nobody the act who is neither a Doula nor an Owner or Admin', async () => {
+		pageState.data = { session: { ...practiceSession(['bookkeeper']).session } };
+
+		await setup();
+
+		await expect.element(testPage.getByRole('link', { name: /cannot be reached/ })).not.toBeInTheDocument();
+	});
+
+	it('says what the act did above the title', async () => {
+		takeOutcome.mockReturnValueOnce('The time you cannot be reached is recorded on 2 births.');
+
+		await setup();
+
+		await expect.element(testPage.getByRole('status').first()).toHaveTextContent('The time you cannot be reached is recorded on 2 births.');
 	});
 });

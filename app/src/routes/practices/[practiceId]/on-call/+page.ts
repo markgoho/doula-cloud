@@ -1,5 +1,6 @@
 import type { RangeErrors } from '#lib/dayRange.js';
 import {
+	ON_CALL_READ,
 	onCallViewFromParameters,
 	resolveOnCallRead,
 	rosterPath,
@@ -12,7 +13,7 @@ import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
 import { streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import type { PageLoad } from './$types';
 
-export const _ON_CALL_READ = 'app:on-call';
+export const _ON_CALL_READ = ON_CALL_READ;
 
 export interface OnCallPageData {
 	/**

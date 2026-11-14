@@ -64,7 +64,9 @@
 		type RosterWindow,
 		type UnreachableGap
 	} from '#lib/onCall.js';
-	import { canNarrowToMine, isAmbientContractor, isOwnerOrAdmin } from '#lib/roles.js';
+	import { entryLabel, journeyHref } from '#lib/cannotBeReached.js';
+	import { takeOutcome } from '#lib/outcome.js';
+	import { canNarrowToMine, isAmbientContractor, isDoula, isOwnerOrAdmin } from '#lib/roles.js';
 	import { practiceZoneNote } from '#lib/practiceZone.js';
 	import { dayIn } from '#lib/zonedTime.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
@@ -136,6 +138,12 @@
 		onCallViewFromParameters(page.url.searchParams, canMine, isOwnerView ? undefined : { staffId: session.staffId })
 	);
 	const viewKey = (of: OnCallView) => onCallHref('', of);
+	// What the act that led here did (#2934), read once while this screen renders; the streamed read re-renders it.
+	const outcome = untrack(() => takeOutcome(page.url));
+	const canRecordGap = $derived(isDoula(session) || isOwnerView);
+	const recordGapHref = $derived(
+		journeyHref(practiceId, 'doula', { back: viewKey(view).replace(/^\?/, ''), doula: isOwnerView ? view.doula : '' })
+	);
 	const wantedKey = $derived(viewKey(view));
 
 	/*
@@ -875,7 +883,11 @@
 
 <svelte:document onvisibilitychange={refreshNow} />
 
-<ListPage title="On call" {content} />
+{#snippet actions()}
+	<Link href={recordGapHref} label={entryLabel(isOwnerView)} variant="secondary" />
+{/snippet}
+
+<ListPage title="On call" actions={canRecordGap ? actions : undefined} {outcome} {content} />
 
 <style>
 	@layer components {
