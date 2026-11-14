@@ -85,6 +85,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, client Client, enq 
 	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/list",
 		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
 		false, staffauth.AnyStaff, ListPracticeInvoicesHandler())
+	// #2871: every Invoice the list's view, search and period match, as a
+	// CSV. Owner and Admin, the readers of money leaving the product, and
+	// limited as a heavy endpoint (docs/api-design.md section 6).
+	ir.ExemptGated("POST /api/practices/{practiceId}/invoices/export",
+		"a read whose one write is its audit row; a replay would store a book of Client names in the idempotency table",
+		false, staffauth.OwnerAndAdmin, ExportPracticeInvoicesHandler())
 
 	// Billing mode (#271): a Practice-level choice between billing through
 	// Stripe and billing by hand. Reading is any Staff -- a Doula meets

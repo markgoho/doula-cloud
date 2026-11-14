@@ -88,62 +88,82 @@ type Rule struct {
 func Wrap(db *sql.DB, endpoint string, rules []Rule) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// tightestLimit/tightestRemaining track the rule closest to its
-			// own cap, across every rule this request is checked against --
-			// docs/api-design.md section 6's RateLimit-Limit/-Remaining
-			// headers report that one, the same way a multi-dimension limit
-			// is only as generous as its tightest dimension.
-			tightestLimit, tightestRemaining := 0, -1
-			// One instant for the whole request (#1992): every bucket's
-			// window is judged and restarted at it, and Retry-After is
-			// counted from it.
-			now := clock.Now(r.Context())
-
-			for _, rule := range rules {
-				key, ok := rule.Key(r)
-				if !ok {
-					continue
-				}
-
-				count, windowStart, err := touch(r.Context(), db, bucketKey(endpoint, rule.Dimension, key), rule.Window, now)
-				if err != nil {
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-					return
-				}
-
-				maxRequests := limit(rule)
-				if count > maxRequests {
-					retryAfter := retryAfterSeconds(windowStart, now, rule.Window)
-					// coverage:ignore reason: DB query failure, not exercised by unit tests
-					if err := recordRefusal(r.Context(), db, endpoint, rule.Dimension, key); err != nil {
-						// A failed refusal log must not itself turn a refusal
-						// into a 500 -- the caller already isn't getting
-						// through, and the log is for investigation, not
-						// enforcement. Logged, not surfaced.
-						log.Printf("ratelimit: record refusal: %v", err)
-					}
-					w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-					w.Header().Set("RateLimit-Limit", strconv.Itoa(maxRequests))
-					w.Header().Set("RateLimit-Remaining", "0")
-					apierr.WriteError(w, fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter),
-						http.StatusTooManyRequests)
-					return
-				}
-
-				remaining := maxRequests - count
-				if tightestRemaining < 0 || remaining < tightestRemaining {
-					tightestLimit, tightestRemaining = maxRequests, remaining
-				}
+			if Enforce(w, r, db, endpoint, rules) {
+				next.ServeHTTP(w, r)
 			}
-
-			if tightestRemaining >= 0 {
-				w.Header().Set("RateLimit-Limit", strconv.Itoa(tightestLimit))
-				w.Header().Set("RateLimit-Remaining", strconv.Itoa(tightestRemaining))
-			}
-			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// Conn is what the counters are read and written through: a *sql.DB for a
+// route that sits outside any transaction, or the request's own *sql.Tx
+// for a handler already inside staffauth.Middleware, which holds the
+// request's one pool connection and would hang the pool by asking for a
+// second (#2432).
+type Conn interface {
+	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+// Enforce is Wrap's check on conn, for a handler that already holds the
+// request's transaction (#2871): it counts the request against every rule
+// and reports whether the handler may go on. When it reports false it has
+// already written the 429 or the 500, and the handler returns.
+func Enforce(w http.ResponseWriter, r *http.Request, conn Conn, endpoint string, rules []Rule) bool {
+	// tightestLimit/tightestRemaining track the rule closest to its
+	// own cap, across every rule this request is checked against --
+	// docs/api-design.md section 6's RateLimit-Limit/-Remaining
+	// headers report that one, the same way a multi-dimension limit
+	// is only as generous as its tightest dimension.
+	tightestLimit, tightestRemaining := 0, -1
+	// One instant for the whole request (#1992): every bucket's
+	// window is judged and restarted at it, and Retry-After is
+	// counted from it.
+	now := clock.Now(r.Context())
+
+	for _, rule := range rules {
+		key, ok := rule.Key(r)
+		if !ok {
+			continue
+		}
+
+		count, windowStart, err := touch(r.Context(), conn, bucketKey(endpoint, rule.Dimension, key), rule.Window, now)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return false
+		}
+
+		maxRequests := limit(rule)
+		if count > maxRequests {
+			retryAfter := retryAfterSeconds(windowStart, now, rule.Window)
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			if err := recordRefusal(r.Context(), conn, endpoint, rule.Dimension, key); err != nil {
+				// A failed refusal log must not itself turn a refusal
+				// into a 500 -- the caller already isn't getting
+				// through, and the log is for investigation, not
+				// enforcement. Logged, not surfaced.
+				log.Printf("ratelimit: record refusal: %v", err)
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+			w.Header().Set("RateLimit-Limit", strconv.Itoa(maxRequests))
+			w.Header().Set("RateLimit-Remaining", "0")
+			apierr.WriteError(w, fmt.Sprintf("too many requests -- try again in %d seconds", retryAfter),
+				http.StatusTooManyRequests)
+			return false
+		}
+
+		remaining := maxRequests - count
+		if tightestRemaining < 0 || remaining < tightestRemaining {
+			tightestLimit, tightestRemaining = maxRequests, remaining
+		}
+	}
+
+	if tightestRemaining >= 0 {
+		w.Header().Set("RateLimit-Limit", strconv.Itoa(tightestLimit))
+		w.Header().Set("RateLimit-Remaining", strconv.Itoa(tightestRemaining))
+	}
+	return true
 }
 
 // bucketKey namespaces a rate_limit_buckets row by the endpoint and rule
@@ -169,7 +189,7 @@ func bucketKey(endpoint, dimension, key string) string {
 // (#1992), not SQL now(): window_start is then written and read on the
 // one clock retryAfterSeconds counts from, so a fixed-clock test reaches
 // the window's edge and a moved clock moves the window with it.
-func touch(ctx context.Context, db *sql.DB, key string, window time.Duration, now time.Time) (count int, windowStart time.Time, err error) {
+func touch(ctx context.Context, db Conn, key string, window time.Duration, now time.Time) (count int, windowStart time.Time, err error) {
 	err = db.QueryRowContext(ctx,
 		`INSERT INTO rate_limit_buckets (key, window_start, count)
 		 VALUES ($1, $2, 1)
@@ -190,7 +210,7 @@ func touch(ctx context.Context, db *sql.DB, key string, window time.Duration, no
 
 // recordRefusal appends one rate_limit_refusals row (00060) for a request
 // this rule just turned away.
-func recordRefusal(ctx context.Context, db *sql.DB, endpoint, dimension, key string) error {
+func recordRefusal(ctx context.Context, db Conn, endpoint, dimension, key string) error {
 	if _, err := db.ExecContext(ctx,
 		`INSERT INTO rate_limit_refusals (endpoint, dimension, key_value) VALUES ($1, $2, $3)`,
 		endpoint, dimension, key,

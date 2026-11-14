@@ -88,6 +88,7 @@ const (
 	ActionPracticeTimezoneChanged     PracticeAction = "practice_timezone_changed"
 	ActionPracticeOnCallChanged       PracticeAction = "practice_on_call_changed"
 	ActionPracticeDataExported        PracticeAction = "practice_data_exported"
+	ActionInvoicesExported            PracticeAction = "invoices_exported"
 	ActionPracticeDeletionRequested   PracticeAction = "practice_deletion_requested"
 	ActionPracticeDeletionRestored    PracticeAction = "practice_deletion_restored"
 	ActionPracticeDeletionFinalized   PracticeAction = "practice_deletion_finalized"
