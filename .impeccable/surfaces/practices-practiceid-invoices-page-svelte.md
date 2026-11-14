@@ -39,7 +39,7 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | A reader-chosen order (sent, payment due, amount; each either way) | Have it (#2869) | Linear and Stripe give the reader a chosen order beside the filters; each view's own order stays its default ("All" newest first, "Unpaid" earliest due first, "Overdue" longest overdue first); built 2026-11-13, an Order select in the bar and `aria-sort` on the ordered column |
 | The order said to assistive technology (`aria-sort`) | Have it (#2869) | the view orders by a column a screen reader is not told; moved here from #2867 |
 | Search by reference or Client | Have it | "Reference or Client" (T4; #1829) |
-| A total count | Have it | the five totals ("Billed $12,790.00 on 14 Invoices" first, #2871, built 2026-11-14), and the whole in the result line while more exist ("the first 30 of 35") |
+| A total count | Have it | the four totals, and with a period a "Billed $12,790.00 on 14 Invoices" first (#2871, built 2026-11-14), and the whole in the result line while more exist ("the first 30 of 35") |
 | A period (date-range) narrowing | Have it (#2871) | built 2026-11-14: a "Sent" select (any time, this month, last month, this year, last year, choose days) on the day an Invoice was sent in the Practice's zone, "what was billed in October, what was billed this year"; the four totals follow it and a line over them says so; chasing by the day payment is due is already served by Unpaid, Overdue and the payment-due order, so the period is not by that day |
 | Relative days | Have it | "12 days overdue" in the Money cell (`invoiceStateWord`) |
 | Grouping by day, a calendar view | Declined | a book of Invoices is not read by day |

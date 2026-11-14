@@ -64,9 +64,9 @@ describe('the overdue book (#768)', () => {
 		// row is open and past its due date. Its label says it is a part of
 		// what Clients owe, the line above it.
 		const terms = testPage.getByRole('term');
-		await expect.element(terms.nth(1)).toHaveTextContent('Clients owe');
-		await expect.element(terms.nth(2)).toHaveTextContent('Of that, overdue');
-		await expect.element(testPage.getByRole('definition').nth(2)).toHaveTextContent('$4,500.00 on 1 Invoice');
+		await expect.element(terms.nth(0)).toHaveTextContent('Clients owe');
+		await expect.element(terms.nth(1)).toHaveTextContent('Of that, overdue');
+		await expect.element(testPage.getByRole('definition').nth(1)).toHaveTextContent('$4,500.00 on 1 Invoice');
 	});
 
 	it('says how late an unpaid invoice is with its amount, and the day payment was due beside it', async () => {
