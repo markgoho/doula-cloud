@@ -140,6 +140,16 @@
 		 * frame runs out. Read only by that layout.
 		 */
 		track?: string;
+		/**
+		 * The row link's accessible name already says this column's value
+		 * ("Quinn Dunmore, Fri Nov 13, 2:00pm" says the When), so a screen
+		 * reader skips the cell, and on a compact card its label, and hears the
+		 * fact once. The name keeps the fact, so a list of links still tells two
+		 * rows of one Client apart; a description would not. Read only with
+		 * `rowHref` and `rowLinkLabel`, never on the first column, and not on a
+		 * `list` card, whose label stands in its own term.
+		 */
+		namedByRowLink?: boolean;
 	}
 
 	interface RowActions<T> {
@@ -417,6 +427,68 @@
 	 * first column renders the link AND takes no content padding -- and
 	 * disagreement fails there rather than showing up on screen.
 	 */
+	function isUnheard(column: Column<T>, columnIndex: number, view: DataTableView): boolean {
+		return Boolean(
+			rowHref && column.namedByRowLink && columnIndex > 0 && (view === 'table' || recordLayout === 'compact')
+		);
+	}
+
+	const CONTROLS =
+		'a, button, input, select, textarea, summary, label, option, details, dialog, [role=button], [role=link], [role=menuitem], [role=checkbox], [contenteditable], td.actions, .record-actions';
+	const MOVE_LIMIT = 5;
+
+	function rowTarget(row: HTMLElement) {
+		let press: { x: number; y: number; wasSelecting: boolean } | undefined;
+
+		const isSelectingInRow = () => {
+			const selection = getSelection();
+			return Boolean(
+				selection && !selection.isCollapsed && selection.rangeCount > 0 && selection.getRangeAt(0).intersectsNode(row)
+			);
+		};
+
+		const isOnControl = (event: Event) => {
+			const control = (event.target as Element).closest(CONTROLS);
+			return Boolean(control && row.contains(control));
+		};
+
+		const link = () => row.querySelector<HTMLAnchorElement>('[data-row-link]')!;
+
+		const onpointerdown = (event: PointerEvent) => {
+			press = { x: event.clientX, y: event.clientY, wasSelecting: isSelectingInRow() };
+		};
+
+		const onclick = (event: MouseEvent) => {
+			const started = press;
+			press = undefined;
+			if (event.defaultPrevented || isOnControl(event) || event.button !== 0) return;
+			if (started && (started.wasSelecting || Math.hypot(event.clientX - started.x, event.clientY - started.y) > MOVE_LIMIT)) {
+				return;
+			}
+			const target = link();
+			if (event.ctrlKey || event.metaKey || event.shiftKey) {
+				window.open(target.href, '_blank', 'noopener');
+				return;
+			}
+			if (event.altKey || event.detail !== 1) return;
+			target.click();
+		};
+
+		const onauxclick = (event: MouseEvent) => {
+			if (event.button !== 1 || event.defaultPrevented || isOnControl(event)) return;
+			window.open(link().href, '_blank', 'noopener');
+		};
+
+		row.addEventListener('pointerdown', onpointerdown);
+		row.addEventListener('click', onclick);
+		row.addEventListener('auxclick', onauxclick);
+		return () => {
+			row.removeEventListener('pointerdown', onpointerdown);
+			row.removeEventListener('click', onclick);
+			row.removeEventListener('auxclick', onauxclick);
+		};
+	}
+
 	function isContentCell(column: Column<T>, columnIndex: number): boolean {
 		return Boolean(column.content) && !(columnIndex === 0 && rowHref);
 	}
@@ -463,12 +535,20 @@
 	linked first column is deliberately unreachable -- see `Column.content`.
 -->
 {#snippet cell(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
+	{#if isUnheard(column, columnIndex, view)}
+		<span aria-hidden="true">{@render cellBody(column, columnIndex, row, view)}</span>
+	{:else}
+		{@render cellBody(column, columnIndex, row, view)}
+	{/if}
+{/snippet}
+
+{#snippet cellBody(column: Column<T>, columnIndex: number, row: T, view: DataTableView)}
 	{#if columnIndex === 0 && rowHref && column.datetimeAccessor}
 		<time datetime={column.datetimeAccessor(row)}
-			><Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} /></time
+			><Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} isRowLink /></time
 		>
 	{:else if columnIndex === 0 && rowHref}
-		<Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} />
+		<Link href={rowHref(row)} label={column.accessor(row)} ariaLabel={rowLinkLabel?.(row)} isRowLink />
 	{:else if column.content}
 		{@render column.content(row, view)}
 	{:else if column.datetimeAccessor}
@@ -534,6 +614,8 @@
 						tabindex={rowId ? -1 : undefined}
 						data-row-index={index}
 						class:opens-group={opensGroup}
+						class:row-target={rowHref}
+						{@attach rowHref ? rowTarget : undefined}
 					>
 						{#each columns as column, columnIndex (column.label)}
 							<!-- `content` has no counterpart on the record view's
@@ -594,7 +676,14 @@
 				<!-- The tabindex is only ever -1, which the check cannot see
 				     through the condition. -->
 				<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
-				<div class="record" id={rowId?.(row, 'record')} tabindex={rowId ? -1 : undefined} data-row-index={index}>
+				<div
+					class="record"
+					class:row-target={rowHref}
+					id={rowId?.(row, 'record')}
+					tabindex={rowId ? -1 : undefined}
+					data-row-index={index}
+					{@attach rowHref ? rowTarget : undefined}
+				>
 					<div class="record-title">{@render cell(columns[0]!, 0, row, 'record')}</div>
 					{#if fields.length > 0 && recordLayout === 'compact'}
 						<!-- The first field is the line under the title; the rest share
@@ -604,7 +693,7 @@
 						{@const lead = fields[0]!}
 						{@const rest = fields.slice(1)}
 						<div class="compact-lead">
-							<span class="visually-hidden">{`${lead.label}: `}</span>
+							<span class="visually-hidden" aria-hidden={isUnheard(lead.column, lead.columnIndex, view) || undefined}>{`${lead.label}: `}</span>
 							{@render cell(lead.column, lead.columnIndex, row, view)}
 						</div>
 						{#if rest.length > 0}
@@ -614,7 +703,7 @@
 									     starts a line takes its dot past the line's start, where it is
 									     clipped: no line starts or ends on one. -->
 									<span class="compact-field">
-										<span class="visually-hidden">{`${field.label}: `}</span>
+										<span class="visually-hidden" aria-hidden={isUnheard(field.column, field.columnIndex, view) || undefined}>{`${field.label}: `}</span>
 										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}{@render cell(field.column, field.columnIndex, row, view)}
 									</span>
 								{/each}
@@ -951,9 +1040,22 @@
 			margin-block-start: var(--space-related);
 		}
 
-		/* A row hover tint. The row's link stays the one target, and the
-		   tint is never the only cue for anything. */
+		/* A row hover tint, never the only cue for anything. A row with a
+		   link is a click target as a whole (#2888): the pointer says so, and
+		   the row's own controls, which are not part of it, say they are not. */
 		tbody tr:not(.group-heading):hover > :is(td, th) {
+			background-color: var(--color-surface-container);
+		}
+
+		.row-target {
+			cursor: pointer;
+		}
+
+		.row-target :is(td.actions, .record-actions) {
+			cursor: default;
+		}
+
+		.record.row-target:hover:not(:has(.record-actions:hover)) {
 			background-color: var(--color-surface-container);
 		}
 

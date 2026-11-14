@@ -180,14 +180,15 @@ describe('the Practice-wide invoice list (#265)', () => {
 		await expect.element(testPage.getByRole('cell', { name: heard('$4,500.00, owed') })).toBeVisible();
 	});
 
-	// T6 (WCAG 1.3.1): the cell under "Invoice" says the reference, then the
-	// care and how it was billed. C1 (#2746): the care is the Engagement's kind,
-	// in the Clients list's words.
-	it('says the reference, the care each Invoice bills for and how it was billed', async () => {
+	// T6, #2864: the reference is heard in the row link's name and once; the
+	// cell under "Invoice" says the care and how it was billed. C1 (#2746): the
+	// care is the Engagement's kind, in the Clients list's words.
+	it('says the care each Invoice bills for and how it was billed, and the reference only in the row link', async () => {
 		await setup();
 
-		await expect.element(testPage.getByRole('cell', { name: heard('INV-0042, Postpartum, billed By hand') })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: heard('DC-0092, Birth, billed through Stripe') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Postpartum, billed By hand') })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: heard('Birth, billed through Stripe') }).first()).toBeVisible();
+		expect(testPage.getByRole('cell', { name: /INV-0042|DC-0092/ }).elements()).toHaveLength(0);
 	});
 
 	// T6: the table is named, described by the result line, and two

@@ -514,8 +514,8 @@
 {/snippet}
 
 {#snippet referenceCell(invoice: PracticeInvoice)}
-	<!-- The reference is said here too, so the cell under "Invoice" holds it (WCAG 1.3.1), though the row link says it as well. -->
-	<span class="no-break">{invoice.reference}<span class="visually-hidden">,</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
+	<!-- The reference is drawn under "Invoice" and heard in the row link's name ("Tessa Moreau, INV-0012"), which is what tells two Invoices of one Client apart in a list of links, so it is heard once. -->
+	<span class="no-break"><span aria-hidden="true">{invoice.reference}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{kindLabel(invoice.engagementKind)}</span><span class="visually-hidden">{billedSpoken(invoice)}</span><span class="separator" aria-hidden="true">·</span><span class="lead">{billedLabel(invoice)}</span></span>
 {/snippet}
 
 <!-- In the table a paid row's "Paid" is heard and not seen: its Money cell shows "paid" under the "Payment" heading (H8), and a row read whole still says the day's kind. A card has no heading, so it shows it. An unpaid row keeps "Payment due", never a bare "due" (ADR-0015). -->

@@ -537,7 +537,12 @@
 	 */
 	const columns = [
 		{ label: 'Client', accessor: (visit: ScheduledVisit) => visit.clientName, grows: true, track: '15.2ch' },
-		{ label: 'When', accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: whenCell },
+		{
+			label: 'When',
+			accessor: (visit: ScheduledVisit) => formatScheduledVisit(visit.scheduledAt, timeZone),
+			content: whenCell,
+			namedByRowLink: true
+		},
 		{ label: 'Type', track: 'calc(10ch + 2 * var(--data-table-cell-inset))', accessor: (visit: ScheduledVisit) => visitTypeLabel(visit.type) },
 		{
 			label: 'Doula',

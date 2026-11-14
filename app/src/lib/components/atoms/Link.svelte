@@ -48,6 +48,11 @@
 		 * Client's details do not belong in an address.
 		 */
 		onClick?: (event: MouseEvent) => void;
+		/*
+		 * Marks the one link a list row opens, for the row's own click
+		 * handler to find (`DataTable`).
+		 */
+		isRowLink?: boolean;
 	}
 
 	let {
@@ -58,7 +63,8 @@
 		current = false,
 		describedBy,
 		ariaLabel,
-		onClick
+		onClick,
+		isRowLink = false
 	}: Properties = $props();
 
 	// Absolute (http(s)) or protocol-relative hrefs leave the app; every
@@ -78,6 +84,7 @@
 	aria-label={ariaLabel}
 	target={isExternal ? '_blank' : undefined}
 	rel={isExternal ? 'noopener noreferrer' : undefined}
+	data-row-link={isRowLink ? '' : undefined}
 	onclick={onClick}
 >
 	<!--
