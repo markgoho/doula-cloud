@@ -4,8 +4,9 @@
 
 	/*
 	 * Each color means one thing, on every screen:
-	 * - warning (amber): needs someone to act. Owing money is one such thing;
-	 *   so are onboarding left unfinished, payouts on hold and a gap in cover.
+	 * - warning (amber): needs someone to act: onboarding left
+	 *   unfinished, payouts on hold, a gap in cover. Money owed and not yet due
+	 *   asks nothing, so it is neutral (#2891); it turns red when it is late.
 	 * - error (red): late or failed. An overdue Invoice is late; an email that
 	 *   could not be delivered and a collection that failed are failures.
 	 * - info (blue): pending, or something to know; nobody has to act yet.
@@ -88,7 +89,7 @@
 		/* Quiet and filled, as Stripe's are: a tint of the meaning's own
 		   hue, text a step deeper toward the ink, and no outline (the
 		   transparent border only keeps the box the size it was). One
-		   meaning per color app-wide: amber is owes, or a warning that needs
+		   meaning per color app-wide: amber is a warning that needs
 		   someone to act; red is overdue or an error; blue is information,
 		   and anything pending or waiting on someone else; green is
 		   success; gray is neutral. */

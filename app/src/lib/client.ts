@@ -47,6 +47,11 @@ export interface ClientListItem {
 	 * OwedInvoiceCount. */
 	owedCents?: number;
 	owedInvoiceCount?: number;
+	/** How many whole Practice days late the oldest of those Invoices is, 0
+	 * when none is late; absent for a contractor Doula. "Most overdue first"
+	 * orders by that Invoice's due instant. Mirrors the Go BFF's
+	 * client.ListItem.OldestOverdueDays. */
+	oldestOverdueDays?: number;
 }
 
 /** One rollup line of ClientListItem.openEngagements -- mirrors the Go
@@ -169,15 +174,16 @@ export interface LoadClientsOptions {
 
 /**
  * The orders the Clients list is read in (#2869). The empty one is the
- * list's own; "owed" is not offered to a reader who sees no money.
+ * list's own; "owed" and "overdue" are not offered to a reader who sees no money.
  */
-export type ClientOrder = '' | 'name' | 'name-desc' | 'owed';
+export type ClientOrder = '' | 'name' | 'name-desc' | 'owed' | 'overdue';
 
 export const CLIENT_ORDER_OPTIONS: readonly { value: ClientOrder; label: string }[] = [
 	{ value: '', label: 'Soonest due first' },
 	{ value: 'name', label: 'Name, A to Z' },
 	{ value: 'name-desc', label: 'Name, Z to A' },
-	{ value: 'owed', label: 'Most owed first' }
+	{ value: 'owed', label: 'Most owed first' },
+	{ value: 'overdue', label: 'Most overdue first' }
 ];
 
 /**
@@ -299,7 +305,8 @@ const ORDER_WORDS: Record<ClientOrder, string> = {
 	'': 'soonest due first, then most recently ended',
 	name: 'by name, A to Z',
 	'name-desc': 'by name, Z to A',
-	owed: 'most owed first'
+	owed: 'most owed first',
+	overdue: 'most overdue first'
 };
 const CLEAR_FILTERS = 'Clear the filters to widen the list.';
 /**

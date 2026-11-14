@@ -34,6 +34,7 @@ export const clients: ClientListItem[] = [
 		pendingRequestKinds: ['birth'],
 		// The BFF sums what a Client owes for every non-contractor row (#2874): her one open Invoice.
 		owedCents: 450_000,
+		oldestOverdueDays: 12,
 		owedInvoiceCount: 1,
 		/*
 		 * #264: both ends of the rollup on one Client -- ADR-0017's "two
@@ -225,7 +226,7 @@ const typicalClients: ClientListItem[] = TYPICAL_CLIENTS.slice(0, 8).map((person
 		portalInviteStatus: isNew ? undefined : (index % 4 === 1 ? 'invited' : 'accepted'),
 		portalInviteDelivery: !isNew && index % 4 === 1 ? 'sent' : undefined,
 		pendingRequestKinds: index === 5 ? ['birth'] : [],
-		...(!isNew && index !== 5 && { owedCents: kind === 'birth' ? 150_000 : 90_000, owedInvoiceCount: 1 }),
+		...(!isNew && index !== 5 && { owedCents: kind === 'birth' ? 150_000 : 90_000, owedInvoiceCount: 1, oldestOverdueDays: index === 1 ? 12 : 0 }),
 		// The Client with a pending birth Request has no Engagement yet: the
 		// Request is what asks for one (ADR-0017), so her row holds the one badge.
 		openEngagements: isNew || index === 5
@@ -269,12 +270,15 @@ const busiestLine = new Map<number, object>([
 ]);
 
 // #2874: the widest total the Money cell says, a five-figure sum over two Invoices, on the busiest row.
-const busiestOwed = { owedCents: 1_245_000, owedInvoiceCount: 2 };
+const busiestOwed = { owedCents: 1_245_000, owedInvoiceCount: 2, oldestOverdueDays: 62 };
 
 export const seedLikeClients: ClientListItem[] = typicalClients.map((client, index) => {
 	const [line] = client.openEngagements ?? [];
 	const busiest = busiestLine.get(index);
-	const owed = index === 4 ? busiestOwed : {};
+	const owed = new Map<number, Partial<ClientListItem>>([
+		[4, busiestOwed],
+		[6, { oldestOverdueDays: 12 }]
+	]).get(index);
 	return line && busiest ? { ...client, ...owed, openEngagements: [{ ...line, ...busiest }] } : client;
 });
 

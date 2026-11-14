@@ -418,6 +418,7 @@ describe('the Clients list order (#2869)', () => {
 		expect(clientOrderFrom('name')).toBe('name');
 		expect(clientOrderFrom('name-desc')).toBe('name-desc');
 		expect(clientOrderFrom('owed')).toBe('owed');
+		expect(clientOrderFrom('overdue')).toBe('overdue');
 		expect(clientOrderFrom('newest')).toBe('');
 		expect(clientOrderFrom('')).toBe('');
 	});
@@ -426,6 +427,7 @@ describe('the Clients list order (#2869)', () => {
 		expect(clientsResultSummary(30, true, false, false, false, false, { order: 'name' })).toBe('Showing the first 30 Clients, by name, A to Z.');
 		expect(clientsResultSummary(2, false, false, false, false, false, { order: 'name-desc' })).toBe('Showing 2 Clients, by name, Z to A.');
 		expect(clientsResultSummary(2, false, false, false, true, false, { order: 'owed' })).toBe('Showing 2 Clients who owe money, most owed first.');
+		expect(clientsResultSummary(2, false, false, false, false, false, { order: 'overdue' })).toBe('Showing 2 Clients, most overdue first.');
 	});
 });
 

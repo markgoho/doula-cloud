@@ -5,7 +5,7 @@ import MoneyAmount from './MoneyAmount.svelte';
 
 interface SetupOptions {
 	amount?: string;
-	state?: { word: string; variant?: 'warning' | 'error' };
+	state?: { word: string; variant?: 'error' };
 	isTracked?: boolean;
 }
 
@@ -36,7 +36,7 @@ describe('MoneyAmount.svelte', () => {
 	});
 
 	it('ends every amount on one edge in its table form, whatever the state says', async () => {
-		await setup({ state: { word: 'owed', variant: 'warning' }, isTracked: true });
+		await setup({ state: { word: 'owed' }, isTracked: true });
 		await render(MoneyAmount, { amount: '$12,950.00', state: { word: 'payment on its way' }, isTracked: true });
 		const gaps = ['$950.00', '$12,950.00'].map((amount) => {
 			const element = page.getByText(amount, { exact: true }).element();
