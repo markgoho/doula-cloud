@@ -24,6 +24,7 @@ func TestRead_ReadsTheFileHeaderFirst(t *testing.T) {
 	}
 }
 
+// jscpd:ignore-start -- these helpers are what csvexport's own tests call, and each package's binary must run them to cover them
 func TestRequireFileAndRequireRecorded_ReadTheDownloadAndItsOneRow(t *testing.T) {
 	now := time.Date(2026, 11, 15, 2, 0, 0, 0, time.UTC)
 	s := ownerScene(t, false, fixture.At(now))
@@ -34,6 +35,8 @@ func TestRequireFileAndRequireRecorded_ReadTheDownloadAndItsOneRow(t *testing.T)
 	exporttest.RequireFile(t, resp, "test-2026-11-14.csv", "Test-Count", "1")
 	exporttest.RequireRecorded(t, s.DB, s.Practice.ID, s.Staff.ID, exporttest.Action, now, map[string]any{"zone": "America/New_York"}, "quinn")
 }
+
+// jscpd:ignore-end
 
 func TestNewScene_ARefusingBuildAnswersItsOwn400(t *testing.T) {
 	s := ownerScene(t, true)
@@ -55,6 +58,7 @@ func TestRequireOwnerAndAdminOnly_AsksEachRoleOnce(t *testing.T) {
 	})
 }
 
+// jscpd:ignore-start -- the same reason: a helper is covered by the package that owns it
 func TestRequireRateLimited_TheThirtyFirstIsRefused(t *testing.T) {
 	s := ownerScene(t, false)
 
@@ -62,3 +66,5 @@ func TestRequireRateLimited_TheThirtyFirstIsRefused(t *testing.T) {
 		return exporttest.Send(s)
 	}, func() int { return len(exporttest.Diffs(t, s.DB, s.Practice.ID, exporttest.Action)) })
 }
+
+// jscpd:ignore-end
