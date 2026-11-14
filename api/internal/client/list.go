@@ -329,6 +329,21 @@ func filtersFor(w http.ResponseWriter, c staffauth.Call, req ListRequest) (listF
 	}, true
 }
 
+// listZone is the Practice's zone for a reader who is shown Invoices, UTC for
+// a contractor Doula, and sets filters' overdue cutoff from it at the request's
+// instant: the one read both the list and its export count lateness by.
+func listZone(ctx context.Context, c staffauth.Call, filters *listFilters) (*time.Location, error) {
+	if c.Reader.IsAmbientContractor() {
+		return time.UTC, nil
+	}
+	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
+	if err != nil {
+		return nil, fmt.Errorf("client: load practice timezone: %w", err)
+	}
+	filters.overdueFrom = overdue.From(clock.Now(ctx), zone)
+	return zone, nil
+}
+
 // serveList answers the Clients list for filters already read and checked
 // by either entry point.
 func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
@@ -336,16 +351,11 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 	if !ok {
 		return
 	}
-	var zone *time.Location
-	if !c.Reader.IsAmbientContractor() {
-		loaded, err := practicetimezone.Load(r.Context(), c.Tx, c.PracticeID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		zone = loaded
-		filters.overdueFrom = overdue.From(clock.Now(r.Context()), zone)
+	zone, err := listZone(r.Context(), c, &filters)
+	if err != nil {
+		// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
 	}
 
 	var after *listAfter
@@ -359,7 +369,6 @@ func serveList(w http.ResponseWriter, r *http.Request, c staffauth.Call, req Lis
 	}
 
 	var list []ListItem
-	var err error
 	attached := c.Reader.IsAmbientContractor() || req.Mine
 	if attached {
 		list, err = listAttachedClients(r.Context(), c.Tx, c.PracticeID, c.StaffID, filters, req.Order, after)

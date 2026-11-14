@@ -89,6 +89,11 @@ func ExportHandler() http.Handler {
 // and nothing is skipped or repeated at a page's edge.
 func listEveryClient(ctx context.Context, c staffauth.Call, filters listFilters, req ListRequest) ([]ListItem, error) {
 	attached := req.Mine
+	zone, err := listZone(ctx, c, &filters)
+	if err != nil {
+		// coverage:ignore reason: DB query failure or a stored zone that will not load, not exercised by unit tests
+		return nil, err
+	}
 	var every []ListItem
 	var after *listAfter
 	for {
@@ -120,7 +125,7 @@ func listEveryClient(ctx context.Context, c staffauth.Call, filters listFilters,
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
 	}
-	if err := attachOwedTotals(ctx, c.Tx, every, c.Reader); err != nil {
+	if err := attachOwedTotals(ctx, c.Tx, every, c.Reader, zone); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
 	}
