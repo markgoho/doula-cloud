@@ -97,6 +97,46 @@ func TestPracticeInvoices_TotalsFollowThePeriodAndIgnoreViewAndSearch(t *testing
 	}
 }
 
+// TestPracticeInvoices_BilledCountsWhatWasSentAndStands proves billed is the
+// Invoices sent that still stand as a bill: open, paid (refunded or not) and
+// written off count, a draft and a void do not, and the period is the
+// Practice's New York day at both edges of the month.
+func TestPracticeInvoices_BilledCountsWhatWasSentAndStands(t *testing.T) {
+	e := newEnv(t)
+	_, contractID := e.contractWithStatus(invoiceStatusDraft)
+	inOctober := time.Date(2026, 10, 15, 16, 0, 0, 0, time.UTC)
+	for i, in := range []struct {
+		status string
+		cents  int64
+		at     time.Time
+	}{
+		{invoiceStatusOpen, 1, inOctober},
+		{invoiceStatusPaid, 2, inOctober},
+		{invoiceStatusUncollectible, 4, inOctober},
+		{invoiceStatusVoid, 8, inOctober},
+		{invoiceStatusDraft, 16, inOctober},
+		{invoiceStatusOpen, 32, time.Date(2026, 11, 1, 3, 59, 59, 0, time.UTC)},
+		{invoiceStatusOpen, 64, time.Date(2026, 10, 1, 4, 0, 0, 0, time.UTC)},
+		{invoiceStatusOpen, 128, time.Date(2026, 10, 1, 3, 59, 59, 0, time.UTC)},
+		{invoiceStatusOpen, 256, time.Date(2026, 11, 1, 4, 0, 0, 0, time.UTC)},
+	} {
+		seedInvoice(e.T, e.DB, e.Practice.ID, contractID, "in_billed_"+strconv.Itoa(i), in.status, in.cents, in.at)
+	}
+
+	october := e.practiceInvoices("sentFrom=2026-10-01", "sentTo=2026-10-31")
+	if october.BilledCents != 1+2+4+32+64 || october.BilledCount != 5 || october.InvoiceCount != 7 {
+		t.Fatalf("October: billed %d over %d, count %d, want 103 over 5, count 7", october.BilledCents, october.BilledCount, october.InvoiceCount)
+	}
+	unpaid := e.practiceInvoices("sentFrom=2026-10-01", "sentTo=2026-10-31", "unpaid=true")
+	if unpaid.BilledCents != october.BilledCents || unpaid.BilledCount != october.BilledCount {
+		t.Fatalf("unpaid view: billed %d over %d, want the same as the whole book's", unpaid.BilledCents, unpaid.BilledCount)
+	}
+	whole := e.practiceInvoices()
+	if whole.BilledCents != 1+2+4+32+64+128+256 || whole.BilledCount != 7 || whole.InvoiceCount != 9 {
+		t.Fatalf("no period: billed %d over %d, count %d, want 487 over 7, count 9", whole.BilledCents, whole.BilledCount, whole.InvoiceCount)
+	}
+}
+
 // TestPracticeInvoices_RefundedTotalFollowsThePeriod proves the money that
 // went back counts under the period its Invoice was sent in.
 func TestPracticeInvoices_RefundedTotalFollowsThePeriod(t *testing.T) {
@@ -110,10 +150,10 @@ func TestPracticeInvoices_RefundedTotalFollowsThePeriod(t *testing.T) {
 
 	inside := e.practiceInvoices(sentFromOct25, sentToOct25)
 	outside := e.practiceInvoices("sentFrom=2026-10-26", "sentTo=2026-10-26")
-	if inside.RefundedCents != seedByHandInvoiceAmountCents || inside.PaidCents != seedByHandInvoiceAmountCents {
+	if inside.RefundedCents != seedByHandInvoiceAmountCents || inside.PaidCents != seedByHandInvoiceAmountCents || inside.BilledCents != seedByHandInvoiceAmountCents || inside.BilledCount != 1 {
 		t.Fatalf("inside: refunded %d, paid %d, want %d each", inside.RefundedCents, inside.PaidCents, seedByHandInvoiceAmountCents)
 	}
-	if outside.RefundedCents != 0 || outside.PaidCents != 0 || outside.InvoiceCount != 0 {
+	if outside.RefundedCents != 0 || outside.PaidCents != 0 || outside.InvoiceCount != 0 || outside.BilledCents != 0 || outside.BilledCount != 0 {
 		t.Fatalf("outside: refunded %d, paid %d, count %d, want none", outside.RefundedCents, outside.PaidCents, outside.InvoiceCount)
 	}
 }

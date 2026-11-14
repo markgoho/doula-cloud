@@ -1,13 +1,22 @@
 import { describe, expect, it, vi } from 'vitest';
-import { exportFilename, invoicesExportedDetail, requestInvoicesExport, EXPORT_FAILED } from './invoiceExport.js';
+import { downloadedWords, exportFilename, invoicesExportedDetail, requestInvoicesExport, EXPORT_FAILED } from './invoiceExport.js';
 
 const scope = { view: 'unpaid', search: 'Quinn', order: 'amount-largest', days: { from: '2026-10-01', to: '2026-10-31' } } as const;
+
+describe('downloadedWords', () => {
+	it('names the file and counts its Invoices', () => {
+		expect(downloadedWords('invoices-2026-11-14.csv', 17)).toBe('Downloaded invoices-2026-11-14.csv, 17 Invoices.');
+		expect(downloadedWords('invoices-2026-11-14.csv', 1)).toBe('Downloaded invoices-2026-11-14.csv, 1 Invoice.');
+	});
+});
 
 describe('requestInvoicesExport', () => {
 	it('posts the applied view, search, order and period and hands back the file', async () => {
 		const fetcher = vi.fn(
 			async () =>
-				new Response('a,b\n', { headers: { 'Content-Disposition': 'attachment; filename="invoices-2026-11-14.csv"' } })
+				new Response('a,b\n', {
+					headers: { 'Content-Disposition': 'attachment; filename="invoices-2026-11-14.csv"', 'Invoice-Count': '17' }
+				})
 		);
 
 		const result = await requestInvoicesExport(fetcher, 'practice-1', scope);
@@ -17,7 +26,7 @@ describe('requestInvoicesExport', () => {
 			headers: { 'Content-Type': 'application/json' },
 			body: JSON.stringify({ view: 'unpaid', search: 'Quinn', order: 'amount-largest', sentFrom: '2026-10-01', sentTo: '2026-10-31' })
 		});
-		expect(result).toMatchObject({ filename: 'invoices-2026-11-14.csv' });
+		expect(result).toMatchObject({ filename: 'invoices-2026-11-14.csv', count: 17 });
 		await expect((result as { blob: Blob }).blob.text()).resolves.toBe('a,b\n');
 	});
 

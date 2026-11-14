@@ -97,6 +97,15 @@ type PracticeInvoicesResponse struct {
 	HasMore          bool                  `json:"hasMore"`
 	OutstandingCents int64                 `json:"outstandingCents"`
 	OutstandingCount int                   `json:"outstandingCount"`
+	// BilledCents and BilledCount (#2871) are what the Practice billed:
+	// the Invoices that were sent and still stand as a bill, status 'open',
+	// 'paid' or 'uncollectible'. A 'draft' never reached the Client, and a
+	// 'void' one returned its amount to its Contract (GLOSSARY.md, Invoice),
+	// so neither counts; a written-off one still counts as billed, and a
+	// refunded one is 'paid' and counts in full. Outstanding plus paid plus
+	// written off is billed, so the figures beside it add up to it.
+	BilledCents int64 `json:"billedCents"`
+	BilledCount int   `json:"billedCount"`
 	// InvoiceCount (#2746) is every Invoice in the book, whatever its
 	// status: the rows the whole-book list holds, so the screen can say
 	// how many of them it is showing.
@@ -328,6 +337,8 @@ func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.C
 		NextCursor:       next,
 		OutstandingCents: totals.outstandingCents,
 		OutstandingCount: totals.outstandingCount,
+		BilledCents:      totals.billedCents,
+		BilledCount:      totals.billedCount,
 		InvoiceCount:     totals.invoiceCount,
 		PaidCents:        totals.paidCents,
 		RefundedCents:    totals.refundedCents,
@@ -557,6 +568,8 @@ func readPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q 
 type invoiceTotals struct {
 	outstandingCents int64
 	outstandingCount int
+	billedCents      int64
+	billedCount      int
 	invoiceCount     int
 	paidCents        int64
 	overdueCents     int64
@@ -579,6 +592,8 @@ type invoiceTotals struct {
 var practiceInvoiceTotalsQuery = `SELECT
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'open'), 0),
 		COUNT(*) FILTER (WHERE i.status = 'open'),
+		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status IN ('open', 'paid', 'uncollectible')), 0),
+		COUNT(*) FILTER (WHERE i.status IN ('open', 'paid', 'uncollectible')),
 		COUNT(*),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE i.status = 'paid'), 0),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE ` + overdue.Expr("$2") + `), 0),
@@ -604,7 +619,7 @@ func sentInPeriod(alias string) string {
 func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time, sentFrom, sentBefore sql.NullTime) (invoiceTotals, error) {
 	var t invoiceTotals
 	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff, sentFrom, sentBefore).
-		Scan(&t.outstandingCents, &t.outstandingCount, &t.invoiceCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
+		Scan(&t.outstandingCents, &t.outstandingCount, &t.billedCents, &t.billedCount, &t.invoiceCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)
 	}

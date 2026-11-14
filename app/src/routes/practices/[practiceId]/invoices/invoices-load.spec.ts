@@ -18,6 +18,8 @@ const emptyBook = {
 	hasMore: false,
 	outstandingCents: 0,
 	outstandingCount: 0,
+	billedCents: 0,
+	billedCount: 0,
 	paidCents: 0,
 	overdueCents: 0,
 	overdueCount: 0
