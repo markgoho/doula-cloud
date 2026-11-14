@@ -196,6 +196,55 @@ describe('the on-call roster', () => {
 		expect(due?.textContent).toBe('Wed Nov 25');
 	});
 
+	it('folds the Days row under "Days and filters" at a phone width and keeps Apply and the result line in view', async () => {
+		await testPage.viewport(375, 740);
+		await setup();
+
+		const summary = testPage.getByText('Days and filters');
+		await expect.element(summary).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Apply' })).toBeVisible();
+		await expect.element(testPage.getByRole('status')).toBeVisible();
+		const tonight = document.querySelector('input[name="days"][value="tonight"]')!;
+		expect(tonight.closest('details')!.open).toBe(false);
+
+		await summary.click();
+
+		expect(tonight.closest('details')!.open).toBe(true);
+		await expect.element(testPage.getByRole('radio', { name: 'Tonight' })).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /^Later,/ })).toBeVisible();
+	});
+
+	it('names the fold for the controls it holds: "Days and order" for a contractor, "Days and filters" for a Doula offered Mine', async () => {
+		await testPage.viewport(375, 740);
+		asVariant(asContractor);
+		const { unmount } = await setup({ data: asContractor.props!.data as OnCallPageData });
+		await expect.element(testPage.getByText('Days and order')).toBeVisible();
+		unmount();
+
+		asVariant(asDoula);
+		await setup();
+		await expect.element(testPage.getByText('Days and filters')).toBeVisible();
+	});
+
+	it('says on a phone’s card what each date is, once, with no label read twice and no line ending on a dot', async () => {
+		await testPage.viewport(375, 740);
+		await setup();
+
+		const card = testPage.getByRole('group', { name: 'Births on call' }).element().querySelector<HTMLElement>('.record')!;
+		const value = (text: string) => [...card.querySelectorAll<HTMLElement>('.compact-value')].find((v) => v.textContent!.startsWith(text));
+		expect(value('On call')?.textContent?.trim()).toBe('On call until Wed Dec 9');
+		expect(value('Due')?.textContent?.trim()).toBe('Due Wed Nov 25');
+		const hidden = [...card.querySelectorAll('.visually-hidden')].map((label) => label.textContent);
+		expect(hidden).toContain('On call: ');
+		expect(hidden).toContain('Cover: ');
+		expect(hidden).not.toContain('Days on call: ');
+		expect(hidden).not.toContain('Due: ');
+		const cover = card.querySelector<HTMLElement>(':scope .compact-meta > :last-child')!;
+		expect(cover.querySelector('.compact-separator')!.getBoundingClientRect().top).toBeLessThan(
+			cover.querySelector('.compact-value')!.getBoundingClientRect().top + 6
+		);
+	});
+
 	it('states the rule in force and, to an Owner, the way to change it', async () => {
 		await setup();
 

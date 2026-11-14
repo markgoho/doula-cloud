@@ -132,7 +132,7 @@ const linkContentColumns = [
 ];
 
 interface SetupOptions {
-	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string }[];
+	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string; recordLabel?: string }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowLinkLabel?: (row: Row) => string;
@@ -440,6 +440,45 @@ describe('DataTable.svelte', () => {
 			}
 			const isLineStart = Math.round(field.getBoundingClientRect().top) !== Math.round(fields[index - 1]!.getBoundingClientRect().top);
 			expect(dot!.getBoundingClientRect().right <= edge, `field ${index}'s dot is past the line's start only when the field starts a line`).toBe(isLineStart);
+		}
+	});
+
+	it('draws a column’s recordLabel before its value on a compact card and reads the column’s own label no more', async () => {
+		const { container } = await setup({
+			columns: [
+				{ label: 'Name', accessor: (row: Row) => row.name },
+				{ label: 'Kind', accessor: () => 'Prenatal' },
+				{ label: 'Days on call', recordLabel: 'On call', accessor: () => 'until Fri Dec 18' },
+				{ label: 'Due', recordLabel: 'Due', accessor: () => 'Fri Dec 4' }
+			],
+			recordLayout: 'compact',
+			caption: 'People'
+		});
+		await page.viewport(...NARROW);
+
+		const record = container.querySelector<HTMLElement>(':scope .record-view .record')!;
+		expect([...record.querySelectorAll('.compact-value')].map((value) => value.textContent)).toEqual([
+			'On call until Fri Dec 18',
+			'Due Fri Dec 4'
+		]);
+		expect([...record.querySelectorAll('.visually-hidden')].map((label) => label.textContent)).toEqual(['Kind: ']);
+	});
+
+	it('keeps a compact field’s dot on the line its value starts, even when the value is a block', async () => {
+		const block = createRawSnippet<[Row, DataTableView]>(() => ({ render: () => '<div>Covered by Marisol Terrazas, then Lena Vasquez</div>' }));
+		const days = ['Sent', 'Paid'].map((label) => ({ label, accessor: () => `${label} Nov 12, 2026` }));
+		const { container } = await setup({
+			columns: [...columns, ...days, { label: 'Cover', accessor: () => 'Covered', content: block }] as typeof columns,
+			recordLayout: 'compact',
+			caption: 'People'
+		});
+		await page.viewport(...NARROW);
+
+		const meta = container.querySelector<HTMLElement>(':scope .record-view .compact-meta')!;
+		for (const field of [...meta.children].slice(1)) {
+			const dot = field.querySelector('.compact-separator')!.getBoundingClientRect();
+			const value = field.querySelector('.compact-value')!.getBoundingClientRect();
+			expect(Math.abs(dot.top - value.top), 'the dot sits on the first line of its value').toBeLessThan(6);
 		}
 	});
 

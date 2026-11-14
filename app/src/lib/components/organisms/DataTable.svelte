@@ -150,6 +150,13 @@
 		 * `list` card, whose label stands in its own term.
 		 */
 		namedByRowLink?: boolean;
+		/**
+		 * On a `compact` card, the word drawn before the value in place of the
+		 * column's label, which is then not read: the card says "Due Fri Dec 4",
+		 * seen once and heard once. Without it the label is read and not drawn.
+		 * Read only by that layout.
+		 */
+		recordLabel?: string;
 	}
 
 	interface RowActions<T> {
@@ -545,6 +552,10 @@
 	{/if}
 {/snippet}
 
+{#snippet recordWord(field: { label: string; column: (typeof columns)[number] })}
+	{#if field.column.recordLabel}{`${field.column.recordLabel} `}{:else}<span class="visually-hidden">{`${field.label}: `}</span>{/if}
+{/snippet}
+
 {#snippet ledgerContent()}
 <stack-l class="frame" bind:this={frame}>
 	<!-- One empty state, not one per tree (#2015): the container query
@@ -680,8 +691,7 @@
 						{@const lead = fields[0]!}
 						{@const rest = fields.slice(1)}
 						<div class="compact-lead">
-							<span class="visually-hidden">{`${lead.label}: `}</span>
-							{@render cell(lead.column, lead.columnIndex, row, view)}
+							{@render recordWord(lead)}{@render cell(lead.column, lead.columnIndex, row, view)}
 						</div>
 						{#if rest.length > 0}
 							<div class="compact-meta">
@@ -690,8 +700,7 @@
 									     starts a line takes its dot past the line's start, where it is
 									     clipped: no line starts or ends on one. -->
 									<span class="compact-field">
-										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}<span class="visually-hidden">{`${field.label}: `}</span>
-										{@render cell(field.column, field.columnIndex, row, view)}
+										{#if index > 0}<span class="compact-separator" aria-hidden="true">·</span>{/if}<span class="compact-value">{@render recordWord(field)}{@render cell(field.column, field.columnIndex, row, view)}</span>
 									</span>
 								{/each}
 							</div>
@@ -1314,11 +1323,17 @@
 		}
 
 		.compact-field {
+			display: flex;
+			align-items: baseline;
+			min-inline-size: 0;
+		}
+
+		.compact-value {
 			min-inline-size: 0;
 		}
 
 		.compact-separator {
-			display: inline-block;
+			flex: none;
 			inline-size: var(--space-3);
 			margin-inline-start: calc(-1 * var(--space-3));
 			text-align: center;

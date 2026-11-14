@@ -73,6 +73,9 @@ interface SetupOptions {
 	appliedCount?: number;
 	hasUntaggedFilter?: boolean;
 	foldsFieldsOnly?: boolean;
+	foldsSwitches?: boolean;
+	isForcedOpen?: boolean;
+	foldLabel?: string;
 	novalidate?: boolean;
 	withFields?: boolean;
 	status?: string;
@@ -131,6 +134,9 @@ async function setup({
 	appliedCount,
 	hasUntaggedFilter,
 	foldsFieldsOnly = false,
+	foldsSwitches = false,
+	isForcedOpen = false,
+	foldLabel,
 	novalidate,
 	withFields = true,
 	status = 'Showing 2 scheduled visits.',
@@ -157,6 +163,9 @@ async function setup({
 		statusId,
 		switches: switchesFor({ withChangeControls, withSwitches, withHeldSwitch }),
 		foldsFieldsOnly,
+		foldsSwitches,
+		isForcedOpen,
+		foldLabel,
 		novalidate,
 		isBusy,
 		applied: withApplied ? appliedTags() : undefined,
@@ -168,6 +177,69 @@ async function setup({
 	});
 	return { onSubmit, component, rerender };
 }
+
+describe('FilterBar foldsSwitches', () => {
+	const options = { order: ORDER, foldsFieldsOnly: true, foldsSwitches: true, withSwitches: true, withFolded: true };
+
+	it('folds the switches with the fields at a phone width, leaving Apply and the result line in view', async () => {
+		await setup({ ...options, foldLabel: 'Days and filters', width: PHONE });
+
+		await expect.element(page.getByText('Days and filters')).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Apply' })).toBeVisible();
+		await expect.element(page.getByRole('status')).toBeVisible();
+		await expect.element(page.getByLabelText('Also show everyone')).not.toBeVisible();
+		await expect.element(page.getByLabelText('Name')).not.toBeVisible();
+
+		await page.getByText('Days and filters').click();
+
+		await expect.element(page.getByLabelText('Also show everyone')).toBeVisible();
+		await expect.element(page.getByLabelText('Name')).toBeVisible();
+	});
+
+	it('draws the switches first inside the fold, then the children, then the folded fields, then Order', async () => {
+		await setup({ ...options, foldLabel: 'Days and filters', width: PHONE });
+
+		const order = ['Also show everyone', 'Name', 'From', 'Order'].map((label) => page.getByLabelText(label).element());
+		for (const [index, element] of order.slice(1).entries())
+			expect(order[index]!.compareDocumentPosition(element) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(page.getByLabelText('Also show everyone').element().closest('details')).toBe(
+			page.getByLabelText('Order').element().closest('details')
+		);
+	});
+
+	it('still sends the switches from the form while the fold is closed', async () => {
+		const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+		await setup({ ...options, width: PHONE, onSubmit });
+		await page.getByRole('button', { name: 'Apply' }).click();
+
+		const form = (onSubmit.mock.calls[0]![0] as SubmitEvent).target as HTMLFormElement;
+		expect(new FormData(form).get('order')).toBe('');
+		expect(form.elements.namedItem('all')).not.toBeNull();
+	});
+
+	it('draws no summary and the switches on a row of their own, above the fields, in a wide bar', async () => {
+		await setup({ ...options, foldLabel: 'Days and filters' });
+
+		await expect.element(page.getByText('Days and filters')).not.toBeVisible();
+		const switches = page.getByLabelText('Also show everyone').element().getBoundingClientRect();
+		const name = page.getByLabelText('Name').element().getBoundingClientRect();
+		expect(switches.bottom).toBeLessThanOrEqual(name.top);
+		expect(page.getByLabelText('Also show everyone').element().closest('.switches')).not.toBeNull();
+	});
+
+	it('opens the fold while the route says so, so a refusal beside a folded field is in sight', async () => {
+		await setup({ ...options, width: PHONE, isForcedOpen: true });
+
+		await expect.element(page.getByLabelText('Name')).toBeVisible();
+	});
+
+	it('folds the switches alone under the label given, where nothing else folds', async () => {
+		await setup({ foldsFieldsOnly: true, foldsSwitches: true, withSwitches: true, foldLabel: 'Days and order', width: PHONE });
+
+		await expect.element(page.getByText('Days and order')).toBeVisible();
+		await expect.element(page.getByLabelText('Also show everyone')).not.toBeVisible();
+	});
+});
 
 describe('FilterBar order', () => {
 	it('draws no Order select when the route gives no order', async () => {
