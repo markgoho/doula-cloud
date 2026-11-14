@@ -93,7 +93,7 @@ func WaitingVisitsHandler() http.Handler {
 			resp.Items = append(resp.Items, row.WaitingEngagement)
 		}
 		dated, err := countScheduledVisits(ctx, c.Tx, c.PracticeID, scheduleFilter{
-			from: now, to: now.AddDate(waitingForeverYears, 0, 0), offEngagement: true,
+			from: now, to: now.AddDate(waitingForeverYears, 0, 0), offEngagement: true, zone: time.UTC,
 		})
 		if err == nil {
 			err = c.Tx.QueryRowContext(ctx, `SELECT count(*)

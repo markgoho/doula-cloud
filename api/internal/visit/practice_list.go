@@ -44,6 +44,8 @@ const (
 	MsgInvalidOrder  = "The order must be empty or latest."
 	// MsgInvalidOffEngagement refuses an offEngagement narrowing that is not true (#2863).
 	MsgInvalidOffEngagement = "The offEngagement narrowing must be true or absent."
+	// MsgInvalidType refuses a type that is not one DeriveType returns (#2888).
+	MsgInvalidType = "The type must be prenatal, birth or postpartum."
 	// MsgSearchInBody refuses a search in the address: it can be a Client's
 	// name, and a URL is logged (#1829).
 	MsgSearchInBody = "Send the search in a POST to /visits/list, not in the address."
@@ -124,6 +126,12 @@ type scheduleFilter struct {
 	namePattern string
 	// offEngagement narrows to the Visits that wait for a new Doula (#2863).
 	offEngagement bool
+	// visitType narrows to one of the three types DeriveType returns, "" for
+	// any (#2888).
+	visitType string
+	// zone is the Practice's own, which the type is read in; the handler sets
+	// it once it has loaded it.
+	zone *time.Location
 }
 
 // ScheduleListRequest is the body of the Practice-wide schedule read sent
@@ -139,6 +147,8 @@ type ScheduleListRequest struct {
 	Cursor  string `json:"cursor"`
 	// OffEngagement narrows to the Visits that wait for a new Doula (#2863).
 	OffEngagement bool `json:"offEngagement"`
+	// Type narrows to prenatal, birth or postpartum Visits (#2888).
+	Type string `json:"type"`
 }
 
 // scheduleAfter is the position a keyed cursor decodes to: the scheduled
@@ -203,7 +213,7 @@ func PracticeScheduleHandler() http.Handler {
 		}
 		filter, ok := parseScheduleFilter(w, r, c, ScheduleListRequest{
 			From: query.Get("from"), To: query.Get("to"), StaffID: query.Get("staffId"), Order: query.Get("order"),
-			OffEngagement: query.Has("offEngagement"),
+			OffEngagement: query.Has("offEngagement"), Type: query.Get("type"),
 		})
 		if !ok {
 			return
@@ -243,7 +253,8 @@ func serveSchedule(w http.ResponseWriter, r *http.Request, c staffauth.Call, fil
 			if err != nil {
 				return nil, err //nolint:wrapcheck // Fetch turns any error into the 500
 			}
-			return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after, zone)
+			filter.zone = zone
+			return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after)
 		},
 		func(v ScheduledVisit) ([]string, string) {
 			return []string{pagecursor.TimeKey(v.ScheduledAt)}, v.VisitID
@@ -329,6 +340,13 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 	}
 	filter.namePattern = textmatch.Contains(search)
 	filter.offEngagement = req.OffEngagement
+	switch req.Type {
+	case "", TypePrenatal, TypeBirth, TypePostpartum:
+		filter.visitType = req.Type
+	default:
+		apierr.WriteError(w, MsgInvalidType, http.StatusBadRequest)
+		return scheduleFilter{}, false
+	}
 
 	if c.Reader.IsAmbientContractor() {
 		filter.contractorStaffID = c.StaffID
@@ -370,9 +388,14 @@ var scheduleSelect = `SELECT v.id, e.id, cl.given_name, cl.preferred_name, cl.fa
 
 // scheduleFromWhere is the rows the schedule holds, shared by the page and
 // by the count (#2867), so the total can never be of a different set than
-// the rows. It reads $1 to $8; $6 is the Client name pattern, "" for none
+// the rows. It reads $1 to $10; $6 is the Client name pattern, "" for none
 // (#2870), $7 is the instant a Visit is measured against, and $8 narrows to
-// the Visits waiting for a new Doula (#2863).
+// the Visits waiting for a new Doula (#2863). $9 is the Visit type to keep,
+// "" for any, and $10 is the Practice's IANA zone (#2888).
+//
+// The CASE is DeriveType written a second time, in SQL, so the type is a
+// predicate the rows and the count both read; practice_list_type_test.go
+// holds the two to one table of cases.
 var scheduleFromWhere = `
 	  FROM visits v
 	  JOIN engagements e ON e.id = v.engagement_id
@@ -388,7 +411,12 @@ var scheduleFromWhere = `
 	          WHERE ea.engagement_id = v.engagement_id AND ea.staff_id = $5::uuid
 	            AND ea.state = 'granted'))
 	   AND ($6::text = '' OR ` + textmatch.ClientNameExpr("cl", 6) + `)
-	   AND (NOT $8::boolean OR ` + offEngagementBefore + `$7` + offEngagementAfter + `)`
+	   AND (NOT $8::boolean OR ` + offEngagementBefore + `$7` + offEngagementAfter + `)
+	   AND ($9::text = '' OR (CASE
+	         WHEN e.pregnancy_ended_on IS NULL THEN '` + TypePrenatal + `'
+	         WHEN (v.scheduled_at AT TIME ZONE $10::text)::date < e.pregnancy_ended_on THEN '` + TypePrenatal + `'
+	         WHEN (v.scheduled_at AT TIME ZONE $10::text)::date = e.pregnancy_ended_on THEN '` + TypeBirth + `'
+	         ELSE '` + TypePostpartum + `' END) = $9::text)`
 
 // nullableID turns "the caller named none" into a real SQL NULL, which is
 // what the `$n::uuid IS NULL` halves above test. An empty string would be
@@ -407,7 +435,7 @@ func countScheduledVisits(ctx context.Context, tx *sql.Tx, practiceID string, fi
 	var n int
 	err := tx.QueryRowContext(ctx, `SELECT count(*)`+scheduleFromWhere,
 		practiceID, filter.from, filter.to, nullableID(filter.staffID), nullableID(filter.contractorStaffID), filter.namePattern,
-		clock.Now(ctx), filter.offEngagement).Scan(&n)
+		clock.Now(ctx), filter.offEngagement, filter.visitType, filter.zone.String()).Scan(&n)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return 0, fmt.Errorf("visit: count practice schedule: %w", err)
@@ -422,13 +450,13 @@ func withSchedulePage(query string, args []any, order string, after *scheduleAft
 	latest := order == orderLatest
 	switch {
 	case after != nil && latest:
-		query += ` AND (v.scheduled_at, v.id) < ($9, $10) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $11`
+		query += ` AND (v.scheduled_at, v.id) < ($11, $12) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $13`
 	case after != nil:
-		query += ` AND (v.scheduled_at, v.id) > ($9, $10) ORDER BY v.scheduled_at, v.id LIMIT $11`
+		query += ` AND (v.scheduled_at, v.id) > ($11, $12) ORDER BY v.scheduled_at, v.id LIMIT $13`
 	case latest:
-		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $9`
+		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $11`
 	default:
-		query += ` ORDER BY v.scheduled_at, v.id LIMIT $9`
+		query += ` ORDER BY v.scheduled_at, v.id LIMIT $11`
 	}
 	if after != nil {
 		args = append(args, after.at, after.id)
@@ -442,7 +470,6 @@ func listScheduledVisits(
 	practiceID string,
 	filter scheduleFilter,
 	after *scheduleAfter,
-	zone *time.Location,
 ) ([]ScheduledVisit, error) {
 	// Every clause below is a string literal, and the two optional
 	// narrowings ride on NULL-able parameters rather than on placeholders
@@ -456,6 +483,7 @@ func listScheduledVisits(
 	args := []any{
 		practiceID, filter.from, filter.to,
 		nullableID(filter.staffID), nullableID(filter.contractorStaffID), filter.namePattern, clock.Now(ctx), filter.offEngagement,
+		filter.visitType, filter.zone.String(),
 	}
 	query, args = withSchedulePage(query, args, filter.order, after)
 
@@ -478,7 +506,7 @@ func listScheduledVisits(
 			return nil, fmt.Errorf("visit: scan practice schedule row: %w", err)
 		}
 		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
-		item.Type = DeriveType(item.ScheduledAt, endedOn, zone)
+		item.Type = DeriveType(item.ScheduledAt, endedOn, filter.zone)
 		list = append(list, item)
 	}
 	if err := rows.Err(); err != nil {
