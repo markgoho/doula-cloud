@@ -47,7 +47,7 @@ describe('invoicesResultSummary', () => {
 
 	it('reserves room for its longest wording', () => {
 		expect(INVOICES_RESULT_RULER).toBe(
-			'Showing the first 999 of 9999 unpaid Invoices, earliest payment due first.'
+			'Showing the first 999 of 9999 overdue Invoices, earliest payment due first.'
 		);
 	});
 });

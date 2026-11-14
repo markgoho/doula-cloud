@@ -107,7 +107,8 @@ export const data: PracticeInvoiceListData = {
 	clientsCanPay: true,
 	// #768: the whole book, so the fixture sweeps the Payment column
 	// and the filter bar in the state a Practice meets first.
-	view: 'all'
+	view: 'all',
+	order: ''
 };
 
 /*

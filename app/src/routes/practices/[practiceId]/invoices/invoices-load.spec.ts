@@ -33,7 +33,7 @@ describe('invoices/+page.ts load', () => {
 			'/api/practices/practice-1/invoices',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'all' });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'all', order: '' });
 	});
 
 	// #768: the narrowing is in the URL, so the load reads it there and
@@ -51,15 +51,21 @@ describe('invoices/+page.ts load', () => {
 			'/api/practices/practice-1/invoices?overdue=true',
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'overdue' });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view: 'overdue', order: '' });
 	});
 
 	// #2249: the screen has changed by the time a refusal lands, so the
 	// screen follows it; the read carries the response through unread.
+	// #2869: the order is in the address too, and the view's own order is the empty one.
 	it.each([
-		['show=unpaid', 'unpaid'],
-		['show=overdue', 'overdue']
-	] as const)('reads %s as the %s view', async (query, view) => {
+		['show=unpaid', '?unpaid=true', 'unpaid', ''],
+		['show=overdue', '?overdue=true', 'overdue', ''],
+		['order=amount-largest', '?order=amount-largest', 'all', 'amount-largest'],
+		['show=unpaid&order=sent-oldest', '?unpaid=true&order=sent-oldest', 'unpaid', 'sent-oldest'],
+		['show=unpaid&order=due-earliest', '?unpaid=true', 'unpaid', ''],
+		['order=sent-newest', '', 'all', ''],
+		['order=bogus', '', 'all', '']
+	] as const)('reads %s into the BFF read and the view and order the screen holds', async (query, path, view, order) => {
 		const { fetchMock } = setup(200, emptyBook);
 
 		const data = await load({
@@ -69,10 +75,10 @@ describe('invoices/+page.ts load', () => {
 		} as Parameters<typeof load>[0]);
 
 		expect(fetchMock).toHaveBeenCalledWith(
-			`/api/practices/practice-1/invoices?${view}=true`,
+			`/api/practices/practice-1/invoices${path}`,
 			expect.objectContaining({ credentials: 'include' })
 		);
-		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view });
+		await expect(loadedValue(data)).resolves.toEqual({ ...emptyBook, view, order });
 	});
 
 	it('hands a refusal to the screen rather than throwing mid-load', async () => {

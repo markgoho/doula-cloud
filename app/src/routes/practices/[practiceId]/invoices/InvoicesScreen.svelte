@@ -24,9 +24,15 @@
 		invoiceDateLine,
 		invoiceMoneyState,
 		invoicesResultSummary,
+		invoiceOrderedBy,
+		invoiceOrderOf,
+		invoiceOrderOptions,
+		invoiceOrderTag,
 		invoicesViewOf,
 		invoicesViewQuery,
 		loadPracticeInvoices,
+		orderForView,
+		type InvoiceOrder,
 		type InvoicesView,
 		type PracticeInvoice,
 		type PracticeInvoicePage
@@ -76,6 +82,8 @@
 	const LOAD_MORE_FAILED = 'More Invoices did not load. Nothing you saved is lost. Try again.';
 
 	const view = $derived(invoicesViewOf(page.url.searchParams));
+	// #2869: the order the address names, empty for the view's own.
+	const order = $derived(invoiceOrderOf(page.url.searchParams, view));
 	const session = $derived((page.data as { session?: PracticeSession }).session);
 	// #2200: Stripe not being connected stops a card payment, never a
 	// Practice that bills by hand, so that one is told nothing about it.
@@ -97,9 +105,10 @@
 	 * screen's own, a POST with the search in its body.
 	 */
 	const appliedSearch = $derived((page.state.invoicesSearch ?? '').trim());
-	type ReadKey = { view: InvoicesView; search: string };
-	const isSameKey = (a: ReadKey | undefined, b: ReadKey) => a?.view === b.view && a.search === b.search;
-	const wanted = $derived<ReadKey>({ view, search: appliedSearch });
+	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string };
+	const isSameKey = (a: ReadKey | undefined, b: ReadKey) =>
+		a?.view === b.view && a.order === b.order && a.search === b.search;
+	const wanted = $derived<ReadKey>({ view, order, search: appliedSearch });
 
 	/*
 	 * What the rows on screen were read under, and the latest page read for
@@ -129,7 +138,7 @@
 		loadPage: async (cursor) => {
 			const under = shown!;
 			try {
-				const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search);
+				const next = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, cursor, under.view, under.search, under.order);
 				if (shown === under) book = next;
 				return next;
 			} catch {
@@ -218,7 +227,7 @@
 		untrack(() => {
 			if (landed === adopted && shown?.search === '') return;
 			adopted = landed;
-			adopt(landed, { view: landed.view, search: '' });
+			adopt(landed, { view: landed.view, order: landed.order, search: '' });
 		});
 	});
 
@@ -234,7 +243,7 @@
 	async function readSearch(key: ReadKey, thisSearch: number) {
 		isSearching = true;
 		try {
-			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search);
+			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search, key.order);
 			if (thisSearch === latestSearch) adopt(first, key);
 		} catch {
 			if (thisSearch === latestSearch) {
@@ -322,6 +331,7 @@
 	// the address and the history entry after every navigation. A field the
 	// person typed in since the navigation began is hers: the seed leaves it.
 	let draftView = $state<InvoicesView>('all');
+	let draftOrder = $state<InvoiceOrder>('');
 	let draftSearch = $state('');
 	let isSearchTouched = false;
 	let filterBar = $state<{ focusStatus: () => void }>();
@@ -329,6 +339,7 @@
 	let lastKey: ReadKey | undefined;
 	function seedDrafts() {
 		draftView = view;
+		draftOrder = order;
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
@@ -362,7 +373,7 @@
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		await showFilter(`${invoicesHref}${invoicesViewQuery(draftView)}`, draftSearch.trim());
+		await showFilter(`${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView))}`, draftSearch.trim());
 	}
 
 	/*
@@ -376,9 +387,12 @@
 	const appliedTags = $derived.by(() => {
 		const tags: AppliedTag[] = [];
 		const viewTag = VIEW_OPTIONS.find((option) => option.value === view)?.tag;
-		if (viewTag) tags.push({ text: viewTag, href: invoicesHref, search: appliedSearch });
+		if (viewTag) {
+			tags.push({ text: viewTag, href: `${invoicesHref}${invoicesViewQuery('all', orderForView(order, 'all'))}`, search: appliedSearch });
+		}
+		if (order) tags.push({ text: invoiceOrderTag(order), href: `${invoicesHref}${invoicesViewQuery(view)}`, search: appliedSearch });
 		if (appliedSearch) {
-			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view)}`, search: '' });
+			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: '' });
 		}
 		return tags;
 	});
@@ -390,7 +404,7 @@
 
 	const resultSummary = $derived(
 		shown && book
-			? invoicesResultSummary(shown.view, invoices.items.length, invoices.hasMore, book, shown.search)
+			? invoicesResultSummary(shown.view, invoices.items.length, invoices.hasMore, book, shown.search, shown.order)
 			: ''
 	);
 
@@ -401,8 +415,9 @@
 	// Invoice, keeping the text she typed (in history state, never the address).
 	const emptyListAction = $derived.by((): EmptyStateAction => {
 		const search = shown?.search ?? '';
-		if (search === '' || shown?.view === 'all') return { label: 'Show all Invoices', href: invoicesHref };
-		return { label: `Search all Invoices for "${search}"`, onClick: () => void showFilter(invoicesHref, search) };
+		const allHref = `${invoicesHref}${invoicesViewQuery('all', orderForView(shown?.order ?? '', 'all'))}`;
+		if (search === '' || shown?.view === 'all') return { label: 'Show all Invoices', href: allHref };
+		return { label: `Search all Invoices for "${search}"`, onClick: () => void showFilter(allHref, search) };
 	});
 
 
@@ -579,7 +594,7 @@
 	{/if}
 
 	<!-- The bar and the list it narrows are one group, held closer than the page's sections, as on the Clients list. -->
-	<stack-l space="var(--space-related)">
+	<stack-l class="bar-and-list" space="var(--space-related)">
 		{#if !isBookEmpty}
 			<FilterBar
 				bind:this={filterBar}
@@ -594,6 +609,7 @@
 				applied={appliedTags.length > 0 ? applied : undefined}
 				appliedCount={appliedTags.length}
 				foldsFieldsOnly
+				order={{ options: invoiceOrderOptions(draftView), value: draftOrder, onChange: (value) => (draftOrder = value as InvoiceOrder) }}
 				{isBusy}
 			>
 				<!-- The Clients list's two rows: the view with its own visible question, then the search and Apply. -->
@@ -603,7 +619,10 @@
 						name="show"
 						options={VIEW_OPTIONS}
 						value={draftView}
-						onChange={(chosen) => (draftView = chosen)}
+						onChange={(chosen) => {
+							draftView = chosen;
+							draftOrder = orderForView(draftOrder, chosen);
+						}}
 						isInline
 					/>
 				{/snippet}
@@ -638,6 +657,7 @@
 					describedBy={isBookEmpty ? undefined : RESULT_ID}
 					columnWidths="one-line"
 					recordLayout="compact"
+					orderedBy={invoiceOrderedBy(shown.order, shown.view)}
 					{isBusy}
 				/>
 			</div>
@@ -791,6 +811,18 @@
 		   its line with Apply alone, so a phone's first screen keeps that line
 		   for the list, and an applied tag takes the line under them. There
 		   the box takes the room Apply leaves, so Apply sits one gap after it. */
+		/* The Order select holds the width of its longest option, so Apply does
+		   not move when a view or a pick changes the option shown (#2869). It
+		   gives way where the line has no more room. */
+		.bar-and-list :global(.order) {
+			flex: 0 1 17rem;
+			min-inline-size: 0;
+		}
+
+		.bar-and-list :global(.order select) {
+			max-inline-size: none;
+		}
+
 		.search {
 			flex: 1 1 11rem;
 			max-inline-size: max-content;

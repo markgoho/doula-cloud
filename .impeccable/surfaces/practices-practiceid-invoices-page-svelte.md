@@ -36,8 +36,8 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
 | A list-level export, print or copy | Build (#2871) | both readings rejected "Settings exports the whole Practice": that export is raw tables with clinical records in them, and "unpaid, this month" means joining files; Stripe's lists "filter … or export" (https://docs.stripe.com/dashboard/basics) |
 | Row actions without opening the record | Declined | Record payment is a form (amount, day, method), and a second copy of it on the list is a second place for money to be entered wrongly; one action from the row reaches it |
-| A reader-chosen order (sent, payment due, amount; each either way) | Build (#2869) | Linear and Stripe give the reader a chosen order beside the filters; each view's own order stays its default ("All" newest first, "Unpaid" earliest due first, "Overdue" longest overdue first) |
-| The order said to assistive technology (`aria-sort`) | Build (#2869) | the view orders by a column a screen reader is not told; moved here from #2867 |
+| A reader-chosen order (sent, payment due, amount; each either way) | Have it (#2869) | Linear and Stripe give the reader a chosen order beside the filters; each view's own order stays its default ("All" newest first, "Unpaid" earliest due first, "Overdue" longest overdue first); built 2026-11-13, an Order select in the bar and `aria-sort` on the ordered column |
+| The order said to assistive technology (`aria-sort`) | Have it (#2869) | the view orders by a column a screen reader is not told; moved here from #2867 |
 | Search by reference or Client | Have it | "Reference or Client" (T4; #1829) |
 | A total count | Have it | the four totals, and the whole in the result line while more exist ("the first 30 of 35") |
 | A period (date-range) narrowing | Build (#2871) | a book of Invoices is chased by when it fell due |
