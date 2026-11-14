@@ -3,7 +3,7 @@
  * search waits for Apply. Its own file for the same reason the order's is.
  */
 import { page as testPage } from 'vitest/browser';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
@@ -34,6 +34,10 @@ beforeEach(() => {
 	goto.mockReset();
 	goto.mockResolvedValue(undefined);
 	Object.assign(pageState, toPageState(fixture));
+});
+
+afterEach(() => {
+	vi.useRealTimers();
 });
 
 async function setupChange() {
@@ -83,10 +87,11 @@ describe('the Invoices list applies untyped controls when changed (#2888)', () =
 
 	it('sends one read for two quick changes, and Apply stays a way to send', async () => {
 		await setupChange();
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 
 		await radio('Unpaid').click();
 		await radio('Overdue').click();
-		await settled();
+		await vi.advanceTimersByTimeAsync(450);
 		expect(goto).toHaveBeenCalledOnce();
 
 		await testPage.getByRole('button', { name: 'Apply' }).click();

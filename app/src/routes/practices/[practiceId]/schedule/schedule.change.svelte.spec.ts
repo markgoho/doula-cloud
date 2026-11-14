@@ -179,10 +179,12 @@ describe('the Schedule applies untyped controls when changed (#2888)', () => {
 
 	it('still lets Apply send the bar', async () => {
 		await setupAt();
+		vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+		vi.setSystemTime(new Date('2026-09-07T13:00:00Z'));
 
 		await box('Mine').click();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
-		await settled();
+		await vi.advanceTimersByTimeAsync(450);
 
 		expect(goto).toHaveBeenCalledOnce();
 		expect(goto).toHaveBeenCalledWith(`${schedulePath}?mine=true`, { state: { scheduleSearch: '' } });

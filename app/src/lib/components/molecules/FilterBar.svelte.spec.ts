@@ -1,6 +1,6 @@
 import { createRawSnippet } from 'svelte';
 import { page, userEvent } from 'vitest/browser';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from 'vitest-browser-svelte';
 import FilterBar from './FilterBar.svelte';
 // The skip link is hidden by the design tokens' spacing, so they must load.
@@ -716,6 +716,10 @@ async function setupChanging(onChangeApply = vi.fn()) {
 }
 
 describe('FilterBar applying when a control changes', () => {
+	afterEach(() => {
+		vi.useRealTimers();
+	});
+
 	it('sends a ticked box once, after the settle, and names the field that changed', async () => {
 		const { onChangeApply } = await setupChanging();
 
@@ -881,9 +885,10 @@ describe('FilterBar applying when a control changes', () => {
 	it('lets Apply stand in for a change that has not settled, so one read is sent', async () => {
 		const { onChangeApply, onSubmit } = await setupChanging();
 
+		vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
 		await page.getByLabelText('Mine').click();
 		await page.getByRole('button', { name: 'Apply' }).click();
-		await afterSettle();
+		await vi.advanceTimersByTimeAsync(SETTLE * 2);
 
 		expect(onSubmit).toHaveBeenCalledOnce();
 		expect(onChangeApply).not.toHaveBeenCalled();
