@@ -225,6 +225,29 @@ describe('the on-call roster', () => {
 		await expect.element(testPage.getByText('Anne-Marie Ochieng-Whitfield and Bea Okafor, until Sun Nov 22').first()).toBeVisible();
 	});
 
+	it('says in the Doulas table whether a gap is covered, and by whom', async () => {
+		await setup();
+		const doulasTable = testPage.getByRole('table', { name: 'Doulas (2)' });
+		await expect.element(doulasTable.getByText(/Anne-Marie Ochieng-Whitfield, nobody covering/).first()).toBeVisible();
+
+		const covered = {
+			...data,
+			roster: {
+				...roster,
+				windows: roster.windows.map((row) => ({
+					...row,
+					gaps: row.gaps.map((gap) => (gap.id === 'gap-1' ? { ...gap, coveringStaffId: 'staff-2', coveringStaffName: 'Bo Ng' } : gap))
+				})),
+				doulas: roster.doulas.map((doula, index) =>
+					index === 0 ? { ...doula, unreachable: doula.unreachable.map((gap) => ({ ...gap, isCovered: true })) } : doula
+				)
+			}
+		};
+		await setup({ data: covered });
+
+		await expect.element(testPage.getByRole('table', { name: 'Doulas (2)' }).last().getByText(/Anne-Marie Ochieng-Whitfield, Bo Ng covering/).first()).toBeVisible();
+	});
+
 	it('draws no table of one Doula and no flag that cannot fire', async () => {
 		await setup({ data: { ...data, roster: { ...roster, doulas: roster.doulas.slice(0, 1) } } });
 

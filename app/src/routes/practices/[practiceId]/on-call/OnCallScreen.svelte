@@ -55,7 +55,8 @@
 		type OnCallView,
 		type NoWindowRow,
 		type RosterDoula,
-		type RosterWindow
+		type RosterWindow,
+		type UnreachableGap
 	} from '#lib/onCall.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
 	import { practiceZoneNote } from '#lib/practiceZone.js';
@@ -183,6 +184,7 @@
 			inFlight: () => Promise.resolve(),
 			rowLink
 		});
+		if (back.rowId) rowLink(back.rowId)?.closest('tr')?.scrollIntoView({ block: 'nearest' });
 	}
 
 	const rowDomId = (engagementId: string, of: DataTableView) => `on-call-row-${engagementId}-${of}`;
@@ -435,7 +437,12 @@
 	const birthHref = (row: { engagementId: string }) => `${engagementHref(row)}#on-call`;
 	const gapsByNeed = (row: RosterWindow) =>
 		row.gaps.toSorted((a, b) => Number(a.coveringStaffId !== undefined) - Number(b.coveringStaffId !== undefined));
-	const atOnceNames = (doula: RosterDoula, ids: string[]) =>
+	const coveringNames = $derived(
+		new Map(roster?.windows.flatMap((row) => row.gaps.map((gap) => [gap.id, gap.coveringStaffName] as const)))
+	);
+	const coverWords = (gap: UnreachableGap) =>
+		gap.isCovered ? (coveringNames.get(gap.gapId) ? `${coveringNames.get(gap.gapId)} covering` : 'covered') : 'nobody covering';
+	const atOnceNames =(doula: RosterDoula, ids: string[]) =>
 		ids
 			.map((id) => doula.births.find((birth) => birth.engagementId === id)?.clientName)
 			.filter((name): name is string => name !== undefined)
@@ -461,7 +468,13 @@
 			accessor: (row: RosterWindow) => (row.dueDate ? say(row.dueDate) : ''),
 			content: dueCell
 		},
-		{ label: 'Cover', grows: true, accessor: describeCoverage, content: coverCell }
+		{
+			label: 'Cover',
+			grows: true,
+			track: 'calc(36ch + 2 * var(--data-table-cell-inset))',
+			accessor: describeCoverage,
+			content: coverCell
+		}
 	]);
 
 	const noWindowColumns = [
@@ -576,7 +589,7 @@
 			{#if tableView === 'record'}{ON_CALL_LABEL}{/if}{@render days(row.window, tableView === 'record' ? 'until' : 'Until')}
 		</span>
 		{#if row.ownStart}
-			<span class="line">{ownStartWords(row.ownStart, roster!.rule)}</span>
+			<span class="line wraps">{ownStartWords(row.ownStart, roster!.rule)}</span>
 		{/if}
 	</div>
 {/snippet}
@@ -638,7 +651,7 @@
 		<ul class="lines">
 			{#each doula.unreachable as gap (gap.gapId)}
 				<li>
-					<CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {gap.clientName}
+					<CoverageGapWhen startsAt={gap.startsAt} endsAt={gap.endsAt} {timeZone} {now} />, {gap.clientName}, {coverWords(gap)}
 				</li>
 			{/each}
 		</ul>
@@ -866,6 +879,15 @@
 			display: none;
 		}
 
+		/* A birth's row is several lines tall and its link sits mid-row, so the restored row as a whole, not only its link, clears the stuck heading (and a group's heading above it). */
+		.births :global(.table-view > tbody > tr[id]) {
+			scroll-margin-block-start: calc(var(--row-height) + var(--border-thin));
+		}
+
+		.births :global(.table-view > tbody > tr.opens-group[id]) {
+			scroll-margin-block-start: calc(2 * var(--row-height) + var(--border-thin));
+		}
+
 		.range-slot {
 			display: contents;
 		}
@@ -915,6 +937,13 @@
 			display: block;
 			color: var(--color-on-surface-variant);
 			font-size: var(--text-small-size);
+		}
+
+		/* A sentence wraps inside the column's own width; only a day or a range of days holds one line. */
+		.wraps {
+			white-space: normal;
+			inline-size: 24ch;
+			max-inline-size: 100%;
 		}
 
 		p.line {
