@@ -29,6 +29,7 @@ if (!customElements.get('center-l')) registerLayoutPrimitives();
 const { practiceId } = fixture.params;
 const schedulePath = `/practices/${practiceId}/schedule`;
 
+// jscpd:ignore-start -- the per-test clock and mock reset every list's spec repeats
 beforeEach(() => {
 	vi.useFakeTimers({ toFake: ['Date'] });
 	vi.setSystemTime(new Date('2026-09-07T13:00:00Z'));
@@ -41,6 +42,7 @@ beforeEach(() => {
 afterEach(() => {
 	vi.useRealTimers();
 });
+// jscpd:ignore-end
 
 async function setupAt(query = '', { search = '', width = 1440 }: { search?: string; width?: number } = {}) {
 	pageState.url = new SvelteURL(`https://example.test${schedulePath}${query}`);
