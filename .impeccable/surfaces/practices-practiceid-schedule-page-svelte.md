@@ -76,12 +76,24 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | A narrowing to the Visits whose Doula is no longer on the work, with their count | Have it (#2863, #2888) | a "Doula no longer on this work" box in "Show only" for an Owner or Admin (`?needsDoula=true`), in the badge's own words, a tag, and the count on the result line ("2 have a Doula no longer on this work."); four blind walks as Dee reached for it |
 | A reader's own Visits first ("Mine" on already for a Doula) | Have it (#2870) | decided by its design call for this list and the Clients list together; Priya, both walks: "This is everyone's"; Linear opens a member on "My issues" (unread) |
 | Filter by the Visit's type | Have it (#2888) | a "Type" select ("Prenatal", "Birth", "Postpartum") in the fold with the Doula, `?type=`, a "Type: Birth" tag, and the type in the one WHERE the rows and the count read; Acuity's appointment type and Calendly's event type taught it (round 5, all three graders) |
-| A whole-row click target | Open (#2888) | two of three graders (Stripe's lists); decided in #2888 |
-| Filters that take effect when changed | Declined | the bar holds typed fields (a day, and a Client's name in #2870), so it submits with Apply, as `govuk-alignment.md`'s filter-bar row records; whether a "Show only" box alone takes effect at once is #2870's design call |
+| Filters that take effect when changed | Have it (#2888) | a box, a radio and a select apply when changed, after a 250ms settle, with focus kept on the control and the result line announcing the list; typed fields (the Client, the days) still wait for Apply or Enter, and Apply stays drawn for them and for no script; all three graders and both walks of round 5 waited on an untyped control; recorded in DESIGN.md's Filter bar entry and `govuk-alignment.md`'s filter-bar row |
 | Booking a Visit from the Schedule | Later (#330) | a Visit is added on its Engagement, where its Client and its Doulas are; booking from a calendar comes with #330's calendar work; all three graders named it |
 | A Doula picker that takes several | Declined | no job on record asks for two Doulas' Visits at once, and "Any Doula" with the day headings shows everyone's; two graders named it |
 | A way to past Visits | Have it (#2870) | "Earlier" steps back a window at a time; "Choose days" reaches any day |
 | The filter bar on a phone | Have it (#2870) | below a 42rem bar "Show only", the Doula select and Order fold under "More filters and order"; Days, Earlier, Later, the Client search and Apply stay in view; the first screen holds a card or two instead of the bar |
+
+### Round 5's smaller notes (#2888)
+
+Each was raised by one grader or one walk. Each is fixed or declined with its reason here.
+
+| Note | Verdict | Reason |
+| --- | --- | --- |
+| "Needing a new Doula" (the box) and "No longer on this work" (the badge) name one condition twice | Fixed (#2907) | the box, the tag and the result line take the badge's words, "Doula no longer on this work", which H2 holds fixed; `?needsDoula=true` stays, because an address does not need to read as copy |
+| An empty search's "Look for … in the next 12 months" looks forward only | Fixed (#2907) | the step looks a year each way ("Look for "Camille" a year back and a year ahead"), today − 365 to today + 364 in the Practice's zone, and the result line states the days |
+| An empty search leaves about 50px blank under its tag | Fixed (#2901) | `FilterBar` draws no ruler while the list is empty, on all three lists; the gap from the tag to the empty state went from 65px to 45px at 375×740 |
+| "Earlier" from the opening 30 days steps 30 days, where Priya wanted last week | Declined | T10's job is to move the days shown by their own length, and a 7-day step out of a 30-day window would land on days the reader was never shown; since the radios apply when changed, last week is two taps ("Next 7 days", then "Earlier"), and so is the week after |
+| A search carries into Earlier and Later | Declined | a Client who calls about "my visit last week" (T9 with T10, Dee's call) needs the search kept through the step, as #2870's E6 decided; the empty state names what was looked for, the "Client: …" tag is in view, and its × is one action to every Visit in those days |
+| In the table the comma after the day sits about 20px from the time | Declined | the When cell is read by H2 (ADR-0022's form, comma included), H4 (one shared formatter with the Engagement), H6 (weekdays at one x), H8, T2, T4/T5 (the card runs it on as one phrase), T6, craft C4 (weekdays at one x and clocks on one edge, measured) and DESIGN.md's "A Visit's When"; closing the gap means a day track sized to each day or a right-aligned day, and either fails H6 and C4; hiding the comma failed H2 and H4 in round 2 (#2747's retro, point 5). A column is read down, not across |
 
 The order is built in #2869: one control at every width with its value in the address, the ordering column's `th` saying it with `aria-sort`, and the BFF serving each order with a cursor tied to it. A header-only button vanishes in the record cards at 320px (ADR-0024).
 
