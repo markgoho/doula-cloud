@@ -3,11 +3,12 @@
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import FailedRead from '../FailedRead.svelte';
 	import ScheduleScreen from './ScheduleScreen.svelte';
-	import { _SCHEDULE_READ } from './+page.js';
+	import { _forgetRoster, _SCHEDULE_READ } from './+page.js';
 	import type { PageProps as PageProperties } from './$types';
 
 	let { data }: PageProperties = $props();
 	const schedule = new Streamed(() => data.read);
+	$effect(() => _forgetRoster);
 
 	// A read that may work a second time is said inside the screen, beside
 	// "Try again", so the bar keeps its narrowing. A refusal, a missing

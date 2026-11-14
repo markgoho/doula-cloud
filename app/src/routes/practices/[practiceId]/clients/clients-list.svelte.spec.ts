@@ -3441,3 +3441,72 @@ describe('the count line in a narrow and a wide bar', () => {
 });
 
 
+
+// #2888: a box, a select and the order apply when changed; the Name waits for Apply.
+const settledChange = () => new Promise((resolve) => setTimeout(resolve, 450));
+
+describe('the Clients list applies untyped controls when changed (#2888)', () => {
+	it('reads once for a ticked box, keeps focus on it, and sends the Name as drawn', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+		await nameField().fill('Zelda');
+
+		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
+		expect(goto).not.toHaveBeenCalled();
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledOnce();
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, {
+			state: { clientsName: 'Zelda' },
+			replaceState: false,
+			reset: false
+		});
+		expect(document.activeElement).toBe(testPage.getByRole('checkbox', { name: 'Who owe money' }).element());
+	});
+
+	it('replaces the entry for a second change on the same box, and adds one for another control', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
+		await settledChange();
+		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
+		await settledChange();
+		await testPage.getByRole('checkbox', { name: 'Active, with no Contract' }).click();
+		await settledChange();
+
+		expect(goto.mock.calls.map((call) => (call[1] as { replaceState: boolean }).replaceState)).toEqual([false, true, false]);
+	});
+
+	it('applies the Order select when picked', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await testPage.getByRole('combobox', { name: 'Order' }).selectOptions('Name, A to Z');
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?order=name`, expect.objectContaining({ reset: false }));
+	});
+
+	it('does not read for the Name until Apply', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await nameField().fill('Zelda');
+		await settledChange();
+
+		expect(goto).not.toHaveBeenCalled();
+	});
+
+	it('still lets Apply send the bar once', async () => {
+		goto.mockResolvedValue(undefined);
+		await setup();
+
+		await testPage.getByRole('checkbox', { name: 'Who owe money' }).click();
+		await applyFilters();
+		await settledChange();
+
+		expect(goto).toHaveBeenCalledOnce();
+		expect(goto).toHaveBeenCalledWith(`/practices/${practiceId}/clients?owes=true`, noName);
+	});
+});

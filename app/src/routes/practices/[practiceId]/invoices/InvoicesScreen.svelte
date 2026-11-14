@@ -349,7 +349,7 @@
 		seedDrafts();
 		// A change of filter lands on the result line once its list has
 		// loaded, never on first arrival, where the route announcer speaks.
-		if (lastKey !== undefined && !isSameKey(lastKey, wanted)) isFocusPending = true;
+		if (changeApplies === 0 && lastKey !== undefined && !isSameKey(lastKey, wanted)) isFocusPending = true;
 		lastKey = wanted;
 	});
 	$effect(() => {
@@ -360,19 +360,33 @@
 
 	// Every move to another filter: a page already being added is abandoned,
 	// so it never lands in the new list, and Apply answers the press at once.
-	async function showFilter(href: string, search: string) {
+	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
+	let changeApplies = 0;
+	async function showFilter(href: string, search: string, change?: { replace: boolean }) {
 		invoices.abandon();
 		isApplying = true;
+		if (change) changeApplies += 1;
 		try {
-			await goto(href, { state: { invoicesSearch: search } });
+			await goto(href, {
+				state: { invoicesSearch: search },
+				...(change && { replaceState: change.replace, reset: false })
+			});
 		} finally {
 			isApplying = false;
+			if (change) changeApplies -= 1;
 		}
 	}
 
+	const drawnHref = () => `${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView))}`;
+
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		await showFilter(`${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView))}`, draftSearch.trim());
+		await showFilter(drawnHref(), draftSearch.trim());
+	}
+
+	// A radio or the order applies when changed (#2888); the search waits for Apply.
+	function applyOnChange({ replace }: { replace: boolean }) {
+		void showFilter(drawnHref(), draftSearch.trim(), { replace });
 	}
 
 	/*
@@ -602,6 +616,7 @@
 				bind:this={filterBar}
 				action={invoicesHref}
 				onSubmit={applyFilters}
+				onChangeApply={applyOnChange}
 				legend="Choose which Invoices to show"
 				status={readFailure ? '' : resultSummary}
 				statusRuler={INVOICES_RESULT_RULER}

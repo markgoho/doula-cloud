@@ -245,7 +245,7 @@ import type { PageProps as PageProperties } from './$types';
 		seedDrafts();
 		if (from?.route.id === CLIENT_HUB_ROUTE) {
 			pendingFocus = { clientId: from.params!.clientId };
-		} else if (lastFilterKey !== undefined && lastFilterKey !== filterKey) {
+		} else if (changeApplies === 0 && lastFilterKey !== undefined && lastFilterKey !== filterKey) {
 			pendingFocus = {};
 		}
 		lastFilterKey = filterKey;
@@ -390,10 +390,11 @@ import type { PageProps as PageProperties } from './$types';
 		isNoContractChecked = checked;
 	};
 
-	// The filter bar's own form, upgraded to a client-side navigation
-	// (Rule of Least Power).
-	async function applyFilters(event: SubmitEvent) {
-		event.preventDefault();
+	// Moves a change of control began and has not finished: the list lands without taking focus from the control.
+	let changeApplies = 0;
+
+	// The bar as drawn, typed name included.
+	async function applyDrawn(change?: { replace: boolean }) {
 		// Before the navigation, so a "Load more" already in flight is
 		// abandoned rather than merged into the new filter's list. The rows
 		// stay up until the new filter's first page arrives.
@@ -401,6 +402,7 @@ import type { PageProps as PageProperties } from './$types';
 		// Apply answers the press at once: the navigation has to run its load
 		// before the address changes and the list's own request starts.
 		isApplying = true;
+		if (change) changeApplies += 1;
 		try {
 			await goto(
 				clientsPath({
@@ -411,11 +413,27 @@ import type { PageProps as PageProperties } from './$types';
 					doula: draftDoula,
 					order: draftOrder
 				}),
-				{ state: { clientsName: draftName.trim() } }
+				{
+					state: { clientsName: draftName.trim() },
+					...(change && { replaceState: change.replace, reset: false })
+				}
 			);
 		} finally {
 			isApplying = false;
+			if (change) changeApplies -= 1;
 		}
+	}
+
+	// The filter bar's own form, upgraded to a client-side navigation
+	// (Rule of Least Power).
+	function applyFilters(event: SubmitEvent) {
+		event.preventDefault();
+		return applyDrawn();
+	}
+
+	// A box, a select or the order applies when changed (#2888); the name waits for Apply.
+	function applyOnChange({ replace }: { replace: boolean }) {
+		void applyDrawn({ replace });
 	}
 
 	const doulaOptions = $derived([{ value: '', label: 'Any Doula' }, ...doulas]);
@@ -1104,6 +1122,7 @@ import type { PageProps as PageProperties } from './$types';
 				bind:this={filterBar}
 				action={clientsPath({})}
 				onSubmit={applyFilters}
+				onChangeApply={applyOnChange}
 				legend="Choose which Clients to show"
 				status={isReady ? summary : ''}
 				statusRuler={longestSummary}

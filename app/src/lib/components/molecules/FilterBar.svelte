@@ -63,12 +63,15 @@
 	 * `content-visibility: hidden` on `::details-content`, so it is in the
 	 * accessibility tree only while shown. No script.
 	 *
-	 * Every bar has Apply: a date or a name is typed a character at a time,
-	 * and a list that reloaded on each one would move under the person
-	 * typing it, so a bar that holds one such field applies every control
-	 * with it (GOV.UK's filter pattern). The bar of switches that acted
-	 * the moment they changed (#2068) went when the Clients list gained a
-	 * Name and a Doula field.
+	 * Every bar has Apply, and every bar holds a typed field (a name, a search,
+	 * a date). A list that reloaded on each character would move under the
+	 * person typing, so typed text waits for Apply or Enter, and Apply is also
+	 * how a phone applies a typed value and how the whole bar applies with no
+	 * script (GOV.UK's filter pattern). A box, a radio and a select are not
+	 * typed into, so with `onChangeApply` they apply when changed: the bar waits
+	 * 250ms for the next change, a select the keyboard stepped waits for Enter
+	 * or for focus to leave it, and the route sends the whole bar as drawn
+	 * (#2888). Focus stays on the control.
 	 */
 	import type { Snippet } from 'svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -85,6 +88,17 @@
 		 * The route's client-side navigation. It owns `preventDefault()`.
 		 */
 		onSubmit?: (event: SubmitEvent) => void;
+		/**
+		 * Given, the bar applies when a checkbox, a radio or a select changes:
+		 * after a 250ms settle that each new change restarts, and for a select
+		 * the keyboard stepped, once Enter is pressed or focus leaves it. Typed
+		 * fields never trigger it. `replace` is false for the first change after
+		 * a control gains focus and true for the changes that follow, so a route
+		 * adds one history entry and then replaces it; `changed` names the form
+		 * fields that changed since the last send. Return `false` when nothing was
+		 * sent, so the next change still adds its entry.
+		 */
+		onChangeApply?: (how: { replace: boolean; changed: readonly string[] }) => boolean | void;
 		/**
 		 * What the bar does, in a few words ("Narrow the schedule").
 		 */
@@ -207,6 +221,7 @@
 	let {
 		action,
 		onSubmit,
+		onChangeApply,
 		legend,
 		status,
 		empty = false,
@@ -243,6 +258,93 @@
 	const clearTo = $derived(appliedCount === 1 && !hasUntaggedFilter ? undefined : clearHref);
 
 	let statusLine = $state<HTMLParagraphElement>();
+
+	const SETTLE_MS = 250;
+	const STEPPING_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown']);
+	let settleTimer: ReturnType<typeof setTimeout> | undefined;
+	let changedNames: string[] = [];
+	let heldSelect: HTMLSelectElement | undefined;
+	let isStepping = false;
+	let focusedControl: unknown;
+	let hasPushed = false;
+
+	function changeControlOf(target: EventTarget | null) {
+		if (target instanceof HTMLSelectElement) return target;
+		if (target instanceof HTMLInputElement && (target.type === 'checkbox' || target.type === 'radio')) return target;
+		return;
+	}
+
+	// A radio group is one control: arrowing moves focus from one radio to the next.
+	function noteFocus(control: HTMLInputElement | HTMLSelectElement) {
+		const identity = control instanceof HTMLInputElement && control.type === 'radio' ? `radio:${control.name}` : control;
+		if (identity === focusedControl) return;
+		focusedControl = identity;
+		hasPushed = false;
+	}
+
+	function cancelSettle() {
+		clearTimeout(settleTimer);
+		settleTimer = undefined;
+	}
+
+	function send() {
+		cancelSettle();
+		heldSelect = undefined;
+		const how = { replace: hasPushed, changed: changedNames };
+		changedNames = [];
+		if (onChangeApply?.(how) !== false) hasPushed = true;
+	}
+
+	function settle() {
+		cancelSettle();
+		settleTimer = setTimeout(send, SETTLE_MS);
+	}
+
+	function handleChange(event: Event) {
+		const control = changeControlOf(event.target);
+		if (!onChangeApply || !control) return;
+		noteFocus(control);
+		if (control.name && !changedNames.includes(control.name)) changedNames.push(control.name);
+		const wasStepped = isStepping;
+		isStepping = false;
+		if (wasStepped && control instanceof HTMLSelectElement) {
+			heldSelect = control;
+			cancelSettle();
+			return;
+		}
+		settle();
+	}
+
+	function handleKeydown(event: KeyboardEvent) {
+		if (!(event.target instanceof HTMLSelectElement)) return;
+		if (event.key === 'Enter' && heldSelect === event.target) {
+			event.preventDefault();
+			send();
+			return;
+		}
+		const isModified = event.altKey || event.ctrlKey || event.metaKey;
+		if (!isModified && (STEPPING_KEYS.has(event.key) || event.key.length === 1)) isStepping = true;
+	}
+
+	function handleFocusin(event: FocusEvent) {
+		const control = changeControlOf(event.target);
+		if (control) noteFocus(control);
+	}
+
+	function handleFocusout(event: FocusEvent) {
+		if (event.target === heldSelect) settle();
+		const to = event.relatedTarget;
+		if (!(to instanceof Node) || !(event.currentTarget as HTMLElement).contains(to)) focusedControl = undefined;
+	}
+
+	function handleSubmit(event: SubmitEvent) {
+		cancelSettle();
+		heldSelect = undefined;
+		changedNames = [];
+		onSubmit?.(event);
+	}
+
+	$effect(() => cancelSettle);
 
 	/**
 	 * Moves focus to the result line, so a keyboard user who has just applied
@@ -308,7 +410,7 @@
 {#snippet result()}
 	<div class="count" class:ruled={statusRuler !== undefined}>
 		<p id={statusId} role="status" class="status" class:visually-hidden={empty} tabindex="-1" bind:this={statusLine}>{status}</p>
-		{#if statusRuler !== undefined}
+		{#if statusRuler !== undefined && !empty}
 			<!-- The longest wording, unseen, out of the tab order and the accessibility tree. -->
 			<span class="status ruler" aria-hidden="true" inert>{statusRuler}</span>
 		{/if}
@@ -318,8 +420,21 @@
 	{/if}
 {/snippet}
 
+<svelte:window onpopstate={() => (hasPushed = false)} />
+
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
 <!-- stacked-form:ignore: #2026 -- the one GET narrowing form. Its fields sit side by side and wrap on their own, and `StackedForm` would both stack them and take away the GET submission this form is built on. -->
-<form method="get" {action} onsubmit={onSubmit} class:dense={foldsFieldsOnly}>
+<form
+	method="get"
+	{action}
+	onsubmit={handleSubmit}
+	onchange={handleChange}
+	onkeydown={handleKeydown}
+	onkeyup={() => (isStepping = false)}
+	onfocusin={handleFocusin}
+	onfocusout={handleFocusout}
+	class:dense={foldsFieldsOnly}
+>
 	<!-- The first stop in the bar, drawn only while focused: a keyboard user
 	     crosses the controls only when she means to. -->
 	<Link
