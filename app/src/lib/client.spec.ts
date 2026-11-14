@@ -127,6 +127,8 @@ describe('loadClients', () => {
 			showOwing: true,
 			showNoContract: true,
 			doula: 'staff-1',
+			dueFrom: '2027-03-01',
+			dueTo: '2027-03-15',
 			name: 'Anne & Marie 100%',
 			order: 'name',
 			cursor: 'next-page'
@@ -143,9 +145,24 @@ describe('loadClients', () => {
 			owes: true,
 			noContract: true,
 			doula: 'staff-1',
+			due: '',
+			dueFrom: '2027-03-01',
+			dueTo: '2027-03-15',
 			order: 'name',
 			cursor: 'next-page'
 		});
+	});
+
+	it('asks for a due month, or for chosen days, after the Doula and before the order (#2871)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(response({ items: [], hasMore: false }));
+
+		await loadClients(fetcher, 'practice-1', { doula: 'staff-1', due: '2027-03', order: 'name', cursor: 'next-page' });
+		await loadClients(fetcher, 'practice-1', { dueFrom: '2027-03-01', dueTo: '2027-03-15' });
+		await loadClients(fetcher, 'practice-1', { dueFrom: '2027-03-01' });
+
+		expect(fetcher).toHaveBeenNthCalledWith(1, '/api/practices/practice-1/clients?doula=staff-1&due=2027-03&order=name&cursor=next-page');
+		expect(fetcher).toHaveBeenNthCalledWith(2, '/api/practices/practice-1/clients?dueFrom=2027-03-01&dueTo=2027-03-15');
+		expect(fetcher).toHaveBeenNthCalledWith(3, '/api/practices/practice-1/clients');
 	});
 
 	it('sends the unset filters of a named list as off', async () => {
@@ -160,6 +177,9 @@ describe('loadClients', () => {
 			owes: false,
 			noContract: false,
 			doula: '',
+			due: '',
+			dueFrom: '',
+			dueTo: '',
 			order: '',
 			cursor: ''
 		});
@@ -573,5 +593,40 @@ describe('clientsResultSummary (#2068)', () => {
 		expect(clientsResultSummary(2, false, true, false, false, false, { name: 'Cam' })).toBe(
 			'Showing 2 Clients named "Cam", including anyone not yet in care, soonest due first, then most recently ended.'
 		);
+	});
+
+	describe('beside a due month or days (#2871)', () => {
+		const march = { month: '2027-03', from: '', to: '' };
+		const days = { month: '', from: '2027-03-01', to: '2027-03-15' };
+		const tail = ', soonest due first, then most recently ended.';
+
+		it('says when after the Clients, her Doula and a name, and before what they owe', () => {
+			expect(clientsResultSummary(4, false, false, false, false, false, { due: march })).toBe(`Showing 4 Clients due in March 2027${tail}`);
+			expect(clientsResultSummary(2, false, false, false, false, false, { doulaName: 'Priya Raman', due: march })).toBe(
+				`Showing Priya Raman's 2 Clients due in March 2027${tail}`
+			);
+			expect(clientsResultSummary(30, true, false, false, true, false, { name: 'Cam', due: days }, 41)).toBe(
+				`Showing the first 30 of 41 Clients named "Cam" due Mar 1 to Mar 15, 2027 who owe money${tail}`
+			);
+		});
+
+		it('says nothing of the switch for the rest, which a due date makes no difference to', () => {
+			expect(clientsResultSummary(1, false, true, false, false, false, { due: march })).toBe(`Showing 1 Client due in March 2027${tail}`);
+		});
+
+		it('says nobody is due when nobody is, in the words of the narrowing', () => {
+			expect(clientsResultSummary(0, false, false, false, false, false, { due: march })).toBe(
+				'No Client is due in March 2027. Clear the filters to widen the list.'
+			);
+			expect(clientsResultSummary(0, false, false, false, false, false, { due: days, name: 'Cam' })).toBe(
+				'No Client named "Cam" is due Mar 1 to Mar 15, 2027. Clear the filters to widen the list.'
+			);
+			expect(clientsResultSummary(0, false, false, false, true, false, { doulaName: 'Priya Raman', due: march })).toBe(
+				"None of Priya Raman's Clients owe money and are due in March 2027. Clear the filters to widen the list."
+			);
+			expect(clientsResultSummary(0, false, false, false, false, false, { doulaName: 'Priya Raman', due: march })).toBe(
+				"None of Priya Raman's Clients are due in March 2027. Clear the filters to widen the list."
+			);
+		});
 	});
 });

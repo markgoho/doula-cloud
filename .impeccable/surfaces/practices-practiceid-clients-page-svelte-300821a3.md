@@ -42,7 +42,7 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Search by name | Have it | Name (T5; #1829) |
 | Grouping by Doula | Declined | a Client can have several Doulas, so there is no one key; the Doula column and the Doula select show them |
 | A total count | Have it | while more exist the result line says "Showing the first 30 of 58 Clients", the first page's count of the narrowing, from the same predicate as the rows, so a contractor's total is her own (#2867); an owner who "can no longer hold it in her head" (`personas/practice-owner.md:11`) is owed the whole |
-| A due-month (date-range) narrowing | Build (#2871) | "Priya has room in March" (`journeys/non-doula-admin.md:89`) |
+| A due-month (date-range) narrowing | Have it (#2871) | "Priya has room in March" (`journeys/non-doula-admin.md:89`) is two actions at 1280px: the Doula select, then the `Due` select (this month and the next nine by name, "Any time", "Choose days" for typed From and To); a month applies when changed, `?due=2027-03` or `?dueFrom=&dueTo=` in the address, the tag "Due in March 2027", the result line "Showing Priya Raman's 2 Clients due in March 2027, soonest due first." A Client is in a month when an open Engagement's due date is in it, so one already postpartum is still due in the month her due date names |
 | Relative days | Have it | the Date column says "3 weeks postpartum" after a live birth and the day, "Due Nov 9, 2026", before it |
 | A calendar view | Declined | a roster is not read by day |
 | Time zone shown | Declined | days only, no times |
