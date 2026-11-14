@@ -390,6 +390,18 @@ func TestCreateHandler_ReplayReturnsTheSameAssignee(t *testing.T) {
 // path, the same one create takes with no assignee.
 func TestReassignHandler_APlainDoulaMayNameOnlyHerself(t *testing.T) {
 	e := newEnv(t)
+
+	peer := requireReassignRefusedAndVisitStays(t, e)
+
+	peerVisit := seedVisit(t, e.DB, e.Engagement.ID, peer)
+	e.reassign(peerVisit, e.Staff.ID, http.StatusOK)
+}
+
+// requireReassignRefusedAndVisitStays has the signed-in Staff member hand
+// her own Visit to a colleague, expects the refusal, and checks the Visit
+// stayed hers. It returns the colleague's id.
+func requireReassignRefusedAndVisitStays(t *testing.T, e *env) string {
+	t.Helper()
 	peer := e.Colleague().ID
 	visitID := seedVisit(t, e.DB, e.Engagement.ID, e.Staff.ID)
 
@@ -398,7 +410,16 @@ func TestReassignHandler_APlainDoulaMayNameOnlyHerself(t *testing.T) {
 	if assignedTo != e.Staff.ID {
 		t.Fatalf("visit is assigned to %q, want the refusal to have left it on %q", assignedTo, e.Staff.ID)
 	}
+	return peer
+}
 
-	peerVisit := seedVisit(t, e.DB, e.Engagement.ID, peer)
-	e.reassign(peerVisit, e.Staff.ID, http.StatusOK)
+// A contractor attached to the Engagement may set a Visit's date and write
+// its notes, but naming a colleague is the Owner's and the Admin's alone
+// (ADR-0008's "Who may assign a Visit to whom"): a reassign from her is
+// refused, and the Visit stays where it was.
+func TestReassignHandler_AConfinedContractorMayNotNameAColleague(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Doula(), fixture.Contractor()))
+	testdb.SeedGrantedAttachment(t, e.DB, e.Engagement.ID, e.Staff.ID)
+
+	requireReassignRefusedAndVisitStays(t, e)
 }

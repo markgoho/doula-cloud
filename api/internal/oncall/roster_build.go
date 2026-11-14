@@ -329,8 +329,9 @@ func intersect(a, b Window) (Window, bool) {
 
 // rosterDoulas lists the Doulas the reader may know and what each does in
 // the range. A reader with ambient reach holds every Doula at the
-// Practice; a contractor holds only those on one of her births (visible),
-// each described by those births alone, and none of their overlaps.
+// Practice; a contractor holds only those on one of her births (visible)
+// that has days in the range, each described by those births alone, and
+// none of their overlaps.
 func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []builtRow, atOnce map[string][]DoulaAtOnce, contractorStaffID string, visible map[string]bool) ([]RosterDoula, error) {
 	rows, err := tx.QueryContext(ctx,
 		`SELECT s.id, s.name
@@ -400,6 +401,9 @@ func rosterDoulas(ctx context.Context, tx *sql.Tx, practiceID string, built []bu
 	out := make([]RosterDoula, 0, len(order))
 	for _, id := range order {
 		d := byID[id]
+		if contractorStaffID != "" && id != contractorStaffID && len(d.Births) == 0 {
+			continue
+		}
 		slices.SortFunc(d.Unreachable, func(a, b Unreachable) int {
 			return cmp.Or(a.StartsAt.Compare(b.StartsAt), cmp.Compare(a.GapID, b.GapID))
 		})

@@ -915,6 +915,12 @@
 	// same standing fact clientsCanPay/hasClientEmail already are.
 	const billingModeState = new SectionState<BillingMode | undefined>(undefined);
 	const billingMode = $derived(billingModeState.value);
+	// An empty list that has not been read is not "No Invoices yet.", and a
+	// billing mode that has not been read is not "Create Invoice".
+	const isInvoicesSettled = $derived(
+		(canReadContractMoney ? invoicesState.hasSettled : contractorInvoicesState.hasSettled) &&
+			billingModeState.hasSettled
+	);
 
 	const practiceTimezone = $derived(timeZone);
 	const visitsZoneNote = $derived(
@@ -3237,7 +3243,7 @@
 	     rather than mounting with '' and throwing on its own first date
 	     computation. A still-loading or failed read leaves this gap
 	     blank; the Notice above already says why. -->
-	{#if paymentTermsDays > 0}
+	{#if paymentTermsDays > 0 && isInvoicesSettled}
 		<InvoiceSection
 			{invoices}
 			{contractStatus}
@@ -3600,7 +3606,7 @@
 			<LabeledField
 				id={gapFieldIds.reason}
 				label="Reason"
-				hint="Optional. Staff at this Practice can read it; the Client never does."
+				hint="Optional. Owners, Admins and the Doulas on this birth can read it; the Client never does."
 				error={gapSubmission.errorFor(gapFieldIds.reason)}
 			>
 				{#snippet children({ id, describedBy, invalid })}
