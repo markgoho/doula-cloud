@@ -45,9 +45,9 @@ afterEach(() => {
 });
 // jscpd:ignore-end
 
-async function setupAt(query = '') {
+async function setupAt(query = '', state: Record<string, string> = {}) {
 	pageState.url = new SvelteURL(`https://example.test${schedulePath}${query}`);
-	pageState.state = {};
+	pageState.state = state;
 	await testPage.viewport(1440, 900);
 	const parameters = new URLSearchParams(query);
 	const [from, to] = [parameters.get('from'), parameters.get('to')];
@@ -105,6 +105,24 @@ describe('the Schedule applies untyped controls when changed (#2888)', () => {
 		await settled();
 
 		expect(goto).toHaveBeenCalledWith(`${schedulePath}?mine=true`, expect.objectContaining({ state: { scheduleSearch: 'Cam' } }));
+	});
+
+	it.each([
+		['with an input event', async (client: ReturnType<typeof testPage.getByLabelText>) => client.fill('')],
+		['without an input event', async (client: ReturnType<typeof testPage.getByLabelText>) => void ((client.element() as HTMLInputElement).value = '')]
+	])('clears an applied Client the reader emptied %s, on a change and on Apply', async (_how, empty) => {
+		await setupAt('', { scheduleSearch: 'Camille' });
+		const client = testPage.getByLabelText('Client', { exact: true });
+		await expect.element(client).toHaveValue('Camille');
+
+		await empty(client);
+		await testPage.getByRole('radio', { name: 'Next 7 days' }).click();
+		await settled();
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`, expect.objectContaining({ state: { scheduleSearch: '' } }));
+
+		await empty(client);
+		await testPage.getByRole('button', { name: 'Apply' }).click();
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7`, { state: { scheduleSearch: '' } });
 	});
 
 	it('does not read for a typed Client until Apply', async () => {

@@ -29,6 +29,7 @@
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
+	import { typedIn } from '#lib/typedIn.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -365,6 +366,7 @@
 	let draftView = $state<InvoicesView>('all');
 	let draftOrder = $state<InvoiceOrder>('');
 	let draftSearch = $state('');
+	let searchBox = $state<HTMLElement>();
 	let draftChoice = $state<InvoicePeriodChoice>('');
 	let fromValue = $state('');
 	let toValue = $state('');
@@ -439,14 +441,14 @@
 			document.querySelector<HTMLInputElement>(rangeErrors.from ? 'input[name="from"]' : 'input[name="to"]')?.focus();
 			return;
 		}
-		await showFilter(drawnHref(), draftSearch.trim());
+		await showFilter(drawnHref(), typedIn(searchBox, draftSearch));
 	}
 
 	// A radio, a select or the order applies when changed (#2888); the search and typed days wait for Apply, and "Choose days" alone only opens its fields.
 	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
 		if (isChoosingDays && changed.length === 1 && changed[0] === 'sent') return false;
 		if (hasRangeProblem()) return false;
-		void showFilter(drawnHref(), draftSearch.trim(), { replace });
+		void showFilter(drawnHref(), typedIn(searchBox, draftSearch), { replace });
 		return true;
 	}
 
@@ -677,7 +679,7 @@
 
 <!-- In view at every width, beside the view where the bar is wide (T4: a check is matched in two actions on a phone too). Unnamed, so a Client's name never reaches the address (#1829). -->
 {#snippet searchField()}
-	<div class="search">
+	<div class="search" bind:this={searchBox}>
 		<LabeledField label="Reference or Client" width={20}>
 			{#snippet children({ id, describedBy, invalid, width })}
 				<TextInput

@@ -28,6 +28,7 @@
 	} from '#lib/clientsDue.js';
 	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
 	import { dayIn } from '#lib/zonedTime.js';
+	import { typedIn } from '#lib/typedIn.js';
 	import { RefusalError } from '#lib/formErrors.js';
 	import { holdClientsName } from '#lib/clientsReturn.js';
 	import { keepListReturn, pagesToRestore, putListBack, type ListReturn } from '#lib/listReturn.js';
@@ -479,7 +480,7 @@ import type { PageProps as PageProperties } from './$types';
 					order: draftOrder
 				}),
 				{
-					state: { clientsName: draftName.trim() },
+					state: { clientsName: typedIn(nameField, draftName) },
 					...(change && { replaceState: change.replace, reset: false })
 				}
 			);
