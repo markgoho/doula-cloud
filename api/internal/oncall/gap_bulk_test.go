@@ -216,8 +216,14 @@ func TestBulkGap_ABirthWhoseDaysMissTheTimeIsNotHit(t *testing.T) {
 	if got := e.preview(e.SignedIn, e.Doula.ID); len(got.Births) != 0 {
 		t.Fatalf("preview = %+v, want no birth: one has no days and the other starts later", got.Births)
 	}
-	long := gapEnd.AddDate(0, 3, 0)
-	got := reqtest.Expect[oncall.GapPreview](t, http.MethodGet, e.previewURL(e.Doula.ID, long, long.Add(time.Hour)), http.StatusOK, e.SignedIn)
+}
+
+func TestBulkGap_ATimeAfterEveryWindowMeetsNoBirth(t *testing.T) {
+	e := newEnv(t)
+	after := gapEnd.AddDate(0, 3, 0)
+
+	got := reqtest.Expect[oncall.GapPreview](t, http.MethodGet, e.previewURL(e.Doula.ID, after, after.Add(time.Hour)), http.StatusOK, e.SignedIn)
+
 	if len(got.Births) != 0 {
 		t.Fatalf("preview = %+v, want no birth for a time after every window", got.Births)
 	}

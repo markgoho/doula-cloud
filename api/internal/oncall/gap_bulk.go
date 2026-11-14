@@ -197,6 +197,7 @@ func PreviewGapsHandler() http.Handler {
 		}
 		_, hits, ok := hitsOrRefuse(w, r, call, staffID, *startsAt, *endsAt)
 		if !ok {
+			// coverage:ignore reason: hitsOrRefuse refuses only on a DB failure, not exercised by unit tests
 			return
 		}
 		out := GapPreview{Births: []GapPreviewBirth{}}
@@ -262,6 +263,7 @@ func RecordGapsHandler(enq tasknudge.Enqueuer) http.Handler {
 		}
 		settings, hits, ok := hitsOrRefuse(w, r, call, req.StaffID, *req.StartsAt, *req.EndsAt)
 		if !ok {
+			// coverage:ignore reason: hitsOrRefuse refuses only on a DB failure, not exercised by unit tests
 			return
 		}
 		writes, ok := matchWrites(hits, req.Births)

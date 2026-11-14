@@ -191,6 +191,7 @@ func (c gapWrite) insertGap(ctx context.Context, facts gapFacts) (string, error)
 // worker.
 func (c gapWrite) recordSaved(ctx context.Context, gapID string, action activity.EngagementAction, diff gapDiff, saved gapFacts) (bool, error) {
 	if err := recordGap(ctx, c.tx, c.practiceID, c.engagementID, c.actorID, action, diff); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, err
 	}
 	if saved.CoveringStaffID != nil {
