@@ -19,7 +19,7 @@ import { loadContractTemplate } from './contractTemplate.js';
 import { loadEmailSuppressions } from './emailSuppression.js';
 import { formatAmount } from './invoice.js';
 import { loadMfaRequirementImpact } from './mfaRequirement.js';
-import { loadOnCallSettings, type OnCallSettings } from './onCall.js';
+import { loadOnCallSettings, type OnCallSettings } from './onCallRule.js';
 import { CONNECT_STATUS_BADGES, loadConnectStatus } from './payments.js';
 import { loadTemplate as loadPlanTemplate, type Field as PlanField } from './planTemplate.js';
 import { loadPracticeTimezone } from './practiceTimezone.js';

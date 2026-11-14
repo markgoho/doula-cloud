@@ -122,6 +122,8 @@ The Clients list (`GET /api/practices/{id}/clients`, and the `order` in the body
 
 The Clients list also narrows to a due month (#2871): `due=2027-03`, or `dueFrom` and `dueTo` (YYYY-MM-DD, inclusive), on the GET and in the POST body. A Client is in when one of her open Engagements has a `due_date` in the range, a date with no zone, so no conversion. It composes with every other filter, `mine`, the Doula and the order, and `clientCount` follows it. A malformed value, `due` beside `dueFrom` or `dueTo`, one of `dueFrom` and `dueTo` without the other, and `dueTo` before `dueFrom` are each a 400 with `details` keyed by the field.
 
+The on-call roster (`GET /api/practices/{id}/on-call`, #2748) is a list a reader can reorder that is not paged, and says why in `roster.go`: it is every live birth in a range capped at 92 days, and its flags and Doula totals are over that whole range, so a page of it would be a wrong answer, not a slower one. Its `order` follows rules 1 and 2 above and has no cursor: empty is births that include tonight first, then due date ascending (a birth with none last), then Client name, then id; `cover` puts the births that need cover first, then the same order. `staffId` and `cover=needed` narrow the rows after the flags are computed, so no flag moves when a list is narrowed, and an unknown `order` or `cover` is a 400 with `details` keyed by the parameter, as is a `from` before the Practice's today.
+
 ---
 
 ## 5. Keep Default Payloads Lean (Use `?include=`)

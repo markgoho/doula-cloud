@@ -265,7 +265,7 @@ func noWindowRefusal(reason NoWindowReason) string {
 		return MsgNoWindowNobodyOnIt
 	case NoWindowEndedBeforeStart:
 		return MsgNoWindowEnded
-	case NoWindowNoDueDate:
+	case NoWindowNoDueDate, NoWindowNoDueDateNoDoula:
 		return MsgNoWindowNoDueDate
 	default:
 		// coverage:ignore reason: DeriveWindow gives no sixth reason, and a window that exists never reaches here -- the fallback exists so a refusal always carries a sentence

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { loadPracticeTimezone, savePracticeTimezone } from '#lib/practiceTimezone.js';
@@ -140,6 +141,8 @@
 
 <FormPage
 	title="Timezone"
+	backHref={resolve('/practices/[practiceId]/settings', { practiceId: page.params.practiceId! })}
+	backLabel="Settings"
 	fieldsets={[{ content: canChangeTimezone ? fields : readOnlyFields }]}
 	{actions}
 	read={zoneRead.frame('Loading the timezone')}

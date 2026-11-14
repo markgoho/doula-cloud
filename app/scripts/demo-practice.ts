@@ -730,8 +730,11 @@ function tonight(now: Date): { startsAt: string; endsAt: string } {
 // birth. Morgan Grier has Marisol as primary and Lena as backup by
 // Narrowing, and a gap Lena covers. Casey Estrada's Doula, Rowan, is
 // narrowed to leave the last week with nobody. Priya is away tonight with
-// nobody covering Camille's birth. Imogen has a Doula and no due date, so no
-// window yet. Quinn Estrada and Tessa Moreau stay plainly Covered.
+// nobody covering tonight on Camille's birth, where Bethany takes over from
+// the due date. Imogen has a Doula and no due date, so no window yet. Tamsin
+// Reyes is due in 25 days with no Doula. Quinn Estrada has her own start rule
+// and Tessa Moreau stays plainly Covered. Dee has changed the Practice's rule
+// twice, so its Activity holds two entries.
 async function seedOnCall(
 	request: APIRequestContext,
 	roster: Roster,
@@ -747,6 +750,14 @@ async function seedOnCall(
 		send(request, 'PUT', `${engagementPath(engagementId)}/attachments/${staffId}/on-call`, owner, { from, to });
 	const gap = (engagementId: string, body: object) =>
 		send(request, 'POST', `${engagementPath(engagementId)}/coverage-gaps`, owner, body);
+
+	const practiceRule = { startRule: 'gestational_week', startWeek: 37, graceDays: 14 };
+	for (const startWeek of [38, 37]) {
+		await send(request, 'PUT', `/api/practices/${practiceId}/on-call-settings`, staff.dee.headers, {
+			...practiceRule,
+			startWeek
+		});
+	}
 
 	const morgan = birth('Morgan', 'Grier');
 	const lena = staff.lena;
@@ -764,6 +775,14 @@ async function seedOnCall(
 
 	await narrow(birth('Casey', 'Estrada').engagementId, staff.rowan.staffId, undefined, dayAfter(today, 8));
 
+	await send(request, 'PUT', `${engagementPath(birth('Quinn', 'Estrada').engagementId)}/on-call-rule`, owner, {
+		startRule: 'attachment_granted'
+	});
+
+	await send(request, 'PUT', `${engagementPath(camille.engagementId)}/attachments/${staff.bethany.staffId}`, owner);
+	await narrow(camille.engagementId, staff.priya.staffId, undefined, dayAfter(today, 19));
+	await narrow(camille.engagementId, staff.bethany.staffId, dayAfter(today, 20), undefined);
+
 	await gap(camille.engagementId, {
 		staffId: staff.priya.staffId,
 		...tonight(new Date()),
@@ -777,6 +796,8 @@ async function seedOnCall(
 		{ givenName: 'Imogen', familyName: 'Okafor', kind: 'birth' },
 		{ doulaStaffId: staff.delia.staffId }
 	);
+
+	await addClient(request, roster, today, { givenName: 'Tamsin', familyName: 'Reyes', kind: 'birth', dueInDays: 25 });
 }
 
 export interface DemoPractice {

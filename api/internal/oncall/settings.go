@@ -5,8 +5,10 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/activitypage"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/staffauth"
 )
@@ -38,6 +40,49 @@ type Settings struct {
 	GraceDays int       `json:"graceDays"`
 }
 
+// SettingsResponse is the rule and who last changed it. LastChanged is
+// null while nobody has changed it since the Practice was set up.
+type SettingsResponse struct {
+	Settings
+	LastChanged *LastChanged `json:"lastChanged"`
+}
+
+// LastChanged is the latest recorded change to the rule: who, and when.
+type LastChanged struct {
+	StaffName string    `json:"staffName"`
+	At        time.Time `json:"at"`
+}
+
+func lastChanged(ctx context.Context, tx *sql.Tx, practiceID string) (*LastChanged, error) {
+	stamp, err := activitypage.Latest(ctx, tx, activitypage.LatestQuery{
+		PracticeID: practiceID, SubjectKind: activity.SubjectPractice, SubjectID: practiceID, Action: actionPracticeOnCallChanged,
+	})
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("oncall: read when the rule last changed: %w", err)
+	}
+	if stamp == nil {
+		return nil, nil //nolint:nilnil // not changed since the Practice was set up is an answer, not a failure
+	}
+	return &LastChanged{StaffName: stamp.By, At: stamp.At}, nil
+}
+
+// validateSettings is the rule's own refusals, shared by the write and the
+// preview of it so the two say the same words under the same keys.
+func validateSettings(s Settings) map[string]string {
+	details := map[string]string{}
+	if s.StartRule != StartGestationalWeek && s.StartRule != StartAttachmentGranted {
+		details["startRule"] = MsgUnknownStartRule
+	}
+	if s.StartWeek < minStartWeek || s.StartWeek > maxStartWeek {
+		details["startWeek"] = MsgStartWeekRange
+	}
+	if s.GraceDays < 0 || s.GraceDays > maxGraceDays {
+		details["graceDays"] = MsgGraceDaysRange
+	}
+	return details
+}
+
 // GetSettingsHandler reads the Practice's on-call rule. Owner and Admin
 // only, declared at the mount, the pair that may state it -- the same
 // authority practicetimezone gives the zone. Every Staff member still
@@ -52,8 +97,18 @@ func GetSettingsHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		apierr.WriteJSON(w, http.StatusOK, settingsOf(s.rule))
+		writeSettingsResponse(w, r, c, settingsOf(s.rule))
 	})
+}
+
+func writeSettingsResponse(w http.ResponseWriter, r *http.Request, c staffauth.Call, settings Settings) {
+	changed, err := lastChanged(r.Context(), c.Tx, c.PracticeID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return
+	}
+	apierr.WriteJSON(w, http.StatusOK, SettingsResponse{Settings: settings, LastChanged: changed})
 }
 
 // PutSettingsHandler states a Practice's on-call rule. Idempotent by
@@ -68,17 +123,7 @@ func PutSettingsHandler() http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		details := map[string]string{}
-		if req.StartRule != StartGestationalWeek && req.StartRule != StartAttachmentGranted {
-			details["startRule"] = MsgUnknownStartRule
-		}
-		if req.StartWeek < minStartWeek || req.StartWeek > maxStartWeek {
-			details["startWeek"] = MsgStartWeekRange
-		}
-		if req.GraceDays < 0 || req.GraceDays > maxGraceDays {
-			details["graceDays"] = MsgGraceDaysRange
-		}
-		if len(details) > 0 {
+		if details := validateSettings(req); len(details) > 0 {
 			apierr.Write(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "The on-call rule could not be saved.", details)
 			return
 		}
@@ -96,7 +141,7 @@ func PutSettingsHandler() http.Handler {
 				return
 			}
 		}
-		apierr.WriteJSON(w, http.StatusOK, req)
+		writeSettingsResponse(w, r, c, req)
 	})
 }
 

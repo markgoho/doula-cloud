@@ -18,7 +18,7 @@
 		loadOnCallSettings,
 		saveOnCallSettings,
 		type OnCallSettings
-	} from '#lib/onCall.js';
+	} from '#lib/onCallRule.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';

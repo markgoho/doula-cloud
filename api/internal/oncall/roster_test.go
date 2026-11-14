@@ -36,7 +36,7 @@ func newRosterEnv(t *testing.T) rosterEnv {
 		}
 		return fixture.Engagement(t, e.DB, e.Practice, opts...)
 	}
-	e.Ada = birth("Ada Whitfield", birthDue, e.Contractor)
+	e.Ada = birth(adaWhitfield, birthDue, e.Contractor)
 	e.Bea = birth("Bea Okafor", "2026-10-28", e.Employee)
 	e.Cleo = birth("Cleo Marsh", "2026-11-02", e.Employee)
 	e.Dot = birth("Dot Nakamura", "", e.Employee)
@@ -49,6 +49,12 @@ func newRosterEnv(t *testing.T) rosterEnv {
 		VALUES ($1, $2, '2026-10-17T22:00:00Z', '2026-10-18T10:00:00Z', 'Sister''s wedding', $2)`,
 		e.Bea.ID, e.Employee.ID)
 	return e
+}
+
+// othersFacts are the names and ids of the three births a contractor is
+// not on, none of which may reach her.
+func (e rosterEnv) othersFacts() []string {
+	return []string{"Bea", "Cleo", "Dot", e.Bea.ID, e.Cleo.ID, e.Dot.ID}
 }
 
 func windowIDs(resp oncall.RosterResponse) []string {
@@ -102,13 +108,27 @@ func TestRoster_ContractorReadsOnlyHerOwnEngagements(t *testing.T) {
 	}
 }
 
-// TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly: she may
-// know a colleague exists and cannot be reached, and nothing attached to
-// that colleague -- not even how many births she is carrying.
-func TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly(t *testing.T) {
+// TestRoster_ContractorSeesOnlyTheColleaguesOnHerBirths: a colleague who is
+// on none of her births is not in her Doula list at all, and one who is on
+// one of them reads there by her part in that birth alone -- no other birth
+// of hers, no count, no overlap, no gap on another Client.
+func TestRoster_ContractorSeesOnlyTheColleaguesOnHerBirths(t *testing.T) {
 	e := newRosterEnv(t)
+	url := e.rosterURL("2026-10-17", "2026-10-17")
+	asContractor := e.As(e.Contractor)
 
-	roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.rosterURL("2026-10-17", "2026-10-17"), http.StatusOK, e.As(e.Contractor))
+	roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, url, http.StatusOK, asContractor)
+
+	if len(roster.Doulas) != 1 || roster.Doulas[0].StaffID != e.Contractor.ID {
+		t.Fatalf("doulas = %+v, want only herself while no colleague is on her births", roster.Doulas)
+	}
+	self := roster.Doulas[0]
+	if len(self.Births) != 1 || self.Births[0].EngagementID != e.Ada.ID || self.Births[0].Covering {
+		t.Errorf("her births = %+v, want Ada's, not covering", self.Births)
+	}
+
+	testdb.SeedGrantedAttachment(t, e.DB, e.Ada.ID, e.Employee.ID)
+	roster = reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, url, http.StatusOK, asContractor)
 
 	byID := map[string]oncall.RosterDoula{}
 	for _, d := range roster.Doulas {
@@ -116,20 +136,74 @@ func TestRoster_ContractorSeesAColleagueByNameAndAvailabilityOnly(t *testing.T) 
 	}
 	colleague, ok := byID[e.Employee.ID]
 	if !ok {
-		t.Fatal("the colleague is missing from the Doula list; she may see that a colleague exists")
+		t.Fatal("a colleague on her birth is missing from the Doula list")
 	}
-	if colleague.Name == "" {
-		t.Error("the colleague has no name")
+	if len(colleague.Births) != 1 || colleague.Births[0].EngagementID != e.Ada.ID {
+		t.Errorf("the colleague's births = %+v, want only the one that is also hers", colleague.Births)
 	}
-	if colleague.Available {
-		t.Error("the colleague reads available on a night her gap is in force")
+	if len(colleague.Unreachable) != 0 {
+		t.Errorf("the colleague's gap on another Client's birth reached her: %+v", colleague.Unreachable)
 	}
-	if colleague.ConcurrentWindows != nil {
-		t.Errorf("the colleague's window count reached the contractor: %d", *colleague.ConcurrentWindows)
+	if colleague.AtOnce != nil {
+		t.Errorf("the colleague's overlaps reached her: %+v", colleague.AtOnce)
 	}
-	self := byID[e.Contractor.ID]
-	if self.ConcurrentWindows == nil || *self.ConcurrentWindows != 1 {
-		t.Errorf("her own count = %v, want 1", self.ConcurrentWindows)
+	body := string(reqtest.ExpectBody(t, http.MethodGet, url, http.StatusOK, asContractor))
+	for _, leak := range append(e.othersFacts(), "wedding") {
+		if strings.Contains(body, leak) {
+			t.Errorf("the contractor's roster carries %q, a fact of a birth she is not on", leak)
+		}
+	}
+}
+
+// TestRoster_AContractorNeverReadsABirthWithNoDoula: a birth nobody is on
+// has no Attachment she could hold, so it is neither a row nor a
+// no-window entry for her, and an Owner reads it as one.
+func TestRoster_AContractorNeverReadsABirthWithNoDoula(t *testing.T) {
+	e := newRosterEnv(t)
+	orphan := e.birthDue("Orla Unstaffed", "2026-10-20")
+	url := e.rosterURL(octFirst, octLast)
+
+	body := string(reqtest.ExpectBody(t, http.MethodGet, url, http.StatusOK, e.As(e.Contractor)))
+
+	if strings.Contains(body, "Orla") || strings.Contains(body, orphan.ID) {
+		t.Errorf("the contractor's roster carries a birth with no Doula: %s", body)
+	}
+	owner := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, url, http.StatusOK, e.As(fixture.Staff(t, e.DB, e.Practice, fixture.Owner())))
+	if !slices.Contains(windowIDs(owner), orphan.ID) {
+		t.Errorf("an Owner's windows = %v, want the birth with no Doula among them", windowIDs(owner))
+	}
+}
+
+// TestRoster_StaffIDOnlyNarrowsAContractorsOwnAnswer: naming a colleague
+// who is on a birth she cannot read, or on none, never widens what she
+// reads; naming herself or a colleague on her birth only narrows.
+func TestRoster_StaffIDOnlyNarrowsAContractorsOwnAnswer(t *testing.T) {
+	e := newRosterEnv(t)
+	asContractor := e.As(e.Contractor)
+
+	for name, staffID := range map[string]string{"a colleague on others' births": e.Employee.ID, "a stranger": "00000000-0000-0000-0000-000000000000", "herself": e.Contractor.ID} {
+		t.Run(name, func(t *testing.T) {
+			url := e.PracticeURL("/on-call?from=" + octFirst + "&to=" + octLast + "&staffId=" + staffID)
+			body := string(reqtest.ExpectBody(t, http.MethodGet, url, http.StatusOK, asContractor))
+			roster := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, url, http.StatusOK, asContractor)
+
+			for _, leak := range e.othersFacts() {
+				if strings.Contains(body, leak) {
+					t.Errorf("staffId widened her answer to %q", leak)
+				}
+			}
+			for _, id := range windowIDs(roster) {
+				if id != e.Ada.ID {
+					t.Errorf("windows = %v, want only her own", windowIDs(roster))
+				}
+			}
+			if staffID == e.Contractor.ID && len(roster.Windows) != 1 {
+				t.Errorf("windows = %v, want her own birth for herself", windowIDs(roster))
+			}
+			if staffID != e.Contractor.ID && len(roster.Windows) != 0 {
+				t.Errorf("windows = %v, want none for a Doula who is not on her birth", windowIDs(roster))
+			}
+		})
 	}
 }
 
@@ -155,13 +229,15 @@ func TestRoster_AmbientReadersReadTheWholePractice(t *testing.T) {
 				roster.NoWindow[0].Reason != oncall.NoWindowNoDueDate {
 				t.Fatalf("noWindow = %+v, want Dot's Engagement with reason no_due_date", roster.NoWindow)
 			}
+			byID := map[string]oncall.RosterDoula{}
 			for _, d := range roster.Doulas {
-				if d.ConcurrentWindows == nil {
-					t.Fatalf("%s has no count; an ambient reader holds every count", d.Name)
-				}
-				if d.StaffID == e.Employee.ID && *d.ConcurrentWindows != 2 {
-					t.Errorf("the employee's count = %d, want 2 concurrent windows (Bea, Cleo)", *d.ConcurrentWindows)
-				}
+				byID[d.StaffID] = d
+			}
+			if got := len(byID[e.Employee.ID].Births); got != 2 {
+				t.Errorf("the employee's births = %d, want 2 (Bea, Cleo)", got)
+			}
+			if got := len(byID[e.Contractor.ID].Births); got != 1 {
+				t.Errorf("the contractor's births = %d, want 1 (Ada)", got)
 			}
 		})
 	}

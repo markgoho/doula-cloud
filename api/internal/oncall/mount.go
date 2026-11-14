@@ -18,6 +18,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, enq tasknudge.Enque
 	g.Get("/api/practices/{practiceId}/engagements/{engagementId}/on-call", staffauth.AnyStaff, EngagementHandler())
 
 	g.Get("/api/practices/{practiceId}/on-call-settings", staffauth.OwnerAndAdmin, GetSettingsHandler())
+	g.Get("/api/practices/{practiceId}/on-call-settings/effect", staffauth.OwnerAndAdmin, GetEffectHandler())
 	ir.ExemptGated("PUT /api/practices/{practiceId}/on-call-settings",
 		"full-replace UPDATE of the Practice's one on-call rule; re-sending the same body writes and records nothing (see PutSettingsHandler)",
 		false, staffauth.OwnerAndAdmin, PutSettingsHandler())

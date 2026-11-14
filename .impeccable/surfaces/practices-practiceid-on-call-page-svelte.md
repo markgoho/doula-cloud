@@ -37,7 +37,7 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page. The
 | Convention | Verdict | Reason |
 | --- | --- | --- |
 | Who is on call now, shown first, with a today marker | Build | PagerDuty: "The user currently on call will be listed with a Now pill to the right of their name." (https://docs.pagerduty.com/incident-management/schedules/schedule-basics); OneUptime's red "Now" line (https://oneuptime.com/docs/en/on-call/schedule-timeline); the journey's 2 a.m. job (`journeys/practice-owner.md:158`). The births on call tonight come first under their own heading, as the Schedule groups a day, each says who holds tonight, and "Tonight" is a choice of days |
-| The reader's own shifts | Build | PagerDuty's My On-Call Shifts (https://docs.pagerduty.com/incident-management/schedules/my-on-call-shifts); When I Work's My Schedule; the Schedule's "Mine", on already for a Doula (#2870); Priya comes "to know where she has to be" (`personas/employed-doula.md:17`) |
+| The reader's own shifts | Build | PagerDuty's My On-Call Shifts (https://docs.pagerduty.com/incident-management/schedules/my-on-call-shifts); When I Work's My Schedule; the Schedule's "Mine", which the nav's link turns on for a Doula while the bare address stays the whole Practice (#2870); Priya comes "to know where she has to be" (`personas/employed-doula.md:17`) |
 | A timeline or calendar grid beside the list | Later (#330) | PagerDuty, OneUptime and When I Work all draw one; it is deferred with #330's calendar, with the Schedule's month view (#2888 takes that reason up); a birth is on call for five weeks, so a list carries it meanwhile |
 | Earlier and later, and back to today | Build | PagerDuty: "Click to move back an iteration of the selected time period, or click to move forward." and "Click Today" (schedule-basics); the Schedule's "Earlier" and "Later" (#2870). "Earlier" stops at today: the roster is "a Practice's live book, not its history" (`roster.go`), so a past day would leave out births since completed and gaps since cleared and answer "was she covered that night" (`GLOSSARY.md:47`) wrongly |
 | Presets for the days | Build | PagerDuty's time period list (1 Day to 30 Days); the Schedule's "Days" radios, with "Tonight" added because this screen's first question is tonight |
@@ -68,6 +68,9 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page. The
 | Who is at a birth now | Later (#428) | nothing records it (RA-G18) |
 | Keyboard shortcuts | Later | one decision for the whole app, as on the Schedule |
 | Density and column choice | Declined | no job on record |
+| A whole-row click target | Have it (#2905) | `DataTable` opens the row's link from a click anywhere on a row that sets `rowHref` |
+| The free Doulas offered where a gap's cover is chosen | Declined | When I Work and Deputy offer available staff for an open shift (unread; one grader's note, 2026-11-14). A covering Doula "must already hold a granted Attachment on that Engagement" and a gap is "never a back door to putting somebody on a birth" (`GLOSSARY.md:47`), so the list is the birth's own Doulas; who is free tonight is the Overview's block and the Doulas table |
+| One place to say "I cannot be reached" across all of a Doula's births | Later | Priya's blind walk reached for it (2026-11-14). A gap is about one birth (`GLOSSARY.md:47`), and the birth's row reaches its form in one action; one interval written to several births at once has no job on record. A ticket carries it |
 | The births as a table at 1280px | Build | the sibling lists draw tables at 1280px; this roster drew cards until 1920px (measured 2026-11-14) |
 
 ## Category baseline: the rule's settings

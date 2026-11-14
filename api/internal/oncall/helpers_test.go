@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/idempotency"
@@ -26,6 +27,8 @@ const (
 	statusSent    = "sent"
 	statusSkipped = "skipped"
 	fieldWeek     = "startWeek"
+	fieldFrom     = "from"
+	adaWhitfield  = "Ada Whitfield"
 )
 
 // The fixture calendar, named once. Every date test in this package
@@ -44,6 +47,11 @@ const (
 	grantedOn      = "2026-06-01"
 	birthDue       = "2026-10-30"
 )
+
+// sceneNow is the instant every request is served at unless a test moves
+// it: noon at the Practice on 2026-10-01, the first day of the fixture
+// calendar, so a roster can start on any day from there.
+var sceneNow = time.Date(2026, time.October, 1, 16, 0, 0, 0, time.UTC)
 
 // env is what almost every test in this package starts from: a Practice
 // with this package's whole surface mounted on a server, its Owner at the
@@ -83,7 +91,7 @@ func newBareEnv(t *testing.T, opts ...fixture.SceneOption) *env {
 	mount := func(g *staffauth.GatedRouter, ir *idempotency.Router, _ *sql.DB) {
 		oncall.Mount(g, ir, e.enq)
 	}
-	e.Scene = fixture.NewScene(t, mount, opts...)
+	e.Scene = fixture.NewScene(t, mount, append([]fixture.SceneOption{fixture.At(sceneNow)}, opts...)...)
 	return e
 }
 
@@ -96,7 +104,7 @@ func newEnv(t *testing.T, opts ...envOption) *env {
 	e := newBareEnv(t, fixture.InPractice(fixture.PracticeName(spec.practiceName)), fixture.SignedInAs(fixture.Owner()))
 	e.Doula = e.Colleague(fixture.StaffName("Maya Primary"))
 	e.Birth = e.AnotherEngagement(
-		fixture.NewClient(fixture.ClientName("Ada Whitfield")),
+		fixture.NewClient(fixture.ClientName(adaWhitfield)),
 		fixture.Status(fixture.StatusActive), fixture.DueDate(spec.dueDate), fixture.WithDoula(e.Doula))
 	return e
 }
@@ -158,6 +166,13 @@ func (e *env) count(query string, args ...any) int {
 func (e *env) roster(from, to string) oncall.RosterResponse {
 	e.T.Helper()
 	return reqtest.Expect[oncall.RosterResponse](e.T, http.MethodGet, e.rosterURL(from, to), http.StatusOK, e.SignedIn)
+}
+
+// rosterQuery is the Owner's read of the roster with query appended, such
+// as "?cover=needed".
+func (e *env) rosterQuery(query string) oncall.RosterResponse {
+	e.T.Helper()
+	return reqtest.Expect[oncall.RosterResponse](e.T, http.MethodGet, e.PracticeURL("/on-call"+query), http.StatusOK, e.SignedIn)
 }
 
 // panel is the Owner's read of the birth's on-call panel.

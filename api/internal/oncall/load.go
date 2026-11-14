@@ -59,6 +59,27 @@ type engagementOnCall struct {
 	window     *Window
 	reason     NoWindowReason
 	doulas     []attachedDoula
+	ownStart   *OwnStart
+	noDoula    bool
+}
+
+// OwnStart is the start rule one Engagement carries of its own, over the
+// Practice's. The week is absent under the grant-day rule.
+type OwnStart struct {
+	StartRule StartRule `json:"startRule"`
+	StartWeek *int      `json:"startWeek,omitempty"`
+}
+
+func ownStartOf(rule sql.NullString, week sql.NullInt16) *OwnStart {
+	if !rule.Valid {
+		return nil
+	}
+	own := &OwnStart{StartRule: StartRule(rule.String)}
+	if week.Valid {
+		w := int(week.Int16)
+		own.StartWeek = &w
+	}
+	return own
 }
 
 // engagementsFilter narrows loadEngagements. Both fields are the empty
@@ -70,6 +91,11 @@ type engagementsFilter struct {
 	contractorStaffID string
 	// engagementID confines the read to one Engagement.
 	engagementID string
+	// unattendedOn, when set, also reads the live births nobody holds a
+	// granted Attachment on, each derived as though a Doula were put on it
+	// that day (YYYY-MM-DD): the days a birth with no Doula yet would be
+	// on call.
+	unattendedOn string
 }
 
 // engagementsSelect reads every live (not completed) birth Engagement at the Practice
@@ -86,17 +112,20 @@ type engagementsFilter struct {
 //
 // $2 is the contractor narrowing and $3 the one-Engagement narrowing,
 // each "NULL, or it matches" -- the same NULL-able parameter form
-// visit.scheduleSelect uses, so no clause is assembled at run time.
+// visit.scheduleSelect uses, so no clause is assembled at run time. $4
+// admits the births nobody is granted on, one row each with a NULL
+// Attachment; a contractor's narrowing refuses those rows by itself.
 const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.preferred_name, cl.family_name,
 	       e.due_date::text, e.pregnancy_ended_on::text,
 	       e.on_call_start_rule::text, e.on_call_start_week,
 	       ea.staff_id, s.name, ea.attached_at, ea.on_call_from::text, ea.on_call_to::text
 	  FROM engagements e
 	  JOIN clients cl ON cl.id = e.client_id
-	  JOIN engagement_attachments ea
+	  LEFT JOIN engagement_attachments ea
 	    ON ea.engagement_id = e.id AND ea.state = 'granted'
 	  LEFT JOIN staff s ON s.id = ea.staff_id
 	 WHERE e.practice_id = $1
+	   AND ($4::boolean OR ea.staff_id IS NOT NULL)
 	   AND e.status <> 'completed'
 	   AND e.kind = 'birth'
 	   AND ($2::uuid IS NULL OR EXISTS (
@@ -110,7 +139,7 @@ const engagementsSelect = `SELECT e.id, e.status::text, cl.given_name, cl.prefer
 // no particular order.
 func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, settings practiceSettings, filter engagementsFilter) ([]engagementOnCall, error) {
 	rows, err := tx.QueryContext(ctx, engagementsSelect,
-		practiceID, nullableID(filter.contractorStaffID), nullableID(filter.engagementID))
+		practiceID, nullableID(filter.contractorStaffID), nullableID(filter.engagementID), filter.unattendedOn != "")
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("oncall: list on-call engagements: %w", err)
@@ -127,16 +156,20 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 			overrideRule              sql.NullString
 			overrideWeek              sql.NullInt16
 			doula                     attachedDoula
+			staffID                   sql.NullString
+			attachedAt                sql.NullTime
 			narrowFrom, narrowTo      sql.NullString
 		)
 		if err := rows.Scan(&id, &status, &givenName, &preferredName, &familyName, &dueDate, &endedOn,
 			&overrideRule, &overrideWeek,
-			&doula.staffID, &staffName, &doula.attachedAt, &narrowFrom, &narrowTo); err != nil {
+			&staffID, &staffName, &attachedAt, &narrowFrom, &narrowTo); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("oncall: scan on-call engagement: %w", err)
 		}
+		doula.staffID = staffID.String
+		doula.attachedAt = attachedAt.Time
 		doula.name = staffName.String
-		if !staffName.Valid {
+		if staffID.Valid && !staffName.Valid {
 			// coverage:ignore reason: an open Attachment ends with its Membership, so its staff row is always visible
 			doula.name = activity.DepartedStaffName
 		}
@@ -153,11 +186,16 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 				clientName: personname.Full(givenName, preferredName.String, familyName.String),
 				dueDate:    nullString(dueDate),
 				rule:       settings.rule.Resolve(nullString(overrideRule), week),
+				ownStart:   ownStartOf(overrideRule, overrideWeek),
+				noDoula:    !staffID.Valid,
 			})
 			// The first row of each Engagement carries its earliest
 			// Attachment (the ORDER BY), which is what the grant-date
 			// rule opens on.
 			granted := doula.attachedAt.In(settings.zone).Format(dateLayout)
+			if !staffID.Valid {
+				granted = filter.unattendedOn
+			}
 			current := &out[len(out)-1]
 			current.window, current.reason = DeriveWindow(WindowInput{
 				Kind:             KindBirth,
@@ -167,9 +205,14 @@ func loadEngagements(ctx context.Context, tx *sql.Tx, practiceID string, setting
 				FirstGrantedOn:   &granted,
 				Rule:             current.rule,
 			})
+			if current.noDoula && current.reason == NoWindowNoDueDate {
+				current.reason = NoWindowNoDueDateNoDoula
+			}
 		}
 		current := &out[len(out)-1]
-		current.doulas = append(current.doulas, doula)
+		if staffID.Valid {
+			current.doulas = append(current.doulas, doula)
+		}
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests

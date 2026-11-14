@@ -36,6 +36,30 @@ async function setup(overrides: SetupOptions = {}) {
 }
 
 describe('FormPage.svelte', () => {
+	it('draws a back link that names where it goes, above the error summary and the title', async () => {
+		await setup({ backHref: '/practices/p1/settings', backLabel: 'Settings', errorSummary: textSnippet('There is a problem') });
+
+		const back = page.getByRole('link', { name: 'Settings' });
+		await expect.element(back).toBeVisible();
+		await expect.element(back).toHaveAttribute('href', '/practices/p1/settings');
+		const summary = page.getByText('There is a problem').element();
+		const title = page.getByRole('heading', { level: 1, name: 'New client' }).element();
+		expect(back.element().compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(back.element().compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('draws the back link while the page is still loading', async () => {
+		await setup({ backHref: '/practices/p1/settings', read: { status: 'loading', label: 'Loading the form' } });
+
+		await expect.element(page.getByRole('link', { name: 'Back' })).toBeVisible();
+	});
+
+	it('draws no back link when none is given', async () => {
+		await setup();
+
+		expect(page.getByRole('link').elements()).toHaveLength(0);
+	});
+
 	it('renders the title as the page h1', async () => {
 		await setup();
 

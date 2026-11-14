@@ -37,11 +37,11 @@ func TestRoster_WindowIsDerivedAndMovesWithTheDueDate(t *testing.T) {
 
 func TestRoster_TheGrantDateRuleAndAPerEngagementOverride(t *testing.T) {
 	e := newEnv(t)
-	e.Exec(`UPDATE engagement_attachments SET attached_at = '2026-06-01T15:00:00Z' WHERE engagement_id = $1`, e.Birth.ID)
+	e.Exec(`UPDATE engagement_attachments SET attached_at = '2026-10-03T15:00:00Z' WHERE engagement_id = $1`, e.Birth.ID)
 
 	e.Exec(`UPDATE practices SET on_call_start_rule = 'attachment_granted' WHERE id = $1`, e.Practice.ID)
-	if got := e.roster(grantedOn, "2026-06-30"); len(got.Windows) != 1 || got.Windows[0].Window.Start != grantedOn {
-		t.Fatalf("under the grant-date rule, windows = %+v, want one opening 2026-06-01", got.Windows)
+	if got := e.roster(octFirst, octTwenty); len(got.Windows) != 1 || got.Windows[0].Window.Start != "2026-10-03" {
+		t.Fatalf("under the grant-date rule, windows = %+v, want one opening 2026-10-03", got.Windows)
 	}
 
 	e.Exec(`UPDATE engagements SET on_call_start_rule = 'gestational_week', on_call_start_week = 38 WHERE id = $1`, e.Birth.ID)
@@ -138,29 +138,54 @@ func TestRoster_RefusesAMalformedRange(t *testing.T) {
 	e := newEnv(t)
 
 	tests := []struct {
-		name  string
-		query string
-		want  string
+		name    string
+		query   string
+		message string
+		details map[string]string
 	}{
-		{"a from that is not a date", "?from=tomorrow", oncall.MsgInvalidFrom},
-		{"a to that is not a date", "?from=2026-10-01&to=soon", oncall.MsgInvalidTo},
-		{"a range that ends before it starts", "?from=2026-10-10&to=2026-10-01", oncall.MsgEmptyRange},
-		{"a range longer than the roster reads", "?from=2026-01-01&to=2026-12-31", oncall.MsgRangeTooLong},
+		{"a from that is not a date", "?from=tomorrow", oncall.MsgDaysNotShown, map[string]string{fieldFrom: oncall.MsgEnterFromDay}},
+		{"a to that is not a date", "?from=2026-10-01&to=soon", oncall.MsgDaysNotShown, map[string]string{"to": oncall.MsgEnterToDay}},
+		{"both days that are not dates", "?from=a&to=b", oncall.MsgDaysNotShown, map[string]string{fieldFrom: oncall.MsgEnterFromDay, "to": oncall.MsgEnterToDay}},
+		{"a from before today", "?from=2026-09-30&to=2026-10-05", oncall.MsgDaysNotShown, map[string]string{fieldFrom: oncall.MsgFromBeforeToday}},
+		{"a to alone that is before today", "?to=2026-09-30", oncall.MsgDaysNotShown, map[string]string{"to": oncall.MsgToBeforeFrom}},
+		{"a range that ends before it starts", "?from=2026-10-10&to=2026-10-02", oncall.MsgDaysNotShown, map[string]string{"to": oncall.MsgToBeforeFrom}},
+		{"a range longer than the roster reads", "?from=2026-10-01&to=2027-01-02", oncall.MsgDaysNotShown, map[string]string{"to": oncall.MsgRangeTooLong}},
+		{"an order the list does not offer", "?order=oldest", oncall.MsgRosterNotShown, map[string]string{"order": oncall.MsgUnknownOrder}},
+		{"a cover value the list does not offer", "?cover=all", oncall.MsgRosterNotShown, map[string]string{"cover": oncall.MsgUnknownCover}},
+		{"a range fault and an order together", "?from=x&order=y", oncall.MsgDaysNotShown, map[string]string{fieldFrom: oncall.MsgEnterFromDay, "order": oncall.MsgUnknownOrder}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := reqtest.Expect[refusal](t, http.MethodGet, e.PracticeURL("/on-call"+tt.query), http.StatusBadRequest, e.SignedIn)
-			if got.Message != tt.want {
-				t.Errorf("message = %v, want %q", got.Message, tt.want)
+			if got.Message != tt.message {
+				t.Errorf("message = %v, want %q", got.Message, tt.message)
+			}
+			if len(got.Details) != len(tt.details) {
+				t.Errorf("details = %v, want %v", got.Details, tt.details)
+			}
+			for key, want := range tt.details {
+				if got.Details[key] != want {
+					t.Errorf("details[%s] = %v, want %q", key, got.Details[key], want)
+				}
 			}
 		})
+	}
+}
+
+func TestRoster_TheLastDayOfTheLongestRangeIsAccepted(t *testing.T) {
+	e := newEnv(t)
+
+	got := e.roster(octFirst, "2026-12-31")
+
+	if got.From != octFirst || got.To != "2026-12-31" {
+		t.Fatalf("range = %s..%s, want the 92 days from 2026-10-01", got.From, got.To)
 	}
 }
 
 func TestRoster_DefaultsToTodayInThePracticeZone(t *testing.T) {
 	e := newEnv(t)
 	loc, _ := time.LoadLocation(zone)
-	today := time.Now().In(loc).Format("2006-01-02")
+	today := sceneNow.In(loc).Format("2006-01-02")
 
 	got := reqtest.Expect[oncall.RosterResponse](t, http.MethodGet, e.PracticeURL("/on-call"), http.StatusOK, e.SignedIn)
 

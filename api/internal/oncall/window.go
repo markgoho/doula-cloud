@@ -91,6 +91,10 @@ const (
 	// NoWindowEndedBeforeStart: the pregnancy ended before the window
 	// would have opened -- an early birth under a gestational rule.
 	NoWindowEndedBeforeStart NoWindowReason = "ended_before_start"
+	// NoWindowNoDueDateNoDoula is the roster's own reading of a birth with
+	// no due date and nobody on it: the days it would be on call cannot be
+	// resolved either.
+	NoWindowNoDueDateNoDoula NoWindowReason = "no_due_date_no_doula"
 )
 
 // WindowInput is every fact one Engagement's window is derived from, as

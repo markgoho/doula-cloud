@@ -42,6 +42,12 @@ async function setup(loadResponse: Response) {
 }
 
 describe('the Timezone screen', () => {
+	it('links back to the settings hub', async () => {
+		await setup(jsonResponse({ timezone: 'America/Denver' }));
+
+		await expect.element(testPage.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '/practices/practice-1/settings');
+	});
+
 	it('opens on the zone the Practice holds', async () => {
 		await setup(jsonResponse({ timezone: 'America/Denver' }));
 

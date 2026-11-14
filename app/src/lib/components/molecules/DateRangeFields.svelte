@@ -21,9 +21,23 @@
 		 * the range ("Both days are included."). Absent, no hint is drawn.
 		 */
 		hint?: string;
+		/**
+		 * The first day either box accepts (`YYYY-MM-DD`, the native `min`):
+		 * the browser's picker disables the days before it and its own validity
+		 * check names them. Absent, any day. The On call roster passes
+		 * today, because it lists only births still to come; the screen
+		 * still words the refusal, as the browser's is a tooltip.
+		 */
+		earliest?: string;
+		/**
+		 * The last day either box accepts (`YYYY-MM-DD`, the native `max`).
+		 * Absent, any day. The On call roster passes the From day plus 91,
+		 * its longest range.
+		 */
+		latest?: string;
 	}
 
-	let { from = $bindable(), to = $bindable(), fromError, toError, hint }: Properties = $props();
+	let { from = $bindable(), to = $bindable(), fromError, toError, hint, earliest, latest }: Properties = $props();
 
 	const generatedId = $props.id();
 	const hintId = `${generatedId}-range-hint`;
@@ -56,6 +70,8 @@
 					invalid={Boolean(fromError)}
 					type="date"
 					name="from"
+					min={earliest}
+					max={latest}
 					value={from}
 					onInput={(value) => (from = value)}
 				/>
@@ -69,6 +85,8 @@
 					invalid={Boolean(toError)}
 					type="date"
 					name="to"
+					min={earliest}
+					max={latest}
 					value={to}
 					onInput={(value) => (to = value)}
 				/>

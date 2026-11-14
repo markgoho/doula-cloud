@@ -8,7 +8,7 @@
  * on the screen, and they are the sentences the product actually says.
  */
 import { jsonResponse } from '#lib/testResponse.js';
-import type { OnCallSettings } from '#lib/onCall.js';
+import type { OnCallSettings } from '#lib/onCallRule.js';
 import type { RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
