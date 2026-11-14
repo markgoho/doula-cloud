@@ -36,7 +36,9 @@ describe('Badge.svelte', () => {
 		expect(svg).toBeInTheDocument();
 		expect(svg).toHaveAttribute('aria-hidden', 'true');
 	});
+});
 
+describe('Badge.svelte icon prop (#2891)', () => {
 	it('draws the icon it is given in place of its variant icon', async () => {
 		const own = await render(Icon, { name: 'receipt', size: 16 });
 		const drawn = own.container.getHTML();
