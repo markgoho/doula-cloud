@@ -620,6 +620,8 @@ describe('paging', () => {
 		await expect
 			.element(testPage.getByRole('alert'))
 			.toHaveTextContent('More Visits did not load. Nothing you saved is lost. Try again.');
+		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		expect(testPage.getByText('invalid cursor').elements()).toHaveLength(0);
 		await expect.element(testPage.getByRole('link', { name: /^Anne-Marie/ })).toBeVisible();
 	});

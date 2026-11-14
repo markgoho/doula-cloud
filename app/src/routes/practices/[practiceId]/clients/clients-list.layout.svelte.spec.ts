@@ -375,6 +375,14 @@ async function lefts(queries: Record<string, string>, body: unknown, width: numb
 	return result;
 }
 
+const datedPage = (dueDate: string) => ({
+	items: seedLikeClients.map((client) => ({
+		...client,
+		openEngagements: client.openEngagements?.map((line) => (line.dueDate ? { ...line, dueDate } : line))
+	})),
+	hasMore: false
+});
+
 describe('the columns between filter states', () => {
 	const shortest = seedLikeClients.toSorted((a, b) => a.name.length - b.name.length)[0]!;
 
@@ -395,6 +403,48 @@ describe('the columns between filter states', () => {
 		}
 		expect(Object.keys(states.doula)).not.toContain('Doula');
 		expect(Object.keys(states.noContract)).not.toContain('Money');
+	});
+
+	// The Date column is held at its longest value, so a page whose rows say a shorter day
+	// leaves Money and Doula where a page with the longest one has them (#2862).
+	it('keeps every column at one x under each of the four orders, whatever the dates on the page', async () => {
+		const orders = [
+			['', datedPage('2027-05-17')],
+			['name', datedPage('2027-03-03')],
+			['name-desc', datedPage('2027-03-03')],
+			['owed', datedPage('2026-12-03')]
+		] as const;
+		const byOrder: Record<string, Record<string, number>> = {};
+		for (const [order, body] of orders) {
+			byOrder[order || 'default'] = await lefts(order ? { order } : {}, body, 1280);
+		}
+		const first = byOrder.default!;
+		for (const [order, columns] of Object.entries(byOrder)) {
+			for (const [column, left] of Object.entries(first)) {
+				expect(Math.abs(columns[column]! - left), `${column} moved under ${order}: ${JSON.stringify(byOrder)}`).toBeLessThanOrEqual(0.5);
+			}
+		}
+	});
+
+	// Five Doulas on one Engagement (#2862): a second name folds the cell into the first name and a count, so
+	// the table stays inside its frame from the floor to the widest window, and a screen reader hears all five.
+	it.each([880, 960, 1024, 1180, 1280, 1440, 1920])('draws no sideways scroll when one Client has five Doulas, at %ipx', async (width) => {
+		const five = ['Renata Alvarez', 'Charlene Boateng', 'Bethany Kroll', 'Aditi Sundaram', 'Marisol Terrazas'];
+		const items = seedLikeClients.map((client, index) =>
+			index === 1
+				? { ...client, openEngagements: client.openEngagements?.map((line) => ({ ...line, doulaNames: five })) }
+				: client
+		);
+		await renderListScreen({ width, height: 900, respond: () => jsonResponse({ items, hasMore: false }) });
+		await ready();
+
+		expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth);
+		const frame = document.querySelector('.clients-table')!.getBoundingClientRect();
+		const tableBox = document.querySelector('table.table-view')!.getBoundingClientRect();
+		if (isTableShown()) expect(tableBox.right, `a ${Math.round(tableBox.width)}px table in ${Math.round(frame.width)}px`).toBeLessThanOrEqual(frame.right + 0.5);
+		const row = [...document.querySelectorAll('table.table-view tbody tr')].find((one) => one.textContent!.includes('Marisol Terrazas'))!;
+		expect(row.textContent).toContain(five.join(', '));
+		expect(row.querySelector(':scope .doula-names [aria-hidden="true"]')!.textContent).toContain('Renata Alvarez +4 more');
 	});
 
 	// At 1024px the fields, with Order (#2869), leave Apply's line no room for a tag and "Clear

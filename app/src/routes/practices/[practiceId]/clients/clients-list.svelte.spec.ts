@@ -1983,6 +1983,8 @@ describe('a "Load more" already in flight when the filter changes', () => {
 		await expect
 			.element(testPage.getByText('More Clients did not load. Nothing you saved is lost. Try again.'))
 			.toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Try again' })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('the practice is gone')).not.toBeInTheDocument();
 		// #506: a failed "Load more" used to route through the same `error`
 		// state as the initial load, replacing the whole table with a bare

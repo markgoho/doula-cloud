@@ -587,14 +587,24 @@ import type { PageProps as PageProperties } from './$types';
 
 	// One entry per open Engagement. Where a Client holds more than one,
 	// each names its kind, so a name is never read against the wrong one.
-	// Two Doulas on one Engagement run on one line, comma-joined, and wrap only
-	// when the column has no room left.
-	type DoulaLine = { engagementId: string; prefix: string; text: string };
+	// In the table, a second name folds the list into the first name and a count
+	// ('+1 more'), so the Doula column is as wide as one name however many a
+	// Client has; a screen reader hears every name, and a card, which wraps,
+	// says them all.
+	const DOULA_NAMES_SHOWN = 1;
+	type DoulaLine = { engagementId: string; prefix: string; text: string; shown: string; moreCount: number };
 	function doulaLines(client: ClientListItem): DoulaLine[] {
 		const lines = client.openEngagements ?? [];
 		return lines.map((line) => {
 			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
-			return { engagementId: line.engagementId, prefix, text: `${prefix}${doulaNamesText(line)}` };
+			const names = line.doulaNames ?? [];
+			return {
+				engagementId: line.engagementId,
+				prefix,
+				text: `${prefix}${doulaNamesText(line)}`,
+				shown: `${prefix}${names.slice(0, DOULA_NAMES_SHOWN).join(', ')}`,
+				moreCount: Math.max(0, names.length - DOULA_NAMES_SHOWN)
+			};
 		});
 	}
 
@@ -694,8 +704,8 @@ import type { PageProps as PageProperties } from './$types';
 	// wraps only where the frame runs out (`columnWidths="one-line"`). A Client
 	// with two Engagements stacks hers by design.
 	const columnSet = {
-		name: { label: 'Name', accessor: (client: ClientListItem) => client.name },
-		status: { label: 'Status', accessor: statusText, content: statusCell, grows: true },
+		name: { label: 'Name', accessor: (client: ClientListItem) => client.name, track: '15ch' },
+		status: { label: 'Status', accessor: statusText, content: statusCell, grows: true, track: '32ch' },
 		money: {
 			label: 'Money',
 			numeric: true,
@@ -709,6 +719,9 @@ import type { PageProps as PageProperties } from './$types';
 			// Left-aligned like the words around it: dates are read, not summed,
 			// and right-aligned they ran into the Doula's name beside them.
 			label: 'Date',
+			// "11 weeks postpartum", the longest a live birth reads, so the Doula
+			// starts at one place under every order.
+			track: 'calc(17.4ch + 2 * var(--data-table-cell-inset))',
 			accessor: (client: ClientListItem) =>
 				dueLines(client)
 					.map((line) => line.text)
@@ -961,7 +974,7 @@ import type { PageProps as PageProperties } from './$types';
 <!-- Between the floor and the width the Doula column fits, the column is not drawn and her name sits under the Date, so the table keeps every column's words. Not drawn at all from the wide band, and the table's own Doula cell is not drawn below it, so a screen reader hears her once. -->
 {#snippet foldedDoula(line: DoulaLine | undefined)}
 	{#if line}
-		<span class="folded-doula"><span class="visually-hidden">Doula: </span><span class="doula-names">{line.text}</span></span>
+		<span class="folded-doula"><span class="visually-hidden">Doula: </span>{@render doulaNames(line, 'table')}</span>
 	{/if}
 {/snippet}
 
@@ -969,7 +982,7 @@ import type { PageProps as PageProperties } from './$types';
 	{line.prefix}{#if line.postpartum}<time class="date postpartum" datetime={line.bornOn}>{line.postpartum}<span class="visually-hidden">, born {line.day}</span></time>{:else if line.day}<span class="date"><span class="lead">{line.lead}</span> <span>{line.day}</span></span>{:else}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_DUE_DATE}</span>{/if}
 {/snippet}
 
-{#snippet doulaCell(client: ClientListItem)}
+{#snippet doulaCell(client: ClientListItem, view: DataTableView)}
 	<!--
 		#2232: one line per open Engagement, in the Status cell's order, so
 		a Client with two reads as two. Nothing for a Client with none, and
@@ -978,18 +991,22 @@ import type { PageProps as PageProperties } from './$types';
 	-->
 	{@const lines = doulaLines(client)}
 	{#if lines.length === 1}
-		{@render doulaNames(lines[0])}
+		{@render doulaNames(lines[0], view)}
 	{:else if lines.length > 1}
 		<ul class="status-list">
 			{#each lines as line (line.engagementId)}
-				<li>{@render doulaNames(line)}</li>
+				<li>{@render doulaNames(line, view)}</li>
 			{/each}
 		</ul>
 	{/if}
 {/snippet}
 
-{#snippet doulaNames(line: DoulaLine)}
-	<span class="doula-names">{line.text}</span>
+{#snippet doulaNames(line: DoulaLine, view: DataTableView)}
+	{#if view === 'table' && line.moreCount > 0}
+		<span class="doula-names"><span aria-hidden="true">{line.shown} +{line.moreCount} more</span><span class="visually-hidden">{line.text}</span></span>
+	{:else}
+		<span class="doula-names">{line.text}</span>
+	{/if}
 {/snippet}
 
 {#snippet moneyCell(client: ClientListItem)}
@@ -1230,6 +1247,7 @@ import type { PageProps as PageProperties } from './$types';
 				columnWidths="one-line"
 				{orderedBy}
 				recordLayout="compact"
+				recordColumns="fill"
 				describedBy={isContractor ? undefined : RESULT_ID}
 				{isBusy}
 				{emptyAction}
@@ -1271,37 +1289,12 @@ import type { PageProps as PageProperties } from './$types';
 		   `DataTable.svelte`'s floor comment says why a floor can be the route's. */
 		.clients-table {
 			container: clients-table / inline-size;
-			/* The room a cell keeps either side, so two columns are two insets apart. */
-			--data-table-cell-inset: var(--space-2);
-			/* The Name column's least width, a long two-word name, so what follows it
-			   starts at one place whichever Clients the page holds; a longer name
-			   widens it. */
-			--name-track: 15ch;
-			/* The Status column's width (`grows`): its busiest line on one line, and no
-			   wider, so a wide window leaves no gap between the status words and the Money. */
-			--data-table-grows-track: 32ch;
 		}
 
 		.clients-table > :global(*) {
 			font-size: var(--text-body-size);
 			--data-table-table-display: none;
 			--data-table-records-display: grid;
-		}
-
-		.clients-table :global(.table-view :is(th, td):first-child) {
-			min-inline-size: var(--name-track);
-		}
-
-		/* Records fill the container, in as many columns as it holds. */
-		.clients-table :global(.record-view) {
-			grid-template-columns: repeat(auto-fill, minmax(min(100%, 38ch), 1fr));
-			gap: var(--space-related);
-			align-items: start;
-		}
-
-		.clients-table :global(.record-view .record) {
-			max-inline-size: none;
-			margin-block-start: 0;
 		}
 
 		.folded-doula {

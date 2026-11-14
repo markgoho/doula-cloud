@@ -2,7 +2,7 @@ import { createRawSnippet } from 'svelte';
 import type { CDPSession } from '@vitest/browser-playwright';
 import { cdp, page, userEvent } from 'vitest/browser';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { render } from 'vitest-browser-svelte';
+import { cleanup, render } from 'vitest-browser-svelte';
 import DataTable, { type DataTableView } from './DataTable.svelte';
 import { findDuplicateIds } from '#lib/duplicateIds.js';
 // The record-view switch depends on the frame (a <stack-l>) actually
@@ -132,7 +132,7 @@ const linkContentColumns = [
 ];
 
 interface SetupOptions {
-	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean }[];
+	columns?: { label: string; accessor: (row: Row) => string; numeric?: boolean; grows?: boolean; track?: string }[];
 	rows?: Row[];
 	rowHref?: (row: Row) => string;
 	rowLinkLabel?: (row: Row) => string;
@@ -149,6 +149,7 @@ interface SetupOptions {
 	isBusy?: boolean;
 	columnWidths?: 'content' | 'even' | 'one-line';
 	recordLayout?: 'list' | 'compact';
+	recordColumns?: 'auto' | 'fill' | 'one';
 }
 
 /*
@@ -179,7 +180,8 @@ async function setup({
 	hasRowHeader,
 	isBusy,
 	columnWidths,
-	recordLayout
+	recordLayout,
+	recordColumns
 }: SetupOptions = {}) {
 	await page.viewport(...WIDE);
 	const { container } = await render(DataTable<Row>, {
@@ -202,9 +204,35 @@ async function setup({
 		hasRowHeader,
 		isBusy,
 		columnWidths,
-		recordLayout
+		recordLayout,
+		recordColumns
 	});
 	return { container };
+}
+
+async function secondColumnLeft(values: string[]) {
+	const { container } = await setup({
+		columns: [
+			{ label: 'Name', accessor: (row: Row) => row.name, track: '20ch' },
+			{ label: 'Status', accessor: (row: Row) => row.status }
+		],
+		rows: values.map((name) => ({ ...rows[0]!, name })),
+		columnWidths: 'one-line',
+		caption: 'People'
+	});
+	await document.fonts.ready;
+	const left = container.querySelectorAll(':scope thead th')[1]!.getBoundingClientRect().left;
+	cleanup();
+	return left;
+}
+
+async function cardsAcross(recordColumns: 'one' | 'fill') {
+	await setup({ recordColumns, caption: 'People' });
+	await page.viewport(850, 900);
+	const cards = [...document.querySelectorAll('.record-view .record')].map((card) => card.getBoundingClientRect());
+	expect(cards[0]!.width).toBeGreaterThan(0);
+	cleanup();
+	return cards.filter((card) => Math.abs(card.top - cards[0]!.top) <= 1).length;
 }
 
 describe('DataTable.svelte', () => {
@@ -277,56 +305,55 @@ describe('DataTable.svelte', () => {
 	});
 
 	it('stops a one-line table where its columns are satisfied, every fact on one line, the growing column at its track', async () => {
-		document.body.style.setProperty('--data-table-grows-track', '30ch');
-		try {
-			const { container } = await setup({
-				columns: [
-					{ label: 'Name', accessor: (row: Row) => row.name },
-					{ label: 'Status', accessor: (row: Row) => row.status, grows: true }
-				],
-				columnWidths: 'one-line',
-				caption: 'People'
-			});
+		const { container } = await setup({
+			columns: [
+				{ label: 'Name', accessor: (row: Row) => row.name },
+				{ label: 'Status', accessor: (row: Row) => row.status, grows: true, track: '30ch' }
+			],
+			columnWidths: 'one-line',
+			caption: 'People'
+		});
 
-			await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
-			await document.fonts.ready;
-			const table = container.querySelector('table')!.getBoundingClientRect();
-			// A wide frame's room is left after the table, never spread between a name and its status.
-			expect(table.width).toBeLessThan(WIDE[0] / 2);
-			const status = page.getByRole('columnheader', { name: 'Status' }).element();
-			const track = Number(getComputedStyle(status).fontSize.replace('px', '')) * 30 * 0.5;
-			expect(status.getBoundingClientRect().width).toBeGreaterThan(track);
-			for (const header of page.getByRole('rowheader').elements()) {
-				const range = document.createRange();
-				range.selectNodeContents(header);
-				expect(range.getClientRects()).toHaveLength(1);
-			}
-		} finally {
-			document.body.style.removeProperty('--data-table-grows-track');
+		await expect.element(page.getByRole('columnheader', { name: 'Name' })).toBeVisible();
+		await document.fonts.ready;
+		const table = container.querySelector('table')!.getBoundingClientRect();
+		// A wide frame's room is left after the table, never spread between a name and its status.
+		expect(table.width).toBeLessThan(WIDE[0] / 2);
+		const status = page.getByRole('columnheader', { name: 'Status' }).element();
+		const track = Number(getComputedStyle(status).fontSize.replace('px', '')) * 30 * 0.5;
+		expect(status.getBoundingClientRect().width).toBeGreaterThan(track);
+		for (const header of page.getByRole('rowheader').elements()) {
+			const range = document.createRange();
+			range.selectNodeContents(header);
+			expect(range.getClientRects()).toHaveLength(1);
 		}
 	});
 
 	it('keeps a growing value longer than its track on one line while the frame has room', async () => {
-		document.body.style.setProperty('--data-table-grows-track', '5ch');
-		try {
-			await setup({
-				columns: [
-					{ label: 'Status', accessor: (row: Row) => row.status },
-					{ label: 'Name', accessor: (row: Row) => row.name, grows: true }
-				],
-				columnWidths: 'one-line',
-				caption: 'People'
-			});
+		await setup({
+			columns: [
+				{ label: 'Status', accessor: (row: Row) => row.status },
+				{ label: 'Name', accessor: (row: Row) => row.name, grows: true, track: '5ch' }
+			],
+			columnWidths: 'one-line',
+			caption: 'People'
+		});
 
-			await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
-			for (const cell of page.getByRole('cell').elements()) {
-				const range = document.createRange();
-				range.selectNodeContents(cell);
-				expect(range.getClientRects()).toHaveLength(1);
-			}
-		} finally {
-			document.body.style.removeProperty('--data-table-grows-track');
+		await expect.element(page.getByRole('cell', { name: 'Ada Lovelace' })).toBeVisible();
+		for (const cell of page.getByRole('cell').elements()) {
+			const range = document.createRange();
+			range.selectNodeContents(cell);
+			expect(range.getClientRects()).toHaveLength(1);
 		}
+	});
+
+	it('holds a column at its track whatever its rows say, so the columns after it start at one x', async () => {
+		expect(await secondColumnLeft(['Ada'])).toBeCloseTo(await secondColumnLeft(['Ada Lovelace']), 0);
+	});
+
+	it('draws one card to a line at every width when recordColumns is one, and two where the frame holds two when it is fill', async () => {
+		expect(await cardsAcross('one')).toBe(1);
+		expect(await cardsAcross('fill')).toBeGreaterThan(1);
 	});
 
 	it('moves no column left of the growing one when a column right of it is left out of a one-line table', async () => {
@@ -611,7 +638,7 @@ describe('DataTable.svelte', () => {
 		await rerender({ isLoadingMore: false, loadMoreError: 'Failed to load more records' });
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
-		await expect.element(button).toHaveFocus();
+		await expect.element(page.getByRole('button', { name: 'Try again' })).toHaveFocus();
 		expect(onLoadMore).toHaveBeenCalledOnce();
 	});
 
@@ -644,7 +671,8 @@ describe('DataTable.svelte', () => {
 
 		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to load more records');
 		await expect.element(page.getByRole('rowheader', { name: 'Ada Lovelace' })).toBeVisible();
-		await expect.element(page.getByRole('button', { name: 'Load more' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Try again' })).toBeVisible();
+		await expect.element(page.getByRole('button', { name: 'Load more' })).not.toBeInTheDocument();
 	});
 
 	it('renders no loadMoreError notice when it is omitted', async () => {
