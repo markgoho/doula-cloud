@@ -249,6 +249,7 @@
 
 	function seedDrafts() {
 		isStepped = view.chosen !== undefined && (isStepped || steppedKey === wantedKey);
+		steppedKey = undefined;
 		draftChoice = choiceOf(view);
 		const shown = view.chosen ?? onCallDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
@@ -295,7 +296,7 @@
 
 	// While the days typed are refused, the rows and the result line still answer the days before them, so neither is drawn.
 	const isRangeRefused = $derived(Boolean(rangeErrors.from || rangeErrors.to));
-	const isChoosingDays =$derived(draftChoice === 'choose' && !isStepped);
+	const isChoosingDays = $derived(draftChoice === 'choose' && !isStepped);
 
 	let isApplying = $state(false);
 	// Moves a change of control began and has not finished: the list lands without taking focus from the control.

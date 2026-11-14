@@ -338,6 +338,7 @@
 	function seedDrafts() {
 		if (!isSearchTouched) draftSearch = appliedSearch;
 		isStepped = view.chosen !== undefined && (isStepped || steppedKey === wantedKey);
+		steppedKey = undefined;
 		draftChoice = view.chosen ? 'choose' : scheduleChoiceOfPreset(view.preset);
 		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;

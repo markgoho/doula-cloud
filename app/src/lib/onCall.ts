@@ -587,9 +587,10 @@ export function ownStartWords(own: NonNullable<RosterWindow['ownStart']>, rule: 
 }
 
 /**
- * The Order control's first option and the result line say the same words:
- * tonight first while today is in the days shown, soonest due first when it
- * is not.
+ * The Order control's first option: tonight first while today is in the days
+ * shown, soonest due first when it is not. The result line says the same with
+ * the one thing the option has no room for, "nobody tonight first", because a
+ * longer option widens the bar's Order select and moves Apply.
  */
 export function onCallOrderOptions(isTonightShown: boolean): readonly { value: OnCallOrder; label: string }[] {
 	return [{ value: '', label: isTonightShown ? 'Tonight first' : 'Soonest due first' }, ON_CALL_ORDER_OPTIONS[1]!];
