@@ -10,7 +10,9 @@ import {
 	ENTER_TO_DAY,
 	isCalendarDay,
 	rangeErrors,
+	presetDays,
 	stepDays,
+	THIS_WEEK,
 	TO_BEFORE_FROM,
 	type DaysView
 } from './dayRange.js';
@@ -104,6 +106,51 @@ describe('the days a view reads', () => {
 		expect(daysOf(viewOf(30, { from: '2026-11-12', to: '2026-11-20' }), EASTERN, NOW, UPCOMING)).toEqual({
 			errors: { from: UPCOMING.earliest.message }
 		});
+	});
+});
+
+const HONOLULU = 'Pacific/Honolulu';
+
+describe('the week preset', () => {
+	it('is the Monday through Sunday holding today, on any day of it', () => {
+		expect(presetDays(THIS_WEEK, '2026-11-09')).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+		expect(presetDays(THIS_WEEK, '2026-11-13')).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+		expect(presetDays(THIS_WEEK, '2026-11-15')).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+		expect(presetDays(THIS_WEEK, '2026-11-16')).toEqual({ from: '2026-11-16', to: '2026-11-22' });
+	});
+
+	it('is still the old week on a Sunday evening in a zone behind UTC, where UTC is already Monday', () => {
+		const sundayEvening = new Date('2026-11-16T05:00:00Z');
+
+		expect(daysOf(viewOf(THIS_WEEK), HONOLULU, sundayEvening).days).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+		expect(daysOf(viewOf(THIS_WEEK), 'UTC', sundayEvening).days).toEqual({ from: '2026-11-16', to: '2026-11-22' });
+	});
+
+	it('is the new week on a Monday morning in a zone behind UTC', () => {
+		const mondayMorning = new Date('2026-11-16T18:00:00Z');
+
+		expect(daysOf(viewOf(THIS_WEEK), HONOLULU, mondayMorning).days).toEqual({ from: '2026-11-16', to: '2026-11-22' });
+	});
+
+	it('steps to the week before and the week after, a whole Monday to Sunday', () => {
+		const earlier = stepDays(viewOf(THIS_WEEK), -1, EASTERN, NOW, [7, THIS_WEEK, 30]);
+		const later = stepDays(viewOf(THIS_WEEK), 1, EASTERN, NOW, [7, THIS_WEEK, 30]);
+
+		expect(earlier?.days).toEqual({ from: '2026-11-02', to: '2026-11-08' });
+		expect(later?.days).toEqual({ from: '2026-11-16', to: '2026-11-22' });
+		expect(later?.view.chosen).toEqual(later?.days);
+	});
+
+	it('steps back onto this week as the preset, and a screen that does not offer it lands on chosen days', () => {
+		const from = viewOf(THIS_WEEK, { from: '2026-11-16', to: '2026-11-22' });
+
+		expect(stepDays(from, -1, EASTERN, NOW, [7, THIS_WEEK, 30])?.view).toEqual({ preset: THIS_WEEK, chosen: undefined });
+		expect(stepDays(from, -1, EASTERN, NOW, [7, 30])?.view.chosen).toEqual({ from: '2026-11-09', to: '2026-11-15' });
+	});
+
+	it('has no earlier week under a floor of today, where its Monday is already past', () => {
+		expect(stepDays(viewOf(THIS_WEEK), -1, EASTERN, NOW, [1, 7, 30], '2026-11-13')).toBeUndefined();
+		expect(stepDays(viewOf(THIS_WEEK), 1, EASTERN, NOW, [1, 7, 30], '2026-11-13')?.days.from).toBe('2026-11-16');
 	});
 });
 

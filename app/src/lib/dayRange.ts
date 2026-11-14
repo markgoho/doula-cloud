@@ -6,7 +6,7 @@
  * A calendar day is `YYYY-MM-DD` and has no zone, so counting in days is
  * arithmetic on its own parts. Only "today" is read in the Practice's zone
  * (ADR-0036). Generic over the presets a screen offers: a view names its
- * preset as a number of days counted from today.
+ * preset as a number of days counted from today, or `THIS_WEEK`.
  */
 import { formatCalendarWeekdayDay } from './dates.js';
 import { dayIn } from './zonedTime.js';
@@ -14,6 +14,8 @@ import { dayIn } from './zonedTime.js';
 /**
  * Two calendar days, both included.
  */
+export const THIS_WEEK = 0;
+
 export interface Days {
 	from: string;
 	to: string;
@@ -26,8 +28,8 @@ export interface RangeErrors {
 
 /**
  * What an address says about its days before any day is worked out: a
- * preset of N days counted from today, or two typed days that may be empty
- * or not days.
+ * preset of N days counted from today (or `THIS_WEEK`), or two typed days
+ * that may be empty or not days.
  */
 export interface DaysView {
 	preset: number;
@@ -92,6 +94,16 @@ export function rangeErrors(from: string, to: string, limits: RangeLimits = {}):
 	return errors;
 }
 
+/**
+The days a preset reads on a given today: that day and the ones after it, or for `THIS_WEEK` the Monday through Sunday that holds it.
+*/
+export function presetDays(preset: number, today: string): Days {
+	if (preset !== THIS_WEEK) return { from: today, to: addDays(today, preset - 1) };
+	const [year, month, date] = today.split('-').map(Number);
+	const from = addDays(today, -((new Date(Date.UTC(year!, month! - 1, date)).getUTCDay() + 6) % 7));
+	return { from, to: addDays(from, 6) };
+}
+
 /** The days a view reads: a preset of N days is today through today plus
  * N - 1, the last day included, so a preset of 1 is today alone. Chosen days
  * that are not a range carry their errors instead. */
@@ -105,8 +117,7 @@ export function daysOf(
 		const errors = rangeErrors(view.chosen.from, view.chosen.to, limits);
 		return Object.keys(errors).length > 0 ? { errors } : { days: view.chosen };
 	}
-	const from = dayIn(now, timeZone);
-	return { days: { from, to: addDays(from, view.preset - 1) } };
+	return { days: presetDays(view.preset, dayIn(now, timeZone)) };
 }
 
 export interface DaysStep<V extends DaysView> {
@@ -120,7 +131,7 @@ export interface DaysStep<V extends DaysView> {
 /**
  * The days one step earlier (`-1`) or later (`1`): the days the reader sees
  * moved by their own length. A step lands on a preset of `presets` when its
- * days are that preset counted from today. With a `floor`, an earlier step
+ * days are the days that preset reads today. With a `floor`, an earlier step
  * that would start before it starts on it with the same length, and there is
  * none from the floor itself. Nothing where the days are not a range.
  */
@@ -142,10 +153,10 @@ export function stepDays<V extends DaysView>(
 		if (from < floor) from = floor;
 	}
 	const days = { from, to: addDays(from, length - 1) };
-	if (days.from === dayIn(now, timeZone)) {
-		for (const preset of presets) {
-			if (days.to === addDays(days.from, preset - 1)) return { view: { ...view, preset, chosen: undefined }, days };
-		}
+	const today = dayIn(now, timeZone);
+	for (const preset of presets) {
+		const read = presetDays(preset, today);
+		if (days.from === read.from && days.to === read.to) return { view: { ...view, preset, chosen: undefined }, days };
 	}
 	return { view: { ...view, chosen: days }, days };
 }
