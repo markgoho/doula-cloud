@@ -11,6 +11,7 @@ import {
 	formatPortalVisit,
 	formatScheduledVisit,
 	scheduledVisitParts,
+	hasClockTime,
 	toDatetimeLocalValue
 } from './dates.js';
 import { instantFromWall } from './zonedTime.js';
@@ -70,6 +71,19 @@ describe('formatActivityTimestamp (ADR-0022)', () => {
 		['7+ days ago is the absolute date', local(2026, 7, 31, 20, 0), 'Jul 31, 2026, 8:00pm']
 	])('%s', (_name, iso, want) => {
 		expect(formatActivityTimestamp(iso, 'America/New_York', now)).toBe(want);
+	});
+});
+
+describe('hasClockTime', () => {
+	const now = new Date('2026-08-14T20:12:00Z');
+
+	it.each([
+		['just now', '2026-08-14T20:11:30Z', false],
+		['23 hours ago', '2026-08-13T21:12:00Z', false],
+		['a day ago, which reads "Yesterday, 4:12pm"', '2026-08-13T20:12:00Z', true],
+		['a week ago', '2026-08-07T20:12:00Z', true]
+	])('%s', (_name, value, want) => {
+		expect(hasClockTime(value, now)).toBe(want);
 	});
 });
 

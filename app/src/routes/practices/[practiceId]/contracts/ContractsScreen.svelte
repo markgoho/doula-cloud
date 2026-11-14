@@ -20,7 +20,7 @@
 		type AwaitingContract,
 		type AwaitingVoidRequest
 	} from '#lib/contract.js';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, hasClockTime } from '#lib/dates.js';
 	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -77,6 +77,13 @@
 		failureMessage: 'Failed to load more void requests'
 	});
 
+	const zoneNote = $derived(
+		practiceZoneNote(
+			contracts.items.some((contract) => hasClockTime(contract.createdAt)) ||
+				voidRequests.items.some((request) => hasClockTime(request.createdAt))
+		)
+	);
+
 	const voidRequestColumns = [
 		{ label: 'Client', accessor: (request: AwaitingVoidRequest) => request.clientName },
 		{ label: 'Asked by', accessor: (request: AwaitingVoidRequest) => request.requestedByName },
@@ -105,8 +112,8 @@
 {/snippet}
 
 {#snippet content()}
-	{#if practiceZoneNote()}
-		<Text text={practiceZoneNote()!} tone="muted" />
+	{#if zoneNote}
+		<Text text={zoneNote} tone="muted" />
 	{/if}
 	<DataTable
 		{columns}

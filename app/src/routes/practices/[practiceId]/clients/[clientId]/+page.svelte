@@ -28,7 +28,7 @@
 	import { eraseClient, loadEraseEligibility, type EraseEligibility, type UnsettledInvoice } from '#lib/clientErasure.js';
 	import { formatAmount } from '#lib/invoice.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
-	import { formatActivityTimestamp, formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatCalendarDay, formatInstant, hasClockTime } from '#lib/dates.js';
 	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { formatAddress, formatPhoneNumber } from '#lib/contactDetails.js';
 	import { takeOutcome } from '#lib/outcome.js';
@@ -248,6 +248,12 @@
 	const MERGED_ENTRY_SUFFIX = ' (from another record, before the two were combined)';
 
 	const mergedFrom = $derived(detail?.mergedFrom ?? []);
+
+	const zoneNote = $derived(
+		practiceZoneNote(
+			mergedFrom.some((merge) => hasClockTime(merge.mergedAt)) || historyTableRows.some((row) => hasClockTime(row.at))
+		)
+	);
 
 	// Says the act happened, when, and who did it -- the audit trail's own
 	// question, answered from plaintext columns so it survives the
@@ -670,8 +676,8 @@
 {/snippet}
 
 {#snippet historySection()}
-	{#if practiceZoneNote()}
-		<Text step="body-sm" tone="muted" text={practiceZoneNote()!} />
+	{#if zoneNote}
+		<Text step="body-sm" tone="muted" text={zoneNote} />
 	{/if}
 	{#if mergedFrom.length > 0}
 		<!--

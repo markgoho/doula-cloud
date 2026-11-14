@@ -913,7 +913,9 @@
 	const billingMode = $derived(billingModeState.value);
 
 	const practiceTimezone = $derived(timeZone);
-	const visitsZoneNote = $derived(zoneNote(timeZone, readerTimeZone(), new Date()));
+	const visitsZoneNote = $derived(
+		visits.items.some((visit) => visit.scheduledAt) ? zoneNote(timeZone, readerTimeZone(), new Date()) : undefined
+	);
 	// #2828: the Practice's payment terms, the answer Create Invoice's due
 	// question has chosen. 0 until read; real terms are at least a day.
 	const paymentTermsState = new SectionState(0);

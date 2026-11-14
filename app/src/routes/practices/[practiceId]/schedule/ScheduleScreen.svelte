@@ -468,7 +468,7 @@
 		scheduleResultRuler(doulas.map((doula) => doula.label).toSorted((a, b) => b.length - a.length)[0] ?? '')
 	);
 	// Said once, under the result line, only to a reader whose own zone reads these times differently.
-	const zoneNote = $derived(zoneNoteOf(timeZone, readerTimeZone(), now));
+	const zoneNote = $derived(schedule.items.length > 0 ? zoneNoteOf(timeZone, readerTimeZone(), now) : undefined);
 	const isBusy = $derived(isApplying || (read !== undefined && readKeyOf(read) !== wantedKey && readFailure === ''));
 	const isEmpty = $derived(read !== undefined && !read.rangeErrors && schedule.items.length === 0);
 

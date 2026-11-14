@@ -8,6 +8,7 @@ import {
 	describeActivityAction,
 	loadEngagementActivityPage,
 	loadPortalActivityPage,
+	hasLedgerRowClockTime,
 	loadPracticeActivityPage,
 	type ActivityEntry
 } from './activityLedger.js';
@@ -368,5 +369,30 @@ describe('clientActivityLedgerColumns (#708)', () => {
 		const what = clientActivityLedgerColumns('America/New_York')[1];
 
 		expect(() => what.accessor(entry({ action: 'offer_sent' }))).toThrow('no Client wording');
+	});
+});
+
+describe('hasLedgerRowClockTime', () => {
+	const now = new Date('2026-08-14T20:12:00Z');
+	const row: ActivityEntry = {
+		action: 'invoice_raised',
+		actorKind: 'staff',
+		actorName: 'Mark Goho',
+		subjectName: 'Amara',
+		createdAt: '2026-08-14T18:12:00Z'
+	};
+
+	it('is false for a row that reads "2 hours ago"', () => {
+		expect(hasLedgerRowClockTime(row, now)).toBe(false);
+	});
+
+	it('is true for a row old enough to read a clock time', () => {
+		expect(hasLedgerRowClockTime({ ...row, createdAt: '2026-08-10T18:12:00Z' }, now)).toBe(true);
+	});
+
+	it('is true for a recent row that names the time of the Visit it moved', () => {
+		expect(
+			hasLedgerRowClockTime({ ...row, action: 'visit_reassigned', visitScheduledAt: '2026-08-20T14:00:00Z' }, now)
+		).toBe(true);
 	});
 });

@@ -16,7 +16,7 @@ import type { Fetcher } from './fetcher.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { clientActivityPhrase } from './clientRegister.js';
-import { formatActivityTimestamp, formatCalendarDay, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
+import { formatActivityTimestamp, formatCalendarDay, hasClockTime, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
@@ -220,6 +220,13 @@ function movedVisitText(row: ActivityEntry, timeZone: string): string | undefine
 	const addedAt = row.visitAddedAt ?? row.diff?.visitCreatedAt;
 	if (typeof addedAt === 'string') return `Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt, timeZone)})`;
 	return undefined;
+}
+
+/**
+ * Whether the ledger row reads a clock time: its When column, or the Visit it moved.
+ */
+export function hasLedgerRowClockTime(row: ActivityEntry, now: Date = new Date()): boolean {
+	return hasClockTime(row.createdAt, now) || movedVisitText(row, 'UTC') !== undefined;
 }
 
 /**

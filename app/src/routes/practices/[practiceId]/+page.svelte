@@ -19,7 +19,7 @@
 		practicePushSubscriptionsPath,
 		registerPushSubscription
 	} from '#lib/pushRegistration.js';
-	import { decideOffer, type DecisionOutcome } from '#lib/offer.js';
+	import { decideOffer, isOpen, type DecisionOutcome } from '#lib/offer.js';
 	import {
 		closeSecondFactorRecommendation,
 		isConnectCardShown,
@@ -50,11 +50,12 @@
 	import { startHref } from './clients/new/intake.js';
 	import {
 		activityLedgerColumns,
+		hasLedgerRowClockTime,
 		loadPracticeActivityPage,
 		RECENT_ACTIVITY_ROWS,
 		type ActivityEntry
 	} from '#lib/activityLedger.js';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, hasClockTime } from '#lib/dates.js';
 	import { practiceZoneNote } from '#lib/practiceZone.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import type { PracticeSession } from './+layout.js';
@@ -234,6 +235,14 @@
 
 	const isPracticeOwner = $derived(isOwner(session));
 
+	const zoneNote = $derived(
+		practiceZoneNote(
+			(isDoula(session) && (landing?.openOffers.some((offer) => isOpen(offer)) ?? false)) ||
+				waitingOnReply.items.some((item) => hasClockTime(item.lastMessageAt)) ||
+				recentActivity.some((row) => hasLedgerRowClockTime(row))
+		)
+	);
+
 	function names(list: string[]): string {
 		return list.length <= 1 ? (list[0] ?? '') : `${list.slice(0, -1).join(', ')} and ${list.at(-1)}`;
 	}
@@ -314,8 +323,8 @@
 	<!-- An Offer goes to a Doula (#2141): a Staff member without the role
 	     can never be offered work, so an inbox that could only ever say
 	     "You have no offers." is not drawn for her. -->
-	{#if practiceZoneNote()}
-		<Text text={practiceZoneNote()!} tone="muted" />
+	{#if zoneNote}
+		<Text text={zoneNote} tone="muted" />
 	{/if}
 	{#if isDoula(session)}{@render offerInbox()}{/if}
 

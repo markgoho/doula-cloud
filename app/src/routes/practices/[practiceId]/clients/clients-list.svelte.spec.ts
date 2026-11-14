@@ -1510,7 +1510,7 @@ describe('the Status column (#264, #2022)', () => {
 	// never say "postpartum" (docs/personas/loss-client.md).
 	describe('with the day pinned to Nov 20, 2026', () => {
 		beforeEach(() => {
-			vi.setSystemTime(new Date(2026, 10, 20, 12));
+			vi.setSystemTime(new Date('2026-11-20T17:00:00Z'));
 		});
 
 		afterEach(() => {
