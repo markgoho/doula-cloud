@@ -29,7 +29,7 @@ describe('Delete-this-Practice settings screen, once deletion has started', () =
 	// The countdown is pending, so the badge is blue; amber is for what is owed
 	// or needs someone to act.
 	it('draws "Deletion pending" as the information badge', async () => {
-		await setup({ ...fixture, respond: () => jsonResponse({ pending: true, hasUnsettledInvoices: false }) });
+		await setup({ ...fixture, respond: () => jsonResponse({ pending: true, hasUnsettledInvoices: false, finalizeAt: '2027-02-01T00:00:00Z' }) });
 
 		await expect.element(testPage.getByText('Deletion pending')).toHaveClass('info');
 	});

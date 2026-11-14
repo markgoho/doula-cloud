@@ -32,10 +32,12 @@
 		loadPortalVisitsPage,
 		noVisitsMessage,
 		portalVisitColumns,
+		portalZoneNote,
 		type PortalVisit
 	} from '#lib/portalVisits.js';
 	import { INVOICES_HEADING, OWED_HEADING, engagementLabel } from '#lib/clientRegister.js';
 	import { totalToPayFact } from '#lib/clientInvoice.js';
+	import { readerTimeZone } from '#lib/zonedTime.js';
 	import {
 		NEXT_HEADING,
 		birthPlanCard,
@@ -92,7 +94,10 @@
 	const detail = $derived(care.value);
 
 	const label = $derived(
-		engagementLabel({ practiceName: page.data.practiceName, createdAt: page.data.createdAt })
+		engagementLabel(
+			{ practiceName: page.data.practiceName, createdAt: page.data.createdAt },
+			page.data.practiceTimezone
+		)
 	);
 	const practiceLine = $derived(detail?.isOneOfSeveral ? label : (page.data.practiceName ?? ''));
 
@@ -157,7 +162,11 @@
 		}, () => SERVICE_PROBLEM);
 	});
 
-	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, detail?.careEnded));
+	const next = $derived(whatHappensNext(nextVisit(visits.items), detail?.dueDate, page.data.practiceTimezone, detail?.careEnded));
+
+	const zoneNote = $derived(
+		portalZoneNote(page.data.practiceName ?? '', page.data.practiceTimezone, readerTimeZone(), new Date())
+	);
 
 	const owedNext = $derived(owedNextLine(detail?.openInvoiceCount ?? 0, detail?.totalToPayCents ?? 0));
 
@@ -208,6 +217,9 @@
 				<Text text={next.detail} tone="variant" />
 			{/if}
 		</section>
+		{#if zoneNote}
+			<Text text={zoneNote} tone="muted" />
+		{/if}
 	</div>
 {/snippet}
 
@@ -234,7 +246,7 @@
 		<Notice variant="error" message={visitsError} />
 	{:else}
 		<DataTable
-			columns={portalVisitColumns()}
+			columns={portalVisitColumns(page.data.practiceTimezone)}
 			rows={inReadingOrder(visits.items)}
 			hasMore={visits.hasMore}
 			onLoadMore={() => visits.loadMore()}
@@ -246,15 +258,15 @@
 {/snippet}
 
 {#snippet birthPlanSection()}
-	{@render card(birthPlanCard(detail?.birthPlan), routes.birthPlan)}
+	{@render card(birthPlanCard(detail?.birthPlan, page.data.practiceTimezone), routes.birthPlan)}
 {/snippet}
 
 {#snippet contractSection()}
-	{@render card(contractCard(detail?.contract, page.data.practiceName ?? ''), routes.contract)}
+	{@render card(contractCard(detail?.contract, page.data.practiceName ?? '', page.data.practiceTimezone), routes.contract)}
 {/snippet}
 
 {#snippet messagesSection()}
-	{@render card(messagesCard(detail?.lastMessage), routes.messages)}
+	{@render card(messagesCard(detail?.lastMessage, page.data.practiceTimezone), routes.messages)}
 {/snippet}
 
 <!--
@@ -284,7 +296,7 @@
 	{:else}
 		<DataTable
 			disclosure="Show what has happened"
-			columns={clientActivityLedgerColumns()}
+			columns={clientActivityLedgerColumns(page.data.practiceTimezone)}
 			rows={activity.items}
 			hasMore={activity.hasMore}
 			onLoadMore={() => activity.loadMore()}

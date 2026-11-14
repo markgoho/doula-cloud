@@ -18,17 +18,17 @@
 
 	<section>
 		<h2>Draft</h2>
-		<ContractStatus status="draft" hasSignedPdf={false} />
+		<ContractStatus timeZone="America/New_York" status="draft" hasSignedPdf={false} />
 	</section>
 
 	<section>
 		<h2>Draft, beside an earlier signed-and-voided Contract (#1229) &mdash; the PDF is named as the earlier Contract's</h2>
-		<ContractStatus status="draft" hasSignedPdf onDownloadPdf={async () => {}} />
+		<ContractStatus timeZone="America/New_York" status="draft" hasSignedPdf onDownloadPdf={async () => {}} />
 	</section>
 
 	<section>
 		<h2>Signed, seen by an Owner or Admin &mdash; download and Void are both offered</h2>
-		<ContractStatus
+		<ContractStatus timeZone="America/New_York"
 			status="signed"
 			hasSignedPdf
 			amountChangedAt="2026-08-19T00:00:00Z"
@@ -42,12 +42,12 @@
 
 	<section>
 		<h2>Signed, seen by a Doula &mdash; the PDF endpoint refuses the Doula, so no download button</h2>
-		<ContractStatus status="signed" hasSignedPdf onVoid={async () => {}} />
+		<ContractStatus timeZone="America/New_York" status="signed" hasSignedPdf onVoid={async () => {}} />
 	</section>
 
 	<section>
 		<h2>Voided, the terminal state &mdash; the agreement is over, the copy of it is not</h2>
-		<ContractStatus
+		<ContractStatus timeZone="America/New_York"
 			status="voided"
 			hasSignedPdf
 			sent={{ at: '2026-08-12T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' }}

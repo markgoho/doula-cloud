@@ -34,6 +34,10 @@
 	interface Properties {
 		messages: Message[];
 		/**
+		 * The Practice's zone, which reads every message's sent time.
+		 */
+		timeZone: string;
+		/**
 		 * A failure to load or download, shown above the thread. A refused
 		 * send is the compose form's own.
 		 */
@@ -85,6 +89,7 @@
 
 	let {
 		messages,
+		timeZone,
 		error,
 		hasMore,
 		isLoadingOlder,
@@ -184,7 +189,7 @@
 						<cluster-l space="var(--space-2)" align="baseline">
 							<strong>{message.senderType === readerSenderType ? 'You' : message.senderName}</strong>
 							<!-- v8 ignore start: Svelte's compiled null-guard on this text node is unreachable -- formatInstantWithClock always returns a string -->
-							<span class="meta">{formatInstantWithClock(message.createdAt)}</span>
+							<span class="meta">{formatInstantWithClock(message.createdAt, timeZone)}</span>
 							<!-- v8 ignore stop -->
 						</cluster-l>
 						{#if message.body}

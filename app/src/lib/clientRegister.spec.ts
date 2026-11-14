@@ -39,7 +39,7 @@ describe('engagementLabel', () => {
 
 	it('carries the Practice name and when the Engagement began', () => {
 		expect(
-			engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2026-03-12T20:00:00Z' })
+			engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2026-03-12T20:00:00Z' }, 'America/New_York')
 		).toBe('Riverside Doulas, started Mar 12, 2026');
 	});
 
@@ -48,8 +48,8 @@ describe('engagementLabel', () => {
 	// one-Engagement-per-Practice assumption, and Practice name alone (or
 	// Practice name plus status) can no longer be trusted to differ.
 	it('tells two Engagements at the same Practice, in the same status, apart', () => {
-		const first = engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2024-06-01T20:00:00Z' });
-		const second = engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2026-03-12T20:00:00Z' });
+		const first = engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2024-06-01T20:00:00Z' }, 'America/New_York');
+		const second = engagementLabel({ practiceName: 'Riverside Doulas', createdAt: '2026-03-12T20:00:00Z' }, 'America/New_York');
 
 		expect(first).not.toBe(second);
 	});
@@ -68,7 +68,7 @@ describe('engagementLabel', () => {
 			endingReason: 'family moved away'
 		};
 
-		const label = engagementLabel(staffLeaking);
+		const label = engagementLabel(staffLeaking, 'America/New_York');
 
 		expect(label).not.toMatch(/birth|stillbirth|family moved away/i);
 	});

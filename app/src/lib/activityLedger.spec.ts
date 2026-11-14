@@ -113,7 +113,7 @@ const entry = (overrides: Partial<ActivityEntry> = {}): ActivityEntry => ({
 const recordedNull = null;
 
 describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)', () => {
-	const what = activityLedgerColumns()[1];
+	const what = activityLedgerColumns('America/New_York')[1];
 
 	it.each([
 		['care_phase_changed', { statusBefore: 'intake', statusAfter: 'active' }, 'Care phase changed for the Client: Intake to Active'],
@@ -222,7 +222,7 @@ describe('activityLedgerColumns: an Engagement fact, from what to what (#1423)',
 
 describe('activityLedgerColumns', () => {
 	it('shows the reassignment as a move between two named people', () => {
-		const what = activityLedgerColumns()[1];
+		const what = activityLedgerColumns('America/New_York')[1];
 
 		expect(what.accessor(entry({ detail: 'Visit reassigned from Ana Silva to Mira Osei' }))).toBe(
 			'Visit reassigned from Ana Silva to Mira Osei'
@@ -235,48 +235,48 @@ describe('activityLedgerColumns', () => {
 		const addedAt = '2026-11-02T10:11:00Z';
 
 		it('names a dated Visit by its date, on the Engagement ledger from the diff', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 
 			expect(what.accessor(entry({ detail, diff: { visitScheduledAt: scheduledAt, visitCreatedAt: addedAt } }))).toBe(
-				`Visit on ${formatInstantWithClock(scheduledAt)} reassigned from Ana Silva to Mira Osei`
+				`Visit on ${formatInstantWithClock(scheduledAt, 'America/New_York')} reassigned from Ana Silva to Mira Osei`
 			);
 		});
 
 		it('names a Visit with no date by when it was added', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 
 			expect(what.accessor(entry({ detail, diff: { visitScheduledAt: recordedNull, visitCreatedAt: addedAt } }))).toBe(
-				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) reassigned from Ana Silva to Mira Osei`
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt, 'America/New_York')}) reassigned from Ana Silva to Mira Osei`
 			);
 		});
 
 		it('keeps a row written before the Visit was recorded as it was', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 
 			expect(what.accessor(entry({ detail, diff: { assignedStaffIdBefore: 'a', assignedStaffIdAfter: 'b' } }))).toBe(detail);
 			expect(what.accessor(entry())).toBe('Visit for the Client given to another doula');
 		});
 
 		it('names the Visit on the Practice-wide feed from its two fields', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 
 			expect(what.accessor(entry({ subjectName: 'Grace Whitfield', visitScheduledAt: scheduledAt, visitAddedAt: addedAt }))).toBe(
-				`Visit on ${formatInstantWithClock(scheduledAt)} for Grace Whitfield given to another doula`
+				`Visit on ${formatInstantWithClock(scheduledAt, 'America/New_York')} for Grace Whitfield given to another doula`
 			);
 			expect(what.accessor(entry({ subjectName: 'Grace Whitfield', visitAddedAt: addedAt }))).toBe(
-				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) for Grace Whitfield given to another doula`
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt, 'America/New_York')}) for Grace Whitfield given to another doula`
 			);
 		});
 
 		it('names both Doulas on the Practice-wide feed when the row carries them (#2672)', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 			const move = { subjectName: 'Grace Whitfield', reassignedFromName: 'Delia Marchetti', reassignedToName: 'Priya Raman' };
 
 			expect(what.accessor(entry({ ...move, visitScheduledAt: scheduledAt, visitAddedAt: addedAt }))).toBe(
-				`Visit on ${formatInstantWithClock(scheduledAt)} for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
+				`Visit on ${formatInstantWithClock(scheduledAt, 'America/New_York')} for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
 			);
 			expect(what.accessor(entry({ ...move, visitAddedAt: addedAt }))).toBe(
-				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)}) for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
+				`Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt, 'America/New_York')}) for Grace Whitfield reassigned from Delia Marchetti to Priya Raman`
 			);
 			expect(what.accessor(entry({ ...move, reassignedFromName: 'a former colleague' }))).toBe(
 				'Visit for Grace Whitfield reassigned from a former colleague to Priya Raman'
@@ -284,20 +284,20 @@ describe('activityLedgerColumns', () => {
 		});
 
 		it('leaves any other action alone', () => {
-			const what = activityLedgerColumns()[1];
+			const what = activityLedgerColumns('America/New_York')[1];
 
 			expect(what.accessor(entry({ action: 'visit_logged', visitScheduledAt: scheduledAt }))).toBe('Visit added for the Client');
 		});
 	});
 
 	it("says the row's own words for an entry carrying no detail (#2006)", () => {
-		const what = activityLedgerColumns()[1];
+		const what = activityLedgerColumns('America/New_York')[1];
 
 		expect(what.accessor(entry({ action: 'invoice_raised' }))).toBe('Invoice created for the Client');
 	});
 
 	it('names the person a roster change happened to (#1148)', () => {
-		const what = activityLedgerColumns()[1];
+		const what = activityLedgerColumns('America/New_York')[1];
 
 		expect(
 			what.accessor(
@@ -307,7 +307,7 @@ describe('activityLedgerColumns', () => {
 	});
 
 	it('names the Client an Engagement row is about (#2006)', () => {
-		const what = activityLedgerColumns()[1];
+		const what = activityLedgerColumns('America/New_York')[1];
 
 		expect(
 			what.accessor(entry({ action: 'invoice_raised', subjectKind: 'engagement', subjectName: 'Amara' }))
@@ -315,12 +315,12 @@ describe('activityLedgerColumns', () => {
 	});
 
 	it('wraps only the What column, on every ledger (#2098, #2112)', () => {
-		expect(activityLedgerColumns().map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
-		expect(clientActivityLedgerColumns().map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
+		expect(activityLedgerColumns('America/New_York').map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
+		expect(clientActivityLedgerColumns('America/New_York').map((column) => Boolean(column.wraps))).toEqual([false, true, false]);
 	});
 
 	it("does not append a subject name to the server's own detail sentence (#1148)", () => {
-		const what = activityLedgerColumns()[1];
+		const what = activityLedgerColumns('America/New_York')[1];
 
 		expect(
 			what.accessor(
@@ -332,8 +332,8 @@ describe('activityLedgerColumns', () => {
 
 describe('clientActivityLedgerColumns (#708)', () => {
 	it('keeps the staff column set everywhere but the event text', () => {
-		const staff = activityLedgerColumns();
-		const client = clientActivityLedgerColumns();
+		const staff = activityLedgerColumns('America/New_York');
+		const client = clientActivityLedgerColumns('America/New_York');
 
 		expect(client.map((column) => column.label)).toEqual(staff.map((column) => column.label));
 		expect(client[0].accessor(entry())).toBe(staff[0].accessor(entry()));
@@ -341,13 +341,13 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	});
 
 	it('says the register phrase, not the raw action, for the row the ticket names', () => {
-		const what = clientActivityLedgerColumns()[1];
+		const what = clientActivityLedgerColumns('America/New_York')[1];
 
 		expect(what.accessor(entry({ action: 'birth_plan_edited' }))).toBe('Your birth plan was updated.');
 	});
 
 	it("ignores a detail sentence, which is the staff register's own prose", () => {
-		const what = clientActivityLedgerColumns()[1];
+		const what = clientActivityLedgerColumns('America/New_York')[1];
 
 		expect(
 			what.accessor(
@@ -357,7 +357,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	});
 
 	it('never names a Staff member a subject name would carry (#1148)', () => {
-		const what = clientActivityLedgerColumns()[1];
+		const what = clientActivityLedgerColumns('America/New_York')[1];
 
 		expect(
 			what.accessor(entry({ action: 'birth_plan_edited', subjectName: 'Renata Alvarez' }))
@@ -365,7 +365,7 @@ describe('clientActivityLedgerColumns (#708)', () => {
 	});
 
 	it('refuses an action the register does not phrase', () => {
-		const what = clientActivityLedgerColumns()[1];
+		const what = clientActivityLedgerColumns('America/New_York')[1];
 
 		expect(() => what.accessor(entry({ action: 'offer_sent' }))).toThrow('no Client wording');
 	});

@@ -33,6 +33,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatInstant } from '#lib/dates.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import {
 		clearEmailSuppression,
 		loadEmailSuppressions,
@@ -101,7 +102,7 @@
 		{ label: 'Why it stopped', accessor: causeText },
 		{
 			label: 'Blocked since',
-			accessor: (row: EmailSuppression) => formatInstant(row.createdAt),
+			accessor: (row: EmailSuppression) => formatInstant(row.createdAt, practiceTimeZone()),
 			// ADR-0022: the display string is a day, the exact instant stays
 			// underneath as the <time> element's machine-readable value.
 			datetimeAccessor: (row: EmailSuppression) => row.createdAt,

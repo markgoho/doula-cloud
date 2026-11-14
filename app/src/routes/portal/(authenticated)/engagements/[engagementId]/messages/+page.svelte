@@ -11,6 +11,9 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { apiErrorMessage } from '#lib/apiErrorMessage.js';
+	import { portalZoneNote } from '#lib/portalVisits.js';
+	import { readerTimeZone } from '#lib/zonedTime.js';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import { CONNECTION_PROBLEM, refusalError } from '#lib/formErrors.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
@@ -37,6 +40,10 @@
 	 */
 	const sentConfirmation = $derived(
 		`Message sent to ${page.data.practiceName || 'your doula'}. A reply will show here. Do not rely on messages for anything urgent.`
+	);
+
+	const zoneNote = $derived(
+		portalZoneNote(page.data.practiceName ?? '', page.data.practiceTimezone, readerTimeZone(), new Date())
 	);
 
 	onDestroy(() => {
@@ -173,7 +180,11 @@
 </script>
 
 {#snippet thread()}
+	{#if zoneNote}
+		<Text text={zoneNote} tone="muted" />
+	{/if}
 	<MessageThread
+		timeZone={page.data.practiceTimezone}
 		{messages}
 		error={messagesError}
 		hasMore={isMessagesHasMore}

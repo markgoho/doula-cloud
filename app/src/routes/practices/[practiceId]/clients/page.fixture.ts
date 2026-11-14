@@ -11,7 +11,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientListItem } from '#lib/client.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
@@ -308,6 +308,7 @@ export const fixture: RouteFixture = {
 	name: 'The Clients list',
 	component: Page,
 	params: { practiceId: 'practice-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/clients',
 	props: { data: { isContractor: false } },
 	respond: () => jsonResponse({ items: clients, hasMore: false }),

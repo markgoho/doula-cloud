@@ -194,8 +194,8 @@ function factChangeText(row: ActivityEntry): string | undefined {
  * A `detail` sentence wins outright: it is the server's own finished
  * prose about the row, and it already names the people in it.
  */
-function staffEventText(row: ActivityEntry): string {
-	const visit = movedVisitText(row);
+function staffEventText(row: ActivityEntry, timeZone: string): string {
+	const visit = movedVisitText(row, timeZone);
 	if (row.detail) {
 		return visit && row.detail.startsWith(DETAIL_VISIT_LEAD) ? visit + row.detail.slice(DETAIL_VISIT_LEAD.length) : row.detail;
 	}
@@ -213,12 +213,12 @@ const DETAIL_VISIT_LEAD = 'Visit';
  * ledger sends them in the diff. A row written before #2666 has neither
  * and keeps its words.
  */
-function movedVisitText(row: ActivityEntry): string | undefined {
+function movedVisitText(row: ActivityEntry, timeZone: string): string | undefined {
 	if (row.action !== 'visit_reassigned') return undefined;
 	const scheduledAt = row.visitScheduledAt ?? row.diff?.visitScheduledAt;
-	if (typeof scheduledAt === 'string') return `Visit on ${formatInstantWithClock(scheduledAt)}`;
+	if (typeof scheduledAt === 'string') return `Visit on ${formatInstantWithClock(scheduledAt, timeZone)}`;
 	const addedAt = row.visitAddedAt ?? row.diff?.visitCreatedAt;
-	if (typeof addedAt === 'string') return `Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt)})`;
+	if (typeof addedAt === 'string') return `Visit not yet scheduled (added ${formatInstantWithSeconds(addedAt, timeZone)})`;
 	return undefined;
 }
 
@@ -264,12 +264,13 @@ interface LedgerColumn {
  * #2112 made it every ledger's, so no caller chooses.
  */
 export function activityLedgerColumns(
-	describeEvent: (row: ActivityEntry) => string = staffEventText
+	timeZone: string,
+	describeEvent: (row: ActivityEntry) => string = (row) => staffEventText(row, timeZone)
 ): LedgerColumn[] {
 	return [
 		{
 			label: 'When',
-			accessor: (row) => formatActivityTimestamp(row.createdAt),
+			accessor: (row) => formatActivityTimestamp(row.createdAt, timeZone),
 			variant: 'meta',
 			datetimeAccessor: (row) => row.createdAt
 		},
@@ -292,8 +293,8 @@ export function activityLedgerColumns(
  * but that handler redacts the actor's name and nothing else, so a column
  * that fell back to `detail` would leak the moment one did.
  */
-export function clientActivityLedgerColumns(): LedgerColumn[] {
-	return activityLedgerColumns((row) => clientActivityPhrase(row.action));
+export function clientActivityLedgerColumns(timeZone: string): LedgerColumn[] {
+	return activityLedgerColumns(timeZone, (row) => clientActivityPhrase(row.action));
 }
 
 /**

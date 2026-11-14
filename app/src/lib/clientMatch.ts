@@ -20,8 +20,8 @@ import { kindLabel } from './engagementRequest.js';
 
 const COMPLETED = 'completed';
 
-export function matchHistory(match: Pick<ClientMatch, 'createdAt' | 'engagements'>): string {
-	const added = `Added ${formatInstant(match.createdAt)}`;
+export function matchHistory(match: Pick<ClientMatch, 'createdAt' | 'engagements'>, timeZone: string): string {
+	const added = `Added ${formatInstant(match.createdAt, timeZone)}`;
 	const { engagements } = match;
 	if (engagements.length === 0) return `${added} · No work started yet`;
 
@@ -46,5 +46,5 @@ export function matchHistory(match: Pick<ClientMatch, 'createdAt' | 'engagements
 	}
 	const isOne = engagements.length === 1;
 	if (lastEnded === undefined) return `${added} · ${count} · ${isOne ? 'ended' : 'all ended'}`;
-	return `${added} · ${count} · ${isOne ? 'ended' : 'most recent ended'} ${formatInstant(lastEnded)}`;
+	return `${added} · ${count} · ${isOne ? 'ended' : 'most recent ended'} ${formatInstant(lastEnded, timeZone)}`;
 }

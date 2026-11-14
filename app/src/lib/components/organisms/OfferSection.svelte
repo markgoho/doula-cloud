@@ -35,6 +35,7 @@
 
 	let {
 		offers,
+		timeZone,
 		doulas,
 		clientName = '',
 		dueDate: engagementDueDate = '',
@@ -47,6 +48,10 @@
 		 * and Cancel change it. */
 		isFormOpen?: boolean;
 		offers: Offer[];
+		/**
+		The Practice's zone, which reads when each Offer was made.
+		*/
+		timeZone: string;
 		/** The Doulas this Offer can go to, for the "someone already here"
 		 * target. employmentType decides whether a fee is required. An
 		 * empty list is a fact -- nobody is there to pick -- and `undefined`
@@ -243,7 +248,7 @@
 
 	const offerColumns = [
 		{ label: 'Doula', accessor: (offer: Offer) => offer.targetName || offer.targetAddress || '' },
-		{ label: 'Offered', accessor: (offer: Offer) => formatInstant(offer.offeredAt) },
+		{ label: 'Offered', accessor: (offer: Offer) => formatInstant(offer.offeredAt, timeZone) },
 		{ label: 'Fee', accessor: (offer: Offer) => formatFee(offer.amountCents) },
 		{ label: 'Answer', accessor: (offer: Offer) => offerStateLabels[offer.state], content: offerAnswer }
 	];

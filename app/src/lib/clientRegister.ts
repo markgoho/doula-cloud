@@ -136,8 +136,8 @@ export interface EngagementLabelInput {
 	createdAt: string;
 }
 
-export function engagementLabel(engagement: EngagementLabelInput): string {
-	return `${engagement.practiceName}, started ${formatInstant(engagement.createdAt)}`;
+export function engagementLabel(engagement: EngagementLabelInput, timeZone: string): string {
+	return `${engagement.practiceName}, started ${formatInstant(engagement.createdAt, timeZone)}`;
 }
 
 /**

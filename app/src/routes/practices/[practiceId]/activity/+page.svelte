@@ -14,6 +14,7 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import DataTable from '#lib/components/organisms/DataTable.svelte';
@@ -37,11 +38,14 @@
 
 {#snippet intro()}
 	<Text text="Who did what, and when, newest first." tone="variant" />
+	{#if practiceZoneNote()}
+		<Text text={practiceZoneNote()!} tone="muted" />
+	{/if}
 {/snippet}
 
 {#snippet content()}
 	<DataTable
-		columns={activityLedgerColumns()}
+		columns={activityLedgerColumns(practiceTimeZone())}
 		rows={activity.items}
 		hasMore={activity.hasMore}
 		onLoadMore={() => activity.loadMore()}

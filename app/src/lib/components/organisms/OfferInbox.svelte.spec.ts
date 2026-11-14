@@ -17,7 +17,7 @@ const openOffer: Offer = {
 	offeredAt: '2026-08-01T00:00:00Z',
 	expiresAt: '2026-08-08T00:00:00Z'
 };
-const sent = formatInstantWithClock(openOffer.offeredAt);
+const sent = formatInstantWithClock(openOffer.offeredAt, 'America/New_York');
 
 async function setup(
 	offers: Offer[] = [],
@@ -29,6 +29,7 @@ async function setup(
 		}))
 ) {
 	const { container } = await render(OfferInbox, {
+		timeZone: 'America/New_York',
 		offers,
 		onDecide,
 		practiceName: 'Rooted Birth Collective',
@@ -229,7 +230,7 @@ describe('OfferInbox.svelte', () => {
 			...page.getByRole('button', { name: 'Decline' }).all()
 		].map((button) => describedByText(container, button));
 		expect(descriptions[0]).toBe(`Sent ${sent}`);
-		expect(descriptions[1]).toBe(`Sent ${formatInstantWithClock('2026-08-03T15:30:00Z')}`);
+		expect(descriptions[1]).toBe(`Sent ${formatInstantWithClock('2026-08-03T15:30:00Z', 'America/New_York')}`);
 		expect(descriptions[0]).not.toBe(descriptions[1]);
 		expect(descriptions[2]).not.toBe(descriptions[3]);
 	});

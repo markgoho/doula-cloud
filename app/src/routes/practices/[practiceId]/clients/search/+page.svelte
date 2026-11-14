@@ -45,6 +45,7 @@
 	import { searchClients, type ClientMatch, type ClientSearchFields } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
 	import { matchHistory } from '#lib/clientMatch.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { carriedGivenName } from '#lib/intakeJourney.js';
 	import { handOffToIntake } from '#lib/intakeHandoff.js';
 	import { intakeDraft } from '#lib/intakeDraft.svelte.js';
@@ -323,7 +324,7 @@
 							<li>
 								<stack-l space="var(--space-1)">
 									<Link href={detailHref(match.id)} label={fullName(match)} />
-									<Text step="body-sm" tone="variant" text={matchHistory(match)} />
+									<Text step="body-sm" tone="variant" text={matchHistory(match, practiceTimeZone())} />
 								</stack-l>
 							</li>
 						{/each}

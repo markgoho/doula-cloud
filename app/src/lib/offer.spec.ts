@@ -262,14 +262,14 @@ describe('clientFactRows', () => {
 });
 
 describe('decideDescription', () => {
-	const sent = formatInstantWithClock(offer.offeredAt);
+	const sent = formatInstantWithClock(offer.offeredAt, 'America/New_York');
 
 	it('names the Offer by where, when, and when it was sent', () => {
-		expect(decideDescription(offer)).toBe(`North side, due Jan 4, 2027, sent ${sent}`);
+		expect(decideDescription(offer, 'America/New_York')).toBe(`North side, due Jan 4, 2027, sent ${sent}`);
 	});
 
 	it('names it by when it was sent once her Client is erased (#2385, #2389)', () => {
-		expect(decideDescription(erased)).toBe(`Sent ${sent}`);
+		expect(decideDescription(erased, 'America/New_York')).toBe(`Sent ${sent}`);
 	});
 });
 

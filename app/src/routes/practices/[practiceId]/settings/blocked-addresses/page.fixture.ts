@@ -14,7 +14,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { EmailSuppression } from '#lib/emailSuppression.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS } from '../../../../typicalPilot.js';
 import Page from './+page.svelte';
 
@@ -59,6 +59,7 @@ export const fixture: RouteFixture = {
 	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/settings/blocked-addresses',
 	respond: () => jsonResponse({ suppressions }),
 	readyText: 'Blocked email addresses'

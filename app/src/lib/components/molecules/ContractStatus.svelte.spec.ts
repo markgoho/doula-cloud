@@ -26,6 +26,7 @@ async function setup({
 	onDeclineVoidRequest
 }: SetupOptions = {}) {
 	return render(ContractStatus, {
+		timeZone: 'America/New_York',
 		status,
 		hasSignedPdf,
 		amountChangedAt,
@@ -71,6 +72,7 @@ describe('ContractStatus.svelte', () => {
 
 	it('says when a signed Contract was signed and sent, and by whom (#2104)', async () => {
 		await render(ContractStatus, {
+		timeZone: 'America/New_York',
 			status: 'signed',
 			hasSignedPdf: false,
 			sent: { at: '2026-08-12T15:00:00Z', by: 'Renata Alvarez' },
@@ -85,6 +87,7 @@ describe('ContractStatus.svelte', () => {
 
 	it('keeps a voided Contract’s signature as a row of its own (#2104)', async () => {
 		await render(ContractStatus, {
+		timeZone: 'America/New_York',
 			status: 'voided',
 			hasSignedPdf: true,
 			signed: { at: '2026-08-14T15:00:00Z', by: 'Camille Boyd' }
@@ -96,6 +99,7 @@ describe('ContractStatus.svelte', () => {
 
 	it("adds the caller's own rows after the status", async () => {
 		await render(ContractStatus, {
+		timeZone: 'America/New_York',
 			status: 'signed',
 			hasSignedPdf: false,
 			rows: [{ label: 'Fee', value: '$1,850.00' }]

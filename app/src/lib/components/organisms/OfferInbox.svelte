@@ -44,10 +44,15 @@
 		offers,
 		onDecide,
 		practiceName,
+		timeZone,
 		engagementHref,
 		outcome = $bindable()
 	}: {
 		offers: Offer[];
+		/**
+		The Practice's zone, which reads when each Offer was sent.
+		*/
+		timeZone: string;
 		onDecide: (offerId: string, action: 'accept' | 'decline') => Promise<OfferDecision>;
 		practiceName: string;
 		engagementHref: (engagementId: string) => string;
@@ -168,7 +173,7 @@
 						/>
 					</cluster-l>
 					<span class="visually-hidden" id="offer-{offer.offerId}-decide-name"
-						>{decideDescription(offer)}</span
+						>{decideDescription(offer, timeZone)}</span
 					>
 					<!-- v8 ignore stop -->
 				{/if}

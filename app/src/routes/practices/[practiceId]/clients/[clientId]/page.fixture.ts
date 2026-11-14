@@ -26,7 +26,7 @@
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ClientDetail } from '#lib/clientDetail.js';
 import type { EraseEligibility } from '#lib/clientErasure.js';
-import type { RouteFixture, RouteVariant } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS, TYPICAL_STAFF } from '../../../../typicalPilot.js';
 import { persephone } from './client.fixture.js';
 import Page from './+page.svelte';
@@ -289,6 +289,7 @@ export const fixture: RouteFixture = {
 	name: 'The Client detail hub, as an employee Doula',
 	component: Page,
 	params: { practiceId: 'practice-1', clientId: 'client-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/clients/client-1',
 	props: { data: { isContractor: false } },
 	respond: (path) => {

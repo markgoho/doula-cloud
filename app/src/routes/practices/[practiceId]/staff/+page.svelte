@@ -15,6 +15,7 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import { formatInstant } from '#lib/dates.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import { workStateName, workStateReportedOn } from '#lib/workStates.js';
 	import { rolesLabel, employmentTypeLabel } from '#lib/roles.js';
@@ -81,7 +82,7 @@
 		{
 			label: 'Works from',
 			accessor: (member: StaffSummary) =>
-				`${workStateName(member.workState)}, self-reported ${workStateReportedOn(member.workStateReportedAt)}`
+				`${workStateName(member.workState)}, self-reported ${workStateReportedOn(member.workStateReportedAt, practiceTimeZone())}`
 		}
 	];
 
@@ -95,7 +96,7 @@
 		{
 			label: 'Expires',
 			// expiresAt is an instant (staffauth/staff.go, RFC 3339).
-			accessor: (invitation: InvitationSummary) => formatInstant(invitation.expiresAt)
+			accessor: (invitation: InvitationSummary) => formatInstant(invitation.expiresAt, practiceTimeZone())
 		}
 	];
 

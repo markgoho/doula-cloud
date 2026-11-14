@@ -14,7 +14,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { ApprovalDetail } from '#lib/engagementRequest.js';
-import type { RouteFixture } from '../../../../routeFixture.js';
+import { practiceSession, type RouteFixture } from '../../../../routeFixture.js';
 import Page from './+page.svelte';
 
 /*
@@ -54,6 +54,7 @@ export const fixture: RouteFixture = {
 	name: 'The approval screen',
 	component: Page,
 	params: { practiceId: 'practice-1', requestId: 'request-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/engagement-requests/request-1',
 	respond: () => jsonResponse(detail),
 	// The Template draws a Skeleton until the load returns, so the heading

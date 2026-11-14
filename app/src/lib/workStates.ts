@@ -106,9 +106,9 @@ export function workStateName(code: string): string {
  * shapes would make it harder to compare, so the format lives here once.
  *
  * The timestamp is an instant (`staff_work_state_events.created_at`), so
- * it reads as `formatInstant` reads one: month first, in the reader's own
+ * it reads as `formatInstant` reads one: month first, in the Practice's
  * zone (ADR-0022's #1940 amendment, #1958).
  */
-export function workStateReportedOn(timestamp: string): string {
-	return formatInstant(timestamp);
+export function workStateReportedOn(timestamp: string, timeZone: string): string {
+	return formatInstant(timestamp, timeZone);
 }

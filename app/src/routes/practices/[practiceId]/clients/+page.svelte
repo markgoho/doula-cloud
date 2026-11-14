@@ -19,6 +19,7 @@
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
 	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { formatAmount, invoiceMoneyState } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import type { LabeledValue } from '#lib/roles.js';
@@ -650,7 +651,7 @@ import type { PageProps as PageProperties } from './$types';
 		if (line.pregnancyEndedOn) {
 			const day = formatCalendarDay(line.pregnancyEndedOn);
 			if (line.birthOutcome === 'live_birth') {
-				return { lead: '', day, postpartum: formatPostpartum(line.pregnancyEndedOn), bornOn: line.pregnancyEndedOn };
+				return { lead: '', day, postpartum: formatPostpartum(line.pregnancyEndedOn, practiceTimeZone()), bornOn: line.pregnancyEndedOn };
 			}
 			return { lead: 'Ended', day, postpartum: '', bornOn: '' };
 		}

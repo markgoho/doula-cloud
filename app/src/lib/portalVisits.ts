@@ -20,6 +20,22 @@ import type { Fetcher } from './fetcher.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatPortalVisit } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
+import { areZonesApart, zoneName } from './zonedTime.js';
+
+/**
+ * The one line that says which zone a portal screen's times are in, for a
+ * Client whose own zone is another: "Times are in Eastern Time, the time
+ * zone Bloom Doulas works in." Nothing for a Client in the Practice's zone.
+ */
+export function portalZoneNote(
+	practiceName: string,
+	practiceZone: string,
+	readerZone: string,
+	now: Date
+): string | undefined {
+	if (!areZonesApart(practiceZone, readerZone, now)) return undefined;
+	return `Times are in ${zoneName(practiceZone, now)}, the time zone ${practiceName} works in.`;
+}
 
 /**
  * One Visit as a Client reads it: when it is, who is coming, and whether
@@ -76,11 +92,11 @@ interface VisitColumn {
  * is also the drawing's own fill for this cell (`$color-on-surface-variant`):
  * the answer she is scanning for is when, and the name reads beside it.
  */
-export function portalVisitColumns(): VisitColumn[] {
+export function portalVisitColumns(timeZone: string): VisitColumn[] {
 	return [
 		{
 			label: 'When',
-			accessor: (row) => formatPortalVisit(row.scheduledAt, row.hasHappened),
+			accessor: (row) => formatPortalVisit(row.scheduledAt, row.hasHappened, timeZone),
 			variant: 'meta',
 			datetimeAccessor: (row) => row.scheduledAt
 		},

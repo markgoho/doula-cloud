@@ -153,7 +153,7 @@
 	{:else if status?.pending}
 		<Notice
 			variant="status"
-			message={`This Practice is scheduled to be deleted on ${formatInstant(status.finalizeAt!)}. Restore it before then to keep it.`}
+			message={`This Practice is scheduled to be deleted on ${formatInstant(status.finalizeAt!, session.timezone)}. Restore it before then to keep it.`}
 		/>
 	{:else if status?.hasUnsettledInvoices}
 		<Notice

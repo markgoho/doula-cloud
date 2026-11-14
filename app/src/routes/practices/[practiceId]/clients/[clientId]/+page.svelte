@@ -29,6 +29,7 @@
 	import { formatAmount } from '#lib/invoice.js';
 	import { isBlockedInvite, portalInviteStatusText } from '#lib/portalInvite.js';
 	import { formatActivityTimestamp, formatCalendarDay, formatInstant } from '#lib/dates.js';
+	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { formatAddress, formatPhoneNumber } from '#lib/contactDetails.js';
 	import { takeOutcome } from '#lib/outcome.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
@@ -205,7 +206,7 @@
 	// Engagement's and an unsettled Invoice's createdAt, erasedAt,
 	// stripeRedactionEligibleAt, a Request's requestedAt).
 	function formattedDate(iso: string): string {
-		return formatInstant(iso);
+		return formatInstant(iso, practiceTimeZone());
 	}
 
 	// A history row can be either shape; DataTable's Column is one
@@ -256,7 +257,7 @@
 		const records = count === 1 ? 'another record' : `${count} other records`;
 		const last = mergedFrom.at(-1)!;
 		const who = last.mergedByName ?? 'a staff member';
-		return `This Client was combined with ${records}. Most recently on ${formatActivityTimestamp(last.mergedAt)}, by ${who}. The histories below stay separate: each record's own entries are labeled, and combining them never joined the two.`;
+		return `This Client was combined with ${records}. Most recently on ${formatActivityTimestamp(last.mergedAt, practiceTimeZone())}, by ${who}. The histories below stay separate: each record's own entries are labeled, and combining them never joined the two.`;
 	}
 
 	function historyWhat(entry: HistoryRow): string {
@@ -305,7 +306,7 @@
 	// own `at` also feeds the datetimeAccessor below, carrying the exact
 	// instant.
 	function historyWhen(entry: HistoryRow): string {
-		return formatActivityTimestamp(entry.at);
+		return formatActivityTimestamp(entry.at, practiceTimeZone());
 	}
 
 	function historyAt(entry: HistoryRow): string {
@@ -669,6 +670,9 @@
 {/snippet}
 
 {#snippet historySection()}
+	{#if practiceZoneNote()}
+		<Text step="body-sm" tone="muted" text={practiceZoneNote()!} />
+	{/if}
 	{#if mergedFrom.length > 0}
 		<!--
 			The plaintext explanation of why this history has two trails in

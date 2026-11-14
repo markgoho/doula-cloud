@@ -26,6 +26,7 @@ export interface ZonedParts {
 	*/
 	hour: number;
 	minute: number;
+	second: number;
 }
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
@@ -66,7 +67,8 @@ export function partsIn(at: Date, timeZone: string): ZonedParts {
 		day: Number(parts.day),
 		year: Number(parts.year),
 		hour: Number(parts.hour),
-		minute: Number(parts.minute)
+		minute: Number(parts.minute),
+		second: Number(parts.second)
 	};
 }
 
@@ -110,6 +112,27 @@ export function startOfDayIn(day: string, timeZone: string): Date {
 	start = wall - offsetIn(new Date(start), timeZone);
 	return new Date(start);
 }
+
+/**
+ * The instant a wall clock, `YYYY-MM-DDTHH:mm` as a datetime-local control
+ * reports it, shows in `timeZone`. A wall time that does not exist (the hour
+ * a spring-forward day skips) reads as the offset before the change, so it
+ * lands an hour later on the clock; one that happens twice (the hour a
+ * fall-back day repeats) is the first of the two. An unparseable value is an
+ * Invalid Date, as `new Date` would give.
+ */
+export function instantFromWall(local: string, timeZone: string): Date {
+	const wall = Date.parse(`${local}Z`);
+	if (Number.isNaN(wall)) return new Date(NaN);
+	const before = offsetIn(new Date(wall - DAY_MS), timeZone);
+	const after = offsetIn(new Date(wall + DAY_MS), timeZone);
+	const candidates = [wall - before, wall - after].filter(
+		(at, index) => offsetIn(new Date(at), timeZone) === (index === 0 ? before : after)
+	);
+	return new Date(candidates.length === 0 ? wall - before : Math.min(...candidates));
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Whether two zones read `at` differently: another UTC offset then, or another

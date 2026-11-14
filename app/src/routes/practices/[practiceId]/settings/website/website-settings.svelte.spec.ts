@@ -51,7 +51,7 @@ async function setup({ website = undeclared, roles = ['owner'], websiteOk = true
 	// The Practice's name and the caller's roles come off page.data.session
 	// (#835), not a fetch this mock has to answer.
 	pageState.data = {
-		session: { practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles, isContractor: false }
+		session: { practiceId: 'practice-1', practiceName: 'Rochester Doulas', roles, isContractor: false, timezone: 'America/New_York' }
 	};
 	const puts: Record<string, unknown>[] = [];
 	apiFetchWithSession.mockImplementation((path: string, init?: RequestInit) => {
@@ -406,7 +406,7 @@ describe('website settings screen', () => {
 		// runner's local timezone, which can read back a day earlier --
 		// this is still a rendered form of the fixture's value (#596),
 		// through the same dates.ts formatter the component uses (#1958).
-		const updatedOn = formatInstant(fixtureWebsite.updatedAt);
+		const updatedOn = formatInstant(fixtureWebsite.updatedAt, 'America/New_York');
 		await expect
 			.element(testPage.getByText(`Last changed by ${fixtureWebsite.updatedBy} on ${updatedOn}`))
 			.toBeVisible();

@@ -70,6 +70,7 @@
 	import { landOnRow } from '#lib/landOnRow.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatCalendarDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
+	import { instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
 	import {
 		activityLedgerColumns,
 		loadEngagementActivityPage,
@@ -131,7 +132,6 @@
 		type RecordPaymentInput,
 		type RefundPaymentInput
 	} from '#lib/invoice.js';
-	import { loadPracticeTimezone } from '#lib/practiceTimezone.js';
 	import { loadRates, type Rate } from '#lib/rates.js';
 	import OfferSection from '#lib/components/organisms/OfferSection.svelte';
 	import DoulaFeeSection from '#lib/components/organisms/DoulaFeeSection.svelte';
@@ -204,7 +204,7 @@
 	// which refuses a contractor on its own.
 	const isPracticeOwnerOrAdmin = $derived(isOwnerOrAdmin(data.session));
 	// A Visit's day and time are the Practice's own (ADR-0036), here as on the Schedule.
-	const visitTimeZone = $derived(data.session.timezone);
+	const timeZone = $derived(data.session.timezone);
 	const canReadContractMoney = $derived(!isAmbientContractor(data.session));
 
 	// InvoiceSection's Owner branch (#270): only an Owner gets the link to
@@ -751,7 +751,7 @@
 		reassignStaffId = '';
 		hasAttemptedReassign = false;
 		if (typeof change === 'object') {
-			changeScheduledAt = toDatetimeLocalValue(change.visit.scheduledAt);
+			changeScheduledAt = toDatetimeLocalValue(change.visit.scheduledAt, timeZone);
 			changeNotes = change.visit.notes ?? '';
 		}
 	}
@@ -807,12 +807,12 @@
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
 	const messageThreadRows = $derived.by<SummaryListRow[]>(() => {
-		const latest = latestMessageText(messages);
+		const latest = latestMessageText(messages, timeZone);
 		if (latest === undefined) return [];
 		const since = unansweredSince(messages);
 		return [
 			{ label: 'Latest', value: latest },
-			...(since ? [{ label: 'Unanswered', value: `Since ${formatInstant(since)}` }] : [])
+			...(since ? [{ label: 'Unanswered', value: `Since ${formatInstant(since, timeZone)}` }] : [])
 		];
 	});
 	// Load (including "load older") and download are separate SectionState
@@ -912,15 +912,8 @@
 	const billingModeState = new SectionState<BillingMode | undefined>(undefined);
 	const billingMode = $derived(billingModeState.value);
 
-	// #1280: the Practice's own zone (ADR-0036) InvoiceSection reads
-	// "today" in for the payment-date field's default and its
-	// future-date ceiling, matching PostManualPaymentHandler's own
-	// guard (#1167). Loaded once at mount (loadPracticeTimezoneSection
-	// below) -- '' means "not loaded yet", which gates the Invoices
-	// section out below rather than handing InvoiceSection a zone that
-	// would fall back to UTC's own day.
-	const practiceTimezoneState = new SectionState('');
-	const practiceTimezone = $derived(practiceTimezoneState.value);
+	const practiceTimezone = $derived(timeZone);
+	const visitsZoneNote = $derived(zoneNote(timeZone, readerTimeZone(), new Date()));
 	// #2828: the Practice's payment terms, the answer Create Invoice's due
 	// question has chosen. 0 until read; real terms are at least a day.
 	const paymentTermsState = new SectionState(0);
@@ -1226,7 +1219,7 @@
 		rows.push(
 			{ label: 'Portal invite', value: portalInviteSummaryText(clientPortalState, hasClientEmailOnFile) },
 			// createdAt is an instant (engagement/detail.go).
-			{ label: 'Created', value: formatInstant(detail.createdAt) }
+			{ label: 'Created', value: formatInstant(detail.createdAt, timeZone) }
 		);
 		return rows;
 	});
@@ -1309,7 +1302,7 @@
 	function birthPlanReadText(instance: Instance): string {
 		if (!birthPlanOffer.offersBirthPlan) return `Not shown to ${detail.clientName}`;
 		return instance.clientAcknowledgedAt
-			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt)}`
+			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt, timeZone)}`
 			: `${detail.clientName} has not read this yet`;
 	}
 
@@ -1358,8 +1351,8 @@
 	// A Plan's one audit row (#2104, #2133): the last save once there is
 	// one, which also says the Plan was started; until then, the start.
 	function planTrailRows(instance: Instance): SummaryListRow[] {
-		if (instance.lastEdited) return [{ label: 'Last edited', value: stampText(instance.lastEdited) }];
-		if (instance.started) return [{ label: 'Started', value: stampText(instance.started) }];
+		if (instance.lastEdited) return [{ label: 'Last edited', value: stampText(instance.lastEdited, timeZone) }];
+		if (instance.started) return [{ label: 'Started', value: stampText(instance.started, timeZone) }];
 		return [];
 	}
 
@@ -1600,18 +1593,6 @@
 		);
 	}
 
-	// #1280: a Practice's zone (ADR-0036) does not move when a Payment is
-	// recorded, voided, reversed, or refunded, so this is loaded once at
-	// mount rather than inside loadInvoicesSection above -- which those
-	// four writes re-run -- to avoid re-reading a fact none of them
-	// changes.
-	async function loadPracticeTimezoneSection() {
-		await practiceTimezoneState.load(async () => {
-			const timezone = await loadPracticeTimezone(apiFetchWithSession, page.params.practiceId!);
-			return timezone.timezone;
-		}, 'Failed to load Practice timezone');
-	}
-
 	async function loadPaymentTermsSection() {
 		await paymentTermsState.load(async () => {
 			const terms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
@@ -1826,13 +1807,13 @@
 	}
 
 	/* An instant the BFF takes, from what `<input type="datetime-local">`
-	   holds -- which is a local wall-clock time with no zone on it, so it
-	   is read in the reader's own zone rather than parsed as UTC. An empty
+	   holds -- which is a wall-clock time with no zone on it, so it is read
+	   in the Practice's zone rather than the reader's or UTC. An empty
 	   control (or a half-typed one, which reports '') is `undefined`, never
 	   `new Date('')`, whose `toISOString()` throws "Invalid time value"
 	   (#1969). */
 	function toInstant(local: string): Date | undefined {
-		const instant = new Date(local);
+		const instant = instantFromWall(local, timeZone);
 		return local === '' || Number.isNaN(instant.getTime()) ? undefined : instant;
 	}
 
@@ -1961,7 +1942,7 @@
 			(gap): GapRow => ({
 				gap,
 				label: gap.staffName,
-				value: `${formatInstant(gap.startsAt)} to ${formatInstant(gap.endsAt)}`,
+				value: `${formatInstant(gap.startsAt, timeZone)} to ${formatInstant(gap.endsAt, timeZone)}`,
 				changes: `the gap for ${gap.staffName}`
 			})
 		)
@@ -2036,7 +2017,6 @@
 			...planSections.map((section) => loadPlan(section.type)),
 			loadContractSection(),
 			loadInvoicesSection(),
-			loadPracticeTimezoneSection(),
 			loadPaymentTermsSection(),
 			loadRosterThenOffers(),
 			loadOnCall(),
@@ -2107,7 +2087,7 @@
 		// cannot admit. The refusal and its remedy are already on screen,
 		// beside the field, from the moment she was picked.
 		if (newVisitBlock) return;
-		const scheduledAt = newVisitScheduledAt ? new Date(newVisitScheduledAt).toISOString() : undefined;
+		const scheduledAt = newVisitScheduledAt ? instantFromWall(newVisitScheduledAt, timeZone).toISOString() : undefined;
 		const staffId = visitStaffId || undefined;
 		let emailed: string[] = [];
 		if (
@@ -2140,8 +2120,8 @@
 	 */
 	async function handleChangeVisit(event: SubmitEvent, visit: Visit) {
 		event.preventDefault();
-		const scheduledAt = changeScheduledAt ? new Date(changeScheduledAt).toISOString() : undefined;
-		const isRescheduled = changeScheduledAt !== toDatetimeLocalValue(visit.scheduledAt);
+		const scheduledAt = changeScheduledAt ? instantFromWall(changeScheduledAt, timeZone).toISOString() : undefined;
+		const isRescheduled = changeScheduledAt !== toDatetimeLocalValue(visit.scheduledAt, timeZone);
 		const hasNewNotes = changeNotes !== (visit.notes ?? '');
 		let hasWritten = false;
 		const wasSaved = await visitChange.mutate(async () => {
@@ -2177,7 +2157,7 @@
 		openVisitForm();
 		await loadVisits();
 		const which = visit.scheduledAt
-			? `The Visit on ${formatScheduledVisit(visit.scheduledAt, visitTimeZone)}`
+			? `The Visit on ${formatScheduledVisit(visit.scheduledAt, timeZone)}`
 			: 'The Visit that is not yet scheduled';
 		// #2436: who was emailed, never that anyone knows: an email can be
 		// sent and still not be read.
@@ -2593,7 +2573,7 @@
 {/snippet}
 
 {#snippet visitWhenCell(visit: Visit, view: DataTableView)}
-	<VisitWhen at={visit.scheduledAt} timeZone={visitTimeZone} isTracked={view === 'table'} />
+	<VisitWhen at={visit.scheduledAt} {timeZone} isTracked={view === 'table'} />
 {/snippet}
 
 {#snippet visitDoulaCell(visit: Visit, view: DataTableView)}
@@ -2608,7 +2588,7 @@
 		tree is asking.
 	-->
 	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
-		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt, visitTimeZone)}</span
+		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt, timeZone)}</span
 	>
 	<cluster-l space="var(--space-3)">
 		<Button
@@ -2709,7 +2689,7 @@
 		<Heading
 			level={3}
 			text={visit.scheduledAt
-				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt, visitTimeZone)}`
+				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt, timeZone)}`
 				: `${act} the Visit for ${visit.staffName}, not yet scheduled`}
 			focusOnAppearing
 		/>
@@ -2812,6 +2792,8 @@
 
 	{#if visitsLoad.error}
 		<Notice variant="error" message={visitsLoad.error} />
+	{:else if visitsZoneNote}
+		<Text text={visitsZoneNote} tone="muted" />
 	{/if}
 
 	<!--
@@ -2838,7 +2820,7 @@
 	{:else}
 	<DataTable
 		columns={[
-			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt, visitTimeZone), content: visitWhenCell },
+			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: visitWhenCell },
 			{ label: 'Type', accessor: (visit: Visit) => visitTypeLabel(visit.type) },
 			{
 				label: 'Doula',
@@ -3016,6 +2998,7 @@
 				<Notice variant="error" message={contractError} />
 			{/if}
 			<ContractStatus
+				{timeZone}
 				status={contract.status}
 				hasSignedPdf={contract.hasSignedPdf}
 				amountChangedAt={contract.amountChangedAt}
@@ -3174,9 +3157,6 @@
 	{#if billingModeState.error}
 		<Notice variant="error" message={billingModeState.error} />
 	{/if}
-	{#if practiceTimezoneState.error}
-		<Notice variant="error" message={practiceTimezoneState.error} />
-	{/if}
 	{#if paymentTermsState.error}
 		<Notice variant="error" message={paymentTermsState.error} />
 	{/if}
@@ -3187,7 +3167,7 @@
 	     rather than mounting with '' and throwing on its own first date
 	     computation. A still-loading or failed read leaves this gap
 	     blank; the Notice above already says why. -->
-	{#if practiceTimezone && paymentTermsDays > 0}
+	{#if paymentTermsDays > 0}
 		<InvoiceSection
 			{invoices}
 			{contractStatus}
@@ -3213,7 +3193,7 @@
 			onVoidInvoice={handleVoidInvoice}
 			onWriteOffInvoice={handleWriteOffInvoice}
 		/>
-	{:else if !practiceTimezoneState.error && !paymentTermsState.error}
+	{:else if !paymentTermsState.error}
 		<Skeleton label="Loading the Invoices" />
 	{/if}
 {/snippet}
@@ -3222,7 +3202,7 @@
 	{#if detail.startNote}
 		<p class="start-note">{detail.startNote.text}</p>
 		<Text
-			text={`Written by ${detail.startNote.writtenBy} on ${formatInstantWithClock(detail.startNote.writtenAt)}.`}
+			text={`Written by ${detail.startNote.writtenBy} on ${formatInstantWithClock(detail.startNote.writtenAt, timeZone)}.`}
 			step="meta"
 			tone="muted"
 		/>
@@ -3251,6 +3231,7 @@
 		<Notice variant="error" message="We could not load the Offers." />
 	{:else}
 	<OfferSection
+		{timeZone}
 		{offers}
 		doulas={offerDoulas}
 		clientName={detail!.clientName}
@@ -3269,7 +3250,7 @@
 	     waits for it, as InvoiceSection does. -->
 	{#if !doulaFeesState.hasSettled}
 		<Skeleton label="Loading the Doula fees" />
-	{:else if practiceTimezone}
+	{:else}
 		<DoulaFeeSection
 			fees={doulaFeesState.value ?? []}
 			{practiceTimezone}
@@ -3292,6 +3273,7 @@
 	{/if}
 	{#if messagesLoad.hasSettled}
 	<MessageThread
+		{timeZone}
 		{messages}
 		error={messagesError}
 		hasMore={isMessagesHasMore}
@@ -3574,7 +3556,7 @@
 		<Skeleton label="Loading the Activity" />
 	{:else}
 	<DataTable
-		columns={activityLedgerColumns()}
+		columns={activityLedgerColumns(timeZone)}
 		rows={shownActivity}
 		hasMore={hasMoreActivity}
 		onLoadMore={showMoreActivity}

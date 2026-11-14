@@ -411,12 +411,12 @@ describe('client detail hub', () => {
 		const approvedRow = testPage.getByRole('row', { name: /Postpartum work approved/ });
 		await expect.element(approvedRow.getByRole('cell', { name: 'Renata Alvarez' })).toBeVisible();
 		await expect
-			.element(approvedRow.getByText(formatActivityTimestamp('2026-01-03T00:00:00Z')))
+			.element(approvedRow.getByText(formatActivityTimestamp('2026-01-03T00:00:00Z', 'America/New_York')))
 			.toHaveAttribute('datetime', '2026-01-03T00:00:00Z');
 		const askedRow = testPage.getByRole('row', { name: /Postpartum work requested/ });
 		await expect.element(askedRow.getByRole('cell', { name: 'Priya Raman' })).toBeVisible();
 		await expect
-			.element(askedRow.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z')))
+			.element(askedRow.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z', 'America/New_York')))
 			.toHaveAttribute('datetime', '2026-01-02T00:00:00Z');
 	});
 
@@ -458,10 +458,10 @@ describe('client detail hub', () => {
 		// ADR-0022: the exact instant stays underneath the shared ledger's
 		// own relative-or-absolute display string.
 		await expect
-			.element(testPage.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z')).first())
+			.element(testPage.getByText(formatActivityTimestamp('2026-01-02T00:00:00Z', 'America/New_York')).first())
 			.toHaveAttribute('datetime', '2026-01-02T00:00:00Z');
 		await expect
-			.element(testPage.getByText(formatActivityTimestamp('2026-01-01T00:00:00Z')).first())
+			.element(testPage.getByText(formatActivityTimestamp('2026-01-01T00:00:00Z', 'America/New_York')).first())
 			.toHaveAttribute('datetime', '2026-01-01T00:00:00Z');
 	});
 
@@ -917,7 +917,7 @@ describe('the pending-request block: Withdraw (#504)', () => {
 		// it, and keeps the asking beneath it.
 		const withdrawnRow = testPage.getByRole('row', { name: /Postpartum work request withdrawn/ });
 		await expect
-			.element(withdrawnRow.getByText(formatActivityTimestamp('2026-01-04T08:00:00Z')))
+			.element(withdrawnRow.getByText(formatActivityTimestamp('2026-01-04T08:00:00Z', 'America/New_York')))
 			.toHaveAttribute('datetime', '2026-01-04T08:00:00Z');
 		await expect.element(testPage.getByRole('cell', { name: 'Postpartum work requested' })).toBeVisible();
 	});
@@ -1168,7 +1168,7 @@ describe('a Client merged from two records (#813)', () => {
 			.element(testPage.getByText('This Client was combined with another record', { exact: false }))
 			.toBeVisible();
 		await expect
-			.element(testPage.getByText(formatActivityTimestamp(merged.mergedAt), { exact: false }).first())
+			.element(testPage.getByText(formatActivityTimestamp(merged.mergedAt, 'America/New_York'), { exact: false }).first())
 			.toBeVisible();
 		await expect.element(testPage.getByText(merged.mergedByName!, { exact: false }).first()).toBeVisible();
 	});

@@ -14,7 +14,7 @@
  */
 import { jsonResponse } from '#lib/testResponse.js';
 import type { PendingRequestItem } from '#lib/engagementRequest.js';
-import type { RouteFixture, RouteVariant } from '../../../routeFixture.js';
+import { practiceSession, type RouteFixture, type RouteVariant } from '../../../routeFixture.js';
 import { nth, TYPICAL_CLIENTS, TYPICAL_DOULAS } from '../../../typicalPilot.js';
 import Page from './+page.svelte';
 
@@ -73,6 +73,7 @@ export const fixture: RouteFixture = {
 	variants: [typical],
 	component: Page,
 	params: { practiceId: 'practice-1' },
+	pageData: practiceSession(['owner']),
 	url: 'https://example.test/practices/practice-1/engagement-requests',
 	respond: () => jsonResponse({ items: requests, hasMore: false }),
 	readyText: 'Requests awaiting approval'

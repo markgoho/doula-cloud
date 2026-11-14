@@ -45,6 +45,7 @@
 	import { editClient, mergeClient, type CollisionMatch } from '#lib/client.js';
 	import { fullName } from '#lib/personName.js';
 	import { matchHistory } from '#lib/clientMatch.js';
+	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import type { JourneyStep } from '#lib/components/organisms/StepRail.svelte';
 	import SummaryList from '#lib/components/molecules/SummaryList.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
@@ -132,7 +133,7 @@
 		...editMergeDraft.matches.map((match) => ({
 			value: match.id,
 			label: fullName(match),
-			description: [matchHistory(match), keptLine(match)]
+			description: [matchHistory(match, practiceTimeZone()), keptLine(match)]
 		})),
 		{
 			value: DIFFERENT_PERSON,

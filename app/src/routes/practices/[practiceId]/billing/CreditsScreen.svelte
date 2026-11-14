@@ -12,6 +12,7 @@
 	} from '#lib/billing.js';
 	import { formatMoney } from '#lib/money.js';
 	import { formatCalendarDay, formatInstantWithClock } from '#lib/dates.js';
+	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { readApprovalReturn } from '#lib/engagementRequest.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
 	import type { FormError } from '#lib/formErrors.js';
@@ -47,7 +48,7 @@
 
 	const columns = [
 		// createdAt is an instant (billing/balance.go), to the minute.
-		{ label: 'Date', accessor: (entry: LedgerEntry) => formatInstantWithClock(entry.createdAt) },
+		{ label: 'Date', accessor: (entry: LedgerEntry) => formatInstantWithClock(entry.createdAt, practiceTimeZone()) },
 		{ label: 'Origin', accessor: (entry: LedgerEntry) => originLabel(entry.origin) },
 		{
 			label: 'Quantity',
@@ -137,6 +138,9 @@
 {/snippet}
 
 {#snippet content()}
+	{#if practiceZoneNote()}
+		<Text text={practiceZoneNote()!} tone="muted" />
+	{/if}
 	<DataTable
 		{columns}
 		rows={ledger.items}

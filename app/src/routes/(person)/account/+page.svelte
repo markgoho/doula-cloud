@@ -42,6 +42,8 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiBaseURL, apiFetchWithSession } from '#lib/api.js';
 	import { staffLoginAfterSessionEnded } from '#lib/sessionEnded.js';
+	// A person's own account spans Practices, so the date is read in her own zone.
+	import { readerTimeZone } from '#lib/zonedTime.js';
 	import { getFirebaseAuth } from '#lib/firebase.js';
 	import { RefusalError, refusalMessage, SERVICE_PROBLEM } from '#lib/formErrors.js';
 	import { FormSubmission, orThrownMessage } from '#lib/formSubmission.svelte.js';
@@ -359,7 +361,7 @@
 			<!-- The reported date is the only staleness signal the design
 			     has (#437), so it stays beside the state it dates. -->
 			{#if row.key === 'work-state' && reportedAt}
-				<Text text={`Last confirmed ${workStateReportedOn(reportedAt)}.`} step="meta" tone="muted" />
+				<Text text={`Last confirmed ${workStateReportedOn(reportedAt, readerTimeZone())}.`} step="meta" tone="muted" />
 			{/if}
 		{/snippet}
 

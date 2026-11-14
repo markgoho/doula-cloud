@@ -47,7 +47,7 @@
 
 	<section>
 		<h2>Default</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			{messages}
 			error=""
 			hasMore={false}
@@ -61,7 +61,7 @@
 
 	<section>
 		<h2>Read by the Client, with an inline image preview</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			{messages}
 			error=""
 			hasMore={false}
@@ -77,7 +77,7 @@
 
 	<section>
 		<h2>Load older messages</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			{messages}
 			error=""
 			hasMore={true}
@@ -91,7 +91,7 @@
 
 	<section>
 		<h2>Error</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			{messages}
 			error="We could not load the rest of this conversation. Check your connection and try again."
 			hasMore={false}
@@ -105,7 +105,7 @@
 
 	<section>
 		<h2>Empty</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			messages={[]}
 			error=""
 			hasMore={false}
@@ -125,7 +125,7 @@
 	-->
 	<section>
 		<h2>Read first, with the form behind its opener</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			{messages}
 			error=""
 			hasMore={false}
@@ -140,7 +140,7 @@
 
 	<section>
 		<h2>No message can be sent yet</h2>
-		<MessageThread
+		<MessageThread timeZone="America/New_York"
 			messages={[]}
 			error=""
 			hasMore={false}

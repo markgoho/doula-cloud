@@ -15,6 +15,7 @@ import { engagementLabel } from '#lib/clientRegister.js';
 import { noVisitsMessage } from '#lib/portalVisits.js';
 import { NEXT_HEADING, NO_NEXT_VISIT_MESSAGE } from '#lib/yourCare.js';
 import { pageState } from '#testing/routePage.js';
+import { inReaderZone } from '#lib/testZone.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
 
 /*
@@ -149,7 +150,7 @@ describe('Client portal Engagement hub', () => {
 			pageState.data = { ...pageState.data, createdAt: started };
 			mockFetch({ ...detail, isOneOfSeveral: true });
 			const screen = await render(Hub);
-			const label = engagementLabel({ practiceName, createdAt: started });
+			const label = engagementLabel({ practiceName, createdAt: started }, 'America/New_York');
 			await expect.element(page.getByText(label, { exact: true })).toBeVisible();
 			labels.push(label);
 			screen.unmount();
@@ -163,7 +164,7 @@ describe('Client portal Engagement hub', () => {
 
 		await expect.element(page.getByText(practiceName, { exact: true })).toBeVisible();
 		await expect
-			.element(page.getByText(engagementLabel({ practiceName, createdAt }), { exact: true }))
+			.element(page.getByText(engagementLabel({ practiceName, createdAt }, 'America/New_York'), { exact: true }))
 			.not.toBeInTheDocument();
 	});
 
@@ -302,7 +303,7 @@ describe('Client portal Engagement hub', () => {
 		await setupHub();
 
 		await expect.element(page.getByText('Your due date is Mar 1, 2027.')).toBeVisible();
-		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }));
+		expect(document.title).toContain(engagementLabel({ practiceName, createdAt }, 'America/New_York'));
 	});
 
 	// ADR-0017: a postpartum-only Engagement has no due date, and once any
@@ -566,6 +567,9 @@ async function setupVisits({ items = visits, refusal }: { items?: unknown[]; ref
 }
 
 describe('Your visits (#478)', () => {
+	// The Practice is in New York; the Client is named to be in Tokyo, ahead of it by 13 or 14 hours.
+	inReaderZone('Asia/Tokyo');
+
 	it("heads the section with the register's own word", async () => {
 		await setupVisits();
 
@@ -585,29 +589,19 @@ describe('Your visits (#478)', () => {
 		const text = visitsTableText(container);
 
 		// The upcoming one: weekday first, then the clock, because the
-		// hour is the part she has to be ready for. Both instants are read
-		// in the runner's own zone, which is what a Client's browser does
-		// with the same value.
-		const upcoming = new Date(visits[0]!.scheduledAt);
-		const weekday = upcoming.toLocaleDateString('en-US', { weekday: 'short' });
-		const month = upcoming.toLocaleDateString('en-US', { month: 'short' });
-		await expect
-			.poll(text)
-			.toMatch(new RegExp(`${weekday} ${month} ${upcoming.getDate()}, ${String.raw`\d+:\d\d[ap]m`}`));
+		// hour is the part she has to be ready for. Read in the Practice's
+		// zone: 19:00Z is 2:00pm in New York, though 4:00am the next day
+		// where this Client's browser is.
+		await expect.poll(text).toContain('Thu Feb 18, 2:00pm');
 		expect(text()).toContain(visits[0]!.doulaName);
 
 		// The past one: the calendar day it was on, no weekday and no
 		// clock -- neither is what she is checking a month later.
-		const happened = new Date(visits[1]!.scheduledAt);
-		const happenedMonth = happened.toLocaleDateString('en-US', { month: 'short' });
-		expect(text()).toContain(`${happenedMonth} ${happened.getDate()}, ${happened.getFullYear()}`);
+		expect(text()).toContain('Aug 18, 2026');
 		expect(text()).toContain(visits[1]!.doulaName);
 		// The past row carries no weekday and no clock of its own -- the
 		// whole of what tells the two apart on the page.
-		const pastDay = `${happenedMonth} ${happened.getDate()}`;
-		expect(text()).not.toMatch(
-			new RegExp(`${String.raw`\w{3} `}${pastDay}|${pastDay}${String.raw`, \d{4}, \d`}`)
-		);
+		expect(text()).not.toMatch(/\w{3} Aug 18|Aug 18, \d{4}, \d/);
 	});
 
 	// A Visit's derived type is staff-only (GLOSSARY.md's Visit entry), and
@@ -658,12 +652,27 @@ describe('Your visits (#478)', () => {
 		const { container } = await setupVisits({ items: [later, ...visits] });
 		const text = visitsTableText(container);
 
-		const soonest = new Date(visits[0]!.scheduledAt);
-		const soonestDay = `${soonest.toLocaleDateString('en-US', { month: 'short' })} ${soonest.getDate()}`;
-		const furthest = new Date(later.scheduledAt);
-		const furthestDay = `${furthest.toLocaleDateString('en-US', { month: 'short' })} ${furthest.getDate()}`;
-		await expect.poll(text).toContain(furthestDay);
-		expect(text()!.indexOf(soonestDay)).toBeLessThan(text()!.indexOf(furthestDay));
+		await expect.poll(text).toContain('Tue Apr 20, 11:00am');
+		expect(text()!.indexOf('Thu Feb 18')).toBeLessThan(text()!.indexOf('Tue Apr 20'));
+	});
+
+	it("says once, in the Practice's name, which zone the times are in, to a Client in another (#2872)", async () => {
+		await setupVisits();
+
+		const note = `Times are in Eastern Time, the time zone ${practiceName} works in.`;
+		await expect.element(page.getByText(note)).toBeVisible();
+		expect(page.getByText(note).elements()).toHaveLength(1);
+	});
+});
+
+describe('Your visits, for a Client in the Practice zone (#2872)', () => {
+	inReaderZone('America/New_York');
+
+	it('reads the same times and adds no line about the zone', async () => {
+		const { container } = await setupVisits();
+
+		await expect.poll(visitsTableText(container)).toContain('Thu Feb 18, 2:00pm');
+		expect(page.getByText(/Times are in/).elements()).toHaveLength(0);
 	});
 });
 

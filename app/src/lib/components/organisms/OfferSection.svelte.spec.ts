@@ -56,6 +56,7 @@ async function setup(options: SetupOptions = {}) {
 	} = options;
 	const doulas = 'doulas' in options ? options.doulas : [contractor, employee];
 	const { container } = await render(OfferSection, {
+		timeZone: 'America/New_York',
 		offers,
 		doulas,
 		clientName,

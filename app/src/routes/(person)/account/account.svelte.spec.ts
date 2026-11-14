@@ -2,6 +2,7 @@ import { page as testPage } from 'vitest/browser';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import { workStateReportedOn } from '#lib/workStates.js';
+import { inReaderZone } from '#lib/testZone.js';
 import { jsonResponse as buildResponse } from '#lib/testResponse.js';
 import { expectFieldError } from '#lib/components/molecules/LabeledField.testing.js';
 import { gotoWithOutcome } from '#lib/outcome.js';
@@ -100,6 +101,9 @@ async function setup(options: MockOptions = {}) {
  * their own (name/, work-state/).
  */
 describe('the account summary', () => {
+	// A person's own account reads dates in her own zone; the spec names it rather than trusting the runner's.
+	inReaderZone('America/New_York');
+
 	it('shows her name, where she works and since when, her email address and her second factor', async () => {
 		await setup();
 
@@ -107,7 +111,7 @@ describe('the account summary', () => {
 		await expect.element(testPage.getByText(`${session.firstName} ${session.lastName}`)).toBeVisible();
 		await expect.element(testPage.getByText('New York')).toBeVisible();
 		await expect
-			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(session.workStateReportedAt)}.`))
+			.element(testPage.getByText(`Last confirmed ${workStateReportedOn(session.workStateReportedAt, 'America/New_York')}.`))
 			.toBeVisible();
 		await expect.element(testPage.getByText(session.email)).toBeVisible();
 		await expect.element(testPage.getByText('Off', { exact: true })).toBeVisible();

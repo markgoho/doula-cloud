@@ -221,7 +221,7 @@
 						href={resolve('/portal/(authenticated)/engagements/[engagementId]', {
 							engagementId: engagement.engagementId
 						})}
-						label={engagementLabel(engagement)}
+						label={engagementLabel(engagement, engagement.practiceTimezone)}
 						description={engagementStatusLabel(engagement.status)}
 					/>
 				</li>
