@@ -121,7 +121,23 @@ export interface ScheduleView {
 	One Doula's Visits: a Staff id, or empty.
 	*/
 	doula: string;
+	/**
+	The order the reader chose: empty is soonest first, the list's own.
+	*/
+	order: ScheduleOrder;
 }
+
+/**
+The orders the Schedule is read in (#2869): the empty one is soonest first.
+*/
+export type ScheduleOrder = '' | 'latest';
+
+export const LATEST_ORDER: ScheduleOrder = 'latest';
+
+export const SCHEDULE_ORDER_OPTIONS: readonly { value: ScheduleOrder; label: string }[] = [
+	{ value: '', label: 'Soonest first' },
+	{ value: LATEST_ORDER, label: 'Latest first' }
+];
 
 /**
 The two days a view reads, once they are both days and in order.
@@ -170,7 +186,8 @@ export function scheduleViewFromParameters(
 		preset: parameters.get('days') === String(SHORT_SCHEDULE_DAYS) ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
 		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
 		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
-		doula: withoutPicker ? '' : doula
+		doula: withoutPicker ? '' : doula,
+		order: parameters.get('order') === LATEST_ORDER ? LATEST_ORDER : ''
 	};
 }
 
@@ -204,6 +221,7 @@ export function scheduleHref(basePath: string, view: ScheduleView): string {
 	}
 	if (view.isMine) parameters.set('mine', 'true');
 	if (view.doula) parameters.set('doula', view.doula);
+	if (view.order) parameters.set('order', view.order);
 	const query = parameters.toString();
 	return query ? `${basePath}?${query}` : basePath;
 }
@@ -218,7 +236,7 @@ export function withDefaultDays(view: ScheduleView): ScheduleView {
 Whether the address names anything beyond the default days.
 */
 export function isScheduleNarrowed(view: ScheduleView): boolean {
-	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '';
+	return view.preset !== DEFAULT_SCHEDULE_DAYS || view.chosen !== undefined || view.isMine || view.doula !== '' || view.order !== '';
 }
 
 /** Whose Visits the BFF is asked for. It takes one Staff id; "Mine" and a
@@ -242,6 +260,7 @@ export interface ResolvedScheduleFilters {
 	to: string;
 	timeZone: string;
 	staffId?: string;
+	order?: ScheduleOrder;
 }
 
 /** The BFF path for one page of the schedule, with the calendar days
@@ -254,6 +273,7 @@ export function practiceSchedulePath(
 	const range = toInstantRange(filters.from, filters.to, filters.timeZone);
 	const parameters = new URLSearchParams({ from: range.from, to: range.to });
 	if (filters.staffId) parameters.set('staffId', filters.staffId);
+	if (filters.order) parameters.set('order', filters.order);
 	if (cursor) parameters.set('cursor', cursor);
 	return `/api/practices/${practiceId}/visits?${parameters.toString()}`;
 }
@@ -352,6 +372,17 @@ export interface ScheduleWho {
 	The reader's own Visits are asked for.
 	*/
 	isMine?: boolean;
+	/**
+	The order the rows are in; the line ends on its words.
+	*/
+	order?: ScheduleOrder;
+}
+
+/**
+The words a result line ends on for an order.
+*/
+export function scheduleOrderWords(order: ScheduleOrder = ''): string {
+	return order === LATEST_ORDER ? 'latest first' : 'soonest first';
 }
 
 /** What the result line says: the count, and while more exist how many there
@@ -373,7 +404,7 @@ export function scheduleResultSummary(
 		if (who.doulaName) return `No Visits for ${who.doulaName} ${span}.`;
 		return `No Visits ${span}.`;
 	}
-	const ordered = hasMore || count > 1 ? ', soonest first' : '';
+	const ordered = hasMore || count > 1 ? `, ${scheduleOrderWords(who.order)}` : '';
 	if (count === 1) {
 		const owner = who.isMine ? 'your' : (who.doulaName ? `${who.doulaName}'s` : '');
 		const one = hasMore ? 'first Visit' : '1 Visit';
@@ -399,6 +430,7 @@ export function scheduleResultRuler(longestDoulaName: string): string {
 	const now = new Date(1999, 0, 1);
 	return [
 		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName }, now, 9999),
+		scheduleResultSummary(999, true, days, 'UTC', { doulaName: longestDoulaName, order: LATEST_ORDER }, now, 9999),
 		scheduleResultSummary(999, true, days, 'UTC', { isMine: true }, now, 9999),
 		scheduleResultSummary(0, false, days, 'UTC', { isMine: true, doulaName: longestDoulaName }, now)
 	].toSorted((a, b) => b.length - a.length)[0];

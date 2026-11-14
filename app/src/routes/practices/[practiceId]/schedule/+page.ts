@@ -83,7 +83,7 @@ export const load: PageLoad = async ({
 	const read = scheduleDaysOf(view, timeZone, now);
 	const whose = scheduleStaffId(view, session.staffId);
 	const filters: ResolvedScheduleFilters = read.days
-		? { ...read.days, timeZone, staffId: whose.staffId }
+		? { ...read.days, timeZone, staffId: whose.staffId, order: view.order }
 		: { from: '', to: '', timeZone };
 	const isReadable = read.days !== undefined && !whose.isEmpty;
 	const schedule: Promise<StreamedRead<SchedulePage>> = isReadable

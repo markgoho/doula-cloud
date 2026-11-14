@@ -274,6 +274,13 @@
 		 */
 		rowGroup?: (row: T) => { key: string; label: string };
 		/**
+		 * The column the rows are in order by, named by its `label`, and which
+		 * way (#2869): `aria-sort` on that column's header and nowhere else.
+		 * The headers are not buttons; the order is chosen in the bar
+		 * (`FilterBar`'s `order`), so a header never acts as a second apply.
+		 */
+		orderedBy?: { column: string; direction: 'ascending' | 'descending' };
+		/**
 		 * The heading level of a group's heading in the record view, which
 		 * only the page can know. The table's own heading row is a row group
 		 * header and has no level.
@@ -303,6 +310,7 @@
 		hasRowHeader = true,
 		isBusy = false,
 		rowGroup,
+		orderedBy,
 		groupHeadingLevel = 2
 	}: Properties<T> = $props();
 
@@ -477,7 +485,13 @@
 			<thead>
 				<tr>
 					{#each columns as column (column.label)}
-						<th scope="col" class:numeric={column.numeric} class:wraps={column.wraps} class:grows={column.grows}>{column.label}</th>
+						<th
+							scope="col"
+							aria-sort={orderedBy?.column === column.label ? orderedBy.direction : undefined}
+							class:numeric={column.numeric}
+							class:wraps={column.wraps}
+							class:grows={column.grows}>{column.label}</th
+						>
 					{/each}
 					{#if rowActions}
 						<!-- `actions` names the column of this table's own controls for

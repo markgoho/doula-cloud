@@ -3,6 +3,7 @@ package visit
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -37,6 +38,14 @@ const (
 	MsgInvalidTo     = "to must be an RFC3339 timestamp"
 	MsgEmptyRange    = "to must be after from"
 	MsgInvalidCursor = "invalid cursor"
+	MsgInvalidOrder  = "The order must be empty or latest."
+)
+
+// The orders the schedule reads in (#2869). The empty name is the view's
+// own, soonest first.
+const (
+	orderSoonest = ""
+	orderLatest  = "latest"
 )
 
 // ScheduledVisit is one row of the Practice-wide schedule: when the Visit
@@ -92,6 +101,32 @@ type scheduleFilter struct {
 	// staff id her attachment rows are keyed by. Empty for every other
 	// caller, which is what turns the EXISTS narrowing off.
 	contractorStaffID string
+	// order is the name of the order the reader chose; the count ignores it.
+	order string
+}
+
+// scheduleAfter is the position a keyed cursor decodes to: the scheduled
+// instant and the Visit the previous page ended on.
+type scheduleAfter struct {
+	at time.Time
+	id string
+}
+
+func decodeScheduleCursor(order string) func(string) (scheduleAfter, error) {
+	return func(s string) (scheduleAfter, error) {
+		c, err := pagecursor.DecodeKeyed(s, order)
+		if err != nil {
+			return scheduleAfter{}, fmt.Errorf("visit: schedule cursor: %w", err)
+		}
+		if len(c.Keys) != 1 {
+			return scheduleAfter{}, errors.New("visit: schedule cursor: wrong key count")
+		}
+		at, err := pagecursor.ParseTimeKey(c.Keys[0])
+		if err != nil {
+			return scheduleAfter{}, fmt.Errorf("visit: schedule cursor: %w", err)
+		}
+		return scheduleAfter{at: at, id: c.ID}, nil
+	}
 }
 
 // PracticeScheduleHandler lists every scheduled Visit at the Practice,
@@ -127,15 +162,18 @@ func PracticeScheduleHandler() http.Handler {
 		}
 
 		ctx := r.Context()
-		page, ok := pagecursor.Fetch(w, r, MsgInvalidCursor, schedulePageSize,
-			func(after *pagecursor.Cursor) ([]ScheduledVisit, error) {
+		page, ok := pagecursor.FetchKeyed(w, r, MsgInvalidCursor, filter.order, schedulePageSize,
+			decodeScheduleCursor(filter.order),
+			func(after *scheduleAfter) ([]ScheduledVisit, error) {
 				zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
 				if err != nil {
 					return nil, err //nolint:wrapcheck // Fetch turns any error into the 500
 				}
 				return listScheduledVisits(ctx, c.Tx, c.PracticeID, filter, after, zone)
 			},
-			func(v ScheduledVisit) (time.Time, string) { return v.ScheduledAt, v.VisitID })
+			func(v ScheduledVisit) ([]string, string) {
+				return []string{pagecursor.TimeKey(v.ScheduledAt)}, v.VisitID
+			})
 		if !ok {
 			return
 		}
@@ -185,6 +223,12 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 	}
 	if !filter.to.After(filter.from) {
 		apierr.WriteError(w, MsgEmptyRange, http.StatusBadRequest)
+		return scheduleFilter{}, false
+	}
+
+	filter.order = query.Get("order")
+	if filter.order != orderSoonest && filter.order != orderLatest {
+		apierr.WriteError(w, MsgInvalidOrder, http.StatusBadRequest)
 		return scheduleFilter{}, false
 	}
 
@@ -275,12 +319,33 @@ func countScheduledVisits(ctx context.Context, tx *sql.Tx, practiceID string, fi
 	return n, nil
 }
 
+// withSchedulePage closes the query with the cursor comparison, the order
+// and the page limit. The four shapes stay string literals: `>` ascends and
+// `<` descends, and each seeks along 00091's index in its own direction.
+func withSchedulePage(query string, args []any, order string, after *scheduleAfter) (string, []any) {
+	latest := order == orderLatest
+	switch {
+	case after != nil && latest:
+		query += ` AND (v.scheduled_at, v.id) < ($7, $8) ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $9`
+	case after != nil:
+		query += ` AND (v.scheduled_at, v.id) > ($7, $8) ORDER BY v.scheduled_at, v.id LIMIT $9`
+	case latest:
+		query += ` ORDER BY v.scheduled_at DESC, v.id DESC LIMIT $7`
+	default:
+		query += ` ORDER BY v.scheduled_at, v.id LIMIT $7`
+	}
+	if after != nil {
+		args = append(args, after.at, after.id)
+	}
+	return query, append(args, schedulePageSize+1)
+}
+
 func listScheduledVisits(
 	ctx context.Context,
 	tx *sql.Tx,
 	practiceID string,
 	filter scheduleFilter,
-	after *pagecursor.Cursor,
+	after *scheduleAfter,
 	zone *time.Location,
 ) ([]ScheduledVisit, error) {
 	// Every clause below is a string literal, and the two optional
@@ -296,13 +361,7 @@ func listScheduledVisits(
 		practiceID, filter.from, filter.to,
 		nullableID(filter.staffID), nullableID(filter.contractorStaffID), clock.Now(ctx),
 	}
-	if after != nil {
-		query += ` AND (v.scheduled_at, v.id) > ($7, $8) ORDER BY v.scheduled_at, v.id LIMIT $9`
-		args = append(args, after.At, after.ID, schedulePageSize+1)
-	} else {
-		query += ` ORDER BY v.scheduled_at, v.id LIMIT $7`
-		args = append(args, schedulePageSize+1)
-	}
+	query, args = withSchedulePage(query, args, filter.order, after)
 
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {

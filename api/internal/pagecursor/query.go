@@ -55,7 +55,24 @@ func Fetch[T any](
 	fetch func(after *Cursor) ([]T, error),
 	key func(T) (time.Time, string),
 ) (page Page[T], ok bool) {
-	after, ok := FromQuery(w, r, Decode, message)
+	return fetchPage(w, r, message, Decode, fetch, func(items []T) Page[T] {
+		items, next, hasMore := Cut(items, size, key)
+		return Page[T]{Items: items, Next: next, HasMore: hasMore}
+	})
+}
+
+// fetchPage is the read side Fetch and FetchKeyed share: decode the
+// request's cursor, have fetch read from it, and hand the rows to cut. A
+// refusal is written here and reported as ok=false.
+func fetchPage[T, C any](
+	w http.ResponseWriter,
+	r *http.Request,
+	message string,
+	decode func(string) (C, error),
+	fetch func(after *C) ([]T, error),
+	cut func(items []T) Page[T],
+) (page Page[T], ok bool) {
+	after, ok := FromQuery(w, r, decode, message)
 	if !ok {
 		return Page[T]{}, false
 	}
@@ -65,8 +82,7 @@ func Fetch[T any](
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 		return Page[T]{}, false
 	}
-	items, next, hasMore := Cut(items, size, key)
-	return Page[T]{Items: items, Next: next, HasMore: hasMore}, true
+	return cut(items), true
 }
 
 // Cut trims a page fetched with one row past size, as Trim does, and mints

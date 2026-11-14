@@ -66,7 +66,16 @@ interface SetupOptions {
 	// which here is the whole window: wide enough to show every control
 	// unless a test asks for a phone's.
 	width?: number;
+	order?: { options: { value: string; label: string }[]; value: string; onChange?: (value: string) => void };
 }
+
+const ORDER = {
+	options: [
+		{ value: '', label: 'Soonest first' },
+		{ value: 'latest', label: 'Latest first' }
+	],
+	value: ''
+};
 
 const WIDE = 1280;
 const PHONE = 414;
@@ -90,7 +99,8 @@ async function setup({
 	status = 'Showing 2 scheduled visits.',
 	statusRuler,
 	onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault()),
-	width = WIDE
+	width = WIDE,
+	order
 }: SetupOptions = {}) {
 	await page.viewport(width, 900);
 	// The gap a list screen leaves above its bar, where the skip link sits.
@@ -111,10 +121,63 @@ async function setup({
 		applied: withApplied ? appliedTags() : undefined,
 		appliedCount,
 		folded: withFolded ? fromField() : undefined,
+		order,
 		children: withFields ? (withFolded ? nameField() : fromField()) : undefined
 	});
 	return { onSubmit, component, rerender };
 }
+
+describe('FilterBar order', () => {
+	it('draws no Order select when the route gives no order', async () => {
+		await setup();
+
+		await expect.element(page.getByLabelText('Order')).not.toBeInTheDocument();
+	});
+
+	it('draws a labeled Order select holding the address order, submitted as the field order', async () => {
+		const onSubmit = vi.fn((event: SubmitEvent) => event.preventDefault());
+		await setup({ order: { ...ORDER, value: 'latest' }, onSubmit });
+
+		const select = page.getByLabelText('Order');
+		await expect.element(select).toHaveValue('latest');
+		await page.getByRole('button', { name: 'Apply' }).click();
+
+		const form = (onSubmit.mock.calls[0]![0] as SubmitEvent).target as HTMLFormElement;
+		expect(new FormData(form).get('order')).toBe('latest');
+	});
+
+	it('reports a pick before Apply', async () => {
+		const onChange = vi.fn();
+		await setup({ order: { ...ORDER, onChange } });
+
+		await page.getByLabelText('Order').selectOptions('Latest first');
+
+		expect(onChange).toHaveBeenCalledWith('latest');
+	});
+
+	it('is the last field before Apply, in the tab order and on the page', async () => {
+		await setup({ order: ORDER });
+
+		const order = page.getByLabelText('Order').element();
+		const from = page.getByLabelText('From').element();
+		const apply = page.getByRole('button', { name: 'Apply' }).element();
+		expect(from.compareDocumentPosition(order) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		expect(order.compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('stays in view beside the name at a phone width while the folded fields fold', async () => {
+		await setup({ order: ORDER, foldsFieldsOnly: true, withFolded: true, width: PHONE });
+
+		await expect.element(page.getByLabelText('Order')).toBeVisible();
+		await expect.element(page.getByLabelText('From')).not.toBeVisible();
+	});
+
+	it('follows the fields in the bar that folds whole too', async () => {
+		await setup({ order: ORDER });
+
+		await expect.element(page.getByLabelText('Order')).toBeVisible();
+	});
+});
 
 describe('FilterBar', () => {
 	it('takes focus on its result line when the route asks, without joining the tab order', async () => {

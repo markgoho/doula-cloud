@@ -102,6 +102,18 @@ ORDER BY created_at DESC, id DESC
 LIMIT $4;
 ```
 
+### Ordering
+
+A list a reader can reorder (#2869) takes the order as a query parameter and keeps the cursor honest about it.
+
+1. **`?order=`** names the order. The empty value, or no parameter, is the list's own default, and a list says in its handler which order that is.
+2. **An unknown `order` is a 400**, never a silent fallback to the default: a link with a typo should fail, not show a different order than it names.
+3. **The cursor is bound to its order.** `pagecursor.EncodeKeyed` mints base64url JSON `{o, k[], id}`: the order name, the sort key values of the row the page ends on, and that row's id. `pagecursor.DecodeKeyed` takes the request's order, and a cursor minted for another order is a 400 "invalid cursor".
+4. **Ties break by `id`**, in the direction of the order, so a page boundary never skips or repeats rows that share a sort key. The cursor comparison is `>` for an ascending key and `<` for a descending one, over the whole `(key, id)` tuple.
+5. **The total does not depend on the order.** A count over the same rows reads the same filter whichever order is asked for.
+
+The Schedule (`GET /api/practices/{id}/visits`) is the first list on it: empty is soonest first, `latest` is `ORDER BY v.scheduled_at DESC, v.id DESC`.
+
 ---
 
 ## 5. Keep Default Payloads Lean (Use `?include=`)
