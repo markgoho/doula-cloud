@@ -908,6 +908,21 @@ describe('the "Order" select (#2869)', () => {
 		pageState.url.searchParams.delete('order');
 	});
 
+	it('goes back to what the address says when another tag is removed, and Apply sends what the select shows', async () => {
+		pageState.url.searchParams.set('owes', 'true');
+		await setup();
+
+		await orderField().selectOptions('Name, A to Z');
+		await tags().getByRole('link', { name: 'Remove filter: Who owe money' }).click();
+		pageState.url.searchParams.delete('owes');
+		navigation.onBefore();
+		navigation.onMove?.({});
+
+		await expect.element(orderField()).toHaveValue('');
+		await applyFilters();
+		expect(String(goto.mock.lastCall![0])).not.toContain('order=');
+	});
+
 	it('is sent again by "Load more", whose cursor belongs to it', async () => {
 		pageState.url.searchParams.set('order', 'name');
 		apiFetchWithSession.mockResolvedValueOnce(jsonResponse({ items: [clients[0]], hasMore: true, nextCursor: 'cursor-1' }));

@@ -1096,7 +1096,7 @@ import type { PageProps as PageProperties } from './$types';
 				foldsFieldsOnly
 				order={{
 					options: CLIENT_ORDER_OPTIONS,
-					value: appliedOrder,
+					value: draftOrder,
 					onChange: (value) => {
 						touched.push('order');
 						draftOrder = value as ClientOrder;
