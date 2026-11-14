@@ -88,6 +88,16 @@ describe('Earlier and Later (#2870)', () => {
 			.toHaveAttribute('href', `${schedulePath}?from=2026-08-31&to=2026-09-06`);
 	});
 
+	it('step This week by a Monday-to-Sunday week, and draw its radio and tag', async () => {
+		await setupAt('?days=week');
+
+		await expect.element(testPage.getByRole('radio', { name: 'This week' })).toBeChecked();
+		await expect.element(testPage.getByRole('radio', { name: 'This week' })).toHaveAttribute('value', 'week');
+		await expect.element(link('Remove filter: This week')).toBeVisible();
+		await expect.element(link('Later, Mon Sep 14 to Sun Sep 20')).toBeVisible();
+		await expect.element(link('Earlier, Mon Aug 31 to Sun Sep 6')).toBeVisible();
+	});
+
 	it('step chosen days by their own length, and land on today’s days as the bare path or ?days=7', async () => {
 		await setupAt('?from=2026-08-08&to=2026-09-06');
 		await expect.element(link('Later, Mon Sep 7 to Tue Oct 6')).toHaveAttribute('href', schedulePath);

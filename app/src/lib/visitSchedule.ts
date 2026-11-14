@@ -28,6 +28,7 @@ import { visitTypeLabel } from './engagementDetail.js';
 import {
 	addDays,
 	daysOf,
+	THIS_WEEK,
 	daysSpan,
 	daysTag,
 	daysWords,
@@ -85,7 +86,28 @@ The other preset the "Days" choice offers.
 */
 export const SHORT_SCHEDULE_DAYS = 7;
 
-export type ScheduleDaysChoice = '7' | '30' | 'choose';
+const THIS_WEEK_PARAMETER = 'week';
+
+export type ScheduleDaysChoice = '7' | 'week' | '30' | 'choose';
+
+export type ScheduleDaysPreset = typeof SHORT_SCHEDULE_DAYS | typeof THIS_WEEK | typeof DEFAULT_SCHEDULE_DAYS;
+
+const PRESET_OF_CHOICE = { '7': SHORT_SCHEDULE_DAYS, week: THIS_WEEK, '30': DEFAULT_SCHEDULE_DAYS } as const;
+
+/**
+The preset a Days radio stands for; "Choose days" is none and reads as the default.
+*/
+export function schedulePresetOfChoice(choice: ScheduleDaysChoice): ScheduleDaysPreset {
+	return choice === 'choose' ? DEFAULT_SCHEDULE_DAYS : PRESET_OF_CHOICE[choice];
+}
+
+/**
+The Days radio a preset is drawn as.
+*/
+export function scheduleChoiceOfPreset(preset: ScheduleDaysPreset): ScheduleDaysChoice {
+	if (preset === THIS_WEEK) return 'week';
+	return preset === SHORT_SCHEDULE_DAYS ? '7' : '30';
+}
 
 /** The instants the BFF's half-open range takes, for a pair of calendar
  * days in the Practice's zone. `from` is the start of its day and `to` is
@@ -105,7 +127,7 @@ export interface ScheduleView {
 	/**
 	The preset, used while no days are chosen.
 	*/
-	preset: typeof SHORT_SCHEDULE_DAYS | typeof DEFAULT_SCHEDULE_DAYS;
+	preset: ScheduleDaysPreset;
 	/**
 	The days the address carries, as typed: either may be empty or not a day.
 	*/
@@ -180,9 +202,10 @@ export function scheduleViewFromParameters(
 ): ScheduleView {
 	const hasChosen = parameters.has('from') || parameters.has('to');
 	const doula = parameters.get('doula') ?? '';
+	const days = parameters.get('days');
 	const isOwnDoula = withoutPicker !== undefined && doula !== '' && doula === withoutPicker.staffId;
 	return {
-		preset: parameters.get('days') === String(SHORT_SCHEDULE_DAYS) ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
+		preset: days === '7' || days === THIS_WEEK_PARAMETER ? PRESET_OF_CHOICE[days] : DEFAULT_SCHEDULE_DAYS,
 		chosen: hasChosen ? { from: parameters.get('from') ?? '', to: parameters.get('to') ?? '' } : undefined,
 		isMine: canMine && (parameters.get('mine') === 'true' || isOwnDoula),
 		doula: withoutPicker ? '' : doula,
@@ -215,6 +238,8 @@ export function scheduleHref(basePath: string, view: ScheduleView): string {
 	if (view.chosen) {
 		parameters.set('from', view.chosen.from);
 		parameters.set('to', view.chosen.to);
+	} else if (view.preset === THIS_WEEK) {
+		parameters.set('days', THIS_WEEK_PARAMETER);
 	} else if (view.preset === SHORT_SCHEDULE_DAYS) {
 		parameters.set('days', String(SHORT_SCHEDULE_DAYS));
 	}
@@ -377,7 +402,7 @@ export function scheduleStep(
 	timeZone: string,
 	now: Date
 ): ScheduleStep | undefined {
-	return stepDays(view, direction, timeZone, now, [SHORT_SCHEDULE_DAYS, DEFAULT_SCHEDULE_DAYS]);
+	return stepDays(view, direction, timeZone, now, [SHORT_SCHEDULE_DAYS, THIS_WEEK, DEFAULT_SCHEDULE_DAYS]);
 }
 
 /**

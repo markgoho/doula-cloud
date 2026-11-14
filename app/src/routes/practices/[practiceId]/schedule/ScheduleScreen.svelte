@@ -19,6 +19,7 @@
 	import { formatScheduledVisit } from '#lib/dates.js';
 	import { visitDoulaText, visitTypeLabel } from '#lib/engagementDetail.js';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
+	import { THIS_WEEK } from '#lib/dayRange.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
@@ -34,6 +35,8 @@
 		scheduleDaysTag,
 		scheduleDaysWords,
 		scheduleStep,
+		scheduleChoiceOfPreset,
+		schedulePresetOfChoice,
 		scheduleDayGroup,
 		scheduleEmptyNextStep,
 		scheduleHref,
@@ -324,7 +327,7 @@
 
 	function seedDrafts() {
 		if (!isSearchTouched) draftSearch = appliedSearch;
-		draftChoice = view.chosen ? 'choose' : (view.preset === SHORT_SCHEDULE_DAYS ? '7' : '30');
+		draftChoice = view.chosen ? 'choose' : scheduleChoiceOfPreset(view.preset);
 		const shown = view.chosen ?? scheduleDaysOf(view, timeZone, now).days!;
 		fromValue = shown.from;
 		toValue = shown.to;
@@ -359,7 +362,7 @@
 	function chooseDays(choice: ScheduleDaysChoice) {
 		if (choice === 'choose' && draftChoice !== 'choose') {
 			const shown = scheduleDaysOf(
-				{ ...view, chosen: undefined, preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS },
+				{ ...view, chosen: undefined, preset: schedulePresetOfChoice(draftChoice) },
 				timeZone,
 				now
 			).days!;
@@ -370,7 +373,7 @@
 	}
 
 	const draftView = $derived<ScheduleView>({
-		preset: draftChoice === '7' ? SHORT_SCHEDULE_DAYS : DEFAULT_SCHEDULE_DAYS,
+		preset: schedulePresetOfChoice(draftChoice),
 		chosen: draftChoice === 'choose' ? { from: fromValue, to: toValue } : undefined,
 		isMine: canMine && isMineChecked,
 		doula: draftDoula,
@@ -445,8 +448,8 @@
 		if (view.chosen) {
 			const days = scheduleDaysOf(view, timeZone, now).days;
 			if (days) tags.push({ text: scheduleDaysTag(days, timeZone, now), href: scheduleHref(basePath, withDefaultDays(view)), search });
-		} else if (view.preset === SHORT_SCHEDULE_DAYS) {
-			tags.push({ text: `Next ${SHORT_SCHEDULE_DAYS} days`, href: scheduleHref(basePath, withDefaultDays(view)), search });
+		} else if (view.preset !== DEFAULT_SCHEDULE_DAYS) {
+			tags.push({ text: view.preset === THIS_WEEK ? 'This week' : `Next ${view.preset} days`, href: scheduleHref(basePath, withDefaultDays(view)), search });
 		}
 		if (view.isMine) tags.push({ text: 'Mine', href: without({ isMine: false }), search });
 		if (view.needsDoula) tags.push({ text: NEEDS_DOULA, href: without({ needsDoula: false }), search });
@@ -532,6 +535,7 @@
 	const doulaOptions = $derived(isDoulaPending ? [{ value: view.doula, label: '' }] : [{ value: '', label: ANY_DOULA }, ...doulas]);
 	const DAYS_OPTIONS: readonly { value: ScheduleDaysChoice; label: string }[] = [
 		{ value: '7', label: `Next ${SHORT_SCHEDULE_DAYS} days` },
+		{ value: 'week', label: 'This week' },
 		{ value: '30', label: `Next ${DEFAULT_SCHEDULE_DAYS} days` },
 		{ value: 'choose', label: 'Choose days' }
 	];

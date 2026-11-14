@@ -88,6 +88,15 @@ describe('the Schedule applies untyped controls when changed (#2888)', () => {
 		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=7&order=latest`, expect.objectContaining(keep));
 	});
 
+	it('applies "This week" as ?days=week', async () => {
+		await setupAt();
+
+		await testPage.getByRole('radio', { name: 'This week' }).click();
+		await settled();
+
+		expect(goto).toHaveBeenLastCalledWith(`${schedulePath}?days=week`, expect.objectContaining(keep));
+	});
+
 	it('sends the whole bar as drawn, a typed Client included', async () => {
 		await setupAt();
 
