@@ -332,18 +332,17 @@ func TestExportPracticeInvoices_ARefusedRequestWritesNoRow(t *testing.T) {
 // get a 403 and no row.
 func TestExportPracticeInvoices_OnlyAnOwnerOrAnAdmin(t *testing.T) {
 	cases := []struct {
-		name string
-		who  []fixture.StaffOption
+		role fixture.RoleCase
 		want int
 	}{
-		{"the Owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{"the Admin", []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
-		{caseDoula, []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
-		{"a contractor Doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
+		{fixture.OwnerCase, http.StatusOK},
+		{fixture.AdminCase, http.StatusOK},
+		{fixture.EmployeeDoulaCase, http.StatusForbidden},
+		{fixture.ContractorDoulaCase, http.StatusForbidden},
 	}
 	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.who...))
+		t.Run(tc.role.Name, func(t *testing.T) {
+			e := newEnv(t, signedInAs(tc.role.Opts...))
 			e.expect(http.MethodPost, "/invoices/export", tc.want, reqtest.JSON(payments.PracticeInvoicesExportRequest{}))
 			wantRows := 0
 			if tc.want == http.StatusOK {
