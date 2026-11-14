@@ -505,6 +505,7 @@ func (n invoiceNarrowing) name() string {
 func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q invoiceListQuery, days bookDays) ([]PracticeInvoiceView, *string, error) {
 	items, err := readPracticeInvoices(ctx, tx, practiceID, q, days, invoicePageSize+1)
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, nil, err
 	}
 	items, next := q.sort.cut(items, invoicePageSize, q.cursorName)
