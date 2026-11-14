@@ -175,10 +175,15 @@ func GetPracticeInvoicesHandler() http.Handler {
 			return
 		}
 		query := r.URL.Query()
+		period, ok := parseInvoicePeriod(w, query.Get("sentFrom"), query.Get("sentTo"))
+		if !ok {
+			return
+		}
 		q, ok := newInvoiceListQuery(w, narrowingFor(r), query.Get("order"), query.Get("cursor"))
 		if !ok {
 			return
 		}
+		q.period = period
 		servePracticeInvoices(w, r, c, q)
 	}, staffauth.NotAmbientContractor())
 }
@@ -197,6 +202,10 @@ type PracticeInvoicesListRequest struct {
 	Cursor string `json:"cursor"`
 	// Order (#2869) is the GET's ?order=: empty is the view's own.
 	Order string `json:"order"`
+	// SentFrom and SentTo (#2871) are the GET's ?sentFrom= and ?sentTo=:
+	// YYYY-MM-DD, both included, read in the Practice's zone. Both or neither.
+	SentFrom string `json:"sentFrom"`
+	SentTo   string `json:"sentTo"`
 }
 
 // maxSearchRunes bounds the search: a reference or a name is short, and the
@@ -216,23 +225,38 @@ func ListPracticeInvoicesHandler() http.Handler {
 		if !apierr.DecodeJSON(w, r, &req) {
 			return
 		}
-		narrowing, ok := narrowingNamed(req.View)
-		if !ok {
-			apierr.WriteError(w, "Choose every Invoice, unpaid or overdue.", http.StatusBadRequest)
-			return
-		}
-		search := strings.TrimSpace(req.Search)
-		if utf8.RuneCountInString(search) > maxSearchRunes {
-			apierr.WriteError(w, "Use 100 characters or fewer for the search.", http.StatusBadRequest)
-			return
-		}
-		q, ok := newInvoiceListQuery(w, narrowing, req.Order, req.Cursor)
+		q, ok := newBodyInvoiceListQuery(w, req)
 		if !ok {
 			return
 		}
-		q.search = search
 		servePracticeInvoices(w, r, c, q)
 	}, staffauth.NotAmbientContractor())
+}
+
+// newBodyInvoiceListQuery reads the request's view, search, period, order
+// and cursor, writing the 400 itself for any the list refuses.
+func newBodyInvoiceListQuery(w http.ResponseWriter, req PracticeInvoicesListRequest) (invoiceListQuery, bool) {
+	narrowing, ok := narrowingNamed(req.View)
+	if !ok {
+		apierr.WriteError(w, "Choose every Invoice, unpaid or overdue.", http.StatusBadRequest)
+		return invoiceListQuery{}, false
+	}
+	search := strings.TrimSpace(req.Search)
+	if utf8.RuneCountInString(search) > maxSearchRunes {
+		apierr.WriteError(w, "Use 100 characters or fewer for the search.", http.StatusBadRequest)
+		return invoiceListQuery{}, false
+	}
+	period, ok := parseInvoicePeriod(w, req.SentFrom, req.SentTo)
+	if !ok {
+		return invoiceListQuery{}, false
+	}
+	q, ok := newInvoiceListQuery(w, narrowing, req.Order, req.Cursor)
+	if !ok {
+		return invoiceListQuery{}, false
+	}
+	q.search = search
+	q.period = period
+	return q, true
 }
 
 // invoiceListQuery is what either entry point read and checked: which slice
@@ -245,6 +269,7 @@ type invoiceListQuery struct {
 	cursorName string
 	after      *invoiceAfter
 	search     string
+	period     invoicePeriod
 }
 
 // newInvoiceListQuery resolves the order a request named for its view and
@@ -289,7 +314,8 @@ func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.C
 		return
 	}
 
-	totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone))
+	sentFrom, sentBefore := q.period.bounds(days.zone)
+	totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone), sentFrom, sentBefore)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -413,7 +439,7 @@ func searchExpr(param int) string {
 // request text; every value -- the overdue cutoff, the search pattern, the
 // cursor and the limit -- is a bound parameter, numbered in the order it is
 // added, so no interpolation of a caller's input can reach the SQL.
-func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookDays) (string, []any) {
+func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookDays, limit int) (string, []any) {
 	args := []any{practiceID}
 	bind := func(v any) int {
 		args = append(args, v)
@@ -425,6 +451,7 @@ func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookD
 	} else {
 		query += q.narrowing.clause("")
 	}
+	query += q.period.clause(days.zone, bind)
 	if q.search != "" {
 		query += searchExpr(bind(textmatch.Contains(q.search)))
 	}
@@ -432,7 +459,10 @@ func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookD
 		key, id := bind(q.after.key), bind(q.after.id)
 		query += ` AND ` + q.sort.after(key, id)
 	}
-	query += ` ORDER BY ` + q.sort.orderBy() + fmt.Sprintf(` LIMIT $%d`, bind(invoicePageSize+1))
+	query += ` ORDER BY ` + q.sort.orderBy()
+	if limit > 0 {
+		query += fmt.Sprintf(` LIMIT $%d`, bind(limit))
+	}
 	return query, args
 }
 
@@ -473,11 +503,22 @@ func (n invoiceNarrowing) name() string {
 // The keyed cursor is bound to the view and the order the first page was
 // asked under, so a later page has to be asked for under both.
 func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q invoiceListQuery, days bookDays) ([]PracticeInvoiceView, *string, error) {
-	query, args := listPracticeInvoicesQuery(practiceID, q, days)
+	items, err := readPracticeInvoices(ctx, tx, practiceID, q, days, invoicePageSize+1)
+	if err != nil {
+		return nil, nil, err
+	}
+	items, next := q.sort.cut(items, invoicePageSize, q.cursorName)
+	return items, next, nil
+}
+
+// readPracticeInvoices reads the rows q matches in q's order, at most limit
+// of them, or every one when limit is 0 (the export, #2871).
+func readPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q invoiceListQuery, days bookDays, limit int) ([]PracticeInvoiceView, error) {
+	query, args := listPracticeInvoicesQuery(practiceID, q, days, limit)
 	rows, err := tx.QueryContext(ctx, query, args...) //nolint:gosec // G701: the only text spliced in is a column and direction from resolveInvoiceOrder's literals; every value is bound
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, nil, fmt.Errorf("payments: list practice invoices: %w", err)
+		return nil, fmt.Errorf("payments: list practice invoices: %w", err)
 	}
 	defer func() { _ = rows.Close() }()
 
@@ -492,7 +533,7 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q 
 		if err := rows.Scan(&it.ID, &it.EngagementID, &it.ContractID, &givenName, &preferredName, &familyName, &it.EngagementKind,
 			&it.Status, &it.AmountCents, &it.Currency, &it.CreatedAt, &paidAt, &dueAt, &it.Reference, &stripeInvoiceID, &activePaymentKind, &it.RefundedCents, &it.PaymentProcessing); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
-			return nil, nil, fmt.Errorf("payments: scan practice invoice row: %w", err)
+			return nil, fmt.Errorf("payments: scan practice invoice row: %w", err)
 		}
 		it.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		it.PaidOn = invoicePaidOn(paidAt, activePaymentKind.String == paymentKindManual, days.zone)
@@ -505,11 +546,9 @@ func listPracticeInvoices(ctx context.Context, tx *sql.Tx, practiceID string, q 
 	}
 	if err := rows.Err(); err != nil {
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
-		return nil, nil, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
+		return nil, fmt.Errorf("payments: iterate practice invoice rows: %w", err)
 	}
-
-	items, next := q.sort.cut(items, invoicePageSize, q.cursorName)
-	return items, next, nil
+	return items, nil
 }
 
 // invoiceTotals is the whole-book summary the Practice-wide list carries
@@ -545,18 +584,25 @@ var practiceInvoiceTotalsQuery = `SELECT
 		COUNT(*) FILTER (WHERE ` + overdue.Expr("$2") + `),
 		(SELECT ` + paymentstanding.RefundedSumExpr + ` FROM payments pt
 		   JOIN invoices ri ON ri.id = pt.invoice_id
-		  WHERE ri.practice_id = $1 AND ` + paymentstanding.IsRefundExpr + `),
+		  WHERE ri.practice_id = $1 AND ` + paymentstanding.IsRefundExpr + `
+		    AND (` + sentInPeriod("ri") + `)),
 		(SELECT ` + cardpayments.ClientsCanPayExpr + ` FROM practices WHERE id = $1)
-	FROM invoices i WHERE i.practice_id = $1`
+	FROM invoices i WHERE i.practice_id = $1 AND (` + sentInPeriod("i") + `)`
+
+// sentInPeriod is the period's test on the Invoice named alias, with the
+// period's half-open bounds as $3 and $4, both NULL for no period (#2871).
+func sentInPeriod(alias string) string {
+	return `($3::timestamptz IS NULL OR (` + alias + `.created_at >= $3 AND ` + alias + `.created_at < $4))`
+}
 
 // practiceInvoiceTotals sums the Practice's outstanding and paid money.
 // It reads every row rather than a page, which is why it stays an
 // aggregate in Postgres instead of a fold over the fetched page: a
 // 14-doula agency's book is thousands of rows, and only three numbers
 // cross the wire.
-func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time) (invoiceTotals, error) {
+func practiceInvoiceTotals(ctx context.Context, tx *sql.Tx, practiceID string, overdueCutoff time.Time, sentFrom, sentBefore sql.NullTime) (invoiceTotals, error) {
 	var t invoiceTotals
-	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff).
+	if err := tx.QueryRowContext(ctx, practiceInvoiceTotalsQuery, practiceID, overdueCutoff, sentFrom, sentBefore).
 		Scan(&t.outstandingCents, &t.outstandingCount, &t.invoiceCount, &t.paidCents, &t.overdueCents, &t.overdueCount, &t.refundedCents, &t.clientsCanPay); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return invoiceTotals{}, fmt.Errorf("payments: practice invoice totals: %w", err)

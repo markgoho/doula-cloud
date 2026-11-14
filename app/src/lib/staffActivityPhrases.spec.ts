@@ -63,6 +63,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['invoice_raised', 'Invoice created for Amara', 'Invoice created for the Client'],
 	['invoice_voided', 'Invoice for Amara voided', 'Invoice for the Client voided'],
 	['invoice_written_off', 'Invoice for Amara written off', 'Invoice for the Client written off'],
+	['invoices_exported', 'Invoices downloaded', 'Invoices downloaded'],
 	['joined', 'Amara joined the Practice', 'A Staff member joined the Practice'],
 	['kind_changed', 'Type of care changed for Amara', 'Type of care changed for the Client'],
 	['merged', "Another record merged into Amara's", "Another record merged into the Client's"],
