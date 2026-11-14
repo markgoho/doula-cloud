@@ -64,7 +64,7 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page. The
 | A calendar feed (.ics) | Later (#330) | PagerDuty, Opsgenie and RotaCloud each export one; with the Schedule's feed |
 | Print or export | Later (#2871) | RotaCloud's "Print rota"; decided with the lists' export |
 | A notice when a gap opens | Have it | an unstaffed Coverage gap sends the Owners and Admins a Notification (`api/internal/oncall/outbox.go`) |
-| Calling or messaging the Doula on call from the roster | Later | the model holds no phone number for a Staff member (only a Client has one), and Rooted covers by "a group text thread for coverage, and Renata's phone for everything else" (`docs/simulation/worlds/rooted-birth-collective.md:111`). No product page was read. Whether Staff phone numbers enter the product is the founder's decision, raised on #2748 |
+| Calling the Doula on call from the roster | Decided, not yet built | the founder decided on #2933 (2026-11-14) that a Staff member's own phone number enters DoulaCloud, read only within reach and drawn as a `tel:` link on the roster and the Engagement's On call section; the rule is the ADR-0008 amendment "A Staff member's own phone number is read only within reach", the build is #2937. Messaging stays out: Rooted covers by "a group text thread for coverage, and Renata's phone for everything else" (`docs/simulation/worlds/rooted-birth-collective.md:111`) |
 | Who is at a birth now | Later (#428) | nothing records it (RA-G18) |
 | Keyboard shortcuts | Later | one decision for the whole app, as on the Schedule |
 | Density and column choice | Declined | no job on record |
