@@ -35,12 +35,15 @@ func waitingEngagementIDs(resp visit.WaitingVisitsResponse) []string {
 }
 
 func TestWaitingVisits_CountsAndListsDatedAndUndatedVisits(t *testing.T) {
-	for name, staff := range map[string]fixture.StaffOption{"owner": fixture.Owner(), "admin": fixture.Admin()} {
-		t.Run(name, func(t *testing.T) {
-			f := newScheduleEnv(t, staff)
+	readers := []struct {
+		reader string
+		staff  fixture.StaffOption
+	}{{"an Owner", fixture.Owner()}, {"an Admin", fixture.Admin()}}
+	for _, tc := range readers {
+		t.Run(tc.reader, func(t *testing.T) {
+			f := newScheduleEnv(t, tc.staff)
 			f.takeOff(f.engagementA, f.employeeDoula.ID)
 			f.takeOff(f.engagementB, f.otherDoula.ID)
-
 			seedVisit(t, f.DB, f.engagementB, f.otherDoula.ID)
 			seedVisit(t, f.DB, f.engagementB, f.otherDoula.ID)
 
