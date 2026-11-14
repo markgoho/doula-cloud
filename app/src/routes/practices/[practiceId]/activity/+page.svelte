@@ -13,7 +13,12 @@
 	import { onMount } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
-	import { activityLedgerColumns, loadPracticeActivityPage, type ActivityEntry } from '#lib/activityLedger.js';
+	import {
+		activityLedgerColumns,
+		hasLedgerRowClockTime,
+		loadPracticeActivityPage,
+		type ActivityEntry
+	} from '#lib/activityLedger.js';
 	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
@@ -28,6 +33,7 @@
 	});
 	// The first page's read; the pages after it are `activity`'s own.
 	const firstPage = new PageRead();
+	const zoneNote = $derived(practiceZoneNote(activity.items.some((row) => hasLedgerRowClockTime(row))));
 
 	onMount(() =>
 		firstPage.load(async () => {
@@ -38,8 +44,8 @@
 
 {#snippet intro()}
 	<Text text="Who did what, and when, newest first." tone="variant" />
-	{#if practiceZoneNote()}
-		<Text text={practiceZoneNote()!} tone="muted" />
+	{#if zoneNote}
+		<Text text={zoneNote} tone="muted" />
 	{/if}
 {/snippet}
 

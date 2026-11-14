@@ -21,6 +21,7 @@ import {
 	tonightRoster
 } from './page.fixture.js';
 import { pageState } from '#testing/routePage.js';
+import { inReaderZone } from '#lib/testZone.js';
 
 // Rendering `+page.svelte` directly bypasses `+layout.svelte`, which is the
 // only place that calls this in the real app -- without it every layout
@@ -80,6 +81,7 @@ interface SetupOptions {
 	overrides?: Record<string, Response | Promise<Response>>;
 	secondFactor?: boolean;
 	isContractor?: boolean;
+	timezone?: string;
 }
 
 // An Owner who is also a Doula, the founder of a small agency and the
@@ -89,11 +91,12 @@ async function setup({
 	clients = [{ clientId: 'c1' }],
 	overrides = {},
 	secondFactor,
-	isContractor = false
+	isContractor = false,
+	timezone
 }: SetupOptions = {}) {
 	// The Membership (roles, practiceName) comes off page.data.session
 	// (#835), not a fetch this mock has to answer.
-	pageState.data = { session: { practiceId, practiceName, roles, isContractor, secondFactor } };
+	pageState.data = { session: { practiceId, practiceName, roles, isContractor, secondFactor, timezone } };
 	const answers: Record<string, Response | Promise<Response>> = {
 		// Before `offers`: its path holds `/offers` (#2508).
 		'no-doula-yet': jsonResponse({ items: [], hasMore: false }),
@@ -1099,5 +1102,74 @@ describe('the Practice landing page while its lists are loading (#2245)', () => 
 
 		await expect.element(testPage.getByText('Who is waiting could not be read.')).toBeVisible();
 		expect(testPage.getByText(NOBODY_WAITING).elements()).toHaveLength(0);
+	});
+});
+
+const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+describe('the zone line on the Overview (#2864)', () => {
+	inReaderZone('Asia/Tokyo');
+
+	const ZONE_NOTE = "Times are in this Practice's time zone, Eastern Time.";
+	const waiting = (lastMessageAt: string) =>
+		jsonResponse({ items: [{ engagementId: 'engagement-9', clientName: 'Priya', lastMessageAt }], hasMore: false });
+	const noOffers = jsonResponse({ items: [] });
+
+	it('says nothing to a reader in another zone while every time is "just now" or "2 hours ago"', async () => {
+		await setup({
+			timezone: 'America/New_York',
+			overrides: { offers: noOffers, 'awaiting-reply': waiting(hoursAgo(2)) }
+		});
+
+		await expect.element(testPage.getByRole('link', { name: 'Priya' })).toBeVisible();
+		await expect.element(testPage.getByText('2 hours ago').first()).toBeVisible();
+		expect(testPage.getByText(/time zone/).elements()).toHaveLength(0);
+	});
+
+	it('says the zone once a time on the screen is a clock time', async () => {
+		await setup({
+			timezone: 'America/New_York',
+			overrides: { offers: noOffers, 'awaiting-reply': waiting(hoursAgo(72)) }
+		});
+
+		await expect.element(testPage.getByText(ZONE_NOTE)).toBeVisible();
+	});
+
+	it('says the zone while an Offer awaits an answer, which names the minute it was sent', async () => {
+		await setup({ timezone: 'America/New_York', overrides: { 'awaiting-reply': waiting(hoursAgo(2)) } });
+
+		await expect.element(testPage.getByText(ZONE_NOTE)).toBeVisible();
+	});
+
+	it('says the zone for a recent activity row that is days old', async () => {
+		await setup({
+			timezone: 'America/New_York',
+			overrides: {
+				offers: noOffers,
+				activity: jsonResponse({
+					items: [
+						{
+							subjectKind: 'engagement',
+							subjectId: 'e1',
+							subjectName: 'Amara',
+							action: 'invoice_raised',
+							actorKind: 'staff',
+							actorName: 'Mark Goho',
+							createdAt: hoursAgo(72)
+						}
+					],
+					hasMore: false
+				})
+			}
+		});
+
+		await expect.element(testPage.getByText(ZONE_NOTE)).toBeVisible();
+	});
+
+	it('says nothing to a reader in the Practice’s own zone', async () => {
+		await setup({ timezone: 'Asia/Tokyo', overrides: { offers: noOffers, 'awaiting-reply': waiting(hoursAgo(72)) } });
+
+		await expect.element(testPage.getByRole('link', { name: 'Priya' })).toBeVisible();
+		expect(testPage.getByText(/time zone/).elements()).toHaveLength(0);
 	});
 });

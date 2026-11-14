@@ -10,9 +10,10 @@ export function practiceTimeZone(): string {
 }
 
 /**
- * The line that says so, for a reader whose own zone is another, and nothing
- * for one in the Practice's.
+ * The line that says so, only where a clock time is on the screen and the
+ * reader's own zone is another.
  */
-export function practiceZoneNote(now: Date = new Date()): string | undefined {
+export function practiceZoneNote(hasClock: boolean, now: Date = new Date()): string | undefined {
+	if (!hasClock) return undefined;
 	return zoneNote(practiceTimeZone(), readerTimeZone(), now);
 }

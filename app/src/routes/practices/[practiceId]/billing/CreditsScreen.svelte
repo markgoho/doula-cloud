@@ -46,6 +46,8 @@
 
 	let checkoutStatus = $derived(page.url.searchParams.get('checkout'));
 
+	const zoneNote = $derived(practiceZoneNote(ledger.items.length > 0));
+
 	const columns = [
 		// createdAt is an instant (billing/balance.go), to the minute.
 		{ label: 'Date', accessor: (entry: LedgerEntry) => formatInstantWithClock(entry.createdAt, practiceTimeZone()) },
@@ -138,8 +140,8 @@
 {/snippet}
 
 {#snippet content()}
-	{#if practiceZoneNote()}
-		<Text text={practiceZoneNote()!} tone="muted" />
+	{#if zoneNote}
+		<Text text={zoneNote} tone="muted" />
 	{/if}
 	<DataTable
 		{columns}

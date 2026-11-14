@@ -33,7 +33,7 @@
 		type WorkStateChange
 	} from '#lib/staff.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
-	import { formatActivityTimestamp } from '#lib/dates.js';
+	import { formatActivityTimestamp, hasClockTime } from '#lib/dates.js';
 	import { practiceTimeZone, practiceZoneNote } from '#lib/practiceZone.js';
 	import { membershipChangeSentence } from '#lib/membershipHistory.js';
 	import { gotoWithOutcome, takeOutcome } from '#lib/outcome.js';
@@ -97,6 +97,10 @@
 		loadPage: (cursor) => loadMembershipHistory(apiFetchWithSession, route.practiceId, route.staffId, cursor),
 		failureMessage: 'Failed to load membership history'
 	});
+
+	const zoneNote = $derived(
+		practiceZoneNote(membershipHistory.entries?.some((change) => hasClockTime(change.createdAt)) ?? false)
+	);
 
 	let isEndSessionsOpen = $state(false);
 	let endSessionsError = $state('');
@@ -251,8 +255,8 @@
 		     type (#872), and who made each change: the audit trail. The
 		     sentence is the one column that wraps (#2098); When and Who stay
 		     on one line. -->
-		{#if practiceZoneNote()}
-			<Text text={practiceZoneNote()!} tone="muted" />
+		{#if zoneNote}
+			<Text text={zoneNote} tone="muted" />
 		{/if}
 		<DataTable
 			columns={[

@@ -134,6 +134,13 @@ export function formatActivityTimestamp(value: string, timeZone: string, now: Da
 }
 
 /**
+ * Whether `formatActivityTimestamp` reads `value` as a clock time, not "2 hours ago".
+ */
+export function hasClockTime(value: string, now: Date = new Date()): boolean {
+	return now.getTime() - new Date(value).getTime() >= DAY_MS;
+}
+
+/**
  * A Visit's own Date column and per-row summary (#250): "Not yet
  * scheduled" -- plain text, so it is readable at 320px and announced to a
  * screen reader the same as any other cell -- when `value` is absent, or
