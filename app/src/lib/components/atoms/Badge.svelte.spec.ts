@@ -38,15 +38,6 @@ describe('Badge.svelte', () => {
 	});
 });
 
-describe('Badge.svelte icon prop (#2891)', () => {
-	it('draws the icon it is given in place of its variant icon', async () => {
-		const own = await render(Icon, { name: 'receipt', size: 16 });
-		const drawn = own.container.getHTML();
-		const { container } = await setup({ variant: 'neutral', icon: 'receipt' });
-
-		expect(container.getHTML()).toContain(drawn);
-	});
-});
 
 /*
  * #434 -- the background tint has to carry variant signal on its own, not
@@ -107,5 +98,13 @@ describe('the icon each variant draws (#2843)', () => {
 		const { container: tag } = await render(Icon, { name: 'x', size: 16 });
 
 		expect(await drawnIcon('error')).not.toBe(tag.querySelector('svg')!.getHTML());
+	});
+
+	it('is the one it is given when a badge names an icon (#2891)', async () => {
+		const { container: receipt } = await render(Icon, { name: 'receipt', size: 16 });
+		const { container } = await setup({ variant: 'neutral', icon: 'receipt' });
+
+		expect(container.querySelector('svg')!.getHTML()).toBe(receipt.querySelector('svg')!.getHTML());
+		expect(await drawnIcon('neutral')).not.toBe(receipt.querySelector('svg')!.getHTML());
 	});
 });
