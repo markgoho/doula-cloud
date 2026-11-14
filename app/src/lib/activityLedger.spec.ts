@@ -303,6 +303,15 @@ describe('activityLedgerColumns', () => {
 		expect(what.accessor(entry({ action: 'invoices_exported', diff: { nope: true } }))).toBe('Invoices downloaded');
 	});
 
+	it('says what left in a Clients download (#2891)', () => {
+		const what = activityLedgerColumns('America/New_York')[1];
+		const diff = { owes: true, doulaId: 'staff-2', rows: 16, searched: true };
+
+		expect(what.accessor(entry({ action: 'clients_exported', diff }))).toBe("Clients downloaded. 16 Clients: who owe money, one Doula's, with a search");
+		expect(what.accessor(entry({ action: 'clients_exported' }))).toBe('Clients downloaded');
+		expect(what.accessor(entry({ action: 'clients_exported', diff: { nope: true } }))).toBe('Clients downloaded');
+	});
+
 	it("says the row's own words for an entry carrying no detail (#2006)", () => {
 		const what = activityLedgerColumns('America/New_York')[1];
 

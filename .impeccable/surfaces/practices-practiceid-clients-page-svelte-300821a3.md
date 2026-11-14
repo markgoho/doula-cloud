@@ -34,7 +34,7 @@ The declines were read on 2026-11-13 by an Opus agent and by Gemini; the rows th
 | Bulk selection and bulk actions | Declined | no bulk job on record; nothing on a roster is done to several Clients at once |
 | Density and column choice | Declined | the columns fold by width already |
 | Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
-| A list-level export, print or copy | Later | decided with the Invoices export (#2871); no record of a roster leaving the product |
+| A list-level export, print or copy | Have it (#2891) | built 2026-11-14 as the Invoices export was (#2871): a "Download CSV" button on the title row for an Owner or Admin, every Client the applied narrowing, name and order match (not the 30 loaded), nine plain-word columns with no email, phone, address or clinical field, one Activity entry per download. Dee's bookkeeper and a tax year leave the product through it; two of three graders in the #2891 round found it "Later" while the Invoices list one tab away had one. Print and copy stay declined: the file is the spreadsheet |
 | Row actions without opening the record | Declined | the Client's page and its Engagement hold the actions, one step from the row |
 | A reader-chosen order (soonest due first, most owed first, most overdue first; Name, A to Z or Z to A) | Have it | Linear and Stripe give the reader a chosen order beside the filters; soonest due first stays the default, stated in the result line |
 | Sort by Money (most owed first) | Have it | both readings rejected "the 'Who owe money' box does it": a yes-or-no narrowing gives the set, not the ranking |
