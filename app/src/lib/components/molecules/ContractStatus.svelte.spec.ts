@@ -71,8 +71,32 @@ describe('ContractStatus.svelte', () => {
 	it('renders the status as a row, in the Staff words (#2004)', async () => {
 		await setup({ status: 'sent' });
 
-		await expect.element(page.getByRole('term')).toHaveTextContent('Status');
-		await expect.element(page.getByRole('definition')).toHaveTextContent('Sent, waiting for the Client to sign');
+		await expect.element(page.getByRole('term').first()).toHaveTextContent('Status');
+		await expect.element(page.getByRole('definition').first()).toHaveTextContent('Sent, waiting for the Client to sign');
+	});
+
+	it('says a sent Contract has not been opened yet (#2952)', async () => {
+		await setup({ status: 'sent' });
+
+		await expect.element(page.getByText('Not opened yet')).toBeVisible();
+	});
+
+	it('says the day the Client opened a sent Contract (#2952)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'America/New_York',
+			status: 'sent',
+			hasSignedPdf: false,
+			openedAt: '2026-11-12T15:04:05Z'
+		});
+
+		await expect.element(page.getByText('Opened', { exact: true })).toBeVisible();
+		expect(page.getByText('Not opened yet').elements()).toHaveLength(0);
+	});
+
+	it('says nothing of opening once the Contract is not sent (#2952)', async () => {
+		await setup({ status: 'signed' });
+
+		expect(page.getByText('Opened', { exact: true }).elements()).toHaveLength(0);
 	});
 
 	it('says a voided Contract is no longer active', async () => {

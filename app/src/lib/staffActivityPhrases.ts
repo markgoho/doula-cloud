@@ -76,6 +76,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	contract_created: (name) => `Contract drafted for ${client(name)}`,
 	contract_sent: (name) => `Contract sent to ${client(name)}`,
 	contract_signed: (name) => `Contract signed by ${client(name)}`,
+	contract_opened: (name) => `Contract opened by ${client(name)}`,
 	contract_voided: (name) => `Contract for ${client(name)} voided`,
 	contract_edited: (name) => `Contract for ${client(name)} changed`,
 	contract_priced: (name) => `Price set on the Contract for ${client(name)}`,

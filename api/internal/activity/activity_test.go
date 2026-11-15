@@ -203,6 +203,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionPortalInviteRefused,
 		// #2520: a Draft she has not been sent.
 		activity.ActionContractEdited,
+		// #2952: her own first read of a Contract is the Practice's to see.
+		activity.ActionContractOpened,
 		// An Invoice draft Stripe would not finalize never reached her.
 		activity.ActionInvoiceNotSent,
 	})

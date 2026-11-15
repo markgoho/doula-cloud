@@ -44,7 +44,10 @@ type ContractListItem struct {
 	SteppedOn string `json:"steppedOn"`
 	// DaysWaiting is set on a Sent Contract only: whole Practice days since
 	// it was sent, 0 for today.
-	DaysWaiting      *int     `json:"daysWaiting,omitempty"`
+	DaysWaiting *int `json:"daysWaiting,omitempty"`
+	// OpenedOn is the Practice-zone day the Client first read a Sent
+	// Contract (#2952), empty until she has.
+	OpenedOn         string   `json:"openedOn,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
 	MadeByName       string   `json:"madeByName,omitempty"`
 	VoidedByName     string   `json:"voidedByName,omitempty"`
@@ -216,7 +219,7 @@ const listFrom = `
 	JOIN clients cl ON cl.id = e.client_id`
 
 const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, e.kind::text, c.status::text,
-	       c.stepped_at, c.sent_at,
+	       c.stepped_at, c.sent_at, c.opened_at,
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by),
@@ -309,10 +312,10 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		var item ContractListItem
 		var givenName string
 		var preferredName, familyName, sentByName, madeByName, voidedByName, dueDate, endedOn, outcome, doulas sql.NullString
-		var sentAt sql.NullTime
+		var sentAt, openedAt sql.NullTime
 		var amount int64
 		if err := rows.Scan(&item.ContractID, &item.EngagementID, &item.ClientID, &givenName, &preferredName, &familyName,
-			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
+			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &openedAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
 			&amount, &item.HasSignedPDF, &item.VoidRequested, &item.sortName); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan list row: %w", err)
@@ -324,6 +327,9 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 			if item.Status == string(StatusSent) {
 				days := practiceDaysBetween(sentAt.Time, now, zone)
 				item.DaysWaiting = &days
+				if openedAt.Valid {
+					item.OpenedOn = openedAt.Time.In(zone).Format(dayLayout)
+				}
 			}
 		}
 		item.SentByName = sentByName.String

@@ -510,8 +510,8 @@
 
 	const INSET = 'var(--data-table-cell-inset)';
 	const STATUS_STATE_TRACK = '9.5ch';
-	const STATUS_DAY_TRACK = '10.5ch';
-	const STATUS_WAIT_TRACK = '6ch';
+	const STATUS_DAY_TRACK = '7ch';
+	const STATUS_OPENED_TRACK = '13ch';
 	const NO_ONE_ON_RECORD = 'No one on record';
 	const VOID_REQUESTED = 'void requested';
 	const formatDay = (day: string) => formatCalendarDayThisYear(day, timeZone, now);
@@ -521,10 +521,16 @@
 		const day = formatDay(contract.steppedOn);
 		if (contract.status === 'draft') return `Draft made ${day}`;
 		if (contract.status === 'sent') {
-			return contract.daysWaiting ? `Sent ${day}, waiting ${daysWaitingWords(contract.daysWaiting)}` : 'Sent today';
+			const sent = contract.daysWaiting ? `Sent ${day}, waiting ${daysWaitingWords(contract.daysWaiting)}` : 'Sent today';
+			return `${sent}, ${openedText(contract, 'run-on')}`;
 		}
 		const word = `${contractStatusWord(contract.status)} ${day}`;
 		return contract.voidRequested ? `${word}, ${VOID_REQUESTED}` : word;
+	}
+
+	function openedText(contract: ContractListItem, form: 'cell' | 'run-on'): string {
+		const words = contract.openedOn ? `opened ${formatDay(contract.openedOn)}` : 'not opened';
+		return form === 'cell' ? words.charAt(0).toUpperCase() + words.slice(1) : words;
 	}
 
 	function whoText(contract: ContractListItem): string {
@@ -544,7 +550,7 @@
 		{ label: 'Client', accessor: (contract: ContractListItem) => contract.clientName, grows: true, track: '16ch' },
 		{
 			label: 'Status',
-			track: `calc(${STATUS_STATE_TRACK} + ${STATUS_DAY_TRACK} + ${STATUS_WAIT_TRACK} + 2 * var(--space-1) + 2 * ${INSET})`,
+			track: `calc(${STATUS_STATE_TRACK} + ${STATUS_DAY_TRACK} + ${STATUS_OPENED_TRACK} + 2 * var(--space-1) + 2 * ${INSET})`,
 			accessor: statusText,
 			content: statusCell
 		},
@@ -625,17 +631,26 @@
 		class:tracked={tableView === 'table' && !contract.voidRequested}
 		style:--status-state-track={STATUS_STATE_TRACK}
 		style:--status-day-track={STATUS_DAY_TRACK}
+		style:--status-opened-track={STATUS_OPENED_TRACK}
 	>
 		{#if contract.status === 'draft'}
 			<Badge variant="warning" label="Draft" />
-			<span class="day"><span class="lead">made</span> <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
+			<span class="day made"><span class="lead">made</span> <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
+		{:else if contract.status === 'sent' && tableView === 'table'}
+			<Badge variant="info" label="Sent" />
+			<span class="day"
+				>{#if contract.daysWaiting}<time class="visually-hidden" datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time><span
+						class="visually-hidden">, waiting </span
+					>{daysWaitingWords(contract.daysWaiting)}{:else}today{/if}</span
+			>
+			<span class="opened">{openedText(contract, 'cell')}</span>
 		{:else if contract.status === 'sent'}
 			<Badge variant="info" label="Sent" />
 			{#if contract.daysWaiting}
-				<span class="day"><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time>{#if tableView !== 'table'}<span aria-hidden="true">,</span>{/if}<span class="visually-hidden">, waiting</span></span>
-				<span class="wait">{daysWaitingWords(contract.daysWaiting)}</span>
+				<span class="day"><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time><span aria-hidden="true">,</span><span class="visually-hidden">, waiting</span></span>
+				<span class="wait">{daysWaitingWords(contract.daysWaiting)}<span aria-hidden="true">,</span> {openedText(contract, 'run-on')}</span>
 			{:else}
-				<span class="day">today</span>
+				<span class="day">today<span aria-hidden="true">,</span> {openedText(contract, 'run-on')}</span>
 			{/if}
 		{:else}
 			<span>{contractStatusWord(contract.status)}</span>
@@ -951,7 +966,7 @@
 		.status.tracked {
 			display: grid;
 			justify-items: start;
-			grid-template-columns: var(--status-state-track) var(--status-day-track) auto;
+			grid-template-columns: var(--status-state-track) var(--status-day-track) var(--status-opened-track);
 			white-space: nowrap;
 			font-variant-numeric: tabular-nums;
 		}
@@ -959,6 +974,10 @@
 		:global(td) .no-break {
 			flex-wrap: nowrap;
 			white-space: nowrap;
+		}
+
+		.status.tracked .made {
+			grid-column: 2 / span 2;
 		}
 
 		.lead {

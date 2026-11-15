@@ -86,8 +86,13 @@
 		rows = [],
 		sent,
 		signed,
+		openedAt,
 		children
 	}: {
+		/**
+		When the Client first read it (#2952), absent until she has. Said only of a Sent Contract.
+		*/
+		openedAt?: string;
 		/**
 		When it was sent and by whom (#2104), absent for a Draft.
 		*/
@@ -269,6 +274,13 @@
 				]
 			: []),
 		...(sent ? [{ label: 'Sent', value: stampText(sent, timeZone), instant: sent.at }] : []),
+		...(status === 'sent'
+			? [
+					openedAt
+						? { label: 'Opened', value: formatInstant(openedAt, timeZone), instant: openedAt }
+						: { label: 'Opened', value: 'Not opened yet' }
+				]
+			: []),
 		...(amountChangedAt
 			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt, timeZone), instant: amountChangedAt }]
 			: []),

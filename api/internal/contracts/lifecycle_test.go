@@ -91,6 +91,7 @@ func TestTransitions_TableIsComplete(t *testing.T) {
 		"change it":                contracts.StatusDraft,
 		"send it":                  contracts.StatusDraft,
 		"sign it":                  contracts.StatusSent,
+		"open it":                  contracts.StatusSent,
 		"void it":                  contracts.StatusSigned,
 		"create an Invoice for it": contracts.StatusSigned,
 		"change its amount":        contracts.StatusDraft,

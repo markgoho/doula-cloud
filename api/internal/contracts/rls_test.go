@@ -226,23 +226,23 @@ func TestRLS_ContractsClientSignsOnlyHerOwnSentContract(t *testing.T) {
 	}
 }
 
-// TestRLS_ContractsClientWritesOutsideTheSignTransitionRejected proves
+// TestRLS_ContractsClientWritesOutsideTheSignAndOpenRejected proves
 // contracts_client_visibility itself grants no write access, and that the
-// sign policy's WITH CHECK, not just USING, admits only sent -> signed.
-// The row is visible for UPDATE (contracts_client_sign's USING clause
-// passes on a 'sent' Contract the caller owns), so Postgres evaluates
-// WITH CHECK against the new row and rejects it outright rather than
-// silently affecting 0 rows -- unlike the SELECT-only case, where an
-// invisible row is simply filtered out. That holds for an UPDATE that
-// leaves the status at 'sent' and for one that moves it to voided (or any
-// status other than signed).
-func TestRLS_ContractsClientWritesOutsideTheSignTransitionRejected(t *testing.T) {
+// sign and open policies' WITH CHECK, not just USING, admit only sent ->
+// signed and a Sent Contract left Sent. The row is visible for UPDATE, so
+// Postgres evaluates WITH CHECK against the new row and rejects it
+// outright rather than silently affecting 0 rows. A field edit that leaves
+// the status sent passes the open policy and is stopped by its trigger
+// (#2952), which lets a Client set opened_at once and nothing else.
+func TestRLS_ContractsClientWritesOutsideTheSignAndOpenRejected(t *testing.T) {
 	cases := []struct {
-		name  string
-		query string
+		name    string
+		query   string
+		wantErr string
 	}{
-		{"a field edit that leaves the status sent", `UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`},
-		{"moving a sent Contract to voided", `UPDATE contracts SET status = 'voided'::contract_status, voided_at = now() WHERE engagement_id = $1`},
+		{"a field edit that leaves the status sent", `UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`, "only write to a sent Contract"},
+		{"an edit riding along with the open", `UPDATE contracts SET opened_at = now(), prose = 'hacked' WHERE engagement_id = $1`, "only write to a sent Contract"},
+		{"moving a sent Contract to voided", `UPDATE contracts SET status = 'voided'::contract_status, voided_at = now() WHERE engagement_id = $1`, "row-level security"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -250,9 +250,33 @@ func TestRLS_ContractsClientWritesOutsideTheSignTransitionRejected(t *testing.T)
 			tx := seeded.asClient(t)
 
 			_, err := tx.ExecContext(t.Context(), c.query, seeded.engagementID)
-			if err == nil || !strings.Contains(err.Error(), "row-level security") {
-				t.Fatalf("update error = %v, want a row-level security violation", err)
+			if err == nil || !strings.Contains(err.Error(), c.wantErr) {
+				t.Fatalf("update error = %v, want %q", err, c.wantErr)
 			}
 		})
+	}
+}
+
+// TestRLS_ContractsClientOpensOnlyHerOwnSentContractOnce proves the open
+// policy admits her first open of her own Sent Contract, not another
+// Client's, not one already opened, and not one that is no longer Sent.
+func TestRLS_ContractsClientOpensOnlyHerOwnSentContractOnce(t *testing.T) {
+	const open = `UPDATE contracts SET opened_at = now() WHERE engagement_id = $1`
+	seeded := seedClientsContract(t, statusSent)
+	tx := seeded.asClient(t)
+
+	if rows := testdb.RowsAffected(t, tx, open, seeded.otherEngagementID); rows != 0 {
+		t.Fatalf("another Client's: %d rows affected, want 0", rows)
+	}
+	if rows := testdb.RowsAffected(t, tx, open, seeded.engagementID); rows != 1 {
+		t.Fatalf("her own: %d rows affected, want 1", rows)
+	}
+	if _, err := tx.ExecContext(t.Context(), open, seeded.engagementID); err == nil || !strings.Contains(err.Error(), "only write to a sent Contract") {
+		t.Fatalf("a second open error = %v, want the trigger's refusal", err)
+	}
+
+	signed := seedClientsContract(t, statusSigned)
+	if rows := testdb.RowsAffected(t, signed.asClient(t), open, signed.engagementID); rows != 0 {
+		t.Fatalf("a signed Contract: %d rows affected, want 0", rows)
 	}
 }
