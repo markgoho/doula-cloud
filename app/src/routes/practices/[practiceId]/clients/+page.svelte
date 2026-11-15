@@ -1230,7 +1230,7 @@
 		{#if line.names.length === 0}
 			{line.text}
 		{:else}
-			<DoulaNames names={line.names} ids={line.ids} readerId={session?.staffId} isTable={view === 'table'} prefix={line.prefix} />
+			<DoulaNames names={line.names} ids={line.ids} readerId={session?.staffId} isTable={view === 'table'} prefix={line.prefix} isCountSpelled />
 		{/if}
 	</span>
 {/snippet}

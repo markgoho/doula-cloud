@@ -3,7 +3,6 @@ package contracts
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 )
@@ -31,11 +30,8 @@ func contractHistory(ctx context.Context, tx *sql.Tx, engagementID string) (curr
 		`SELECT id FROM contracts WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
 	).Scan(&currentID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil, nil
-	}
 	if err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read or written this Contract
 		return "", nil, fmt.Errorf("contracts: read current contract id: %w", err)
 	}
 

@@ -450,7 +450,7 @@ describe('the columns between filter states', () => {
 		if (isTableShown()) expect(tableBox.right, `a ${Math.round(tableBox.width)}px table in ${Math.round(frame.width)}px`).toBeLessThanOrEqual(frame.right + 0.5);
 		const row = [...document.querySelectorAll('table.table-view tbody tr')].find((one) => one.textContent!.includes('Marisol Terrazas'))!;
 		expect(row.textContent).toContain(five.join(', '));
-		expect(row.querySelector(':scope .doula-names [aria-hidden="true"]')!.textContent).toContain('Renata Alvarez +4');
+		expect(row.querySelector(':scope .doula-names [aria-hidden="true"]')!.textContent).toContain('Renata Alvarez +4 more');
 	});
 
 	// At 1024px the fields, with Order (#2869), leave Apply's line no room for a tag and "Clear

@@ -14,6 +14,12 @@ describe('DoulaNames', () => {
 		expect(page.getByText('Joss Adeyemi, Lena Vasquez, Priya Raman').elements()).toHaveLength(1);
 	});
 
+	it('spells the count out where a list has the room', async () => {
+		await render(DoulaNames, { names: THREE, ids: IDS, isTable: true, isCountSpelled: true });
+
+		await expect.element(page.getByText('Joss Adeyemi +2 more')).toBeVisible();
+	});
+
 	it('calls the reader You, first', async () => {
 		await render(DoulaNames, { names: THREE, ids: IDS, readerId: 'b', isTable: true });
 

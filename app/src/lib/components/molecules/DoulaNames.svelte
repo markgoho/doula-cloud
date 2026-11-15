@@ -15,13 +15,17 @@
 		readerId?: string;
 		isTable?: boolean;
 		prefix?: string;
+		/**
+		Says "+2 more" where a list has the room, and not only "+2".
+		*/
+		isCountSpelled?: boolean;
 	}
 
-	let { names, ids = [], readerId = '', isTable = false, prefix = '' }: Properties = $props();
+	let { names, ids = [], readerId = '', isTable = false, prefix = '', isCountSpelled = false }: Properties = $props();
 
 	const words = $derived(doulaWords(names, ids, readerId, DOULA_CELL_FITS - prefix.length));
 	const isFolded = $derived(isTable && words.more > 0);
-	const seen = $derived(isFolded ? `${prefix}${words.lead} +${words.more}` : `${prefix}${isTable ? words.lead : words.full}`);
+	const seen = $derived(isFolded ? `${prefix}${words.lead} +${words.more}${isCountSpelled ? ' more' : ''}` :`${prefix}${isTable ? words.lead : words.full}`);
 	const heard = $derived(`${prefix}${words.full}`);
 </script>
 
