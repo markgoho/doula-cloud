@@ -929,7 +929,7 @@ async function seedContractBook(
 		{
 			engagement: await addressFor(request, roster, tail[18]),
 			asker: staff.rowan,
-			reason: 'This Contract was made for the wrong Quinn by mistake. Quinn Estrada is my Client. Please void it.',
+			reason: 'This Contract was made for the wrong Quinn by mistake. Please void it.',
 			days: 11
 		}
 	];
