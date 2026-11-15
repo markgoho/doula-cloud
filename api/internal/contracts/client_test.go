@@ -37,6 +37,10 @@ func TestClientGetContractHandler_SignedAndVoidedAllowed(t *testing.T) {
 			e.seedContract(status)
 
 			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
+
+			if n, _ := e.openedEntries(); n != 0 {
+				t.Fatalf("a %s Contract read recorded %d opens, want 0 (#2952)", status, n)
+			}
 		})
 	}
 }

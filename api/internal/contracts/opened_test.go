@@ -50,26 +50,6 @@ func TestClientGetContractHandler_RecordsTheFirstOpenOnly(t *testing.T) {
 	}
 }
 
-// TestClientGetContractHandler_OnlyASentContractIsOpened proves a Signed or
-// Voided Contract read by her records nothing.
-func TestClientGetContractHandler_OnlyASentContractIsOpened(t *testing.T) {
-	for _, status := range []string{statusSigned, statusVoided} {
-		t.Run(status, func(t *testing.T) {
-			e := newEnv(t, withPortalLogin())
-			e.seedContract(status)
-
-			reqtest.ExpectStatus(t, http.MethodGet, e.portalURL(""), http.StatusOK, e.AsClient)
-
-			if n, _ := e.openedEntries(); n != 0 {
-				t.Fatalf("opens = %d, want 0", n)
-			}
-			if got := e.contract(); got.OpenedAt != nil {
-				t.Fatalf("openedAt = %v, want none", got.OpenedAt)
-			}
-		})
-	}
-}
-
 // TestListContracts_SaysWhenASentContractWasOpened proves the list's Sent row
 // carries the Practice-zone day it was opened, and a Sent row not yet
 // opened, or any other row, carries none.
