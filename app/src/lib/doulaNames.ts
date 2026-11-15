@@ -23,12 +23,17 @@ export interface DoulaWords {
  * one, and first, so she finds herself; two names are both drawn where they
  * fit the cell, and a longer list is its first name and how many more.
  */
-export function doulaWords(names: readonly string[], ids: readonly string[] = [], readerId = ''): DoulaWords {
+export function doulaWords(
+	names: readonly string[],
+	ids: readonly string[] = [],
+	readerId = '',
+	fits = DOULA_CELL_FITS
+): DoulaWords {
 	const isReader = (index: number) => readerId !== '' && ids[index] === readerId;
 	const readerIndex = names.findIndex((_, index) => isReader(index));
 	const named = names.map((name, index) => (isReader(index) ? 'You' : name));
 	const ordered = readerIndex > 0 ? [named[readerIndex]!, ...named.filter((_, index) => index !== readerIndex)] : named;
 	const full = ordered.join(', ');
-	if (full.length <= DOULA_CELL_FITS) return { full, lead: full, more: 0 };
+	if (full.length <= fits) return { full, lead: full, more: 0 };
 	return { full, lead: ordered[0]!, more: ordered.length - 1 };
 }

@@ -7,7 +7,7 @@
 	 * "+N". A screen reader hears every name; a card, which wraps, says them
 	 * all.
 	 */
-	import { doulaWords } from '#lib/doulaNames.js';
+	import { DOULA_CELL_FITS, doulaWords } from '#lib/doulaNames.js';
 
 	interface Properties {
 		names: readonly string[];
@@ -19,7 +19,7 @@
 
 	let { names, ids = [], readerId = '', isTable = false, prefix = '' }: Properties = $props();
 
-	const words = $derived(doulaWords(names, ids, readerId));
+	const words = $derived(doulaWords(names, ids, readerId, DOULA_CELL_FITS - prefix.length));
 	const isFolded = $derived(isTable && words.more > 0);
 	const seen = $derived(isFolded ? `${prefix}${words.lead} +${words.more}` : `${prefix}${isTable ? words.lead : words.full}`);
 	const heard = $derived(`${prefix}${words.full}`);

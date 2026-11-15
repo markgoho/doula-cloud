@@ -26,6 +26,10 @@ describe('doulaWords', () => {
 		});
 	});
 
+	it('folds sooner where the cell must also hold a prefix', () => {
+		expect(doulaWords(['Jo Ames', 'Li Cho'], [], '', 10)).toEqual({ full: 'Jo Ames, Li Cho', lead: 'Jo Ames', more: 1 });
+	});
+
 	it('names no one for no Doula', () => {
 		expect(doulaWords([])).toEqual({ full: '', lead: '', more: 0 });
 	});
