@@ -75,6 +75,15 @@ func (e *env) seedSkippedNotice(engagementID, kind string, at time.Time) {
 		e.Practice.ID, e.Staff.ID, kind, at, engagementID)
 }
 
+// remindedAboutAnotherContract gives the Client a second Sent Contract
+// whose reminder went out an hour ago.
+func (e *env) remindedAboutAnotherContract() {
+	e.T.Helper()
+	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client))
+	seedContract(e.T, e.DB, other.ID, statusSent, mergeFieldProse)
+	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
+}
+
 // remindable is an env whose Sent Contract was sent before today and whose
 // Client can sign in.
 func remindable(t *testing.T, opts ...envOption) *env {
@@ -284,9 +293,7 @@ func TestPostRemindContractHandler_RefusesOnTheDayTheContractWasSent(t *testing.
 // it was about.
 func TestPostRemindContractHandler_CountsEveryContractOfTheSameClient(t *testing.T) {
 	e := remindable(t)
-	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client))
-	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
-	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
+	e.remindedAboutAnotherContract()
 
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 }
@@ -380,9 +387,7 @@ func TestRemindIsOfferedExactlyWhereItWillBeSent(t *testing.T) {
 // offered Remind on this one, and is told when she can be.
 func TestListContracts_AClientEmailedAboutAnotherContractIsNotOfferedRemind(t *testing.T) {
 	e := remindable(t, signedInAs(fixture.Owner()))
-	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client))
-	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
-	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
+	e.remindedAboutAnotherContract()
 
 	for _, item := range e.list("?view=sent").Items {
 		if item.CanRemind || item.CanRemindOn != nextDay {
