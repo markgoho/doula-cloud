@@ -220,6 +220,10 @@
 			declineError = 'Enter why this request is being declined';
 			return;
 		}
+		if (isVoidRequestReasonTooLong(declineReason)) {
+			declineError = `Use ${VOID_REQUEST_REASON_LIMIT} characters or fewer for the reason`;
+			return;
+		}
 		decliningRequestId = requestId;
 		try {
 			await onDeclineVoidRequest!(requestId, declineReason);
@@ -412,6 +416,7 @@
 							{describedBy}
 							{invalid}
 							value={declineReason}
+							maxLength={VOID_REQUEST_REASON_LIMIT}
 							onInput={(value) => (declineReason = value)}
 						/>
 					{/snippet}

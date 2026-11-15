@@ -120,12 +120,18 @@ func TestPostVoidRequestHandler_RefusesAReasonPastTheLimitInWordsThatSayIt(t *te
 	e := newEnv(t)
 	e.seedContract(statusSigned)
 
-	body := reqtest.ExpectBody(t, http.MethodPost, e.voidRequestURL(), http.StatusBadRequest, e.SignedIn,
-		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
+	e.expectReasonTooLong(e.voidRequestURL())
+}
 
+// expectReasonTooLong posts a reason one past the limit to url and expects
+// the 400 to name the reason field and the limit.
+func (e *env) expectReasonTooLong(url string) {
+	e.T.Helper()
+	body := reqtest.ExpectBody(e.T, http.MethodPost, url, http.StatusBadRequest, e.SignedIn,
+		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
 	want := fmt.Sprintf("Use %d characters or fewer for the reason", contracts.MaxVoidRequestReasonRunes)
 	if !strings.Contains(string(body), want) || !strings.Contains(string(body), `"reason"`) {
-		t.Fatalf("body = %s, want the reason field and %q", body, want)
+		e.T.Fatalf("body = %s, want the reason field and %q", body, want)
 	}
 }
 
@@ -326,6 +332,7 @@ func TestPostVoidRequestDeclineHandler_Refusals(t *testing.T) {
 		{caseNoContract, false, func(*env) string { return noSuchRequestID }, reasoned("declining"), http.StatusNotFound},
 		{caseBodyNotJSON, true, (*env).openRequest, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"empty reason", true, (*env).openRequest, reasoned(""), http.StatusBadRequest},
+		{"reason past the limit", true, (*env).openRequest, reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)), http.StatusBadRequest},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -336,6 +343,22 @@ func TestPostVoidRequestDeclineHandler_Refusals(t *testing.T) {
 
 			reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(c.requestID(e)), c.want, e.SignedIn, c.body)
 		})
+	}
+}
+
+// TestPostVoidRequestDeclineHandler_ReasonLimit proves the refusal names the
+// field and the number the form counts down from, and that the limit counts
+// characters, not bytes.
+func TestPostVoidRequestDeclineHandler_ReasonLimit(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Admin()))
+	e.seedContract(statusSigned)
+	requestID := e.openRequest()
+
+	e.expectReasonTooLong(e.declineURL(requestID))
+
+	out := e.decline(requestID, strings.Repeat("é", contracts.MaxVoidRequestReasonRunes))
+	if got := onlyRequestOfASignedContract(t, out); got.Status != "declined" {
+		t.Fatalf("voidRequest = %+v, want declined", got)
 	}
 }
 

@@ -61,6 +61,12 @@ function openVoidRequest(overrides: Partial<VoidRequestSummary> = {}): VoidReque
 	};
 }
 
+async function setupOpenDecline() {
+	const onDeclineVoidRequest = vi.fn();
+	await setup({ status: 'signed', onDeclineVoidRequest, voidRequests: [openVoidRequest()] });
+	return onDeclineVoidRequest;
+}
+
 describe('ContractStatus.svelte', () => {
 	it('renders the status as a row, in the Staff words (#2004)', async () => {
 		await setup({ status: 'sent' });
@@ -438,12 +444,7 @@ describe('ContractStatus.svelte', () => {
 		});
 
 		it('shows a field error and calls nothing when the decline reason is left blank', async () => {
-			const onDeclineVoidRequest = vi.fn();
-			await setup({
-				status: 'signed',
-				onDeclineVoidRequest,
-				voidRequests: [openVoidRequest()]
-			});
+			const onDeclineVoidRequest = await setupOpenDecline();
 
 			await page.getByRole('button', { name: 'Decline' }).click();
 			await page.getByRole('button', { name: 'Decline' }).click();
@@ -451,6 +452,20 @@ describe('ContractStatus.svelte', () => {
 			await expect
 				.element(page.getByRole('alert'))
 				.toHaveTextContent('Enter why this request is being declined');
+			expect(onDeclineVoidRequest).not.toHaveBeenCalled();
+		});
+
+		it('states the limit on the decline form and refuses a reason past it without calling onDeclineVoidRequest', async () => {
+			const onDeclineVoidRequest = await setupOpenDecline();
+
+			await page.getByRole('button', { name: 'Decline' }).click();
+			await expect.element(page.getByText('You can enter up to 120 characters')).toBeVisible();
+			await page.getByLabelText('Reason for declining').fill('a'.repeat(121));
+			await page.getByRole('button', { name: 'Decline' }).click();
+
+			await expect
+				.element(page.getByRole('alert'))
+				.toHaveTextContent('Use 120 characters or fewer for the reason');
 			expect(onDeclineVoidRequest).not.toHaveBeenCalled();
 		});
 

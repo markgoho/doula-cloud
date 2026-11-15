@@ -624,7 +624,8 @@ export async function loadPracticeVoidRequests(
 	return response.json();
 }
 
-// api/internal/contracts.MaxVoidRequestReasonRunes, counted in characters.
+// api/internal/contracts.MaxVoidRequestReasonRunes, counted in characters: a void
+// request's reason and its decline reason.
 export const VOID_REQUEST_REASON_LIMIT = 120;
 
 export function isVoidRequestReasonTooLong(reason: string): boolean {
