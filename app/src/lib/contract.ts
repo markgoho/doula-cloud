@@ -624,6 +624,13 @@ export async function loadPracticeVoidRequests(
 	return response.json();
 }
 
+// api/internal/contracts.MaxVoidRequestReasonRunes, counted in characters.
+export const VOID_REQUEST_REASON_LIMIT = 120;
+
+export function isVoidRequestReasonTooLong(reason: string): boolean {
+	return [...reason.trim()].length > VOID_REQUEST_REASON_LIMIT;
+}
+
 export function voidRequestsHeading(total: number): string {
 	return `${total} void ${total === 1 ? 'request' : 'requests'} to decide`;
 }

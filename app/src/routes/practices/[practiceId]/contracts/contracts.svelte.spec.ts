@@ -261,8 +261,21 @@ describe('the void request queue', () => {
 		await expect.element(testPage.getByText(second!.reason)).toBeVisible();
 		expect(testPage.getByRole('listitem').elements().filter((each) => each.id.startsWith('void-request-row-'))).toHaveLength(2);
 		await expect
-			.element(testPage.getByText('Open one to void its Contract or decline the request on the Engagement.'))
+			.element(testPage.getByText('Open one to void its Contract or decline it, both on the Engagement.'))
 			.toBeVisible();
+	});
+
+	it('is a click target as a whole, through its one link', async () => {
+		await setup();
+		const [first] = voidRequests;
+		const link = testPage.getByRole('link', { name: `${first!.clientName}, void request` }).element() as HTMLAnchorElement;
+		const followed = vi.spyOn(link, 'click').mockImplementation(() => {});
+
+		await testPage.getByText(first!.reason).click();
+		expect(followed).toHaveBeenCalledTimes(1);
+
+		await testPage.getByText('Jamie Doula asked 11 days ago', { exact: true }).click();
+		expect(followed).toHaveBeenCalledTimes(2);
 	});
 
 	it('says one request in the singular', async () => {
@@ -390,13 +403,13 @@ describe('the filter bar', () => {
 		await expect.element(testPage.getByRole('checkbox', { name: 'Mine' })).not.toBeInTheDocument();
 	});
 
-	it('offers Mine to an employed Doula at a Practice with another Doula, and not the Doula select', async () => {
+	it('offers Mine under "Show only" to an employed Doula at a Practice with another Doula, and not the Doula select', async () => {
 		await setup({
 			session: sessionOf(['doula'], { hasOtherDoulas: true }),
 			props: { data, isQueueExpected: false, doulas: [], isRosterLanded: true }
 		});
 
-		await expect.element(testPage.getByRole('checkbox', { name: 'Mine' })).toBeVisible();
+		await expect.element(testPage.getByRole('group', { name: 'Show only' }).getByRole('checkbox', { name: 'Mine' })).toBeVisible();
 		await expect.element(testPage.getByRole('combobox', { name: 'Doula' })).not.toBeInTheDocument();
 	});
 

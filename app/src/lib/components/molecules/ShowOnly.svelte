@@ -2,7 +2,7 @@
 	/*
 	 * One group, so each box reads as the end of "Show only". FilterBar draws
 	 * the legend on the boxes' own row. Consumers: the Schedule, the On call
-	 * roster and the Clients list.
+	 * roster, the Clients list and the Contracts list.
 	 */
 	import type { Snippet } from 'svelte';
 

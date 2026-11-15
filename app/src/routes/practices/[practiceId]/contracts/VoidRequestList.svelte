@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { voidRequestAsked, type AwaitingVoidRequest } from '#lib/contract.js';
 	import Link from '#lib/components/atoms/Link.svelte';
+	import { rowTarget } from '#lib/rowTarget.js';
 
 	let {
 		requests,
@@ -14,8 +15,8 @@
 <div class="frame">
 	<ul>
 		{#each requests as request (request.requestId)}
-			<li id="void-request-row-{request.requestId}">
-				<div class="title"><Link href={hrefFor(request)} label={request.clientName} ariaLabel={`${request.clientName}, void request`} /></div>
+			<li id="void-request-row-{request.requestId}" {@attach rowTarget}>
+				<div class="title"><Link href={hrefFor(request)} label={request.clientName} ariaLabel={`${request.clientName}, void request`} isRowLink /></div>
 				<p class="meta">{request.requestedByName} {voidRequestAsked(request.daysAgo)}</p>
 				<p class="reason">{request.reason}</p>
 			</li>
@@ -49,6 +50,11 @@
 			border-radius: var(--radius);
 			background-color: var(--color-surface-bright);
 			scroll-margin-block-start: calc(var(--top-bar-height) + var(--space-4));
+			cursor: pointer;
+		}
+
+		li:hover {
+			background-color: var(--color-surface-container);
 		}
 
 		p {
