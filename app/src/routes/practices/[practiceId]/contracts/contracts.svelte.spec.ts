@@ -265,7 +265,7 @@ describe('the reminder (#2951)', () => {
 		await remindButton().click();
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-2/contract/remind', { method: 'POST' });
-		await expect.element(testPage.getByRole('status').filter({ hasText: `Reminder sent for ${sentName}.` })).toBeVisible();
+		await expect.element(testPage.getByRole('status').filter({ hasText: `Reminder on its way to ${sentName}.` })).toBeVisible();
 		await expect.element(remindButton()).not.toBeInTheDocument();
 	});
 
@@ -282,6 +282,27 @@ describe('the reminder (#2951)', () => {
 		await setup({ width: 600 });
 
 		await expect.element(testPage.getByRole('button', { name: 'Remind the Client' })).toBeVisible();
+	});
+
+	it('carries the last-reminded day in the control name, not in a title (#2978)', async () => {
+		await setup();
+
+		await expect.element(testPage.getByRole('button', { name: `Remind the Client, ${sentName}, last reminded Nov 13` })).toBeVisible();
+		expect(document.querySelector('[title^="Reminded"]')).toBeNull();
+	});
+
+	it('offers no control where the BFF would refuse, and says when the Client can next be reminded (#2978)', async () => {
+		await setup();
+
+		const refused = items.find((item) => item.canRemindOn)!;
+		expect(testPage.getByRole('button', { name: `Remind the Client, ${refused.clientName}` }).elements()).toHaveLength(0);
+		await expect.element(testPage.getByText(`Remind the Client Nov 15`, { exact: false })).toBeInTheDocument();
+	});
+
+	it('says it in words on the card of a narrow list (#2978)', async () => {
+		await setup({ width: 600 });
+
+		await expect.element(testPage.getByText('Remind again Nov 15')).toBeVisible();
 	});
 
 	it('is not offered on the Signed view, where nothing waits on the Client', async () => {

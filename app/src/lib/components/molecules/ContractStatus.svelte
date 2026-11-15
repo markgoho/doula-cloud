@@ -21,9 +21,16 @@
 	import ConfirmDialog from '#lib/components/molecules/ConfirmDialog.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
-	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
+	import { formatActivityTimestamp, formatCalendarDay, formatInstant } from '#lib/dates.js';
 	import { stampText, type Stamp } from '#lib/stamp.js';
-	import { contractStatusText, VOID_REQUEST_REASON_LIMIT, isVoidRequestReasonTooLong, type VoidRequestSummary } from '#lib/contract.js';
+	import {
+		contractStatusText,
+		reminderDeliveryWords,
+		VOID_REQUEST_REASON_LIMIT,
+		isVoidRequestReasonTooLong,
+		type ContractReminder,
+		type VoidRequestSummary
+	} from '#lib/contract.js';
 
 	/**
 	 * Status display for a Contract on the Staff Engagement view: the raw
@@ -88,13 +95,18 @@
 		signed,
 		openedAt,
 		reminded,
+		canRemindOn,
 		onRemind,
 		children
 	}: {
 		/**
-		The latest reminder emailed to the Client and who sent it (#2951), absent until one has been.
+		The latest reminder asked for, who asked, and whether its mail is on its way, sent or never arrived (#2951, #2978), absent until one has been.
 		*/
-		reminded?: Stamp;
+		reminded?: ContractReminder;
+		/**
+		The Practice-zone day a reminder can next go out, said in words while Remind is not offered (#2978).
+		*/
+		canRemindOn?: string;
 		/**
 		Emails the Client a reminder (#2951). Present exactly when a reminder is offered today: the page
 		decides, as it does for onVoid. A refusal it throws is shown here.
@@ -293,7 +305,18 @@
 				]
 			: []),
 		...(status === 'sent' && reminded
-			? [{ label: 'Last reminded', value: stampText(reminded, timeZone), instant: reminded.at }]
+			? [
+					{
+						label: 'Last reminded',
+						value: [
+							reminded.by ? stampText({ at: reminded.at, by: reminded.by }, timeZone) : formatInstant(reminded.at, timeZone),
+							reminderDeliveryWords(reminded.delivery)
+						]
+							.filter(Boolean)
+							.join(', '),
+						instant: reminded.at
+					}
+				]
 			: []),
 		...(amountChangedAt
 			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt, timeZone), instant: amountChangedAt }]
@@ -301,6 +324,9 @@
 		...rows
 	]);
 
+	const nextReminderWords = $derived(
+		canRemindOn ? `You can remind the Client again on ${formatCalendarDay(canRemindOn)}.` : ''
+	);
 	let isReminding = $state(false);
 	let remindError = $state('');
 
@@ -358,6 +384,10 @@
 	{#if remindError}
 		<p role="alert">{remindError}</p>
 	{/if}
+{/if}
+
+{#if status === 'sent' && !onRemind && nextReminderWords}
+	<p>{nextReminderWords}</p>
 {/if}
 
 {#if hasSignedPdf && onDownloadPdf}

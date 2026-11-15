@@ -1820,21 +1820,21 @@ describe('the Contract read first, and its change only when asked (#2004)', () =
 
 	it('reminds the Client of a sent Contract and shows who reminded her and when (#2951)', async () => {
 		const sentLongAgo = { at: '2020-01-02T15:00:00Z', by: 'Dee Whitlock' };
-		const reminded = { at: new Date().toISOString(), by: 'Dee Whitlock' };
+		const reminded = { at: new Date().toISOString(), by: 'Dee Whitlock', delivery: 'queued' as const };
 		await setupWithContract(() => {
 			const respond = toApiResponder(fixture);
 			apiFetchWithSession.mockImplementation((path: string) => {
 				if (path.endsWith('/contract/remind')) {
-					return Promise.resolve(jsonResponse(draftOf({ status: 'sent', sent: sentLongAgo, reminded })));
+					return Promise.resolve(jsonResponse(draftOf({ status: 'sent', sent: sentLongAgo, reminded, canRemindOn: '2099-01-02' })));
 				}
-				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf({ status: 'sent', sent: sentLongAgo })));
+				if (path.endsWith('/contract')) return Promise.resolve(jsonResponse(draftOf({ status: 'sent', sent: sentLongAgo, canRemind: true })));
 				return respond(path);
 			});
 		}, accepted);
 
 		await testPage.getByRole('button', { name: 'Remind the Client' }).click();
 
-		await expect.element(testPage.getByRole('status').filter({ hasText: 'Reminder sent.' })).toBeVisible();
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Reminder on its way.' })).toBeVisible();
 		await expect.element(testPage.getByText('Last reminded')).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Remind the Client' })).not.toBeInTheDocument();
 	});

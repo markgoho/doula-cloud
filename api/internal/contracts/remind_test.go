@@ -19,6 +19,13 @@ import (
 // test says otherwise), well after the instant a seeded Contract is sent.
 var remindedNov20 = time.Date(2026, 11, 20, 15, 0, 0, 0, time.UTC)
 
+const (
+	nextDay            = "2026-11-21"
+	kindReminder       = "reminder"
+	noticePending      = "pending"
+	noticeDeadLettered = "dead_lettered"
+)
+
 func (e *env) remind() string { return e.contractURL("/remind") }
 
 // reminders is the Engagement's contract_reminded entries, each
@@ -47,6 +54,27 @@ func (e *env) reminders() []string {
 	return out
 }
 
+// seedNotice writes a contract_notice_outbox row for the Contract of
+// engagementID, as the send or a reminder would have left it by now.
+func (e *env) seedNotice(engagementID, kind, status string, at time.Time) {
+	e.T.Helper()
+	e.Exec(`INSERT INTO contract_notice_outbox (practice_id, contract_id, kind, triggered_by_staff_id, status, next_attempt_at, created_at, sent_at, dead_letter_reason)
+	        SELECT $1, ct.id, $3::contract_notice_kind, $2, $4::contract_notice_outbox_status, $5, $5,
+	               CASE WHEN $4 = 'sent' THEN $5::timestamptz END,
+	               CASE WHEN $4 = 'dead_lettered' THEN 'own_data'::outbox_dead_letter_reason END
+	          FROM contracts ct WHERE ct.engagement_id = $6`,
+		e.Practice.ID, e.Staff.ID, kind, status, at, engagementID)
+}
+
+// seedSkippedNotice is seedNotice for a row the worker skipped.
+func (e *env) seedSkippedNotice(engagementID, kind string, at time.Time) {
+	e.T.Helper()
+	e.Exec(`INSERT INTO contract_notice_outbox (practice_id, contract_id, kind, triggered_by_staff_id, status, next_attempt_at, created_at, skip_reason, skipped_at)
+	        SELECT $1, ct.id, $3::contract_notice_kind, $2, 'skipped', $4, $4, 'already_resolved', $4
+	          FROM contracts ct WHERE ct.engagement_id = $5`,
+		e.Practice.ID, e.Staff.ID, kind, at, engagementID)
+}
+
 // remindable is an env whose Sent Contract was sent before today and whose
 // Client can sign in.
 func remindable(t *testing.T, opts ...envOption) *env {
@@ -67,8 +95,11 @@ func TestPostRemindContractHandler_RemindsTheClient(t *testing.T) {
 	if out.Status != statusSent {
 		t.Fatalf("status = %q, want sent", out.Status)
 	}
-	if out.Reminded == nil || !out.Reminded.At.Equal(remindedNov20) || out.Reminded.By == "" {
-		t.Fatalf("reminded = %+v, want %v and the Staff member's name", out.Reminded, remindedNov20)
+	if out.Reminded == nil || !out.Reminded.At.Equal(remindedNov20) || out.Reminded.By != e.Staff.Name || out.Reminded.Delivery != "queued" {
+		t.Fatalf("reminded = %+v, want %v by %s, queued", out.Reminded, remindedNov20, e.Staff.Name)
+	}
+	if out.CanRemind || out.CanRemindOn != nextDay {
+		t.Fatalf("canRemind = %v on %q, want false until 2026-11-21", out.CanRemind, out.CanRemindOn)
 	}
 	if got, want := e.pendingNotices(), "reminder "+e.Staff.ID; got != want {
 		t.Fatalf("queued = %q, want %q", got, want)
@@ -223,6 +254,7 @@ func TestPostRemindContractHandler_ADayIsThePracticesDay(t *testing.T) {
 	e.Exec(`UPDATE practices SET timezone = 'America/New_York' WHERE id = $1`, e.Practice.ID)
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.SignedIn)
 
+	e.Exec(`UPDATE contract_notice_outbox SET status = 'sent', sent_at = created_at`)
 	e.MoveClockTo(time.Date(2026, 11, 21, 6, 0, 0, 0, time.UTC))
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.As(e.Staff))
 
@@ -243,7 +275,7 @@ func TestPostRemindContractHandler_ABadStoredZoneIsAnErrorNotUTC(t *testing.T) {
 
 func TestPostRemindContractHandler_RefusesOnTheDayTheContractWasSent(t *testing.T) {
 	e := remindable(t)
-	e.Exec(`UPDATE contracts SET sent_at = $2 WHERE engagement_id = $1`, e.Engagement.ID, remindedNov20.Add(-time.Hour))
+	e.seedNotice(e.Engagement.ID, statusSent, statusSent, remindedNov20.Add(-time.Hour))
 
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 }
@@ -254,7 +286,7 @@ func TestPostRemindContractHandler_CountsEveryContractOfTheSameClient(t *testing
 	e := remindable(t)
 	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client))
 	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
-	e.Exec(`UPDATE contracts SET reminded_at = $2 WHERE engagement_id = $1`, other.ID, remindedNov20.Add(-time.Hour))
+	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
 
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 }
@@ -263,9 +295,125 @@ func TestPostRemindContractHandler_AnotherClientIsNotCounted(t *testing.T) {
 	e := remindable(t)
 	other := e.AnotherEngagement()
 	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
-	e.Exec(`UPDATE contracts SET reminded_at = $2 WHERE engagement_id = $1`, other.ID, remindedNov20.Add(-time.Hour))
+	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
 
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.SignedIn)
+}
+
+// #2978: mail she never got holds nothing. A mail still waiting to go, or
+// one that went, holds the day; one that dead-lettered or was skipped frees
+// it, for a reminder and for the mail at send alike.
+func TestPostRemindContractHandler_OnlyMailQueuedOrSentHoldsTheDay(t *testing.T) {
+	for _, tc := range []struct {
+		kind, status string
+		held         bool
+	}{
+		{kindReminder, noticePending, true},
+		{kindReminder, statusSent, true},
+		{statusSent, noticePending, true},
+		{statusSent, statusSent, true},
+		{kindReminder, noticeDeadLettered, false},
+		{statusSent, noticeDeadLettered, false},
+		{kindReminder, "skipped", false},
+	} {
+		t.Run(tc.kind+" "+tc.status, func(t *testing.T) {
+			e := remindable(t)
+			if tc.status == "skipped" {
+				e.seedSkippedNotice(e.Engagement.ID, tc.kind, remindedNov20.Add(-time.Hour))
+			} else {
+				e.seedNotice(e.Engagement.ID, tc.kind, tc.status, remindedNov20.Add(-time.Hour))
+			}
+
+			want := http.StatusOK
+			if tc.held {
+				want = http.StatusConflict
+			}
+			reqtest.ExpectStatus(t, http.MethodPost, e.remind(), want, e.SignedIn)
+		})
+	}
+}
+
+// #2978: the list, the Engagement and the endpoint read one rule. For each
+// way a Client can have been emailed today, what the list and the
+// Engagement offer is what pressing Remind then does.
+func TestRemindIsOfferedExactlyWhereItWillBeSent(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		kind, status string
+		offered      bool
+	}{
+		{"never emailed today", "", "", true},
+		{"mail at send is waiting", statusSent, noticePending, false},
+		{"mail at send went out", statusSent, statusSent, false},
+		{"mail at send dead-lettered", statusSent, noticeDeadLettered, true},
+		{"reminder went out", kindReminder, statusSent, false},
+		{"reminder dead-lettered", kindReminder, noticeDeadLettered, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := remindable(t, signedInAs(fixture.Owner()))
+			if tc.kind != "" {
+				e.seedNotice(e.Engagement.ID, tc.kind, tc.status, remindedNov20.Add(-time.Hour))
+			}
+
+			item := e.list("?view=sent").Items[0]
+			page := e.contract()
+			if item.CanRemind != tc.offered || page.CanRemind != tc.offered {
+				t.Fatalf("list canRemind = %v, Engagement canRemind = %v, want %v", item.CanRemind, page.CanRemind, tc.offered)
+			}
+			wantOn := ""
+			if !tc.offered {
+				wantOn = nextDay
+			}
+			if item.CanRemindOn != wantOn || page.CanRemindOn != wantOn {
+				t.Fatalf("list canRemindOn = %q, Engagement canRemindOn = %q, want %q", item.CanRemindOn, page.CanRemindOn, wantOn)
+			}
+			want := http.StatusConflict
+			if tc.offered {
+				want = http.StatusOK
+			}
+			reqtest.ExpectStatus(t, http.MethodPost, e.remind(), want, e.SignedIn)
+		})
+	}
+}
+
+// #2978: a Client emailed about another of her Contracts today is not
+// offered Remind on this one, and is told when she can be.
+func TestListContracts_AClientEmailedAboutAnotherContractIsNotOfferedRemind(t *testing.T) {
+	e := remindable(t, signedInAs(fixture.Owner()))
+	other := e.AnotherEngagement(fixture.ForClient(e.Engagement.Client))
+	seedContract(t, e.DB, other.ID, statusSent, mergeFieldProse)
+	e.seedNotice(other.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
+
+	for _, item := range e.list("?view=sent").Items {
+		if item.CanRemind || item.CanRemindOn != nextDay {
+			t.Fatalf("%s: canRemind = %v on %q, want false until 2026-11-21", item.ContractID, item.CanRemind, item.CanRemindOn)
+		}
+	}
+}
+
+// #2978: the Engagement says what became of the latest reminder, and the
+// list's day counts only a reminder that was sent or is on its way.
+func TestEngagementContract_SaysWhatBecameOfTheLatestReminder(t *testing.T) {
+	for _, tc := range []struct {
+		status, delivery, listedOn string
+	}{
+		{noticePending, "queued", "2026-11-19"},
+		{statusSent, statusSent, "2026-11-19"},
+		{noticeDeadLettered, "not_delivered", ""},
+	} {
+		t.Run(tc.status, func(t *testing.T) {
+			e := remindable(t, signedInAs(fixture.Owner()))
+			e.seedNotice(e.Engagement.ID, kindReminder, tc.status, remindedNov20.Add(-24*time.Hour))
+
+			got := e.contract().Reminded
+			if got == nil || got.Delivery != tc.delivery || got.By != e.Staff.Name || !got.At.Equal(remindedNov20.Add(-24*time.Hour)) {
+				t.Fatalf("reminded = %+v, want %s by %s", got, tc.delivery, e.Staff.Name)
+			}
+			if on := e.list("?view=sent").Items[0].RemindedOn; on != tc.listedOn {
+				t.Fatalf("list remindedOn = %q, want %q", on, tc.listedOn)
+			}
+		})
+	}
 }
 
 // A repeat of the same request is the first one's answer, not a second email.
@@ -284,7 +432,6 @@ func TestPostRemindContractHandler_ReplaysTheFirstAnswer(t *testing.T) {
 func TestListContracts_SaysWhenAndWhetherASentContractCanBeReminded(t *testing.T) {
 	e := remindable(t, signedInAs(fixture.Owner()))
 	e.Exec(`UPDATE practices SET timezone = 'America/New_York' WHERE id = $1`, e.Practice.ID)
-	e.Exec(`UPDATE contracts SET sent_at = $2 WHERE engagement_id = $1`, e.Engagement.ID, remindedNov20.Add(-72*time.Hour))
 
 	before := e.list("?view=sent").Items[0]
 	if !before.CanRemind || before.RemindedOn != "" {
@@ -294,14 +441,21 @@ func TestListContracts_SaysWhenAndWhetherASentContractCanBeReminded(t *testing.T
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.SignedIn)
 
 	after := e.list("?view=sent").Items[0]
-	if after.CanRemind || after.RemindedOn != "2026-11-20" {
-		t.Fatalf("after: canRemind = %v remindedOn = %q, want false and 2026-11-20", after.CanRemind, after.RemindedOn)
+	if after.CanRemind || after.CanRemindOn != nextDay || after.RemindedOn != "2026-11-20" {
+		t.Fatalf("after: canRemind = %v on %q remindedOn = %q, want false until 2026-11-21 and 2026-11-20", after.CanRemind, after.CanRemindOn, after.RemindedOn)
 	}
+}
+
+func TestEngagementContract_ABadStoredZoneIsAnErrorNotAGuess(t *testing.T) {
+	e := remindable(t)
+	e.Exec(`UPDATE practices SET timezone = 'Nowhere/Bad' WHERE id = $1`, e.Practice.ID)
+
+	reqtest.ExpectStatus(t, http.MethodGet, e.contractURL(""), http.StatusInternalServerError, e.SignedIn)
 }
 
 func TestListContracts_ASentTodayContractCannotBeRemindedYet(t *testing.T) {
 	e := remindable(t, signedInAs(fixture.Owner()))
-	e.Exec(`UPDATE contracts SET sent_at = $2 WHERE engagement_id = $1`, e.Engagement.ID, remindedNov20.Add(-time.Hour))
+	e.seedNotice(e.Engagement.ID, statusSent, noticePending, remindedNov20.Add(-time.Hour))
 
 	if item := e.list("?view=sent").Items[0]; item.CanRemind {
 		t.Fatalf("canRemind = true on the day it was sent")

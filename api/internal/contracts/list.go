@@ -48,13 +48,14 @@ type ContractListItem struct {
 	// OpenedOn is the Practice-zone day the Client first opened it.
 	OpenedOn string `json:"openedOn,omitempty"`
 	// RemindedOn is the Practice-zone day a Staff member last reminded the
-	// Client of a Sent Contract (#2951), empty until one has.
+	// Client of a Sent Contract (#2951), empty until one has. A reminder
+	// whose mail dead-lettered never reached her and is not counted.
 	RemindedOn string `json:"remindedOn,omitempty"`
-	// CanRemind is set on a Sent Contract that was neither sent nor
-	// reminded today, the days a reminder is refused (#2951). It reads
-	// this Contract alone: a Client emailed about another of her Contracts
-	// today is refused when the reminder is pressed.
+	// CanRemind is set on a Sent Contract whose Client the reminder
+	// endpoint would email now (#2978). On a Sent Contract that is false,
+	// CanRemindOn is the Practice-zone day it will.
 	CanRemind        bool     `json:"canRemind,omitempty"`
+	CanRemindOn      string   `json:"canRemindOn,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
 	MadeByName       string   `json:"madeByName,omitempty"`
 	VoidedByName     string   `json:"voidedByName,omitempty"`
@@ -226,7 +227,8 @@ const listFrom = `
 	JOIN clients cl ON cl.id = e.client_id`
 
 const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, e.kind::text, c.status::text,
-	       c.stepped_at, c.sent_at, c.opened_at, c.reminded_at,
+	       c.stepped_at, c.sent_at, c.opened_at,
+	       (SELECT max(o.created_at) FROM contract_notice_outbox o WHERE o.contract_id = c.id AND o.kind = 'reminder' AND o.status IN ('pending', 'sent')),
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by),
@@ -340,8 +342,6 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 				if remindedAt.Valid {
 					item.RemindedOn = remindedAt.Time.In(zone).Format(dayLayout)
 				}
-				today := now.In(zone).Format(dayLayout)
-				item.CanRemind = item.sentOn != today && item.RemindedOn != today
 			}
 		}
 		item.SentByName = sentByName.String
@@ -364,7 +364,32 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
 		return nil, fmt.Errorf("contracts: iterate list rows: %w", err)
 	}
+	if err := setRemindability(ctx, tx, items, zone, now); err != nil {
+		return nil, err
+	}
 	return items, nil
+}
+
+// setRemindability fills CanRemind and CanRemindOn on the Sent rows from
+// remindability, the rule the reminder endpoint enforces, for every Client
+// on the page in one read.
+func setRemindability(ctx context.Context, tx *sql.Tx, items []ContractListItem, zone *time.Location, now time.Time) error {
+	var clientIDs []string
+	for _, item := range items {
+		if item.Status == string(StatusSent) {
+			clientIDs = append(clientIDs, item.ClientID)
+		}
+	}
+	emailed, err := clientsEmailedSince(ctx, tx, clientIDs, startOfDay(now, zone))
+	if err != nil {
+		return err
+	}
+	for i := range items {
+		if items[i].Status == string(StatusSent) {
+			items[i].CanRemind, items[i].CanRemindOn = remindability(emailed[items[i].ClientID], now, zone)
+		}
+	}
+	return nil
 }
 
 // count is the number of Contracts the narrowing matches, with no cursor.

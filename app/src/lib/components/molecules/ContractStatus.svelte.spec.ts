@@ -104,11 +104,54 @@ describe('ContractStatus.svelte', () => {
 			timeZone: 'America/New_York',
 			status: 'sent',
 			hasSignedPdf: false,
-			reminded: { at: '2026-11-13T15:04:05Z', by: 'Dee Whitlock' }
+			reminded: { at: '2026-11-13T15:04:05Z', by: 'Dee Whitlock', delivery: 'sent' }
 		});
 
 		await expect.element(page.getByText('Last reminded')).toBeVisible();
 		await expect.element(page.getByText('by Dee Whitlock', { exact: false })).toBeVisible();
+	});
+
+	it.each([
+		['queued', 'on its way'],
+		['not_delivered', 'did not arrive']
+	] as const)('says a reminder that is %s (#2978)', async (delivery, words) => {
+		await render(ContractStatus, {
+			timeZone: 'UTC',
+			status: 'sent',
+			hasSignedPdf: false,
+			reminded: { at: '2026-11-13T15:04:05Z', by: 'Dee Whitlock', delivery }
+		});
+
+		await expect.element(page.getByText(words, { exact: false })).toBeVisible();
+	});
+
+	it('says a reminder with no name on record by its time alone (#2978)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'UTC',
+			status: 'sent',
+			hasSignedPdf: false,
+			reminded: { at: '2026-11-13T15:04:05Z', delivery: 'sent' }
+		});
+
+		await expect.element(page.getByText('Last reminded')).toBeVisible();
+		expect(page.getByText('by ', { exact: false }).elements()).toHaveLength(0);
+	});
+
+	it.each([
+		['sent', undefined, undefined],
+		['sent', '2026-11-16', vi.fn()],
+		['signed', '2026-11-16', undefined]
+	])('says nothing about a next reminder on a %s Contract given day %s and onRemind %s (#2978)', async (status, canRemindOn, onRemind) => {
+		await render(ContractStatus, { timeZone: 'UTC', status, hasSignedPdf: false, canRemindOn, onRemind });
+
+		expect(page.getByText('You can remind the Client again', { exact: false }).elements()).toHaveLength(0);
+	});
+
+	it('says when the Client can next be reminded while Remind is not offered (#2978)', async () => {
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, canRemindOn: '2026-11-16' });
+
+		await expect.element(page.getByText('You can remind the Client again on Nov 16, 2026.')).toBeVisible();
+		expect(page.getByRole('button', { name: 'Remind the Client' }).elements()).toHaveLength(0);
 	});
 
 	it('offers a reminder on a sent Contract and sends it when pressed (#2951)', async () => {

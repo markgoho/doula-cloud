@@ -102,7 +102,6 @@
 		saveContractValues,
 		sendContract,
 		remindContract,
-		canRemind,
 		voidContract,
 		requestContractVoid,
 		declineContractVoidRequest,
@@ -1519,7 +1518,7 @@
 		contractSavedMessage = '';
 		const reminded = await remindContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 		contractState.value = reminded;
-		contractSavedMessage = 'Reminder sent.';
+		contractSavedMessage = 'Reminder on its way.';
 		await loadActivity();
 	}
 
@@ -3105,7 +3104,8 @@
 				signed={contract.signed}
 				openedAt={contract.openedAt}
 				reminded={contract.reminded}
-				onRemind={canRemind(contract, timeZone) ? handleRemindContract : undefined}
+				canRemindOn={contract.canRemindOn}
+				onRemind={contract.canRemind ? handleRemindContract : undefined}
 				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}
