@@ -103,7 +103,7 @@ const credits = row('Credits', Credits, balance, (read) => ({
 }));
 const contracts = row('Contracts', Contracts, contractsPage, (read) => ({
 	params: { practiceId: 'practice-1' },
-	data: { read, session }
+	data: { read, voidRequests: undefined, doulas: Promise.resolve([]), session }
 }));
 const engagement = row('the Engagement', Engagement, engagementSummary, (read) => ({
 	params: { practiceId: 'practice-1', engagementId: 'engagement-1' },
@@ -124,11 +124,10 @@ const schedule = row('Schedule', Schedule, schedulePage, (read) => ({
 
 const templateLoading = [
 	{ screen: credits, known: 'Credits' },
-	{ screen: contracts, known: 'Contracts' },
 	{ screen: engagement, known: 'Clients' }
 ];
 
-const screenLoading = [onCall, invoices, schedule];
+const screenLoading = [onCall, invoices, contracts, schedule];
 
 const screens = [credits, contracts, engagement, onCall, invoices, schedule];
 

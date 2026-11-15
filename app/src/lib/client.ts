@@ -10,6 +10,7 @@ import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js'
 
 import type { ClientRecord, EngagementSummary } from './clientDetail.js';
 import { RefusalError, refusalError } from './formErrors.js';
+import { formatCalendarDay, formatPostpartum } from './dates.js';
 import { ANY_DUE, dueWhen, isDueApplied, type ClientsDue } from './clientsDue.js';
 
 /** One row of the Clients list, Client-shaped: one row per Client, never
@@ -660,4 +661,28 @@ export async function mergeClient(
 		throw await refusalError(response);
 	}
 	return response.json();
+}
+
+export interface DueParts {
+	lead: string;
+	day: string;
+	postpartum: string;
+	bornOn: string;
+}
+
+export function dueParts(
+	line: Pick<OpenEngagement, 'dueDate' | 'pregnancyEndedOn' | 'birthOutcome'>,
+	timeZone: string,
+	formatDay: (day: string) => string = formatCalendarDay
+): DueParts {
+	if (line.pregnancyEndedOn) {
+		const day = formatDay(line.pregnancyEndedOn);
+		if (line.birthOutcome === 'live_birth') {
+			return { lead: '', day, postpartum: formatPostpartum(line.pregnancyEndedOn, timeZone), bornOn: line.pregnancyEndedOn };
+		}
+		return { lead: 'Ended', day, postpartum: '', bornOn: '' };
+	}
+	return line.dueDate
+		? { lead: 'Due', day: formatDay(line.dueDate), postpartum: '', bornOn: '' }
+		: { lead: '', day: '', postpartum: '', bornOn: '' };
 }

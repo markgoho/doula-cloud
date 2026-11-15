@@ -43,6 +43,7 @@ declare global {
 			clientsName?: string;
 			invoicesSearch?: string;
 			scheduleSearch?: string;
+			contractsSearch?: string;
 			// How many pages of the Clients list were open, for a Back to it.
 			clientsPages?: number;
 		}

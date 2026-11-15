@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
 	formatActivityTimestamp,
 	formatCalendarDay,
+	formatCalendarDayThisYear,
 	formatCalendarMonth,
 	formatCalendarWeekdayDay,
 	formatInstant,
@@ -128,6 +129,20 @@ describe('scheduledVisitParts', () => {
 		const lateNewYearsEve = new Date('2027-01-01T03:00:00Z');
 		expect(scheduledVisitParts('2026-12-31T10:00:00Z', EASTERN, lateNewYearsEve).day).toBe('Thu Dec 31,');
 		expect(scheduledVisitParts('2026-12-31T10:00:00Z', 'Asia/Tokyo', lateNewYearsEve).day).toBe('Thu Dec 31, 2026,');
+	});
+});
+
+describe('formatCalendarDayThisYear', () => {
+	it('leaves the year off a day in this one and keeps it on any other', () => {
+		expect(formatCalendarDayThisYear('2026-11-03', EASTERN, NOW)).toBe('Nov 3');
+		expect(formatCalendarDayThisYear('2025-12-30', EASTERN, NOW)).toBe('Dec 30, 2025');
+		expect(formatCalendarDayThisYear('2027-01-13', EASTERN, NOW)).toBe('Jan 13, 2027');
+	});
+
+	it('decides which year is this one in the Practice zone', () => {
+		const newYear = new Date('2026-12-31T20:00:00Z');
+		expect(formatCalendarDayThisYear('2027-01-02', EASTERN, newYear)).toBe('Jan 2, 2027');
+		expect(formatCalendarDayThisYear('2027-01-02', 'Asia/Tokyo', newYear)).toBe('Jan 2');
 	});
 });
 

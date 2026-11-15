@@ -873,6 +873,7 @@ async function seedContractBook(
 
 	const talia = await newClient('Talia', 'Brandt', 'marisol');
 	const june = await newClient('June', 'Okonkwo', 'bethany');
+	await invitePortal(request, roster, june);
 	for (const [engagement, days] of [
 		[talia, 6],
 		[june, 1]

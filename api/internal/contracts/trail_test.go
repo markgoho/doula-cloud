@@ -33,7 +33,7 @@ func TestContractTrail_SentAndSigned(t *testing.T) {
 		t.Fatalf("the send's response: sent = %+v, want its instant, by the sender", sent.Sent)
 	}
 
-	e.Exec(`UPDATE contracts SET status = 'voided', signed_at = now(), signer_full_name = 'Jordan Q. Client'
+	e.Exec(`UPDATE contracts SET status = 'voided', sent_at = now(), voided_at = now(), signed_at = now(), signer_full_name = 'Jordan Q. Client'
 		 WHERE engagement_id = $1`, e.Engagement.ID)
 	voided := e.contract()
 	if voided.Signed == nil || voided.Signed.By != "Jordan Q. Client" || voided.Signed.At.IsZero() {

@@ -28,8 +28,8 @@ func TestDetailHandler_GlancesAbsentWhenNothingExistsYet(t *testing.T) {
 // name -- the same name the thread itself gives.
 func TestDetailHandler_GlancesCarryHerDocumentsAndThread(t *testing.T) {
 	e := newEnv(t, fixture.WithEngagement(fixture.DueDate("2027-06-15")))
-	e.Exec(`INSERT INTO contracts (engagement_id, status, prose, amount_cents, signed_at, created_at)
-		 VALUES ($1, 'signed', 'Test prose', 15000, '2026-08-14T15:00:00Z', now() - interval '1 day')`,
+	e.Exec(`INSERT INTO contracts (engagement_id, status, prose, amount_cents, signed_at, created_at, sent_at)
+		 VALUES ($1, 'signed', 'Test prose', 15000, '2026-08-14T15:00:00Z', now() - interval '1 day', now() - interval '1 day')`,
 		e.Engagement.ID)
 	e.Exec(`INSERT INTO plan_instances (engagement_id, plan_type, fields, client_acknowledged_at, changed_at)
 		 VALUES ($1, 'birth_plan', '[]'::jsonb, '2026-08-20T12:00:00Z', now())`,

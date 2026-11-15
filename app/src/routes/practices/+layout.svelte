@@ -43,9 +43,8 @@
 
 	/*
 	 * The drawing (#431) shows an Owner's bar, with all its sections --
-	 * seven since #265 added Invoices. `GET .../billing`, `GET .../staff`
-	 * and the Contracts screen's void-requests read are `ownerAndAdmin` on
-	 * the BFF, so offering a Doula those would be a promise the endpoint
+	 * seven since #265 added Invoices. `GET .../billing` and `GET .../staff`
+	 * are `ownerAndAdmin` on the BFF, so offering a Doula those would be a promise the endpoint
 	 * refuses; `GET .../invoices` refuses only a plain contractor Doula
 	 * (ADR-0008, #2846). Same rule #423 applied to the landing page's rail
 	 * -- ask only for what the caller's role can be served.
@@ -102,13 +101,10 @@
 						{ label: 'Invoices', href: resolve('/practices/[practiceId]/invoices', { practiceId }) }
 					]
 				: []),
+			// `GET .../contracts` is `anyStaff`; only the void-requests queue is `ownerAndAdmin`.
+			{ label: 'Contracts', href: listEntry(resolve('/practices/[practiceId]/contracts', { practiceId })) },
 			...(isAdmin
 				? [
-						// The Contract half of the Practice's money question (#273):
-						// who is still owed a signature. The screen also reads
-						// `.../contracts/void-requests`, `ownerAndAdmin`, so the
-						// whole screen sits behind this flag.
-						{ label: 'Contracts', href: resolve('/practices/[practiceId]/contracts', { practiceId }) },
 						// Labeled Credits, not Billing (#256): the route stays
 						// `/billing` on purpose (ADR-0032), and `GET .../billing`
 						// is `ownerAndAdmin` (the Credit balance is Owner and

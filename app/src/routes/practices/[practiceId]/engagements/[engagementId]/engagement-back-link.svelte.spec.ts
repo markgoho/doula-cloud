@@ -126,6 +126,33 @@ describe('the Engagement page back link (#2864)', () => {
 	});
 });
 
+describe('the Engagement page back link from Contracts', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+		navigation.goto.mockReset();
+		history.replaceState(undefined, '', location.pathname + location.search);
+	});
+
+	it('names Contracts and hands the list its search back once the page has moved', async () => {
+		await testPage.viewport(1280, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		const contractsBack = new ListBack(
+			() => ({ contracts: `${practice}/contracts` }),
+			() => pageState.url.pathname
+		);
+		await render(Page, { data: { ...fixtureDetail, session }, back: contractsBack });
+		holdListSearch('contracts', 'Quinn');
+		navigation.afterNavigate?.(arrivedFrom('/contracts?show=sent'));
+		history.replaceState(undefined, '', '#messages');
+
+		await back('Back to Contracts').click();
+
+		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/contracts?show=sent`, {
+			state: { contractsSearch: 'Quinn' }
+		});
+	});
+});
+
 const listPaths = { schedule: '/p/schedule', invoices: '/p/invoices' };
 const engagementPath = '/p/engagements/e1';
 const arrive = (path: string | undefined) =>

@@ -185,7 +185,7 @@ func TestPostVoidRequestDeclineHandler_RefusedByRole(t *testing.T) {
 	}{
 		{"practice owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
 		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
-		{"employed doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
+		{caseEmployedDoula, []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
 		{"doula, contractor", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
 	}
 	for _, tc := range cases {

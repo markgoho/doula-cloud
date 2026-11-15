@@ -158,9 +158,9 @@ func TestPutContractAmountHandler_Refusals(t *testing.T) {
 		{"zero", statusDraft, amounting(0), http.StatusBadRequest},
 		{"negative", statusDraft, amounting(-100), http.StatusBadRequest},
 		{caseBodyNotJSON, statusDraft, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
-		{"sent", statusSent, amounting(20000), http.StatusConflict},
+		{statusSent, statusSent, amounting(20000), http.StatusConflict},
 		{statusSigned, statusSigned, amounting(20000), http.StatusConflict},
-		{"voided", statusVoided, amounting(20000), http.StatusConflict},
+		{statusVoided, statusVoided, amounting(20000), http.StatusConflict},
 		{caseNoContract, "", amounting(20000), http.StatusNotFound},
 	}
 	for _, tc := range cases {

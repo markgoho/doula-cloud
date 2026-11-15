@@ -10,9 +10,8 @@ import (
 	"doula-cloud/api/internal/staffauth"
 )
 
-// Mount registers the Contract Template, the Practice-wide
-// "awaiting-signature" and "void requests awaiting" roll-ups (#426,
-// #971), the per-Engagement Contract's scope-vs-money split (ADR-0008)
+// Mount registers the Contract Template, the Practice-wide Contracts list
+// and "void requests awaiting" roll-up (#2749, #971), the per-Engagement Contract's scope-vs-money split (ADR-0008)
 // and its lifecycle writes, the Signed PDF, and the Client portal's own
 // contract read, sign, and PDF.
 //
@@ -36,16 +35,17 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("PUT /api/practices/{practiceId}/contract-template",
 		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
 		false, staffauth.OwnerOnly, PutTemplateHandler())
-	// The Practice-wide "Contracts awaiting signature" roll-up (#426):
-	// every Draft or Sent Contract at the Practice in one read, so
-	// chasing signatures is one screen rather than every Engagement
-	// opened in turn. AwaitingItem carries no amount, so this is not a
-	// money read and does not carry the credit balance / Invoice-list
-	// declaration; it follows ADR-0008's Engagements/Visits/Messages row
-	// instead, the same as message's own "awaiting-reply" roll-up below --
-	// AnyStaff, with the contractor's attachment narrowing enforced
-	// inside the handler's own query (#973).
-	g.Get("/api/practices/{practiceId}/contracts/awaiting-signature", staffauth.AnyStaff, AwaitingSignatureHandler())
+	// The Practice-wide Contracts list (#2749, replacing #426's
+	// "awaiting-signature" roll-up): every Contract the reader can open, by
+	// view. AnyStaff, with the contractor's attachment narrowing, and the
+	// withholding of her amount and Signed PDF, enforced inside the
+	// handler's own query and shaping (#973, ADR-0008).
+	g.Get("/api/practices/{practiceId}/contracts", staffauth.AnyStaff, ListContractsHandler())
+	// The same list read with its filters, cursor and search in a body, the
+	// only way to search it (#1829). A read, so nothing to replay.
+	ir.ExemptGated("POST /api/practices/{practiceId}/contracts/list",
+		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
+		false, staffauth.AnyStaff, SearchContractsHandler())
 	// #971: the mirror roll-up for a void a Doula has asked for but
 	// nobody has decided yet -- same reach as the row above, since void
 	// itself is Owner/Admin-only (#970).

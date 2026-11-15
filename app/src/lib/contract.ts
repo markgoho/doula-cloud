@@ -7,7 +7,6 @@
  * unit-tested directly -- mirrors planInstance.ts.
  */
 import type { Fetcher } from './fetcher.js';
-import type { CursorPage } from './paginatedList.svelte.js';
 import type { Stamp } from './stamp.js';
 
 import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
@@ -369,94 +368,301 @@ export function setMergeFieldValue(
 	return { ...values, [key]: value };
 }
 
-/** One row of the Practice-wide "Contracts awaiting signature" list
- * (#273) -- a Draft or Sent Contract, the Engagement it belongs to and
- * the Client whose signature is outstanding. Mirrors the Go BFF's
- * AwaitingItem (api/internal/contracts/awaiting.go). `createdAt` is the
- * Contract's own creation instant, which is also the moment it started
- * waiting -- the endpoint's own ordering already treats it that way
- * ("the Contract that has been waiting longest ... belongs at the
- * top"), so this reuses it rather than tracking a separate per-status
- * timestamp the BFF does not keep. */
-export interface AwaitingContract {
-	engagementId: string;
+export type ContractsView = 'not-signed' | 'draft' | 'sent' | 'signed' | 'voided' | 'all';
+export type ContractOrder = '' | 'oldest' | 'newest' | 'client';
+type NamedContractOrder = Exclude<ContractOrder, ''>;
+
+export interface ContractListItem {
 	contractId: string;
+	engagementId: string;
 	clientId: string;
 	clientName: string;
-	status: string;
-	createdAt: string;
+	engagementKind: 'birth' | 'postpartum';
+	status: 'draft' | 'sent' | 'signed' | 'voided';
+	steppedOn: string;
+	daysWaiting?: number;
+	sentByName?: string;
+	dueDate?: string;
+	pregnancyEndedOn?: string;
+	birthOutcome?: string;
+	doulaNames?: string[];
+	amountCents?: number;
+	hasSignedPdf: boolean;
+	voidRequested: boolean;
 }
 
-/** The Practice-wide "Contracts awaiting signature" list's path --
- * mirrors practiceInvoicesPath in invoice.ts. */
-export function practiceAwaitingContractsPath(practiceId: string, cursor?: string): string {
-	const path = `/api/practices/${practiceId}/contracts/awaiting-signature`;
-	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+export interface ContractsPage {
+	items: ContractListItem[];
+	nextCursor?: string;
+	hasMore: boolean;
+	total: number;
 }
 
-/** Loads one page of every Contract at the Practice that is Draft or
- * Sent, oldest first -- mirrors loadWaitingOnReplyPage in
- * practiceLanding.ts. Throws with the response body text on a non-2xx
- * response; the route's `load` maps status codes to SvelteKit errors
- * before calling this, so a throw here is only ever an unexpected
- * failure. */
-export async function loadPracticeAwaitingContracts(
-	fetcher: Fetcher,
-	practiceId: string,
-	cursor?: string
-): Promise<CursorPage<AwaitingContract>> {
-	const response = await fetcher(practiceAwaitingContractsPath(practiceId, cursor));
-	if (!response.ok) {
-		throw new Error(await apiErrorMessage(response));
-	}
-	return response.json();
+export interface ContractsListData extends ContractsPage {
+	view: ContractsView;
+	order: ContractOrder;
+	isMine: boolean;
+	doula: string;
+	now: Date;
 }
 
-/** The two statuses this list ever shows, in the words a person reads --
- * "draft" is work the Practice still owes, "sent" is work the Client
- * still owes. An unknown status falls through to itself rather than to
- * a blank, mirroring invoiceStatusLabel. */
-const awaitingContractStatusLabels: Record<string, string> = {
-	draft: 'Draft',
-	sent: 'Sent'
-};
-
-export function awaitingContractStatusLabel(status: string): string {
-	return awaitingContractStatusLabels[status] ?? status;
+export interface ContractsQuery {
+	view: ContractsView;
+	order: ContractOrder;
+	isMine: boolean;
+	doula: string;
+	search?: string;
 }
 
-/** One row of the Practice-wide "void requests waiting on you" roll-up
- * (#971) -- mirrors the Go BFF's VoidRequestAwaitingItem
- * (api/internal/contracts/void_requests_awaiting.go). Owner/Admin only,
- * the same reach Void itself carries. */
 export interface AwaitingVoidRequest {
 	requestId: string;
+	contractId: string;
 	engagementId: string;
 	clientId: string;
 	clientName: string;
 	requestedByName: string;
 	reason: string;
+	daysAgo: number;
 	createdAt: string;
 }
 
-/** The Practice-wide "void requests awaiting" list's path -- mirrors
- * practiceAwaitingContractsPath above. */
-export function practiceAwaitingVoidRequestsPath(practiceId: string, cursor?: string): string {
-	const path = `/api/practices/${practiceId}/contracts/void-requests`;
-	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+export interface VoidRequestsPage {
+	items: AwaitingVoidRequest[];
+	nextCursor?: string;
+	hasMore: boolean;
+	total: number;
 }
 
-/** Loads one page of every open void request at the Practice, oldest
- * first -- mirrors loadPracticeAwaitingContracts above. Throws with the
- * response body text on a non-2xx response. */
-export async function loadPracticeAwaitingVoidRequests(
+export const CONTRACTS_READ = 'app:contracts';
+
+const VIEW_NAMES: readonly ContractsView[] = ['draft', 'sent', 'signed', 'voided', 'all'];
+
+export function contractsViewOf(search: Pick<URLSearchParams, 'get'>): ContractsView {
+	const shown = search.get('show');
+	return VIEW_NAMES.find((name) => name === shown) ?? 'not-signed';
+}
+
+const VIEW_ORDER: Record<ContractsView, 'oldest' | 'newest'> = {
+	'not-signed': 'oldest',
+	draft: 'oldest',
+	sent: 'oldest',
+	signed: 'newest',
+	voided: 'newest',
+	all: 'newest'
+};
+
+export function contractViewOrder(view: ContractsView): 'oldest' | 'newest' {
+	return VIEW_ORDER[view];
+}
+
+export function orderForView(order: ContractOrder, view: ContractsView): ContractOrder {
+	return order === VIEW_ORDER[view] ? '' : order;
+}
+
+const ORDER_NAMES = new Set(['oldest', 'newest', 'client']);
+
+export function contractOrderOf(search: Pick<URLSearchParams, 'get'>, view: ContractsView): ContractOrder {
+	const named = search.get('order');
+	return ORDER_NAMES.has(named ?? '') ? orderForView(named as ContractOrder, view) : '';
+}
+
+const ORDER_LABELS: Record<ContractsView, { oldest: string; newest: string }> = {
+	'not-signed': { oldest: 'Oldest first', newest: 'Newest first' },
+	draft: { oldest: 'Made, oldest first', newest: 'Made, newest first' },
+	sent: { oldest: 'Longest wait first', newest: 'Shortest wait first' },
+	signed: { oldest: 'Signed, oldest first', newest: 'Signed, newest first' },
+	voided: { oldest: 'Voided, oldest first', newest: 'Voided, newest first' },
+	all: { oldest: 'Oldest first', newest: 'Newest first' }
+};
+
+export function contractOrderOptions(view: ContractsView): { value: ContractOrder; label: string }[] {
+	const own = VIEW_ORDER[view];
+	const other = own === 'oldest' ? 'newest' : 'oldest';
+	return [
+		{ value: '', label: ORDER_LABELS[view][own] },
+		{ value: other, label: ORDER_LABELS[view][other] },
+		{ value: 'client', label: 'Client, A to Z' }
+	];
+}
+
+export function contractOrderedBy(
+	order: ContractOrder,
+	view: ContractsView
+): { column: string; direction: 'ascending' | 'descending' } {
+	const named: NamedContractOrder = order || VIEW_ORDER[view];
+	if (named === 'client') return { column: 'Client', direction: 'ascending' };
+	return { column: 'Status', direction: named === 'oldest' ? 'ascending' : 'descending' };
+}
+
+export interface ContractsAddress {
+	view: ContractsView;
+	order: ContractOrder;
+	isMine?: boolean;
+	doula?: string;
+}
+
+export function contractsQueryString({ view, order, isMine = false, doula = '' }: ContractsAddress): string {
+	const query = new URLSearchParams();
+	if (view !== 'not-signed') query.set('show', view);
+	if (isMine) query.set('mine', 'true');
+	if (doula) query.set('doula', doula);
+	const own = orderForView(order, view);
+	if (own) query.set('order', own);
+	const text = query.toString();
+	return text ? `?${text}` : '';
+}
+
+function contractsBase(practiceId: string): string {
+	return `/api/practices/${practiceId}/contracts`;
+}
+
+export function practiceContractsPath(practiceId: string, query: ContractsQuery, cursor?: string): string {
+	const search = new URLSearchParams();
+	if (query.view !== 'not-signed') search.set('view', query.view);
+	if (query.order) search.set('order', query.order);
+	if (query.isMine) search.set('mine', 'true');
+	if (query.doula) search.set('doula', query.doula);
+	if (cursor) search.set('cursor', cursor);
+	const text = search.toString();
+	return text ? `${contractsBase(practiceId)}?${text}` : contractsBase(practiceId);
+}
+
+export async function loadPracticeContracts(
 	fetcher: Fetcher,
 	practiceId: string,
+	query: ContractsQuery,
 	cursor?: string
-): Promise<CursorPage<AwaitingVoidRequest>> {
-	const response = await fetcher(practiceAwaitingVoidRequestsPath(practiceId, cursor));
+): Promise<ContractsPage> {
+	const search = query.search ?? '';
+	const response = search
+		? await fetcher(`${contractsBase(practiceId)}/list`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					view: query.view === 'not-signed' ? '' : query.view,
+					order: query.order,
+					doula: query.doula,
+					mine: query.isMine,
+					search,
+					cursor: cursor ?? ''
+				})
+			})
+		: await fetcher(practiceContractsPath(practiceId, query, cursor));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
 	return response.json();
 }
+
+export function practiceVoidRequestsPath(practiceId: string, cursor?: string): string {
+	const path = `${contractsBase(practiceId)}/void-requests`;
+	return cursor ? `${path}?cursor=${encodeURIComponent(cursor)}` : path;
+}
+
+export async function loadPracticeVoidRequests(
+	fetcher: Fetcher,
+	practiceId: string,
+	cursor?: string
+): Promise<VoidRequestsPage> {
+	const response = await fetcher(practiceVoidRequestsPath(practiceId, cursor));
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+export function voidRequestsHeading(total: number): string {
+	return `${total} void ${total === 1 ? 'request' : 'requests'} to decide`;
+}
+
+export function voidRequestAsked(daysAgo: number): string {
+	if (daysAgo <= 0) return 'asked today';
+	return `asked ${daysAgo} ${daysAgo === 1 ? 'day' : 'days'} ago`;
+}
+
+const STATUS_WORDS = { draft: 'Draft', sent: 'Sent', signed: 'Signed', voided: 'Voided' } as const;
+
+export function contractStatusWord(status: ContractListItem['status']): string {
+	return STATUS_WORDS[status];
+}
+
+export function daysWaitingWords(days: number): string {
+	return `${days} ${days === 1 ? 'day' : 'days'}`;
+}
+
+const NOUNS: Record<ContractsView, { plural: string; singular: string; none: string; predicate: string }> = {
+	'not-signed': { plural: 'Contracts not signed', singular: 'Contract not signed', none: 'Contract', predicate: 'is waiting to be signed' },
+	draft: { plural: 'Draft Contracts', singular: 'Draft Contract', none: 'Draft Contract', predicate: 'is waiting to be sent' },
+	sent: { plural: 'Sent Contracts', singular: 'Sent Contract', none: 'Sent Contract', predicate: 'is waiting on a Client' },
+	signed: { plural: 'Signed Contracts', singular: 'Signed Contract', none: 'Contract', predicate: 'is signed' },
+	voided: { plural: 'Voided Contracts', singular: 'Voided Contract', none: 'Contract', predicate: 'has been voided' },
+	all: { plural: 'Contracts', singular: 'Contract', none: 'Contract', predicate: '' }
+};
+
+export const CONTRACT_VIEW_TAGS: Partial<Record<ContractsView, string>> = {
+	draft: 'Draft Contracts',
+	sent: 'Sent Contracts',
+	signed: 'Signed Contracts',
+	voided: 'Voided Contracts'
+};
+
+export const NO_DOULA_FALLBACK = 'that Doula';
+
+function orderWords(view: ContractsView, order: ContractOrder): string {
+	const named: NamedContractOrder = order || VIEW_ORDER[view];
+	if (named === 'client') return 'Client A to Z';
+	if (view === 'sent') return named === 'oldest' ? 'longest wait first' : 'shortest wait first';
+	return `${named} first`;
+}
+
+export interface ContractsSummaryInput {
+	view: ContractsView;
+	order: ContractOrder;
+	shown: number;
+	hasMore: boolean;
+	total: number;
+	isMine: boolean;
+	doulaName: string;
+	search: string;
+}
+
+export function contractsResultSummary(input: ContractsSummaryInput): string {
+	const { view, order, shown, hasMore, total, isMine, doulaName, search } = input;
+	const noun = NOUNS[view];
+	const doula = doulaName ? ` on ${doulaName}'s Engagements` : '';
+	const matching = search ? ` matching "${search}"` : '';
+	if (shown === 0) {
+		const scope = `${isMine ? ' of yours' : ''}${doula}${matching}`;
+		if (view === 'all') {
+			return scope ? `No Contract${scope}.` : 'No Contracts yet. One appears here when a Contract is made on an Engagement.';
+		}
+		return `No ${noun.none}${scope} ${noun.predicate}.`;
+	}
+	let count: string;
+	if (hasMore) count = `the first ${shown} of ${isMine ? 'your ' : ''}${Math.max(total, shown)} ${noun.plural}`;
+	else if (isMine) count = `${shown} of your ${noun.plural}`;
+	else count = shown === 1 ? `1 ${noun.singular}` : `${shown} ${noun.plural}`;
+	return `Showing ${count}${doula}${matching}, ${orderWords(view, order)}.`;
+}
+
+const RULER_DOULA = 'D'.repeat(30);
+
+export const CONTRACTS_RESULT_RULER = (Object.keys(NOUNS) as ContractsView[])
+	.flatMap((view) =>
+		(['', 'oldest', 'newest', 'client'] as const).flatMap((order) =>
+			[true, false].map((isMine) =>
+				contractsResultSummary({
+					view,
+					order,
+					shown: 99,
+					hasMore: true,
+					total: 9999,
+					isMine,
+					doulaName: RULER_DOULA,
+					search: ''
+				})
+			)
+		)
+	)
+	.toSorted((a, b) => b.length - a.length)[0];
+

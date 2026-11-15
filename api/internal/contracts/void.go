@@ -5,6 +5,7 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -36,8 +37,8 @@ func PostVoidContractHandler() http.Handler {
 		}
 
 		if _, err := c.Tx.ExecContext(r.Context(),
-			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			string(StatusVoided), ct.ID,
+			`UPDATE contracts SET status = $1::contract_status, voided_at = $2, voided_by = $3 WHERE id = $4`,
+			string(StatusVoided), clock.Now(r.Context()), c.StaffID, ct.ID,
 		); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

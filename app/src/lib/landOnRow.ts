@@ -1,4 +1,18 @@
 /**
+ * Brings a section of the page to the top and moves focus to its heading,
+ * unless focus is already somewhere the person put it.
+ */
+export function landOnSection(sectionId: string): void {
+	if (document.activeElement !== document.body) return;
+	const section = document.querySelector<HTMLElement>(`#${CSS.escape(sectionId)}`);
+	const heading = document.querySelector<HTMLElement>(`#${CSS.escape(sectionId)}-heading`);
+	if (!section || !heading) return;
+	section.scrollIntoView({ block: 'start' });
+	heading.tabIndex = -1;
+	heading.focus({ preventScroll: true });
+}
+
+/**
  * Brings the row a link named into view and focuses it (#2240, #2747).
  * `rowDomIds` is the row's id in each view its table draws (a table row and
  * a record card); the one actually displayed is the one with a box.

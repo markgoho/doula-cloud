@@ -662,8 +662,8 @@ export function seedInvoice(
 	execSQL(
 		`WITH existing AS (SELECT id FROM contracts WHERE engagement_id = ${engagement} LIMIT 1),
 		 made AS (
-		   INSERT INTO contracts (engagement_id, status, prose, amount_cents)
-		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents} WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
+		   INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at)
+		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents}, now(), now() WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
 		 )
 		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at, paid_at)
 		 SELECT ${sqlLiteral(invoiceId)}::uuid, ${sqlLiteral(practiceId)}, (SELECT id FROM existing UNION ALL SELECT id FROM made LIMIT 1),
@@ -737,9 +737,10 @@ export function backdateEngagementStart(engagementId: string, days: number): voi
 }
 
 /**
- * Moves each Engagement's live Contract back `days`, with the Activity rows
- * of its own lifecycle (created, priced, edited, sent, signed), so the
- * Contracts list reads a Contract waiting since that day. A Contract is made
+ * Moves each Engagement's live Contract back `days`, with its sent, signed
+ * and voided instants and the Activity rows of its own lifecycle (created,
+ * priced, edited, sent, signed, voided), so the Contracts list reads a
+ * Contract waiting since that day. A Contract is made
  * at the clock's now and no endpoint makes one in the past. A void request's
  * Activity is not touched: backdateVoidRequests moves it.
  */
@@ -757,9 +758,12 @@ export function backdateContracts(moves: readonly { engagementId: string; days: 
 		   UPDATE activity SET created_at = activity.created_at - moved.shift
 		   FROM moved
 		   WHERE activity.subject_id = moved.engagement_id
-		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed')
+		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed', 'contract_voided')
 		 )
-		 UPDATE contracts SET created_at = contracts.created_at - moved.shift
+		 UPDATE contracts SET created_at = contracts.created_at - moved.shift,
+		   sent_at = contracts.sent_at - moved.shift,
+		   signed_at = contracts.signed_at - moved.shift,
+		   voided_at = contracts.voided_at - moved.shift
 		 FROM moved WHERE contracts.engagement_id = moved.engagement_id AND contracts.status <> 'voided'`
 	);
 }

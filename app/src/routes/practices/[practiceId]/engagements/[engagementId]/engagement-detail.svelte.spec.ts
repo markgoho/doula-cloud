@@ -1011,6 +1011,31 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		}
 	});
 
+	it.each(['#contract-contract-1', '#void-request-request-1'])(
+		'brings the Contract section to the top and focuses its heading when a list linked to %s',
+		async (hash) => {
+			const original = pageState.url;
+			try {
+				pageState.url = new URL(`https://example.test/${hash}`);
+				const scrollIntoView = vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+				await renderWithFixtureResponder();
+
+				await expect.poll(() => document.activeElement?.id).toBe('contract-heading');
+				expect(scrollIntoView).toHaveBeenCalledWith({ block: 'start' });
+				scrollIntoView.mockRestore();
+			} finally {
+				pageState.url = original;
+			}
+		}
+	);
+
+	it('leaves focus alone when the address names no Contract', async () => {
+		await renderWithFixtureResponder();
+
+		await expect.element(testPage.getByRole('heading', { name: 'Contract', level: 2 })).toBeVisible();
+		expect(document.activeElement?.id).not.toBe('contract-heading');
+	});
+
 	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {
 		const requests: { path: string; method?: string; body: unknown }[] = [];
 		await renderWithFixtureResponder((path, init) => {

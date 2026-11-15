@@ -1,36 +1,51 @@
-import { bothRead, mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
-import { practiceAwaitingContractsPath, practiceAwaitingVoidRequestsPath } from '#lib/contract.js';
-import type { CursorPage } from '#lib/paginatedList.svelte.js';
-import type { AwaitingContract, AwaitingVoidRequest } from '#lib/contract.js';
+import { apiFetch } from '#lib/api.js';
+import {
+	CONTRACTS_READ,
+	contractOrderOf,
+	contractsViewOf,
+	practiceContractsPath,
+	practiceVoidRequestsPath,
+	type ContractsListData,
+	type ContractsPage,
+	type VoidRequestsPage
+} from '#lib/contract.js';
+import { canNarrowToMine, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
+import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
+import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
 import type { PageLoad } from './$types';
 
-/** The two Practice-wide, Owner/Admin-only roll-ups this route shows
- * (#273, #971) -- one screen, two work lists, since #971's own AC is
- * "sees the void requests waiting on them" beside the Contracts already
- * waiting on a signature, not a second address to remember. */
 export interface ContractsPageData {
-	contracts: CursorPage<AwaitingContract>;
-	voidRequests: CursorPage<AwaitingVoidRequest>;
+	read: Promise<StreamedRead<ContractsListData>>;
+	voidRequests?: Promise<StreamedRead<VoidRequestsPage>>;
+	doulas: Promise<LabeledValue[]>;
 }
 
-/**
- * Loads through SvelteKit's `load`, mirroring the Practice-wide Invoice
- * list's own `+page.ts` (#265), and hands the reads over unawaited, so a
- * click changes screen at once (#2249). Both reads are Owner/Admin-only,
- * so a Doula who types this URL gets a 403, which the screen draws as the
- * page `practices/+error.svelte` would. Both roll-ups load in parallel --
- * neither depends on the other.
- */
-export const load: PageLoad = ({ params, fetch }): { read: Promise<StreamedRead<ContractsPageData>> } => {
-	const contracts = streamRead<CursorPage<AwaitingContract>>(
-		practiceAwaitingContractsPath(params.practiceId),
-		fetch
-	);
-	const voidRequests = streamRead<CursorPage<AwaitingVoidRequest>>(
-		practiceAwaitingVoidRequestsPath(params.practiceId),
-		fetch
-	);
+async function loadRoster(practiceId: string, fetcher: typeof globalThis.fetch): Promise<LabeledValue[]> {
+	try {
+		const response = await apiFetch(staffPath(practiceId), undefined, fetcher);
+		if (!response.ok) return [];
+		return doulaOptions(doulasOf((await response.json()) as Roster));
+	} catch {
+		return [];
+	}
+}
+
+// `GET .../contracts` is `anyStaff`; the void-requests read and the roster are Owner and Admin only.
+export const load: PageLoad = async ({ params, url, fetch, depends, parent }): Promise<ContractsPageData> => {
+	depends(CONTRACTS_READ);
+	const { session } = await parent();
+	const view = contractsViewOf(url.searchParams);
+	const order = contractOrderOf(url.searchParams, view);
+	const isMine = canNarrowToMine(session) && url.searchParams.get('mine') === 'true';
+	const doula = url.searchParams.get('doula') ?? '';
+	const now = new Date();
+	const isQueueRead = isOwnerOrAdmin(session);
 	return {
-		read: mapRead(bothRead(contracts, voidRequests), ([contracts, voidRequests]) => ({ contracts, voidRequests }))
+		read: mapRead(
+			streamRead<ContractsPage>(practiceContractsPath(params.practiceId, { view, order, isMine, doula }), fetch),
+			(contracts) => ({ ...contracts, view, order, isMine, doula, now })
+		),
+		voidRequests: isQueueRead ? streamRead<VoidRequestsPage>(practiceVoidRequestsPath(params.practiceId), fetch) : undefined,
+		doulas: isQueueRead ? loadRoster(params.practiceId, fetch) : Promise.resolve([])
 	};
 };

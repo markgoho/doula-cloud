@@ -180,22 +180,30 @@ describe('the nav', () => {
 	);
 
 	/*
-	 * The drawing (#431) shows an Owner's bar. The Contracts screen reads
-	 * `.../contracts/void-requests`, beside `GET .../billing` and
-	 * `GET .../staff`, all `ownerAndAdmin` on the BFF, so offering a Doula
-	 * those three would be a promise the endpoint refuses -- the same rule
+	 * The drawing (#431) shows an Owner's bar. `GET .../billing` and
+	 * `GET .../staff` are `ownerAndAdmin` on the BFF, so offering a Doula
+	 * those would be a promise the endpoint refuses -- the same rule
 	 * #423 applied to the landing page's rail.
 	 */
-	it.each(['Contracts', 'Credits', 'Staff'])('hides %s from a Doula', async (label) => {
+	it.each(['Credits', 'Staff'])('hides %s from a Doula', async (label) => {
 		await setup({ roles: ['doula'] });
 
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
 	});
 
-	it.each(['Invoices', 'Contracts', 'Credits', 'Staff'])('hides %s from a contractor Doula', async (label) => {
+	it.each(['Invoices', 'Credits', 'Staff'])('hides %s from a contractor Doula', async (label) => {
 		await setup({ roles: ['doula'], isContractor: true });
 
 		await expect.element(page.getByRole('link', { name: label, exact: true })).not.toBeInTheDocument();
+	});
+
+	it.each([
+		['a Doula', false],
+		['a contractor Doula', true]
+	])('offers Contracts to %s', async (_who, isContractor) => {
+		await setup({ roles: ['doula'], isContractor });
+
+		await expect.element(page.getByRole('link', { name: 'Contracts', exact: true })).toBeVisible();
 	});
 
 	// ADR-0008: an employed Doula reads Invoice history; the Credit balance stays Owner and Admin (#2846).
@@ -273,7 +281,7 @@ describe('the nav', () => {
 		['an Owner who is a Doula', ['owner', 'doula'], false, undefined, false],
 		['an Admin', ['admin'], false, undefined, false],
 		['an Owner', ['owner'], false, undefined, false]
-	])('opens Clients, Schedule and On call for %s on Mine: %s', async (_who, roles, isContractor, hasOtherDoulas, onMine) => {
+	])('opens Clients, Schedule, On call and Contracts for %s on Mine: %s', async (_who, roles, isContractor, hasOtherDoulas, onMine) => {
 		await setup({ roles, isContractor, hasOtherDoulas });
 
 		const suffix = onMine ? '?mine=true' : '';
@@ -286,6 +294,9 @@ describe('the nav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'On call', exact: true }).first())
 			.toHaveAttribute('href', `/practices/practice-1/on-call${suffix}`);
+		await expect
+			.element(page.getByRole('link', { name: 'Contracts', exact: true }).first())
+			.toHaveAttribute('href', `/practices/practice-1/contracts${suffix}`);
 	});
 
 	it('marks Schedule current when the address says Mine', async () => {

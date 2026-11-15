@@ -184,6 +184,17 @@ export function scheduledVisitParts(
 }
 
 /**
+ * A calendar day, `YYYY-MM-DD`, as "Nov 3", and "Dec 30, 2025" when it is not
+ * the year `now` is in, in `timeZone`.
+ */
+export function formatCalendarDayThisYear(value: string, timeZone: string, now: Date = new Date()): string {
+	const [year, month, day] = value.split('-').map(Number);
+	if (year !== partsIn(now, timeZone).year) return formatCalendarDay(value);
+	const at = partsIn(new Date(Date.UTC(year!, month! - 1, day!, 12)), 'UTC');
+	return `${at.month} ${at.day}`;
+}
+
+/**
  * A calendar day, `YYYY-MM-DD`, with its weekday: "Fri Nov 13", and "Fri Nov
  * 13, 2027" when it is not the year `now` is in, in `timeZone`. The
  * Schedule's result line and its applied days say a day this way, the way a

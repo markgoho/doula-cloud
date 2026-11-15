@@ -227,7 +227,7 @@ func ListHandler() http.Handler {
 			apierr.WriteError(w, "Send the name in a POST to /clients/list, not in the address.", http.StatusBadRequest)
 			return
 		}
-		doula, ok := doulaParam(w, query.Get("doula"))
+		doula, ok := DoulaParam(w, query.Get("doula"))
 		if !ok {
 			return
 		}
@@ -284,7 +284,7 @@ func decodeListRequest(w http.ResponseWriter, r *http.Request) (ListRequest, boo
 	if !apierr.DecodeJSON(w, r, &req) {
 		return req, false
 	}
-	doula, ok := doulaParam(w, req.Doula)
+	doula, ok := DoulaParam(w, req.Doula)
 	if !ok {
 		return req, false
 	}
@@ -518,10 +518,10 @@ type listFilters struct {
 	overdueFrom time.Time
 }
 
-// doulaParam checks the doula filter, writing a 400 and returning false when it is not
+// DoulaParam checks the doula filter, writing a 400 and returning false when it is not
 // a uuid. The length check keeps uuid.Parse's looser spellings (braces,
 // urn:uuid:) out, so one id has one address.
-func doulaParam(w http.ResponseWriter, raw string) (string, bool) {
+func DoulaParam(w http.ResponseWriter, raw string) (string, bool) {
 	if raw == "" {
 		return "", true
 	}

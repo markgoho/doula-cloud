@@ -19,9 +19,10 @@ import (
 // Names of table rows that more than one table repeats, named once so
 // goconst does not see independent literals across this package's tests.
 const (
-	caseAdmin       = "admin"
-	caseBodyNotJSON = "body is not JSON"
-	caseNoContract  = "no contract"
+	caseAdmin         = "admin"
+	caseBodyNotJSON   = "body is not JSON"
+	caseNoContract    = "no contract"
+	caseEmployedDoula = "employed doula"
 )
 
 // env is what a test in this package starts from: a Practice with this

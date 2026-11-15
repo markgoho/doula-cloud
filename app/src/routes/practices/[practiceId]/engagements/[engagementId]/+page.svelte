@@ -25,7 +25,8 @@
 		() => ({
 			schedule: resolve('/practices/[practiceId]/schedule', { practiceId: page.params.practiceId! }),
 			invoices: resolve('/practices/[practiceId]/invoices', { practiceId: page.params.practiceId! }),
-			'on-call': resolve('/practices/[practiceId]/on-call', { practiceId: page.params.practiceId! })
+			'on-call': resolve('/practices/[practiceId]/on-call', { practiceId: page.params.practiceId! }),
+			contracts: resolve('/practices/[practiceId]/contracts', { practiceId: page.params.practiceId! })
 		}),
 		() => page.url.pathname
 	);

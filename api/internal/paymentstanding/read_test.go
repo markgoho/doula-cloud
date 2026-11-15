@@ -22,7 +22,7 @@ func paidInvoice(t *testing.T, db *testdb.DB, practiceID string) (invoiceID, pay
 	t.Helper()
 	_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 	contractID := testdb.Scalar[string](t, db.Admin,
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'signed', 'Test prose', 15000) RETURNING id`, engagementID)
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at) VALUES ($1, 'signed', 'Test prose', 15000, now()) RETURNING id`, engagementID)
 	invoiceID = testdb.Scalar[string](t, db.Admin,
 		`INSERT INTO invoices (practice_id, contract_id, status, amount_cents, currency, reference, due_at, paid_at)
 		 VALUES ($1, $2, 'paid', 15000, 'usd', 'INV-STANDING', now(), now()) RETURNING id`, practiceID, contractID)
