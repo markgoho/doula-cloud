@@ -21,6 +21,7 @@
 	import { tick, untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
 	import { THIS_WEEK, addDays, daysTag, daysWords, isCalendarDay, rangeErrors as rangeErrorsOf, rangeHold, type RangeErrors } from '#lib/dayRange.js';
+	import type { ColumnOrder } from '#lib/headingOrder.js';
 	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
 	import { rowLinkLabeler } from '#lib/rowLinkLabel.js';
 	import { formatCalendarWeekdayDay } from '#lib/dates.js';
@@ -335,6 +336,17 @@
 		rangeErrors = {};
 		void show(onCallHref(basePath, draftView), { replace });
 		return true;
+	}
+
+	const sortOrders: readonly ColumnOrder[] = [
+		{ order: '', column: 'Due', direction: 'ascending' },
+		{ order: COVER_FIRST, column: 'Cover', direction: 'ascending' }
+	];
+
+	// A heading's press is the Order select's pick: the bar as drawn, with the order it asks for.
+	function sortBy(order: string) {
+		draftOrder = order as OnCallOrder;
+		applyOnChange({ replace: false, changed: ['order'] });
 	}
 
 	async function applyFilters(event: SubmitEvent) {
@@ -830,7 +842,9 @@
 						recordColumns="one"
 						rowGroup={isGrouped ? (row) => onCallGroup(row, shownOrder, roster.today, timeZone, now) : undefined}
 						groupHeadingLevel={2}
-						orderedBy={shownOrder === COVER_FIRST ? undefined : { column: 'Due', direction: 'ascending' }}
+						orderedBy={{ column: shownOrder === COVER_FIRST ? 'Cover' : 'Due', direction: 'ascending' }}
+						{sortOrders}
+						onSort={sortBy}
 						{isBusy}
 					/>
 				</div>

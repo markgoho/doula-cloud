@@ -7,6 +7,7 @@
  * unit-tested directly -- mirrors planInstance.ts.
  */
 import type { Fetcher } from './fetcher.js';
+import type { ColumnOrder } from './headingOrder.js';
 import type { Stamp } from './stamp.js';
 
 import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
@@ -552,6 +553,20 @@ Every wording the Order select takes in any view, which sizes its cell once for 
 export const EVERY_CONTRACT_ORDER_OPTION = (Object.keys(ORDER_LABELS) as ContractsView[]).flatMap((view) =>
 	contractOrderOptions(view)
 );
+
+/**
+The orders each column's heading asks for (#2955): Status in the view's own direction first, then the other, and Client A to Z.
+*/
+export function contractColumnOrders(view: ContractsView): readonly ColumnOrder[] {
+	const own = VIEW_ORDER[view];
+	const other = own === 'oldest' ? 'newest' : 'oldest';
+	const status = (order: 'oldest' | 'newest'): ColumnOrder => ({
+		order,
+		column: 'Status',
+		direction: order === 'oldest' ? 'ascending' : 'descending'
+	});
+	return [status(own), status(other), { order: 'client', column: 'Client', direction: 'ascending' }];
+}
 
 export function contractOrderedBy(
 	order: ContractOrder,

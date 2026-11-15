@@ -102,6 +102,16 @@ describe('the on-call roster', () => {
 		await expect.element(births.getByRole('columnheader', { name: 'Due' })).toHaveAttribute('aria-sort', 'ascending');
 	});
 
+	it('asks for the cover order by the Cover heading; the sorted Due heading is unavailable (#2955)', async () => {
+		await setup();
+
+		const births = testPage.getByRole('table', { name: 'Births on call' });
+		await expect.element(births.getByRole('columnheader', { name: 'Due' }).getByRole('button')).toHaveAttribute('aria-disabled', 'true');
+		await births.getByRole('columnheader', { name: 'Cover' }).getByRole('button').click();
+
+		expect(vi.mocked(goto).mock.lastCall![0]).toContain('order=cover');
+	});
+
 	it('opens each birth at its On call section', async () => {
 		await setup();
 

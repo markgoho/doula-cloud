@@ -437,6 +437,19 @@ describe('the filter bar', () => {
 		expect(vi.mocked(goto).mock.calls.at(-1)![0]).toBe(`/practices/practice-1/contracts${query}`);
 	});
 
+	it.each([
+		['Status', '?show=sent', 'sent', '', '?show=sent&order=newest'],
+		['Client', '?show=sent', 'sent', '', '?show=sent&order=client'],
+		['Status', '?show=sent&order=client', 'sent', 'client', '?show=sent']
+	])('sorts by the %s heading from %s (#2955)', async (column, query, view, order, expected) => {
+		await setup({ query, props: { ...ownerProperties, data: { ...data, view, order } } });
+
+		await testPage.getByRole('columnheader', { name: column, exact: true }).getByRole('button').click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		expect(vi.mocked(goto).mock.calls.at(-1)![0]).toBe(`/practices/practice-1/contracts${expected}`);
+	});
+
 	it('carries the order through a change of view, the view own order left out', async () => {
 		await setup({ query: '?show=all&order=oldest', props: { ...ownerProperties, data: { ...data, order: 'oldest' } } });
 

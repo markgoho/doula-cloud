@@ -22,6 +22,7 @@
 	import { THIS_WEEK, rangeHold } from '#lib/dayRange.js';
 	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
+	import type { ColumnOrder } from '#lib/headingOrder.js';
 	import { typedIn } from '#lib/typedIn.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isOwnerOrAdmin } from '#lib/roles.js';
@@ -46,6 +47,7 @@
 		scheduleResultRuler,
 		scheduleResultSummary,
 		scheduleViewFromParameters,
+		LATEST_ORDER,
 		SCHEDULE_ORDER_OPTIONS,
 		SCHEDULE_TYPE_OPTIONS,
 		type ScheduleOrder,
@@ -398,6 +400,17 @@
 		return true;
 	}
 
+	const sortOrders: readonly ColumnOrder[] = [
+		{ order: '', column: 'When', direction: 'ascending' },
+		{ order: LATEST_ORDER, column: 'When', direction: 'descending' }
+	];
+
+	// A heading's press is the Order select's pick: the bar as drawn, with the order it asks for.
+	function sortBy(order: string) {
+		draftOrder = order as ScheduleOrder;
+		applyOnChange({ replace: false, changed: ['order'] });
+	}
+
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
 		if (draftChoice === 'choose') {
@@ -739,6 +752,8 @@
 						rowGroup={(visit) => scheduleDayGroup(visit.scheduledAt, timeZone, now)}
 						groupHeadingLevel={2}
 						orderedBy={{ column: 'When', direction: read.view.order ? 'descending' : 'ascending' }}
+						{sortOrders}
+						onSort={sortBy}
 						{isBusy}
 					/>
 				</div>
