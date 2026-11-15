@@ -182,6 +182,38 @@ export const typical: RouteVariant<RouteParameters> = {
 	}
 };
 
+export const typicalWholeBook: RouteVariant<RouteParameters> = {
+	name: 'The Practice-wide Contracts list, the whole book with typical pilot data',
+	typical: true,
+	url: 'https://example.test/practices/practice-1/contracts?show=all',
+	props: {
+		...typical.props,
+		data: {
+			...data,
+			view: 'all',
+			items: [1, 2, 3, 4].map((index) => {
+				const person = nth(TYPICAL_CLIENTS, index);
+				return {
+					contractId: `contract-all-${index}`,
+					engagementId: `eng-all-${index}`,
+					clientId: person.clientId,
+					clientName: person.name,
+					engagementKind: 'birth' as const,
+					status: 'signed' as const,
+					steppedOn: `2026-09-1${index}`,
+					sentByName: nth(TYPICAL_DOULAS, 2).name,
+					dueDate: '2027-02-17',
+					doulaNames: [nth(TYPICAL_DOULAS, 1).name, nth(TYPICAL_DOULAS, 3).name],
+					amountCents: 150_000,
+					hasSignedPdf: true,
+					voidRequested: index === 1
+				};
+			}),
+			total: 4
+		}
+	}
+};
+
 export const loading: RouteVariant<RouteParameters> = {
 	name: 'The Practice-wide Contracts list, while its read runs',
 	props: { isQueueExpected: true, doulas, isRosterLanded: true }
@@ -224,7 +256,7 @@ export const asDoula: RouteVariant<RouteParameters> = {
 
 export const fixture: RouteFixture<RouteParameters> = {
 	name: 'The Practice-wide Contracts list',
-	variants: [typical, loading, queueLoading, queueFailed, noRequests, readFailed, asContractor, asDoula],
+	variants: [typical, typicalWholeBook, loading, queueLoading, queueFailed, noRequests, readFailed, asContractor, asDoula],
 	component: Page,
 	params: { practiceId: 'practice-1' },
 	pageData: owner,

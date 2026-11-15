@@ -476,7 +476,7 @@
 			: [
 					{
 						label: 'Doula',
-						track: `calc(17ch + 2 * ${INSET})`,
+						track: `calc(16ch + 2 * ${INSET})`,
 						accessor: doulaText,
 						content: doulaCell
 					}
