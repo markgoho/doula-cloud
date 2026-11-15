@@ -49,12 +49,19 @@ func TestGetContract_ACurrentVoidedContractIsNotAlsoEarlier(t *testing.T) {
 	}
 }
 
-// TestPostContractHandler_RecordsWhoMadeIt proves a new Draft is stamped
-// with the Staff member who made it, and the list says so.
-func TestPostContractHandler_RecordsWhoMadeIt(t *testing.T) {
+// newEnvWithDraft is an Owner's env with a Draft made through the API.
+func newEnvWithDraft(t *testing.T) *env {
+	t.Helper()
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.readyToDraft(mergeFieldProse)
 	reqtest.ExpectStatus(t, http.MethodPost, e.contractURL(""), http.StatusCreated, e.SignedIn)
+	return e
+}
+
+// TestPostContractHandler_RecordsWhoMadeIt proves a new Draft is stamped
+// with the Staff member who made it, and the list says so.
+func TestPostContractHandler_RecordsWhoMadeIt(t *testing.T) {
+	e := newEnvWithDraft(t)
 
 	out := e.list("?view=draft")
 

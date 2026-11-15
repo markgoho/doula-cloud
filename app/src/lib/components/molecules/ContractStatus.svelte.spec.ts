@@ -4,6 +4,7 @@ import { render } from 'vitest-browser-svelte';
 import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE, VOID_CONSEQUENCE } from './ContractStatus.svelte';
 import type { VoidRequestSummary } from '#lib/contract.js';
 
+// jscpd:ignore-start -- the spec's setup options restate the component's props
 interface SetupOptions {
 	status?: string;
 	hasSignedPdf?: boolean;
@@ -15,6 +16,7 @@ interface SetupOptions {
 	onRequestVoid?: (reason: string) => Promise<void>;
 	onDeclineVoidRequest?: (requestId: string, reason: string) => Promise<void>;
 }
+// jscpd:ignore-end
 
 async function setup({
 	status = 'draft',
