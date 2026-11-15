@@ -12,6 +12,7 @@ import type { Stamp } from './stamp.js';
 
 import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
 import { dueParts, type DueParts } from './client.js';
+import { calendarDayIn } from './invoice.js';
 import { formatCalendarDay } from './dates.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
@@ -55,6 +56,10 @@ export interface Contract {
 	When the Client first opened it. Staff read only.
 	*/
 	openedAt?: string;
+	/** The latest reminder a Staff member emailed the Client about this
+	 * Sent Contract, and who sent it (#2951). Absent until one has been
+	 * sent, and on a Client-portal read. */
+	reminded?: Stamp;
 	/** The current Contract's id, which a list row's `#contract-<id>`
 	 * anchor names. Absent on a Client-portal read (#2958). */
 	id?: string;
@@ -306,6 +311,34 @@ export async function openContract(fetcher: Fetcher, engagementId: string): Prom
 	}
 }
 
+/** Emails the Client of the Sent Contract for engagementId a reminder
+ * (#2951), leaving it Sent. The BFF refuses, in a sentence to print as it
+ * is, a Contract that is not Sent, a Client the reminder cannot reach, and
+ * a Client already emailed about a Contract today. Throws with that
+ * message on a non-2xx response. */
+export async function remindContract(
+	fetcher: Fetcher,
+	practiceId: string,
+	engagementId: string
+): Promise<Contract> {
+	const response = await fetcher(`${contractPath(practiceId, engagementId)}/remind`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+	return response.json();
+}
+
+/** Whether a reminder is worth offering for this Contract right now: it is
+ * Sent, and was neither sent nor reminded earlier today in the Practice's
+ * zone. The BFF refuses the same days (and a Client emailed about another
+ * Contract today); this only keeps the control from being offered on the
+ * days it would be refused. */
+export function canRemind(contract: Pick<Contract, 'status' | 'sent' | 'reminded'>, timeZone: string, now: Date = new Date()): boolean {
+	if (contract.status !== 'sent') return false;
+	const today = calendarDayIn(timeZone, now);
+	return [contract.sent, contract.reminded].every((stamp) => !stamp || calendarDayIn(timeZone, new Date(stamp.at)) !== today);
+}
+
 /** Signs the sent Contract for engagementId -- transitions it to signed,
  * one-way, and only while it's still sent (a non-sent Contract 409s).
  * fullLegalName and isAttestation are the only fields the caller supplies;
@@ -419,6 +452,14 @@ export interface ContractListItem {
 	The Practice-zone day the Client first opened it.
 	*/
 	openedOn?: string;
+	/**
+	The Practice-zone day a Staff member last reminded the Client of a Sent Contract (#2951).
+	*/
+	remindedOn?: string;
+	/**
+	Whether a reminder is offered today: Sent, and neither sent nor reminded today (#2951).
+	*/
+	canRemind?: boolean;
 	sentByName?: string;
 	madeByName?: string;
 	voidedByName?: string;

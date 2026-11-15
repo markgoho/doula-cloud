@@ -76,6 +76,10 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/send",
 		"state-guarded (status != 'draft' -> 409); a retry after the first commit finds the Contract already sent and 409s instead of pushing the Client notification twice",
 		true, staffauth.AnyStaff, PostSendContractHandler(pusher))
+	// #2951: a reminder to the Client of a Sent Contract. Replayable, since a
+	// repeat must not email her again; the same reach as send.
+	ir.ReplayableGated("POST /api/practices/{practiceId}/engagements/{engagementId}/contract/remind",
+		true, staffauth.AnyStaff, PostRemindContractHandler(pusher))
 	// Owner and Admin only (#282, #970): every Doula, employee or
 	// contractor, is refused regardless of attachment, so this is exactly
 	// the case AttachingWrite's reach test cannot express -- reach and

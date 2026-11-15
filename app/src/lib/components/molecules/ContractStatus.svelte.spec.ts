@@ -99,6 +99,52 @@ describe('ContractStatus.svelte', () => {
 		expect(page.getByText('Opened', { exact: true }).elements()).toHaveLength(0);
 	});
 
+	it('says when the Client was last reminded and by whom (#2951)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'America/New_York',
+			status: 'sent',
+			hasSignedPdf: false,
+			reminded: { at: '2026-11-13T15:04:05Z', by: 'Dee Whitlock' }
+		});
+
+		await expect.element(page.getByText('Last reminded')).toBeVisible();
+		await expect.element(page.getByText('by Dee Whitlock', { exact: false })).toBeVisible();
+	});
+
+	it('offers a reminder on a sent Contract and sends it when pressed (#2951)', async () => {
+		const onRemind = vi.fn().mockResolvedValue(undefined);
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
+
+		await page.getByRole('button', { name: 'Remind the Client' }).click();
+
+		expect(onRemind).toHaveBeenCalledOnce();
+	});
+
+	it('shows the reason a reminder was refused beside the button (#2951)', async () => {
+		const onRemind = vi.fn().mockRejectedValue(new Error('This Client was already emailed about a Contract today.'));
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
+
+		await page.getByRole('button', { name: 'Remind the Client' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('This Client was already emailed about a Contract today.');
+	});
+
+	it('shows a plain failure when the refusal is not an Error (#2951)', async () => {
+		const onRemind = vi.fn().mockRejectedValue('nope');
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
+
+		await page.getByRole('button', { name: 'Remind the Client' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to send the reminder');
+	});
+
+	it('offers no reminder without onRemind, or once the Contract is not sent (#2951)', async () => {
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false });
+		await render(ContractStatus, { timeZone: 'UTC', status: 'signed', hasSignedPdf: false, onRemind: vi.fn() });
+
+		expect(page.getByRole('button', { name: 'Remind the Client' }).elements()).toHaveLength(0);
+	});
+
 	it('says a voided Contract is no longer active', async () => {
 		await setup({ status: 'voided' });
 

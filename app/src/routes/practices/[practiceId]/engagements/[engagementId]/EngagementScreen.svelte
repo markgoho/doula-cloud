@@ -101,6 +101,8 @@
 		createContract,
 		saveContractValues,
 		sendContract,
+		remindContract,
+		canRemind,
 		voidContract,
 		requestContractVoid,
 		declineContractVoidRequest,
@@ -1508,6 +1510,16 @@
 		);
 		if (!isSent) return;
 		contractSavedMessage = 'Contract sent.';
+		await loadActivity();
+	}
+
+	// ContractStatus.svelte shows a refusal beside its button, so this one
+	// throws it instead of writing contractState.error, as Void does.
+	async function handleRemindContract() {
+		contractSavedMessage = '';
+		const reminded = await remindContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+		contractState.value = reminded;
+		contractSavedMessage = 'Reminder sent.';
 		await loadActivity();
 	}
 
@@ -3092,6 +3104,8 @@
 				sent={contract.sent}
 				signed={contract.signed}
 				openedAt={contract.openedAt}
+				reminded={contract.reminded}
+				onRemind={canRemind(contract, timeZone) ? handleRemindContract : undefined}
 				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}

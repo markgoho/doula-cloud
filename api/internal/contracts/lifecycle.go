@@ -55,6 +55,10 @@ var TransitionSign = Transition{Act: "sign it", Requires: StatusSent}
 // TransitionOpen is the Client's open of a Contract: only a Sent one.
 var TransitionOpen = Transition{Act: "open it", Requires: StatusSent}
 
+// TransitionRemind is PostRemindContractHandler's precondition (#2951):
+// only a Sent Contract is waiting on her, and the move leaves it Sent.
+var TransitionRemind = Transition{Act: "send a reminder", Requires: StatusSent}
+
 // TransitionVoid is PostVoidContractHandler's precondition: only a Signed
 // Contract may be voided.
 var TransitionVoid = Transition{Act: "void it", Requires: StatusSigned}
@@ -78,7 +82,7 @@ var TransitionOverrideAmount = Transition{Act: "change its amount", Requires: St
 
 // Transitions is every declared Contract lifecycle precondition, walked
 // by lifecycle_test.go's guardrail.
-var Transitions = []Transition{TransitionEdit, TransitionSend, TransitionSign, TransitionOpen, TransitionVoid, TransitionBill, TransitionOverrideAmount}
+var Transitions = []Transition{TransitionEdit, TransitionSend, TransitionSign, TransitionOpen, TransitionRemind, TransitionVoid, TransitionBill, TransitionOverrideAmount}
 
 // Check reports whether current satisfies t (ok=true, no refusal
 // message), or, if not, the 409 message a caller should write -- naming

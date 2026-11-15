@@ -3,7 +3,7 @@ package outbox
 import "errors"
 
 // Status is an outbox row's lifecycle state: the status column of every
-// one of the twenty-one tables that share this machine. Each table keeps
+// one of the twenty-two tables that share this machine. Each table keeps
 // its own <table>_status enum (00169 weighed one shared type and kept
 // these: moving to it means rebuilding every partial index and CHECK
 // that names the old type, about thirty of them, for no new behavior),

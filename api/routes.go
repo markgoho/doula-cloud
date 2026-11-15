@@ -10,6 +10,7 @@ import (
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/contractnotice"
 	"doula-cloud/api/internal/csrf"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
@@ -116,6 +117,7 @@ type Deps struct {
 	StaffInviteWorker       staffinvite.Worker
 	OfferWorker             offer.Worker
 	StaffNoticeWorker       staffnotice.Worker
+	ContractNoticeWorker    contractnotice.Worker
 	EngagementRequestWorker engagementrequest.Worker
 	SiteBuildWorker         sitebuild.Worker
 	PageVerifier            sitebuild.Verifier

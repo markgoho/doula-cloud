@@ -11,6 +11,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientstanding"
+	"doula-cloud/api/internal/contractnotice"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
@@ -124,6 +125,11 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
+		if err := contractnotice.Queue(r.Context(), c.Tx, c.PracticeID, ct.ID, contractnotice.KindSent, c.StaffID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
 		notifyClient(r.Context(), c.Tx, pusher, c.EngagementID)
 
 		out := ContractResponse{

@@ -313,7 +313,7 @@ The plan's `automated` steps were **not** re-run as specs; 1.1 and 1.2 were walk
 | 6.B-screens | 2 | 1: the Engagement; the Contract is built and sent in its section | yes |
 | 6.B-decisions | 7 | 7 on the Draft Contract (five fields, **Save Contract**, **Cancel**) | yes |
 | 6.B-memory | yes | yes. The Client's name, the Practice's name and the fee are filled in, and **Read the Contract text** shows the prose before **Send Contract** | yes |
-| 6.B-confirmation | yes | yes. "Contract sent." and "Sent, waiting for the Client to sign", by whom and when. Nothing is mailed to the Client; she is told by push (`contracts/send.go`) or on her next portal visit | yes |
+| 6.B-confirmation | yes | yes. "Contract sent." and "Sent, waiting for the Client to sign", by whom and when. The Client is emailed a content-free note (#2951) and told by push (`contracts/send.go`); a Staff member can send a reminder, once a day, from the Contracts list or the Engagement | yes |
 | 7.B-screens | 1 | 1: **Contracts** | yes |
 | 7.B-time | 400 ms, 100 ms | **Contracts** from the top bar settled in 50 to 51 ms over four warm presses | yes |
 | 8.B-screens | 1 | 1: the Engagement, for 8.1 and for 8.2 | yes |

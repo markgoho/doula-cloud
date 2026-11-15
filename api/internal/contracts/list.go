@@ -46,7 +46,15 @@ type ContractListItem struct {
 	// it was sent, 0 for today.
 	DaysWaiting *int `json:"daysWaiting,omitempty"`
 	// OpenedOn is the Practice-zone day the Client first opened it.
-	OpenedOn         string   `json:"openedOn,omitempty"`
+	OpenedOn string `json:"openedOn,omitempty"`
+	// RemindedOn is the Practice-zone day a Staff member last reminded the
+	// Client of a Sent Contract (#2951), empty until one has.
+	RemindedOn string `json:"remindedOn,omitempty"`
+	// CanRemind is set on a Sent Contract that was neither sent nor
+	// reminded today, the days a reminder is refused (#2951). It reads
+	// this Contract alone: a Client emailed about another of her Contracts
+	// today is refused when the reminder is pressed.
+	CanRemind        bool     `json:"canRemind,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
 	MadeByName       string   `json:"madeByName,omitempty"`
 	VoidedByName     string   `json:"voidedByName,omitempty"`
@@ -218,7 +226,7 @@ const listFrom = `
 	JOIN clients cl ON cl.id = e.client_id`
 
 const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, e.kind::text, c.status::text,
-	       c.stepped_at, c.sent_at, c.opened_at,
+	       c.stepped_at, c.sent_at, c.opened_at, c.reminded_at,
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by),
@@ -311,10 +319,10 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		var item ContractListItem
 		var givenName string
 		var preferredName, familyName, sentByName, madeByName, voidedByName, dueDate, endedOn, outcome, doulas sql.NullString
-		var sentAt, openedAt sql.NullTime
+		var sentAt, openedAt, remindedAt sql.NullTime
 		var amount int64
 		if err := rows.Scan(&item.ContractID, &item.EngagementID, &item.ClientID, &givenName, &preferredName, &familyName,
-			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &openedAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
+			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &openedAt, &remindedAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
 			&amount, &item.HasSignedPDF, &item.VoidRequested, &item.sortName); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan list row: %w", err)
@@ -329,6 +337,11 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 				if openedAt.Valid {
 					item.OpenedOn = openedAt.Time.In(zone).Format(dayLayout)
 				}
+				if remindedAt.Valid {
+					item.RemindedOn = remindedAt.Time.In(zone).Format(dayLayout)
+				}
+				today := now.In(zone).Format(dayLayout)
+				item.CanRemind = item.sentOn != today && item.RemindedOn != today
 			}
 		}
 		item.SentByName = sentByName.String

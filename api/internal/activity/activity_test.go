@@ -205,6 +205,8 @@ func TestStaffingActions_ContainsExactlyTheRosterSet(t *testing.T) {
 		activity.ActionContractEdited,
 		// #2952: her own first read of a Contract is the Practice's to see.
 		activity.ActionContractOpened,
+		// #2951: a reminder is the Practice's act of chasing.
+		activity.ActionContractReminded,
 		// An Invoice draft Stripe would not finalize never reached her.
 		activity.ActionInvoiceNotSent,
 	})

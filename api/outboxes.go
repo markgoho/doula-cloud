@@ -31,6 +31,9 @@ const (
 	// Privacy Policy, not nudged for the same reason: it goes out 30 days
 	// or more before the date it is about.
 	legalNoticeOutboxPath = "/api/internal/notifications/process-legal-notice-outbox"
+	// #2951's Client email at a Contract send and its reminder, not
+	// nudged, as the void notices to Staff are not.
+	contractNoticeOutboxPath = "/api/internal/notifications/process-contract-notice-outbox"
 	// #1524's private-GitHub-issue outbox, under /api/internal/feedback
 	// rather than /notifications because it notifies nobody -- it opens
 	// an issue in a private GitHub repo.
@@ -130,6 +133,15 @@ func outboxRegistrations(d Deps) []outbox.Registration {
 			Door:   outbox.NotificationDoor,
 			Nudge:  tasknudge.EngagementOffer,
 			Worker: d.OfferWorker,
+		},
+		{
+			// #2951's Contract-notice outbox: the Client's email when a
+			// Contract is sent and a Staff member's reminder, written by
+			// contracts' send and remind. No Nudge on purpose, as the Staff
+			// notices of a void: Cloud Scheduler's cadence carries it.
+			Path:   contractNoticeOutboxPath,
+			Door:   outbox.NotificationDoor,
+			Worker: d.ContractNoticeWorker,
 		},
 		{
 			// #2267's Staff-notice outbox, one table for every notice to
