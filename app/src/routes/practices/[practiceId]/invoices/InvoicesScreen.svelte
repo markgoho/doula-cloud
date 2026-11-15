@@ -410,10 +410,7 @@
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		if (draftPeriod.hasProblem()) {
-			await draftPeriod.focusProblem();
-			return;
-		}
+		if (await draftPeriod.refusesToApply()) return;
 		await showFilter(drawnHref(), typedIn(searchBox, draftSearch));
 	}
 

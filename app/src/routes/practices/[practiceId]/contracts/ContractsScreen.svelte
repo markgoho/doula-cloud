@@ -204,6 +204,7 @@
 		);
 	}
 
+	// jscpd:ignore-start -- the landed read and the latest-search guard are the Invoices list's, over this list's own key; they share its reactive state, so a helper would take five closures
 	let adopted: ContractsListData | undefined;
 	$effect(() => {
 		const landed = data;
@@ -227,6 +228,7 @@
 		const thisSearch = ++latestSearch;
 		untrack(() => void readSearch(key, thisSearch));
 	});
+	// jscpd:ignore-end
 	async function readSearch(key: ReadKey, thisSearch: number) {
 		isSearching = true;
 		try {
@@ -357,18 +359,17 @@
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		if (draftPeriod.hasProblem()) {
-			await draftPeriod.focusProblem();
-			return;
-		}
+		if (await draftPeriod.refusesToApply()) return;
 		await showFilter(drawnHref(), typedIn(searchBox, draftSearch));
 	}
 
+	// jscpd:ignore-start -- FilterBar's onChangeApply contract, which each list answers over its own address and search
 	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
 		if (draftPeriod.isOnlyOpeningDays(changed) || draftPeriod.hasProblem()) return false;
 		void showFilter(drawnHref(), typedIn(searchBox, draftSearch), { replace });
 		return true;
 	}
+	// jscpd:ignore-end
 
 	const VIEW_OPTIONS: readonly { value: ContractsView; label: string }[] = [
 		{ value: 'not-signed', label: 'Not signed' },

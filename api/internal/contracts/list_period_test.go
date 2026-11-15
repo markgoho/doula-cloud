@@ -15,6 +15,7 @@ import (
 // seedPeriodEdges seeds one Sent Contract on each side of both edges of
 // October 25 in the Practice's zone, New York, which is four hours behind UTC
 // on that day, and answers their ids in that order.
+// jscpd:ignore-start -- the four instants either side of a Practice-zone day's edges are the Invoices list's, seeded through this list's own fixtures
 func (e *env) seedPeriodEdges() []string {
 	e.T.Helper()
 	var seeded []string
@@ -29,6 +30,8 @@ func (e *env) seedPeriodEdges() []string {
 	}
 	return seeded
 }
+
+// jscpd:ignore-end
 
 // TestListContracts_PeriodIsTheSentDayInThePracticesZone proves the period's
 // edges are the Practice's midnights, not UTC's, and that both entry points

@@ -50,6 +50,15 @@ export class SentPeriodDraft {
 	}
 
 	/**
+	 * Apply's own check: true after moving focus to the day that is wrong.
+	 */
+	async refusesToApply(): Promise<boolean> {
+		if (!this.hasProblem()) return false;
+		await this.focusProblem();
+		return true;
+	}
+
+	/**
 	 * "Choose days" alone only opens its fields: nothing is sent until Apply.
 	 */
 	isOnlyOpeningDays(changed: readonly string[]): boolean {

@@ -57,6 +57,7 @@ afterEach(() => {
 });
 
 describe('the Sent select (#2954)', () => {
+	// jscpd:ignore-start -- the same control as the Invoices list's, so the same assertion
 	it('offers the Invoices list’s periods and starts on any time', async () => {
 		await setup();
 
@@ -65,6 +66,7 @@ describe('the Sent select (#2954)', () => {
 			await expect.element(sentSelect().getByRole('option', { name: label })).toBeInTheDocument();
 		}
 	});
+	// jscpd:ignore-end
 
 	it('applies a preset when changed, with its name in the address', async () => {
 		await setup();

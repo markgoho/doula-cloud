@@ -28,6 +28,7 @@ func (e *env) exportRequest(req contracts.ListRequest) *http.Response {
 	return reqtest.Do(e.T, http.MethodPost, e.PracticeURL(exportPath), e.SignedIn, reqtest.JSON(req))
 }
 
+// jscpd:ignore-start -- each download's test file reads its own file and its own Activity action through exporttest
 func (e *env) exportRows(req contracts.ListRequest) [][]string {
 	e.T.Helper()
 	return exporttest.Read(e.T, func() *http.Response { return e.exportRequest(req) })
@@ -37,6 +38,8 @@ func (e *env) exportActivity() []string {
 	e.T.Helper()
 	return exporttest.Diffs(e.T, e.DB, e.Practice.ID, "contracts_exported")
 }
+
+// jscpd:ignore-end
 
 func clients(rows [][]string) []string {
 	names := make([]string, 0, len(rows))
@@ -210,6 +213,7 @@ func TestExportContracts_NoSearchNoPeriodRecordsTheBareView(t *testing.T) {
 // TestExportContracts_ARefusedRequestWritesNoRow proves a request the list
 // would refuse is a 400 and is not recorded as a download.
 func TestExportContracts_ARefusedRequestWritesNoRow(t *testing.T) {
+	// jscpd:ignore-start -- the refusals the Invoices export makes, in this list's request
 	cases := map[string]contracts.ListRequest{
 		"a view the list does not offer": {View: "paid"},
 		"a search over 100 characters":   {Search: strings.Repeat("a", 101)},
@@ -217,6 +221,7 @@ func TestExportContracts_ARefusedRequestWritesNoRow(t *testing.T) {
 		"a period with only a From":      {SentFrom: dayOct25},
 		"a To before the From":           {SentFrom: "2026-10-26", SentTo: dayOct25},
 	}
+	// jscpd:ignore-end
 	for name, req := range cases {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t, signedInAs(fixture.Owner()))
