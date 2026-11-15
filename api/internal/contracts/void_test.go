@@ -178,22 +178,10 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 // contractor both reach the Engagement here just as freely as an Owner
 // does.
 func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
-	cases := []struct {
-		name       string
-		staff      []fixture.StaffOption
-		wantStatus int
-	}{
-		{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
-		{caseEmployedDoula, []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.staff...))
-			seedSignedContract(t, e.DB, e.Engagement.ID)
+	cases := append([]roleCase{{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK}}, refusedDoulaCases()...)
+	eachRole(t, cases, func(t *testing.T, e *env, wantStatus int) {
+		seedSignedContract(t, e.DB, e.Engagement.ID)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), tc.wantStatus, e.SignedIn)
-		})
-	}
+		reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), wantStatus, e.SignedIn)
+	})
 }

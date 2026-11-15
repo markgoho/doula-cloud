@@ -60,6 +60,14 @@ const empty = (view: string, extra: Record<string, unknown> = {}) => ({
 	data: { ...data, items: [], total: 0, view, ...extra }
 });
 
+async function expectSearchAcrossAll(search: string) {
+	await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+	const [href, options] = vi.mocked(goto).mock.calls.at(-1)!;
+	expect(href).toBe('/practices/practice-1/contracts?show=all');
+	expect(href).not.toContain(search);
+	expect(options).toMatchObject({ state: { contractsSearch: search } });
+}
+
 const kept = () =>
 	vi.mocked(snapshot).mock.calls.at(-1)![0] as { capture: () => ListReturn; restore: (held: ListReturn) => void };
 
@@ -92,7 +100,7 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell(heard('Draft made Nov 8'))).toBeVisible();
 		await expect.element(cell(heard('Sent Nov 2, waiting 12 days'))).toBeVisible();
 		await expect.element(cell(heard('Sent today'))).toBeVisible();
-		await expect.element(cell(heard('Signed Dec 30, 2025 Void requested'))).toBeVisible();
+		await expect.element(cell(heard('Signed Dec 30, 2025 Void asked'))).toBeVisible();
 		await expect.element(cell(heard('Voided Nov 9'))).toBeVisible();
 	});
 
@@ -118,7 +126,7 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell(heard('Postpartum, no due date'))).toBeVisible();
 		await expect.element(cell(heard('Birth, Ended Oct 30'))).not.toBeInTheDocument();
 		await expect.element(cell(/Birth\s*,?\s*Ended Oct 1/)).toBeVisible();
-		await expect.element(cell(/weeks postpartum/).first()).toBeVisible();
+		await expect.element(cell(/Birth\s*,?\s*Born Oct 30/).first()).toBeVisible();
 	});
 
 	it('shows the fee and the Signed PDF column to a reader the PDF read serves', async () => {
@@ -419,11 +427,7 @@ describe('the filter bar', () => {
 		expect(goto).not.toHaveBeenCalled();
 		await testPage.getByRole('button', { name: 'Apply' }).click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
-		const [href, options] = vi.mocked(goto).mock.calls.at(-1)!;
-		expect(href).toBe('/practices/practice-1/contracts?show=all');
-		expect(href).not.toContain('quinn');
-		expect(options).toMatchObject({ state: { contractsSearch: 'quinn' } });
+		await expectSearchAcrossAll('quinn');
 	});
 });
 
@@ -521,10 +525,7 @@ describe('the result line and what an empty one offers', () => {
 		await expect.element(action).toBeVisible();
 		await action.click();
 
-		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
-		const [href, options] = vi.mocked(goto).mock.calls.at(-1)!;
-		expect(href).toBe('/practices/practice-1/contracts?show=all');
-		expect(options).toMatchObject({ state: { contractsSearch: 'zed' } });
+		await expectSearchAcrossAll('zed');
 	});
 });
 

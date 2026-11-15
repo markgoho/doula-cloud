@@ -362,7 +362,7 @@ func parseScheduleFilter(w http.ResponseWriter, r *http.Request, c staffauth.Cal
 // where the mechanism lives. `visits` has no practice_id column, so the
 // Practice filter is the join to engagements -- applied explicitly on top
 // of the RLS scoping staffauth.Middleware already set on tx, the same
-// belt-and-braces the contracts awaiting-signature roll-up uses. What
+// belt-and-braces the Practice-wide Contracts list uses. What
 // keeps the read quick at a fourteen-doula agency's size is the half-open
 // `scheduled_at` range plus 00091's partial index over (scheduled_at, id)
 // WHERE scheduled_at IS NOT NULL: the index's predicate is this query's

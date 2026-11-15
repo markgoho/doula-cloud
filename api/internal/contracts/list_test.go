@@ -66,6 +66,14 @@ func (e *env) seedListed(status string, stepped time.Time, opts ...fixture.Engag
 	return engagement, seedListedContract(e.T, e.DB, engagement.ID, status, stepped)
 }
 
+// seedEveryStatus seeds one Contract in each of the four statuses.
+func (e *env) seedEveryStatus() {
+	e.T.Helper()
+	for _, status := range []string{statusDraft, statusSent, statusSigned, statusVoided} {
+		e.seedListed(status, listBase)
+	}
+}
+
 // seedListedContract inserts a Contract at status with the columns its
 // status requires, its current step falling at stepped.
 func seedListedContract(t *testing.T, db *testdb.DB, engagementID, status string, stepped time.Time) string {
@@ -114,9 +122,7 @@ func statuses(out contracts.ListResponse) []string {
 // other view its own state.
 func TestListContracts_EachViewHoldsItsStatuses(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	for _, status := range []string{statusDraft, statusSent, statusSigned, statusVoided} {
-		e.seedListed(status, listBase)
-	}
+	e.seedEveryStatus()
 
 	cases := []struct {
 		view string
@@ -535,9 +541,7 @@ func TestListContracts_DaysWaitingIsCountedInThePracticesDays(t *testing.T) {
 // Sent row and on no other.
 func TestListContracts_OnlyASentContractIsWaiting(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	for _, status := range []string{statusDraft, statusSent, statusSigned, statusVoided} {
-		e.seedListed(status, listBase)
-	}
+	e.seedEveryStatus()
 
 	for _, item := range e.list("?view=" + viewAll).Items {
 		if (item.DaysWaiting != nil) != (item.Status == statusSent) {

@@ -221,18 +221,26 @@ func (q listQuery) pageQuery(practiceID string, after *listAfter, limit int) (st
 	return query, args
 }
 
+func practiceZoneAndNow(w http.ResponseWriter, r *http.Request, c staffauth.Call) (*time.Location, time.Time, bool) {
+	ctx := r.Context()
+	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
+	if err != nil {
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return nil, time.Time{}, false
+	}
+	return zone, clock.Now(ctx), true
+}
+
 func serveContracts(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
 	q, ok := newListQuery(w, c, req)
 	if !ok {
 		return
 	}
 	ctx := r.Context()
-	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
-	if err != nil {
-		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+	zone, now, ok := practiceZoneAndNow(w, r, c)
+	if !ok {
 		return
 	}
-	now := clock.Now(ctx)
 
 	page, ok := pagecursor.FetchKeyedFrom(w, req.Cursor, pagecursor.MsgInvalidCursor, q.cursorName, listPageSize,
 		q.sort.decode(q.cursorName),

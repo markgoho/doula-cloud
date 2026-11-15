@@ -744,25 +744,27 @@ export function backdateEngagementStart(engagementId: string, days: number): voi
  * at the clock's now and no endpoint makes one in the past. A void request's
  * Activity is not touched: backdateVoidRequests moves it.
  */
-export function backdateContracts(moves: readonly { engagementId: string; days: number }[]): void {
+export function backdateContracts(moves: readonly { engagementId: string; days: number; signedAfter?: number }[]): void {
 	if (moves.length === 0) return;
-	for (const { days } of moves) {
-		if (!Number.isSafeInteger(days) || days <= 0) {
-			throw new Error(`stack: invalid day count ${days}`);
+	for (const { days, signedAfter = 0 } of moves) {
+		if (!Number.isSafeInteger(days) || days <= 0 || !Number.isSafeInteger(signedAfter) || signedAfter < 0 || signedAfter >= days) {
+			throw new Error(`stack: invalid day count ${days} with signing ${signedAfter} days after`);
 		}
 	}
-	const rows = moves.map(({ engagementId, days }) => `(${sqlLiteral(engagementId)}::uuid, interval '${days} days')`).join(', ');
+	const rows = moves
+		.map(({ engagementId, days, signedAfter = 0 }) => `(${sqlLiteral(engagementId)}::uuid, interval '${days} days', interval '${signedAfter} days')`)
+		.join(', ');
 	execSQL(
-		`WITH moved(engagement_id, shift) AS (VALUES ${rows}),
+		`WITH moved(engagement_id, shift, wait) AS (VALUES ${rows}),
 		 activity_moved AS (
-		   UPDATE activity SET created_at = activity.created_at - moved.shift
+		   UPDATE activity SET created_at = activity.created_at - moved.shift + CASE WHEN activity.action = 'contract_signed' THEN moved.wait ELSE interval '0' END
 		   FROM moved
 		   WHERE activity.subject_id = moved.engagement_id
 		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed', 'contract_voided')
 		 )
 		 UPDATE contracts SET created_at = contracts.created_at - moved.shift,
 		   sent_at = contracts.sent_at - moved.shift,
-		   signed_at = contracts.signed_at - moved.shift,
+		   signed_at = contracts.signed_at - moved.shift + moved.wait,
 		   voided_at = contracts.voided_at - moved.shift
 		 FROM moved WHERE contracts.engagement_id = moved.engagement_id AND contracts.status <> 'voided'`
 	);

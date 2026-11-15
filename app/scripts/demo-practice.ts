@@ -522,6 +522,7 @@ async function seedInvoiceBook(
 	);
 	const billed = tail.filter((client, index) => !offered.has(client.engagementId) && !isCareFinished(index, client));
 	const moves: { invoiceId: string; days: number }[] = [];
+	const signed: { engagementId: string; days: number; signedAfter: number }[] = [];
 	const onStripe: { invoiceId: string; paymentOnItsWay: boolean }[] = [];
 	for (const [index, client] of billed.entries()) {
 		const invoices = BOOK_INVOICES[index];
@@ -540,7 +541,11 @@ async function seedInvoiceBook(
 			engagementId: client.engagementId,
 			email
 		};
-		await contractFor(request, roster, today, engagement, await portalSessionFor(request, roster, engagement));
+		await contractFor(request, roster, today, engagement, await portalSessionFor(request, roster, engagement), {
+			sender: index % 2 === 1 ? roster.staff.dee.headers : undefined
+		});
+		const oldestInvoice = Math.max(0, ...invoices.map((invoice) => invoice.raisedDaysAgo ?? 0));
+		signed.push({ engagementId: client.engagementId, days: Math.max(oldestInvoice + 2, 3 + ((index * 11) % 68)), signedAfter: 1 });
 		for (const invoice of invoices) {
 			const raisedDaysAgo = invoice.raisedDaysAgo ?? 0;
 			const { id } = await send<{ id: string }>(
@@ -582,6 +587,7 @@ async function seedInvoiceBook(
 		}
 	}
 	backdateInvoices(moves);
+	backdateContracts(signed);
 	seedStripeRail(onStripe);
 }
 
@@ -851,9 +857,13 @@ async function seedContractBook(
 	const { staff } = roster;
 	const newClient = (givenName: string, familyName: string, doula: string) =>
 		addClient(request, roster, today, { givenName, familyName, kind: 'postpartum' }, { doulaStaffId: staff[doula].staffId });
+	let sentCount = 0;
 	const sent = async (engagement: NamedEngagement) => {
 		await invitePortal(request, roster, engagement);
-		await contractFor(request, roster, today, engagement, undefined);
+		sentCount += 1;
+		await contractFor(request, roster, today, engagement, undefined, {
+			sender: sentCount % 2 === 0 ? staff.dee.headers : undefined
+		});
 	};
 	const waiting: { engagementId: string; days: number }[] = [];
 

@@ -11,7 +11,6 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientstanding"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/push"
 	"doula-cloud/api/internal/staffauth"
@@ -120,17 +119,8 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		if _, err := c.Tx.ExecContext(r.Context(),
-			`UPDATE contracts SET status = $1::contract_status, sent_at = $2, sent_by = $3 WHERE id = $4`,
-			string(StatusSent), clock.Now(r.Context()), c.StaffID, ct.ID,
-		); err != nil {
+		if !stampTransition(w, r, c, ct, `UPDATE contracts SET status = $1::contract_status, sent_at = $2, sent_by = $3 WHERE id = $4`, StatusSent, activity.ActionContractSent) {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractSent, nil); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

@@ -26,7 +26,7 @@
 import { apiFetch } from '#lib/api.js';
 import { hasAnyClient, loadDoulaCounts, type DoulaCounts } from '#lib/client.js';
 import { isAmbientContractor, isDoula, isOwner, isOwnerOrAdmin, opensOnMine, type LabeledValue } from '#lib/roles.js';
-import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
+import { loadDoulaRoster } from '#lib/staff.js';
 import { CLIENTS_READ } from '#lib/clientsRead.js';
 import type { PageLoad } from './$types';
 
@@ -78,15 +78,8 @@ async function hasMineFrom(counts: Promise<DoulaCounts | undefined>): Promise<bo
  * `hasAnyClientRecord` gives. A Doula is left out only when the counts were
  * read and hold nothing for her.
  */
-async function loadRoster(practiceId: string, fetcher: typeof globalThis.fetch): Promise<LabeledValue[]> {
-	try {
-		const response = await apiFetch(staffPath(practiceId), undefined, fetcher);
-		if (!response.ok) return [];
-		return doulaOptions(doulasOf((await response.json()) as Roster));
-	} catch {
-		return [];
-	}
-}
+const loadRoster = (practiceId: string, fetcher: typeof globalThis.fetch) =>
+	loadDoulaRoster((path, init) => apiFetch(path, init, fetcher), practiceId);
 
 async function holdingClients(roster: Promise<LabeledValue[]>, counts: Promise<DoulaCounts | undefined>): Promise<LabeledValue[]> {
 	const options = await roster;

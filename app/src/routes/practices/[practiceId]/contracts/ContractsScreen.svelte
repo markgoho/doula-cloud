@@ -5,9 +5,9 @@
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { triggerBlobDownload } from '#lib/blobDownload.js';
-	import { dueParts } from '#lib/client.js';
 	import {
 		CONTRACT_VIEW_TAGS,
+		careWhen,
 		CONTRACTS_RESULT_RULER,
 		NO_DOULA_FALLBACK,
 		contractOrderOf,
@@ -36,7 +36,7 @@
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { formatAmount } from '#lib/invoice.js';
 	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
-	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
+	import { keepListReturn, tallyListReturns } from '#lib/listReturn.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isAmbientContractor, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
@@ -146,16 +146,14 @@
 		shown = key;
 		contracts.reset(first);
 		book = first;
-		pagesLoaded = 1;
-		if (heldReturn && isQueueSettled) void restoreReturn(heldReturn);
+		returns.pagesLoaded = 1;
+		if (isQueueSettled && returns.held) void returns.restore(returns.held);
 	}
 
-	let pagesLoaded = 1;
-	let heldReturn: ListReturn | undefined;
-	let navigations = 0;
+	const returns = tallyListReturns(contracts, rowLink);
 	keepListReturn({
 		id: 'contracts-list',
-		pagesLoaded: () => pagesLoaded,
+		pagesLoaded: () => returns.pagesLoaded,
 		rowOf: (to) => {
 			if (to.hash.startsWith('#contract-')) return to.hash.slice('#contract-'.length);
 			if (to.hash.startsWith('#void-request-')) return `vr:${to.hash.slice('#void-request-'.length)}`;
@@ -163,33 +161,11 @@
 		},
 		restore: (back) => {
 			if (readFailure) return;
-			heldReturn = back;
-			if (isQueueSettled && !isReadPending && book && isSameKey(shown, wanted)) void restoreReturn(back);
+			returns.held = back;
+			if (isQueueSettled && !isReadPending && book && isSameKey(shown, wanted)) void returns.restore(back);
 		}
 	});
-	beforeNavigate(() => {
-		heldReturn = undefined;
-		navigations += 1;
-	});
-
-	async function didLoadMore(): Promise<boolean> {
-		const before = contracts.items.length;
-		await contracts.loadMore();
-		if (contracts.items.length === before) return false;
-		pagesLoaded += 1;
-		return true;
-	}
-
-	async function restoreReturn(back: ListReturn) {
-		heldReturn = undefined;
-		await restoreList(back, {
-			pagesLoaded: () => pagesLoaded,
-			navigations: () => navigations,
-			loadMore: didLoadMore,
-			inFlight: () => contracts.inFlight,
-			rowLink
-		});
-	}
+	beforeNavigate(returns.leave);
 
 	const rowDomId = (contractId: string, tableView: DataTableView) => `contract-row-${contractId}-${tableView}`;
 
@@ -228,18 +204,20 @@
 		try {
 			const first = await loadPracticeContracts(apiFetchWithSession, page.params.practiceId!, key);
 			if (thisSearch === latestSearch) adopt(first, key);
+		// jscpd:ignore-start -- the latest-search guard shares its state with this screen's own reactive reads; a helper would take five closures
 		} catch {
 			if (thisSearch === latestSearch) {
 				failedKey = key;
-				heldReturn = undefined;
+				returns.held = undefined;
 			}
 		} finally {
 			if (thisSearch === latestSearch) isSearching = false;
 		}
 	}
+	// jscpd:ignore-end
 	const isReadPending = $derived(appliedSearch === '' ? isReading : isSearching);
 	$effect(() => {
-		if (hasReadFailed) heldReturn = undefined;
+		if (hasReadFailed) returns.held = undefined;
 	});
 	const hasSearchFailed = $derived(isSameKey(failedKey, wanted) && !isSameKey(shown, wanted));
 	const readFailure = $derived(
@@ -280,9 +258,9 @@
 		}
 	}
 	$effect(() => {
-		if (!isQueueSettled || !heldReturn || !book || !isSameKey(shown, wanted)) return;
-		const back = heldReturn;
-		untrack(() => void restoreReturn(back));
+		if (!isQueueSettled || !book || !returns.held || !isSameKey(shown, wanted)) return;
+		const back = returns.held;
+		untrack(() => void returns.restore(back));
 	});
 
 	const doulaNameOf = (id: string) => doulas.find((each) => each.value === id)?.label ?? NO_DOULA_FALLBACK;
@@ -452,16 +430,15 @@
 			return contract.daysWaiting ? `Sent ${day}, waiting ${daysWaitingWords(contract.daysWaiting)}` : 'Sent today';
 		}
 		const word = `${contractStatusWord(contract.status)} ${day}`;
-		return contract.voidRequested ? `${word}, void requested` : word;
+		return contract.voidRequested ? `${word}, void asked` : word;
 	}
 
 	const doulaText = (contract: ContractListItem) =>
 		contract.doulaNames?.length ? contract.doulaNames.join(', ') : NO_DOULA_YET_LABEL;
 
 	function careText(contract: ContractListItem): string {
-		const { lead, day, postpartum } = dueParts(contract, timeZone, formatDay);
-		const when = postpartum || (day && lead ? `${lead} ${day}` : day);
-		return when ? `${kindLabel(contract.engagementKind)} · ${when}` : kindLabel(contract.engagementKind);
+		const { lead, day } = careWhen(contract, timeZone, formatDay);
+		return day ? `${kindLabel(contract.engagementKind)} · ${lead} ${day}` : kindLabel(contract.engagementKind);
 	}
 
 	const columns = $derived([
@@ -475,7 +452,7 @@
 		{
 			label: 'Sent by',
 			recordLabel: 'Sent by',
-			track: `calc(14ch + 2 * ${INSET})`,
+			track: `calc(12ch + 2 * ${INSET})`,
 			accessor: (contract: ContractListItem) => contract.sentByName ?? '',
 			content: sentByCell
 		},
@@ -556,7 +533,7 @@
 		{:else}
 			<span>{contractStatusWord(contract.status)} <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
 			{#if contract.voidRequested}
-				<Badge variant="warning" label="Void requested" />
+				<Badge variant="warning" label="Void asked" />
 			{/if}
 		{/if}
 	</span>
@@ -573,16 +550,16 @@
 {#snippet doulaCell(contract: ContractListItem, tableView: DataTableView)}
 	{@const names = contract.doulaNames ?? []}
 	{#if tableView === 'table' && names.length > 1}
-		<span aria-hidden="true">{names[0]} +{names.length - 1} more</span><span class="visually-hidden">{names.join(', ')}</span>
+		<span aria-hidden="true">{names[0]} +{names.length - 1}</span><span class="visually-hidden">{names.join(', ')}</span>
 	{:else}
 		{doulaText(contract)}
 	{/if}
 {/snippet}
 
 {#snippet careCell(contract: ContractListItem)}
-	{@const due = dueParts(contract, timeZone, formatDay)}
+	{@const due = careWhen(contract, timeZone, formatDay)}
 	<span class="no-break"
-		>{kindLabel(contract.engagementKind)}{#if due.postpartum}<span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span><time datetime={due.bornOn}>{due.postpartum}<span class="visually-hidden">, born {due.day}</span></time>{:else if due.day}<span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span><span class="lead">{due.lead}</span> {due.day}{:else}<span class="visually-hidden">, no due date</span>{/if}</span
+		>{kindLabel(contract.engagementKind)}{#if due.day}<span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span><span class="lead">{due.lead}</span> {due.day}{:else}<span class="visually-hidden">, no due date</span>{/if}</span
 	>
 {/snippet}
 
@@ -781,7 +758,7 @@
 						rowId={(contract, tableView) => rowDomId(contract.contractId, tableView)}
 						{rowLinkLabel}
 						hasMore={contracts.hasMore}
-						onLoadMore={didLoadMore}
+						onLoadMore={returns.didLoadMore}
 						isLoadingMore={contracts.isLoadingMore}
 						loadMoreError={contracts.loadMoreError}
 						emptyMessage={isBookEmpty ? emptyBookWords : resultSummary}
@@ -809,7 +786,7 @@
 		.queue {
 			display: flex;
 			flex-direction: column;
-			gap: var(--space-2);
+			gap: var(--space-1);
 			align-items: start;
 		}
 
@@ -819,7 +796,7 @@
 			list-style: none;
 			display: flex;
 			flex-direction: column;
-			gap: var(--space-1);
+			gap: 0;
 		}
 
 		.requests p {

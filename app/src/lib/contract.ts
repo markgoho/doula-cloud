@@ -10,6 +10,7 @@ import type { Fetcher } from './fetcher.js';
 import type { Stamp } from './stamp.js';
 
 import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
+import { dueParts, type DueParts } from './client.js';
 import { formatCalendarDay } from './dates.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
@@ -584,6 +585,11 @@ const STATUS_WORDS = { draft: 'Draft', sent: 'Sent', signed: 'Signed', voided: '
 
 export function contractStatusWord(status: ContractListItem['status']): string {
 	return STATUS_WORDS[status];
+}
+
+export function careWhen(line: Parameters<typeof dueParts>[0], timeZone: string, formatDay: (day: string) => string): DueParts {
+	const parts = dueParts(line, timeZone, formatDay);
+	return parts.postpartum ? { ...parts, lead: 'Born', postpartum: '' } : parts;
 }
 
 export function daysWaitingWords(days: number): string {

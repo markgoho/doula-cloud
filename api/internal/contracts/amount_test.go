@@ -68,23 +68,11 @@ func TestPostContractHandler_RemovedRateRefusedLikeNoRate(t *testing.T) {
 // the API refuses a Doula, employee or contractor, and admits an Admin,
 // not only an Owner, to override a Contract's amount.
 func TestPutContractAmountHandler_RefusedByRole(t *testing.T) {
-	cases := []struct {
-		name       string
-		staff      []fixture.StaffOption
-		wantStatus int
-	}{
-		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
-		{"employee doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.staff...))
-			e.seedDraft()
+	eachRole(t, refusedDoulaCases(), func(t *testing.T, e *env, wantStatus int) {
+		e.seedDraft()
 
-			reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), tc.wantStatus, e.SignedIn, amounting(20000))
-		})
-	}
+		reqtest.ExpectStatus(t, http.MethodPut, e.amountURL(), wantStatus, e.SignedIn, amounting(20000))
+	})
 }
 
 // TestPutContractAmountHandler_Success proves an Owner's override

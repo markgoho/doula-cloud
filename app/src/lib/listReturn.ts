@@ -56,6 +56,39 @@ export async function restoreList(
 	putListBack(back, list.rowLink);
 }
 
+export function tallyListReturns(
+	list: { items: readonly unknown[]; loadMore: () => Promise<void>; inFlight: Promise<void> | undefined },
+	rowLink: (rowId: string) => HTMLElement | undefined
+) {
+	const returns = {
+		pagesLoaded: 1,
+		navigations: 0,
+		held: undefined as ListReturn | undefined,
+		leave() {
+			returns.held = undefined;
+			returns.navigations += 1;
+		},
+		async didLoadMore(): Promise<boolean> {
+			const before = list.items.length;
+			await list.loadMore();
+			if (list.items.length === before) return false;
+			returns.pagesLoaded += 1;
+			return true;
+		},
+		async restore(back: ListReturn): Promise<void> {
+			returns.held = undefined;
+			await restoreList(back, {
+				pagesLoaded: () => returns.pagesLoaded,
+				navigations: () => returns.navigations,
+				loadMore: returns.didLoadMore,
+				inFlight: () => list.inFlight,
+				rowLink
+			});
+		}
+	};
+	return returns;
+}
+
 export interface ListReturn {
 	pages: number;
 	scrollY: number;

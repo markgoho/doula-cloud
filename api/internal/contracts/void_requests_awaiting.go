@@ -8,10 +8,8 @@ import (
 	"time"
 
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
-	"doula-cloud/api/internal/practicetimezone"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -52,12 +50,10 @@ type VoidRequestsAwaitingResponse struct {
 func VoidRequestsAwaitingHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
 		ctx := r.Context()
-		zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
-		if err != nil {
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		zone, now, ok := practiceZoneAndNow(w, r, c)
+		if !ok {
 			return
 		}
-		now := clock.Now(ctx)
 
 		page, ok := pagecursor.Fetch(w, r, pagecursor.MsgInvalidCursor, voidRequestsAwaitingPageSize,
 			func(after *pagecursor.Cursor) ([]VoidRequestAwaitingItem, error) {

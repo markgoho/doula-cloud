@@ -35,8 +35,7 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("PUT /api/practices/{practiceId}/contract-template",
 		"upsert (ON CONFLICT ... DO UPDATE); replaces the template wholesale, so re-sending the same body is a no-op",
 		false, staffauth.OwnerOnly, PutTemplateHandler())
-	// The Practice-wide Contracts list (#2749, replacing #426's
-	// "awaiting-signature" roll-up): every Contract the reader can open, by
+	// The Practice-wide Contracts list (#2749): every Contract the reader can open, by
 	// view. AnyStaff, with the contractor's attachment narrowing, and the
 	// withholding of her amount and Signed PDF, enforced inside the
 	// handler's own query and shaping (#973, ADR-0008).

@@ -11,23 +11,13 @@ import {
 } from '#lib/contract.js';
 import { canNarrowToMine, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
 import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
-import { doulaOptions, doulasOf, staffPath, type Roster } from '#lib/staff.js';
+import { loadDoulaRoster } from '#lib/staff.js';
 import type { PageLoad } from './$types';
 
 export interface ContractsPageData {
 	read: Promise<StreamedRead<ContractsListData>>;
 	voidRequests?: Promise<StreamedRead<VoidRequestsPage>>;
 	doulas: Promise<LabeledValue[]>;
-}
-
-async function loadRoster(practiceId: string, fetcher: typeof globalThis.fetch): Promise<LabeledValue[]> {
-	try {
-		const response = await apiFetch(staffPath(practiceId), undefined, fetcher);
-		if (!response.ok) return [];
-		return doulaOptions(doulasOf((await response.json()) as Roster));
-	} catch {
-		return [];
-	}
 }
 
 // `GET .../contracts` is `anyStaff`; the void-requests read and the roster are Owner and Admin only.
@@ -46,6 +36,6 @@ export const load: PageLoad = async ({ params, url, fetch, depends, parent }): P
 			(contracts) => ({ ...contracts, view, order, isMine, doula, now })
 		),
 		voidRequests: isQueueRead ? streamRead<VoidRequestsPage>(practiceVoidRequestsPath(params.practiceId), fetch) : undefined,
-		doulas: isQueueRead ? loadRoster(params.practiceId, fetch) : Promise.resolve([])
+		doulas: isQueueRead ? loadDoulaRoster((path, init) => apiFetch(path, init, fetch), params.practiceId) : Promise.resolve([])
 	};
 };
