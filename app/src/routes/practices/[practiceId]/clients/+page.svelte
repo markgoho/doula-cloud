@@ -32,7 +32,7 @@
 	import type { ColumnOrder } from '#lib/headingOrder.js';
 	import { typedIn } from '#lib/typedIn.js';
 	import { clientsDownloadedWords, requestClientsExport } from '#lib/clientExport.js';
-	import { saveFile } from '#lib/csvExport.js';
+	import { CsvDownload } from '#lib/csvDownload.svelte.js';
 	import { isOwnerOrAdmin } from '#lib/roles.js';
 	import type { PracticeSession } from '../+layout.js';
 	import { RefusalError } from '#lib/formErrors.js';
@@ -60,6 +60,8 @@
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import ShowOnly from '#lib/components/molecules/ShowOnly.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import DownloadCsvButton from '#lib/components/molecules/DownloadCsvButton.svelte';
+	import DownloadCsvNotices from '#lib/components/molecules/DownloadCsvNotices.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
@@ -674,15 +676,9 @@
 	 * another try.
 	 */
 	const session = $derived((page.data as { session?: PracticeSession }).session);
-	let isScripted = $state(false);
-	onMount(() => {
-		isScripted = true;
-	});
-	let isExporting = $state(false);
-	let exportRefusal = $state('');
-	let downloaded = $state.raw<{ key: typeof shown; words: string }>();
-	const downloadedWords = $derived(loadedKey === filterKey && downloaded && downloaded.key === shown ? downloaded.words : '');
-	const isExportDrawn = $derived(isScripted && !isContractor && session !== undefined && isOwnerOrAdmin(session));
+	const csv = new CsvDownload<typeof shown>();
+	const downloadedWords = $derived(csv.wordsWhile((key) => loadedKey === filterKey && key === shown));
+	const isExportDrawn = $derived(csv.isScripted && !isContractor && session !== undefined && isOwnerOrAdmin(session));
 	// Drawn from the first frame so the title row never changes height when the list lands; there is nothing to download until it has.
 	const hasExportRows = $derived(isReady && !error && clients.items.length > 0);
 	const exportCount = $derived(clients.hasMore ? shownTotal : clients.items.length);
@@ -692,28 +688,23 @@
 			: `A spreadsheet of the ${exportCount} ${exportCount === 1 ? 'Client' : 'Clients'} this list shows.`
 	);
 	async function downloadCsv() {
-		isExporting = true;
-		exportRefusal = '';
-		downloaded = undefined;
-		const key = shown;
-		const result = await requestClientsExport(apiFetchWithSession, page.params.practiceId!, {
-			all: shown.showAll,
-			mine: shown.showMine,
-			owes: shown.showOwing,
-			noContract: shown.showNoContract,
-			doula: shown.doula,
-			name: shown.name,
-			due: shown.due,
-			dueFrom: shown.dueFrom,
-			dueTo: shown.dueTo,
-			order: shown.order
-		});
-		isExporting = false;
-		if ('refusal' in result) exportRefusal = result.refusal;
-		else {
-			saveFile(result.blob, result.filename);
-			downloaded = { key, words: clientsDownloadedWords(result.filename, result.count) };
-		}
+		await csv.run(
+			shown,
+			() =>
+				requestClientsExport(apiFetchWithSession, page.params.practiceId!, {
+					all: shown.showAll,
+					mine: shown.showMine,
+					owes: shown.showOwing,
+					noContract: shown.showNoContract,
+					doula: shown.doula,
+					name: shown.name,
+					due: shown.due,
+					dueFrom: shown.dueFrom,
+					dueTo: shown.dueTo,
+					order: shown.order
+				}),
+			clientsDownloadedWords
+		);
 	}
 
 	// ADR-0017: a pending Engagement Request shows on its Client's row.
@@ -1277,25 +1268,8 @@
 	{line.prefix}{#if !line.amount}<span aria-hidden="true">—</span><span class="visually-hidden">{NO_MONEY}</span>{#if line.state}<MoneyAmount amount="" state={line.state} />{/if}{:else if line.state}<MoneyAmount amount={line.amount} state={line.state} isTracked />{:else}<span class="no-break"><span class="lead">{line.lead}</span>&nbsp;{line.amount}</span>{/if}
 {/snippet}
 
-{#snippet downloadControl(noteId: string)}
-	<Button
-		label="Download CSV"
-		variant="secondary"
-		loading={isExporting}
-		ariaDisabled={!hasExportRows}
-		describedBy={noteId}
-		onClick={downloadCsv}
-	/>
-	<span class="visually-hidden" id={noteId}>{exportDescription}</span>
-{/snippet}
-
-{#snippet exportNotices()}
-	{#if exportRefusal}
-		<Notice variant="error" message={exportRefusal} />
-	{/if}
-	{#if downloadedWords}
-		<Notice variant="status" message={downloadedWords} />
-	{/if}
+{#snippet downloadControl()}
+	<DownloadCsvButton isExporting={csv.isExporting} hasRows={hasExportRows} description={exportDescription} onDownload={downloadCsv} isFlush />
 {/snippet}
 
 {#snippet actions()}
@@ -1326,7 +1300,7 @@
 			<Link href={startHref(page.params.practiceId!, 'clients')} label="Add a Client" variant="start" />
 		{/if}
 		{#if isExportDrawn}
-			<div class="export-button">{@render downloadControl('clients-export-note')}</div>
+			<div class="export-button">{@render downloadControl()}</div>
 		{/if}
 	</div>
 {/snippet}
@@ -1380,7 +1354,7 @@
 	     reads as apart from the controls and the count as part of the group. -->
 	<stack-l space="var(--space-related)">
 		<!-- Under the title row, with the button still there to try again. -->
-		{@render exportNotices()}
+		<DownloadCsvNotices refusal={csv.refusal} downloaded={downloadedWords} />
 		<!-- #2603: a contractor Doula is attached only through an Offer she accepted (ADR-0008), so the switch could never add a row to her list. -->
 		{#if !isContractor}
 			<FilterBar
@@ -1553,7 +1527,7 @@
 		<!-- Where the title row has no room for it beside the heading and the link, the button
 		     is here, so the first card stays on the first screen of a phone. -->
 		{#if isExportDrawn}
-			<div class="export-narrow">{@render downloadControl('clients-export-note-narrow')}</div>
+			<div class="export-narrow">{@render downloadControl()}</div>
 		{/if}
 	</stack-l>
 {/snippet}

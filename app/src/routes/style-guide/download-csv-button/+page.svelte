@@ -13,6 +13,11 @@
 	</section>
 
 	<section>
+		<h2>Flush</h2>
+		<DownloadCsvButton isExporting={false} hasRows isFlush description="A spreadsheet of the 41 Clients this list shows." onDownload={noop} />
+	</section>
+
+	<section>
 		<h2>Nothing to download</h2>
 		<DownloadCsvButton isExporting={false} hasRows={false} description="A spreadsheet of every Contract this list shows." onDownload={noop} />
 	</section>
