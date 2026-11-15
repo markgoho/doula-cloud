@@ -365,6 +365,7 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		return nil, fmt.Errorf("contracts: iterate list rows: %w", err)
 	}
 	if err := setRemindability(ctx, tx, items, zone, now); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
 	}
 	return items, nil
@@ -382,6 +383,7 @@ func setRemindability(ctx context.Context, tx *sql.Tx, items []ContractListItem,
 	}
 	emailed, err := clientsEmailedSince(ctx, tx, clientIDs, startOfDay(now, zone))
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
 	for i := range items {

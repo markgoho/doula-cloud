@@ -147,6 +147,7 @@ func emailedToday(ctx context.Context, c staffauth.Call) (bool, error) {
 	}
 	emailed, err := clientsEmailedSince(ctx, c.Tx, []string{clientID}, startOfDay(clock.Now(ctx), zone))
 	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, err
 	}
 	return emailed[clientID], nil
