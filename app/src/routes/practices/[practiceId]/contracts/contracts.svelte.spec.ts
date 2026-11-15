@@ -188,6 +188,8 @@ describe('the Signed PDF', () => {
 
 		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-3/contract/pdf');
 		await vi.waitFor(() => expect(downloads.click).toHaveBeenCalledOnce());
+		await expect.element(testPage.getByRole('status').filter({ hasText: 'Downloaded the Signed PDF for Quinn Bishop.' })).toBeVisible();
+		expect(downloads.click!.mock.contexts[0]).toHaveProperty('download', 'signed-contract-quinn-bishop.pdf');
 	});
 
 	it('says in place when it did not download', async () => {

@@ -33,6 +33,8 @@ import {
 	sendContract,
 	setMergeFieldValue,
 	signContract,
+	signedContractFilename,
+	signedPdfDownloadedWords,
 	voidContract,
 	voidRequestAsked,
 	voidRequestsHeading
@@ -376,6 +378,22 @@ describe('signContract', () => {
 		await expect(signContract(fetcher, 'eng-1', 'Jamie Doe', true)).rejects.toThrow(
 			'contract is not awaiting signature'
 		);
+	});
+});
+
+describe('signedContractFilename', () => {
+	it.each([
+		['Quinn Grier', 'signed-contract-quinn-grier.pdf'],
+		['Zoë  O’Brien-Núñez', 'signed-contract-zoe-o-brien-nunez.pdf'],
+		['  ', 'signed-contract.pdf']
+	])('names %j as %s', (name, filename) => {
+		expect(signedContractFilename(name)).toBe(filename);
+	});
+});
+
+describe('signedPdfDownloadedWords', () => {
+	it('names the Client', () => {
+		expect(signedPdfDownloadedWords('Quinn Grier')).toBe('Downloaded the Signed PDF for Quinn Grier.');
 	});
 });
 

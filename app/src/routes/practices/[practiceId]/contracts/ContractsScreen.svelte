@@ -19,6 +19,8 @@
 		contractsViewOf,
 		daysWaitingWords,
 		downloadSignedContractPdf,
+		signedContractFilename,
+		signedPdfDownloadedWords,
 		loadPracticeContracts,
 		loadPracticeVoidRequests,
 		orderForView,
@@ -403,14 +405,19 @@
 
 	let downloadingId = $state('');
 	let pdfRefusal = $state('');
+	let downloaded = $state.raw<{ key: ReadKey | undefined; words: string }>();
+	const downloadedWords = $derived(downloaded && downloaded.key === shown && isSameKey(shown, wanted) ? downloaded.words : '');
 	async function downloadPdf(contract: ContractListItem) {
 		downloadingId = contract.contractId;
 		pdfRefusal = '';
+		downloaded = undefined;
+		const key = shown;
 		try {
 			triggerBlobDownload(
 				await downloadSignedContractPdf(apiFetchWithSession, page.params.practiceId!, contract.engagementId),
-				'signed-contract.pdf'
+				signedContractFilename(contract.clientName)
 			);
+			downloaded = { key, words: signedPdfDownloadedWords(contract.clientName) };
 		} catch {
 			pdfRefusal = PDF_FAILED;
 		} finally {
@@ -685,7 +692,7 @@
 					onSubmit={applyFilters}
 					onChangeApply={applyOnChange}
 					legend="Choose which Contracts to show"
-					status={readFailure ? '' : resultSummary}
+					status={readFailure ? '' : [resultSummary, downloadedWords].filter(Boolean).join(' ')}
 					statusRuler={CONTRACTS_RESULT_RULER}
 					statusId={RESULT_ID}
 					empty={shown !== undefined && contracts.items.length === 0}

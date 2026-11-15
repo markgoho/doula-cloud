@@ -71,11 +71,12 @@ export class ListBack {
 
 	constructor(paths: () => Partial<Record<OriginList, string>>, here: () => string) {
 		afterNavigate(({ from }) => {
-			const found = originFrom(from?.url, paths());
+			const arrivedFrom: URL | null | undefined = from?.url;
+			const found = originFrom(arrivedFrom ?? undefined, paths());
 			if (found) {
 				this.origin = found;
 				this.#arrivedAt = location.href;
-			} else if (from?.url.pathname !== here()) {
+			} else if (arrivedFrom?.pathname !== here()) {
 				this.origin = undefined;
 			}
 		});

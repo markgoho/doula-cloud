@@ -587,6 +587,20 @@ export function contractStatusWord(status: ContractListItem['status']): string {
 	return STATUS_WORDS[status];
 }
 
+export function signedContractFilename(clientName: string): string {
+	const slug = clientName
+		.normalize('NFD')
+		.replaceAll(/[̀-ͯ]/g, '')
+		.toLowerCase()
+		.replaceAll(/[^a-z0-9]+/g, '-')
+		.replaceAll(/^-+|-+$/g, '');
+	return slug ? `signed-contract-${slug}.pdf` : 'signed-contract.pdf';
+}
+
+export function signedPdfDownloadedWords(clientName: string): string {
+	return `Downloaded the Signed PDF for ${clientName}.`;
+}
+
 export function careWhen(line: Parameters<typeof dueParts>[0], timeZone: string, formatDay: (day: string) => string): DueParts {
 	const parts = dueParts(line, timeZone, formatDay);
 	return parts.postpartum ? { ...parts, lead: 'Born', postpartum: '' } : parts;
