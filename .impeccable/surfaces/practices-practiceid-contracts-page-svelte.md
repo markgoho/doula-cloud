@@ -15,9 +15,9 @@ OWN-WORLD: The Staff world as `DESIGN.md` records it. One blue for links and the
 
 STORY: An office manager opens Contracts and reads, before reading a row, how many Contracts are not signed and which has waited longest. The Contract that was made and never sent is told apart from the one the Client is sitting on, because the next step differs: send it, or chase her. A void a Doula asked for is waiting at the top for the person who can decide it. An owner finds any Client's Contract, signed or not, without opening a filing cabinet or asking anyone. A Doula sees the Contracts of the births she is on.
 
-FIRST VIEWPORT: Top bar with the nav; title "Contracts"; the void requests waiting for a decision, when there are any and the reader may decide them; the filter bar above the result line; the list starting in the first screen at 1280px and 375px.
+FIRST VIEWPORT: Top bar with the nav; title "Contracts"; the void requests waiting for a decision, when there are any and the reader may decide them; the filter bar above the result line. With no request waiting, the list starts in the first screen at 1280px and 375px. With requests waiting, the first screen at 1280px holds every request, the bar and the result line, and the list starts under them; on a phone an Owner or Admin reads the requests first and the list below them (the founder, 2026-11-14: a request is a card that groups its facts, and a void is the one decision here that is not undone).
 
-FORM: The category standard (canon). No signature component: a list is not a record (ADR-0063).
+FORM: The category standard (canon). No signature component: a list is not a record (ADR-0063). No concept was rolled: a canon list takes its form from the lists already climbed.
 
 ## Where this screen differs from the climbed lists, and why
 
