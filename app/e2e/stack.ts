@@ -737,9 +737,9 @@ export function backdateEngagementStart(engagementId: string, days: number): voi
 }
 
 /**
- * Moves each Engagement's start and live Contract back `days`, with its sent, signed
+ * Moves each Engagement's start and live Contract back `days`, with its sent, opened, signed
  * and voided instants and the Activity rows of its own lifecycle (created,
- * priced, edited, sent, signed, voided), so the Contracts list reads a
+ * priced, edited, sent, opened, signed, voided), so the Contracts list reads a
  * Contract waiting since that day. A Contract is made
  * at the clock's now and no endpoint makes one in the past. A void request's
  * Activity is not touched: backdateVoidRequests moves it.
@@ -772,12 +772,13 @@ export function backdateContracts(moves: readonly { engagementId: string; days: 
 		     AND activity.subject_id = moved.engagement_id
 		     AND windows.engagement_id = moved.engagement_id AND windows.status <> 'voided'
 		     AND activity.created_at >= windows.lo AND activity.created_at < windows.hi
-		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed', 'contract_voided')
+		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_opened', 'contract_signed', 'contract_voided')
 		 )
 		 UPDATE contracts SET created_at = contracts.created_at - moved.shift,
 		   sent_at = contracts.sent_at - moved.shift,
 		   signed_at = contracts.signed_at - moved.shift + moved.wait,
-		   voided_at = contracts.voided_at - moved.shift
+		   voided_at = contracts.voided_at - moved.shift,
+		   opened_at = contracts.opened_at - moved.shift
 		 FROM moved WHERE contracts.engagement_id = moved.engagement_id AND contracts.status <> 'voided'`
 	);
 }

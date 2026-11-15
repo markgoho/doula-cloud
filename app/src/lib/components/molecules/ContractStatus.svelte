@@ -90,7 +90,7 @@
 		children
 	}: {
 		/**
-		When the Client first read it (#2952), absent until she has. Said only of a Sent Contract.
+		When the Client first opened it; said only of a Sent Contract.
 		*/
 		openedAt?: string;
 		/**

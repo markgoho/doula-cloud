@@ -52,8 +52,7 @@ var TransitionSend = Transition{Act: "send it", Requires: StatusDraft}
 // Sent Contract may be signed.
 var TransitionSign = Transition{Act: "sign it", Requires: StatusSent}
 
-// TransitionOpen is the Client's first read of a Contract (#2952): only a
-// Sent Contract is opened, and the move leaves it Sent.
+// TransitionOpen is the Client's open of a Contract: only a Sent one.
 var TransitionOpen = Transition{Act: "open it", Requires: StatusSent}
 
 // TransitionVoid is PostVoidContractHandler's precondition: only a Signed

@@ -841,7 +841,7 @@ function voidContract(request: APIRequestContext, roster: Roster, engagement: Na
 }
 
 // A Contract book for an agency (#2749), beside Grace's Sent Contract from
-// Priya's book: six Sent and three Draft Contracts of different ages on
+// Priya's book: six Sent (two the Client has opened) and three Draft Contracts of different ages on
 // Clients with no Contract yet, three void requests waiting on Dee and
 // Renata, one the Owner declined, and two Contracts Dee voided after a
 // request, one of them replaced by a new Draft. Its new Clients are
@@ -858,12 +858,20 @@ async function seedContractBook(
 	const newClient = (givenName: string, familyName: string, doula: string) =>
 		addClient(request, roster, today, { givenName, familyName, kind: 'postpartum' }, { doulaStaffId: staff[doula].staffId });
 	let sentCount = 0;
-	const sent = async (engagement: NamedEngagement) => {
-		await invitePortal(request, roster, engagement);
+	const sent = async (engagement: NamedEngagement, isOpened = false) => {
+		let portal: Session | undefined;
+		if (isOpened) {
+			portal = await portalSessionFor(request, roster, engagement);
+		} else {
+			await invitePortal(request, roster, engagement);
+		}
 		sentCount += 1;
 		await contractFor(request, roster, today, engagement, undefined, {
 			sender: sentCount % 2 === 0 ? staff.dee.headers : undefined
 		});
+		if (portal !== undefined) {
+			await send(request, 'POST', `/api/portal/engagements/${engagement.engagementId}/contract/open`, portal);
+		}
 	};
 	const waiting: { engagementId: string; days: number }[] = [];
 
@@ -877,7 +885,7 @@ async function seedContractBook(
 		[unsigned.tamsin, 5],
 		[noelle, 2]
 	] as const) {
-		await sent(engagement);
+		await sent(engagement, engagement === reeseBishop || engagement === unsigned.imogen);
 		waiting.push({ engagementId: engagement.engagementId, days });
 	}
 

@@ -5,6 +5,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import {
 		loadClientContract,
+		openContract,
 		signContract,
 		downloadClientSignedContractPdf,
 		type Contract
@@ -47,6 +48,20 @@
 	onMount(() =>
 		contractRead.load(() => loadClientContract(apiFetchWithSession, page.params.engagementId!), 'Failed to load contract')
 	);
+
+	let hasSentOpen = false;
+	async function recordOpen() {
+		try {
+			await openContract(apiFetchWithSession, page.params.engagementId!);
+		} catch {
+			// Not shown to her: the next visit records the open.
+		}
+	}
+	$effect(() => {
+		if (hasSentOpen || contract?.status !== 'sent') return;
+		hasSentOpen = true;
+		void recordOpen();
+	});
 
 	async function handleSign(fullLegalName: string, isAttestation: boolean) {
 		contractRead.set(

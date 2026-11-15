@@ -35,6 +35,10 @@ async function setup(respond: (path: string) => Promise<Response> | Response = t
 	await render(Page);
 }
 
+function opens() {
+	return apiFetchWithSession.mock.calls.filter(([path]) => String(path).endsWith('/open'));
+}
+
 describe('Client-portal Contract status (#212, NH-G5)', () => {
 	it('shows the register label for a sent Contract, not the raw enum', async () => {
 		await setup();
@@ -49,6 +53,37 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 		await expect
 			.element(page.getByText('Riverside Doula Collective can see that you have opened this contract.'))
 			.toBeVisible();
+	});
+
+	it('records the open once, only after the sent Contract is on screen (#2974)', async () => {
+		await setup();
+		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
+
+		await vi.waitFor(() => {
+			expect(opens()).toHaveLength(1);
+		});
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/portal/engagements/engagement-1/contract/open', {
+			method: 'POST'
+		});
+	});
+
+	it('records no open for a Contract that is not sent (#2974)', async () => {
+		await setup(() => jsonResponse({ ...contract, status: 'signed' }));
+		await expect.element(page.getByText('Signed', { exact: true })).toBeVisible();
+
+		expect(opens()).toHaveLength(0);
+	});
+
+	it('still shows the Contract when recording the open fails (#2974)', async () => {
+		await setup((path) =>
+			path.endsWith('/open') ? ({ ok: false, status: 500, text: () => Promise.resolve('x'), clone: () => ({}) } as Response) : jsonResponse(contract)
+		);
+
+		await expect.element(page.getByText('Ready for your signature')).toBeVisible();
+		await vi.waitFor(() => {
+			expect(opens()).toHaveLength(1);
+		});
+		expect(page.getByRole('alert').elements()).toHaveLength(0);
 	});
 
 	it('says nothing of opening once the Contract is signed (#2952)', async () => {
