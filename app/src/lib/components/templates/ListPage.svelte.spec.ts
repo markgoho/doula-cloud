@@ -190,4 +190,21 @@ describe('ListPage.svelte', () => {
 		expect(gap).toBeLessThan(sectionStep - 0.5);
 	});
 
+	it('sits the intro a related step under the title row, closer than the content is to the intro', async () => {
+		await setup({ intro: textSnippet('Work states are self-reported') });
+
+		const row = page.getByRole('heading', { level: 1 }).element().parentElement!;
+		const intro = page.getByText('Work states are self-reported').element().getBoundingClientRect();
+		const content = page.getByText('A table of Staff members').element().getBoundingClientRect();
+		const titleToIntro = intro.top - row.getBoundingClientRect().bottom;
+		const introToContent = content.top - intro.bottom;
+		const probe = document.createElement('div');
+		probe.style.cssText = 'position:absolute;block-size:var(--space-related)';
+		row.parentElement!.append(probe);
+		const relatedStep = probe.getBoundingClientRect().height;
+		probe.remove();
+		expect(Math.abs(titleToIntro - relatedStep)).toBeLessThanOrEqual(0.5);
+		expect(titleToIntro).toBeLessThan(introToContent - 0.5);
+	});
+
 });

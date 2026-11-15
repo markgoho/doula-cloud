@@ -90,18 +90,20 @@
 				     wraps under the title when the line runs out (ADR-0024).
 				     The row holds one action's height with or without one, so
 				     the title sits at the same place on every list. -->
-				<cluster-l class="title-row" space="var(--space-group)" align="center">
-					<Heading level={1} variant="page" text={title} />
-					{#if actions}
-						<div class="actions">{@render actions()}</div>
-					{/if}
-				</cluster-l>
+				<stack-l space="var(--space-related)">
+					<cluster-l class="title-row" space="var(--space-group)" align="center">
+						<Heading level={1} variant="page" text={title} />
+						{#if actions}
+							<div class="actions">{@render actions()}</div>
+						{/if}
+					</cluster-l>
 
-				{#if intro}
-					<!-- A stack, not a plain div (#2020): an intro of two
-					     paragraphs ran them together. -->
-					<stack-l class="intro" space="var(--space-related)">{@render intro()}</stack-l>
-				{/if}
+					{#if intro}
+						<!-- A stack, not a plain div (#2020): an intro of two
+						     paragraphs ran them together. -->
+						<stack-l class="intro" space="var(--space-related)">{@render intro()}</stack-l>
+					{/if}
+				</stack-l>
 
 				{@render content()}
 			</stack-l>
