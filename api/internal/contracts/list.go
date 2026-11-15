@@ -24,7 +24,6 @@ const listPageSize = 30
 
 const (
 	dayLayout            = "2006-01-02"
-	doulaNameSeparator   = "\x1f"
 	grantedAttachmentSQL = `EXISTS (SELECT 1 FROM engagement_attachments ea WHERE ea.engagement_id = e.id AND ea.staff_id = %s AND ea.state = 'granted')`
 )
 
@@ -46,6 +45,9 @@ type ContractListItem struct {
 	// it was sent, 0 for today.
 	DaysWaiting      *int     `json:"daysWaiting,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
+	MadeByName       string   `json:"madeByName,omitempty"`
+	VoidedByName     string   `json:"voidedByName,omitempty"`
+	DoulaIDs         []string `json:"doulaIds,omitempty"`
 	DueDate          string   `json:"dueDate,omitempty"`
 	PregnancyEndedOn string   `json:"pregnancyEndedOn,omitempty"`
 	BirthOutcome     string   `json:"birthOutcome,omitempty"`
@@ -198,8 +200,10 @@ const listFrom = `
 const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name, cl.family_name, e.kind::text, c.status::text,
 	       c.stepped_at, c.sent_at,
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
+	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
+	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by),
 	       to_char(e.due_date, 'YYYY-MM-DD'), to_char(e.pregnancy_ended_on, 'YYYY-MM-DD'), e.birth_outcome::text,
-	       (SELECT string_agg(s.name, E'\x1f' ORDER BY s.last_name, s.first_name)
+	       (SELECT ` + client.DoulaAgg + `
 	          FROM engagement_attachments ea
 	          JOIN staff s ON s.id = ea.staff_id
 	         WHERE ea.engagement_id = e.id AND ea.state = 'granted'),
@@ -277,11 +281,11 @@ func (q listQuery) read(ctx context.Context, tx *sql.Tx, practiceID string, afte
 	for rows.Next() {
 		var item ContractListItem
 		var givenName string
-		var preferredName, familyName, sentByName, dueDate, endedOn, outcome, doulas sql.NullString
+		var preferredName, familyName, sentByName, madeByName, voidedByName, dueDate, endedOn, outcome, doulas sql.NullString
 		var sentAt sql.NullTime
 		var amount int64
 		if err := rows.Scan(&item.ContractID, &item.EngagementID, &item.ClientID, &givenName, &preferredName, &familyName,
-			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &sentByName, &dueDate, &endedOn, &outcome, &doulas,
+			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
 			&amount, &item.HasSignedPDF, &item.VoidRequested, &item.sortName); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan list row: %w", err)
@@ -293,11 +297,13 @@ func (q listQuery) read(ctx context.Context, tx *sql.Tx, practiceID string, afte
 			item.DaysWaiting = &days
 		}
 		item.SentByName = sentByName.String
+		item.MadeByName = madeByName.String
+		item.VoidedByName = voidedByName.String
 		item.DueDate = dueDate.String
 		item.PregnancyEndedOn = endedOn.String
 		item.BirthOutcome = outcome.String
 		if doulas.Valid {
-			item.DoulaNames = strings.Split(doulas.String, doulaNameSeparator)
+			item.DoulaNames, item.DoulaIDs = client.SplitDoulas(doulas.String)
 		}
 		if q.ambient {
 			item.HasSignedPDF = false

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+	contractStepper,
+	nameWithInitial,
 	contractStatusText,
 	createContract,
 	declineContractVoidRequest,
@@ -780,5 +782,26 @@ describe('contractsResultSummary', () => {
 	it('holds room for the longest line it can say', () => {
 		expect(CONTRACTS_RESULT_RULER.length).toBeGreaterThan(summary().length);
 		expect(CONTRACTS_RESULT_RULER).toContain('D'.repeat(30));
+	});
+});
+
+describe('who took a Contract\u{2019}s step', () => {
+	it.each([
+		[{ status: 'draft', madeByName: 'Dee Whitlock' }, 'Made', 'Dee Whitlock'],
+		[{ status: 'sent', sentByName: 'Dee Whitlock' }, 'Sent', 'Dee Whitlock'],
+		[{ status: 'signed', sentByName: 'Dee Whitlock' }, 'Sent', 'Dee Whitlock'],
+		[{ status: 'voided', sentByName: 'Dee Whitlock', voidedByName: 'Renata Alvarez' }, 'Voided', 'Renata Alvarez']
+	] as const)('names %j', (contract, verb, name) => {
+		expect(contractStepper(contract)).toEqual({ verb, name });
+	});
+
+	it('names no one where the row holds no name for its step', () => {
+		expect(contractStepper({ status: 'draft' })).toBeUndefined();
+	});
+
+	it('shortens a name to its first words and a last initial', () => {
+		expect(nameWithInitial('Anne-Marie Ochieng-Whitfield')).toBe('Anne-Marie O.');
+		expect(nameWithInitial('Mary Ann Smith')).toBe('Mary Ann S.');
+		expect(nameWithInitial('Cher')).toBe('Cher');
 	});
 });

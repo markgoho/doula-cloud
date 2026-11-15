@@ -49,6 +49,24 @@ export interface Contract {
 	/** When the Contract was signed and the full legal name typed to sign
 	 * it (#2104). A voided Contract keeps it. */
 	signed?: Stamp;
+	/** The current Contract's id, which a list row's `#contract-<id>`
+	 * anchor names. Absent on a Client-portal read (#2958). */
+	id?: string;
+	/**
+	The voided Contracts this one replaced, newest first (#2958).
+	*/
+	earlier?: EarlierContract[];
+}
+
+/** A voided Contract the Engagement's current one replaced: the day, who
+ * voided it, and the granted request's asker and reason where there was
+ * one. Mirrors the Go BFF's EarlierContract. */
+export interface EarlierContract {
+	id: string;
+	voidedAt: string;
+	voidedBy?: string;
+	requestedBy?: string;
+	reason?: string;
 }
 
 /** One void request against a Contract (#971): who asked, when, why, and
@@ -383,10 +401,13 @@ export interface ContractListItem {
 	steppedOn: string;
 	daysWaiting?: number;
 	sentByName?: string;
+	madeByName?: string;
+	voidedByName?: string;
 	dueDate?: string;
 	pregnancyEndedOn?: string;
 	birthOutcome?: string;
 	doulaNames?: string[];
+	doulaIds?: string[];
 	amountCents?: number;
 	hasSignedPdf: boolean;
 	voidRequested: boolean;
@@ -485,6 +506,37 @@ export function contractOrderOptions(view: ContractsView): { value: ContractOrde
 		{ value: 'client', label: 'Client, A to Z' }
 	];
 }
+
+/**
+Who took the Contract's current step, and the verb for it (#2958): a Draft was made, a Sent or Signed one was sent, a Voided one voided.
+*/
+export function contractStepper(
+	contract: Pick<ContractListItem, 'status' | 'madeByName' | 'sentByName' | 'voidedByName'>
+): { verb: 'Made' | 'Sent' | 'Voided'; name: string } | undefined {
+	const [verb, name] =
+		contract.status === 'draft'
+			? (['Made', contract.madeByName] as const)
+			: (contract.status === 'voided'
+				? (['Voided', contract.voidedByName] as const)
+				: (['Sent', contract.sentByName] as const));
+	return name ? { verb, name } : undefined;
+}
+
+/**
+"Renata Alvarez" as "Renata A.", for a cell that holds one line.
+*/
+export function nameWithInitial(name: string): string {
+	const words = name.trim().split(/\s+/);
+	const last = words.at(-1)!;
+	return words.length > 1 ? `${words.slice(0, -1).join(' ')} ${last.charAt(0)}.` : name;
+}
+
+/**
+Every wording the Order select takes in any view, which sizes its cell once for all of them (#2958).
+*/
+export const EVERY_CONTRACT_ORDER_OPTION = (Object.keys(ORDER_LABELS) as ContractsView[]).flatMap((view) =>
+	contractOrderOptions(view)
+);
 
 export function contractOrderedBy(
 	order: ContractOrder,

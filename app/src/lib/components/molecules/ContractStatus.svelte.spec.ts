@@ -4,22 +4,26 @@ import { render } from 'vitest-browser-svelte';
 import ContractStatus, { PREVIOUS_CONTRACT_PDF_NOTICE, VOID_CONSEQUENCE } from './ContractStatus.svelte';
 import type { VoidRequestSummary } from '#lib/contract.js';
 
+// jscpd:ignore-start -- the spec's setup options restate the component's props
 interface SetupOptions {
 	status?: string;
 	hasSignedPdf?: boolean;
 	amountChangedAt?: string;
 	voidRequests?: VoidRequestSummary[];
+	viewerId?: string;
 	onVoid?: () => Promise<void>;
 	onDownloadPdf?: () => Promise<void>;
 	onRequestVoid?: (reason: string) => Promise<void>;
 	onDeclineVoidRequest?: (requestId: string, reason: string) => Promise<void>;
 }
+// jscpd:ignore-end
 
 async function setup({
 	status = 'draft',
 	hasSignedPdf = false,
 	amountChangedAt,
 	voidRequests,
+	viewerId,
 	onVoid,
 	onDownloadPdf,
 	onRequestVoid,
@@ -31,6 +35,7 @@ async function setup({
 		hasSignedPdf,
 		amountChangedAt,
 		voidRequests,
+		viewerId,
 		onVoid,
 		onDownloadPdf,
 		onRequestVoid,
@@ -360,7 +365,15 @@ describe('ContractStatus.svelte', () => {
 			await setup({ status: 'signed', onRequestVoid: vi.fn(), voidRequests: [openVoidRequest()] });
 
 			await expect.element(page.getByRole('button', { name: 'Request void' })).not.toBeInTheDocument();
-			await expect.element(page.getByRole('status')).toHaveTextContent('waiting for an owner or admin');
+			await expect
+				.element(page.getByRole('status'))
+				.toHaveTextContent('Void requested. Jamie Doula asked on Dec 31, 2025. An Owner or an Admin will decide.');
+		});
+
+		it('says "You asked" to the one who asked', async () => {
+			await setup({ status: 'signed', onRequestVoid: vi.fn(), viewerId: 'staff-1', voidRequests: [openVoidRequest()] });
+
+			await expect.element(page.getByRole('status')).toHaveTextContent('Void requested. You asked on Dec 31, 2025.');
 		});
 
 		it('shows a declined request as its own notice, with the decliner’s own reason', async () => {
@@ -392,7 +405,7 @@ describe('ContractStatus.svelte', () => {
 			});
 
 			await expect
-				.element(page.getByText('Jamie Doula asked to void this contract: the client rescheduled'))
+				.element(page.getByText('Jamie Doula asked on Dec 31, 2025 to void this Contract: the client rescheduled'))
 				.toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Decline' })).toBeVisible();
 		});

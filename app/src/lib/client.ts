@@ -85,6 +85,7 @@ export interface OpenEngagement {
 	 * Doula holds an open, granted attachment on it -- rendered as an
 	 * explicit state (`NO_DOULA_YET_LABEL`). */
 	doulaNames?: string[];
+	doulaIds?: string[];
 	/** Owner, Admin, or an employed Doula (ADR-0008's money row as
 	 * amended by #282) -- absent for a contractor Doula, even one
 	 * attached to this Engagement. */

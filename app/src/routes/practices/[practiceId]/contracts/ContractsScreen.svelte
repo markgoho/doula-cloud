@@ -17,7 +17,10 @@
 		contractsQueryString,
 		contractsResultSummary,
 		contractsViewOf,
+		contractStepper,
 		daysWaitingWords,
+		nameWithInitial,
+		EVERY_CONTRACT_ORDER_OPTION,
 		downloadSignedContractPdf,
 		signedContractFilename,
 		signedPdfDownloadedWords,
@@ -54,6 +57,7 @@
 	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
+	import DoulaNames from '#lib/components/molecules/DoulaNames.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
@@ -430,7 +434,8 @@
 	}
 
 	const INSET = 'var(--data-table-cell-inset)';
-	const NO_ONE_YET = 'No one yet';
+	const NO_ONE_ON_RECORD = 'No one on record';
+	const VOID_REQUESTED = 'void requested';
 	const formatDay = (day: string) => formatCalendarDayThisYear(day, timeZone, now);
 	const canDownload = (contract: ContractListItem) => contract.status === 'signed' && contract.hasSignedPdf;
 
@@ -441,7 +446,12 @@
 			return contract.daysWaiting ? `Sent ${day}, waiting ${daysWaitingWords(contract.daysWaiting)}` : 'Sent today';
 		}
 		const word = `${contractStatusWord(contract.status)} ${day}`;
-		return contract.voidRequested ? `${word}, void asked` : word;
+		return contract.voidRequested ? `${word}, ${VOID_REQUESTED}` : word;
+	}
+
+	function whoText(contract: ContractListItem): string {
+		const step = contractStepper(contract);
+		return step ? `${step.verb} by ${step.name}` : '';
 	}
 
 	const doulaText = (contract: ContractListItem) =>
@@ -460,17 +470,12 @@
 			accessor: statusText,
 			content: statusCell
 		},
-		...(shown?.view === 'draft'
-			? []
-			: [
-					{
-						label: 'Sent by',
-						recordLabel: 'Sent by',
-						track: `calc(12ch + 2 * ${INSET})`,
-						accessor: (contract: ContractListItem) => contract.sentByName ?? '',
-						content: sentByCell
-					}
-				]),
+		{
+			label: 'Who',
+			track: `calc(8ch + 2 * ${INSET})`,
+			accessor: whoText,
+			content: whoCell
+		},
 		...(shown?.doula
 			? []
 			: [
@@ -551,28 +556,32 @@
 		{:else}
 			<span>{contractStatusWord(contract.status)} <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
 			{#if contract.voidRequested}
-				<Badge variant="warning" label="Void asked" />
+				<Badge variant="warning" label="Void requested" />
 			{/if}
 		{/if}
 	</span>
 {/snippet}
 
-{#snippet sentByCell(contract: ContractListItem)}
-	{#if contract.sentByName}
-		{contract.sentByName}
+{#snippet whoCell(contract: ContractListItem, tableView: DataTableView)}
+	{@const step = contractStepper(contract)}
+	{#if step && tableView === 'table'}
+		<span class="no-break"
+			><span aria-hidden="true">{nameWithInitial(step.name)}</span><span class="visually-hidden">{whoText(contract)}</span></span
+		>
+	{:else if step}
+		{whoText(contract)}
 	{:else}
-		<span aria-hidden="true">—</span><span class="visually-hidden">{NO_ONE_YET}</span>
+		<span aria-hidden="true">—</span><span class="visually-hidden">{NO_ONE_ON_RECORD}</span>
 	{/if}
 {/snippet}
 
 {#snippet doulaCell(contract: ContractListItem, tableView: DataTableView)}
 	{@const names = contract.doulaNames ?? []}
-	{#if tableView === 'table' && names.length > 1}
-		<span aria-hidden="true">{names[0]} +{names.length - 1}</span><span class="visually-hidden">{names.join(', ')}</span>
-	{:else if tableView === 'record' && names.length > 0}
-		<span aria-hidden="true">Doula&nbsp;</span>{doulaText(contract)}
-	{:else}
+	{#if names.length === 0}
 		{doulaText(contract)}
+	{:else}
+		{#if tableView === 'record'}<span aria-hidden="true">Doula&nbsp;</span>{/if}
+		<DoulaNames {names} ids={contract.doulaIds} readerId={session.staffId} isTable={tableView === 'table'} />
 	{/if}
 {/snippet}
 
@@ -708,6 +717,7 @@
 					foldLabel="Filters and order"
 					order={{
 						options: contractOrderOptions(draftView),
+						alsoSizedBy: EVERY_CONTRACT_ORDER_OPTION,
 						value: draftOrder,
 						onChange: (value) => (draftOrder = value as ContractOrder)
 					}}

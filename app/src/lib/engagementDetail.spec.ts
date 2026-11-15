@@ -854,7 +854,7 @@ describe('yourFeeRows', () => {
 	it('puts the terms she accepted beside her fee (#2269)', () => {
 		expect(yourFeeRows({ amountCents: 45_000, acceptedOn: '2026-10-27', terms: 'Backup for the birth.' })).toEqual([
 			{ label: 'Your fee', value: '$450.00, the fee you accepted on Oct 27, 2026' },
-			{ label: 'Terms', value: 'Backup for the birth.' }
+			{ label: 'Your terms', value: 'Backup for the birth.' }
 		]);
 	});
 

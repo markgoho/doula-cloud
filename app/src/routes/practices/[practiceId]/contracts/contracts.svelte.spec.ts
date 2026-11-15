@@ -100,15 +100,31 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell(heard('Draft made Nov 8'))).toBeVisible();
 		await expect.element(cell(heard('Sent Nov 2, waiting 12 days'))).toBeVisible();
 		await expect.element(cell(heard('Sent today'))).toBeVisible();
-		await expect.element(cell(heard('Signed Dec 30, 2025 Void asked'))).toBeVisible();
+		await expect.element(cell(heard('Signed Dec 30, 2025 Void requested'))).toBeVisible();
 		await expect.element(cell(heard('Voided Nov 9'))).toBeVisible();
 	});
 
-	it('names the sender, or says no one has sent a Draft', async () => {
+	it('says who took each Contract’s step: who made a Draft, sent it, voided it', async () => {
 		await setup();
 
-		await expect.element(cell('Dee Whitlock').first()).toBeVisible();
-		await expect.element(cell('No one yet').first()).toBeVisible();
+		await expect.element(cell('Made by Dee Whitlock')).toBeVisible();
+		await expect.element(cell('Sent by Dee Whitlock').first()).toBeVisible();
+		await expect.element(cell('Voided by Dee Whitlock')).toBeVisible();
+	});
+
+	it('says no one is on record where a backfilled Contract has no name for its step', async () => {
+		await setup({
+			props: { ...ownerProperties, data: { ...data, items: [{ ...items[1]!, sentByName: undefined }] } }
+		});
+
+		await expect.element(cell('No one on record')).toBeVisible();
+	});
+
+	it('calls the reader You in the Doula cell, and keeps the other names for a screen reader', async () => {
+		await setup({ session: sessionOf(['doula'], { staffId: 'staff-7' }) });
+
+		await expect.element(cell(heard('You, Kimiko Nakashima'))).toBeVisible();
+		await expect.element(testPage.getByText('You +1')).toBeVisible();
 	});
 
 	it('names every Doula on the Engagement, the first and a count in view, and says none', async () => {
@@ -116,6 +132,7 @@ describe('the Practice-wide Contracts list rows', () => {
 
 		await expect.element(cell('Marisol Terrazas')).toBeVisible();
 		await expect.element(cell('Kimiko Nakashima, Joss Adeyemi')).toBeVisible();
+		await expect.element(testPage.getByText('Kimiko Nakashima +1')).toBeVisible();
 		await expect.element(cell('No Doula yet').first()).toBeVisible();
 	});
 
@@ -686,13 +703,13 @@ describe('coming back from an Engagement', () => {
 });
 
 describe('the columns each view draws', () => {
-	const HEADERS = ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee', 'Signed PDF'];
+	const HEADERS = ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Signed PDF'];
 	it.each([
-		['', 'not-signed', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
-		['?show=draft', 'draft', ['Client', 'Status', 'Doula', 'Care', 'Fee']],
-		['?show=sent', 'sent', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
-		['?show=signed', 'signed', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee', 'Signed PDF']],
-		['?show=voided', 'voided', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
+		['', 'not-signed', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
+		['?show=draft', 'draft', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
+		['?show=sent', 'sent', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
+		['?show=signed', 'signed', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Signed PDF']],
+		['?show=voided', 'voided', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
 		['?show=all', 'all', HEADERS]
 	])('draws only the columns that can hold something in %j', async (query, view, drawn) => {
 		await setup({ query, props: { ...ownerProperties, data: { ...data, view } } });

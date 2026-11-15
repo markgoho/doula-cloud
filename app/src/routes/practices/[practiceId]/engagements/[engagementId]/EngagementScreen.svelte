@@ -93,6 +93,7 @@
 		type Instance
 	} from '#lib/planInstance.js';
 	import ContractForm from '#lib/components/molecules/ContractForm.svelte';
+	import EarlierContracts from '#lib/components/molecules/EarlierContracts.svelte';
 	import ContractStatus from '#lib/components/molecules/ContractStatus.svelte';
 	import ContractView from '#lib/components/molecules/ContractView.svelte';
 	import {
@@ -2103,6 +2104,8 @@
 		if (isLandingOnContract) {
 			await tick();
 			landOnSection('contract');
+			const earlierId = /^#(contract-.+)$/.exec(page.url.hash)?.[1];
+			if (earlierId) document.querySelector<HTMLElement>(`#${CSS.escape(earlierId)}`)?.scrollIntoView({ block: 'start' });
 		}
 
 		// #61: an open service worker push message ("a new Message arrived
@@ -3085,6 +3088,7 @@
 				hasSignedPdf={contract.hasSignedPdf}
 				amountChangedAt={contract.amountChangedAt}
 				voidRequests={contract.voidRequests}
+				viewerId={data.session.staffId}
 				sent={contract.sent}
 				signed={contract.signed}
 				rows={contractFeeRows}
@@ -3101,7 +3105,13 @@
 					before sending it. #2004: behind a disclosure, closed, so the
 					section is its facts first and the text is one press away.
 				-->
-				<Details summary="Read the Contract text">
+				<Details summary={canReadContractMoney ? 'Read the Contract text' : 'Read the Client’s Contract text'}>
+					{#if !canReadContractMoney}
+						<Text
+							text="This is the Contract the Client signs with the Practice. What you agreed to is listed above."
+							tone="muted"
+						/>
+					{/if}
 					<ContractView prose={contract.prose} values={contract.values} />
 				</Details>
 				{#if contract.status === 'draft'}
@@ -3145,6 +3155,9 @@
 					</cluster-l>
 				{/if}
 			</ContractStatus>
+			{#if contract.earlier}
+				<EarlierContracts earlier={contract.earlier} {timeZone} />
+			{/if}
 			{#if contract.status === 'voided'}
 				<!--
 					#2260: a voided Contract ends nothing about the Engagement, and
