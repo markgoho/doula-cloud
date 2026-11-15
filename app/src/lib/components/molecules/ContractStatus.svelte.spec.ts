@@ -454,6 +454,25 @@ describe('ContractStatus.svelte', () => {
 			expect(onDeclineVoidRequest).not.toHaveBeenCalled();
 		});
 
+		it('states the limit on the decline form and refuses a reason past it without calling onDeclineVoidRequest', async () => {
+			const onDeclineVoidRequest = vi.fn();
+			await setup({
+				status: 'signed',
+				onDeclineVoidRequest,
+				voidRequests: [openVoidRequest()]
+			});
+
+			await page.getByRole('button', { name: 'Decline' }).click();
+			await expect.element(page.getByText('You can enter up to 120 characters')).toBeVisible();
+			await page.getByLabelText('Reason for declining').fill('a'.repeat(121));
+			await page.getByRole('button', { name: 'Decline' }).click();
+
+			await expect
+				.element(page.getByRole('alert'))
+				.toHaveTextContent('Use 120 characters or fewer for the reason');
+			expect(onDeclineVoidRequest).not.toHaveBeenCalled();
+		});
+
 		it('calls onDeclineVoidRequest with the request id and typed reason on success', async () => {
 			const onDeclineVoidRequest = vi.fn().mockResolvedValue(undefined);
 			await setup({
