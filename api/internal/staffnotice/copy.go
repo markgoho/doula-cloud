@@ -84,6 +84,34 @@ func visitReassignedToText(link string) string {
 		"If you have questions, reply to this email.\n"
 }
 
+// voidCopies is the mail about a Contract's void request (#2953), by kind,
+// with the status the request must still have for it to be true.
+// ADR-0009 and ADR-0028 as putOnEngagementText keeps them: no Client,
+// colleague, Practice or reason. The Engagement page, one sign-in away,
+// names the Client and the Doula and holds the decline's reason beside the
+// request.
+var voidCopies = map[Kind]struct{ status, subject, sentence string }{
+	KindVoidRequested: {
+		"open", "A void request is waiting on DoulaCloud",
+		"A doula at your practice asked for a contract to be voided on DoulaCloud. This link opens that client's page at your practice, where her request is:",
+	},
+	KindVoidDeclined: {
+		"declined", "A void request was declined on DoulaCloud",
+		"Your request to void a contract at your practice on DoulaCloud was declined. This link opens that client's page at your practice, where the reason is:",
+	},
+	KindVoidGranted: {
+		"voided", "A contract you asked to void was voided on DoulaCloud",
+		"The contract you asked to void at your practice on DoulaCloud was voided. This link opens that client's page at your practice:",
+	},
+}
+
+func voidText(sentence, link string) string {
+	return "Hello,\n\n" +
+		sentence + "\n\n" +
+		link + "\n\n" +
+		"If you have questions, reply to this email.\n"
+}
+
 func visitReassignedFromText(link string, isEndedContractor bool) string {
 	if isEndedContractor {
 		return "Hello,\n\n" +
