@@ -21,6 +21,7 @@ import (
 	"doula-cloud/api/internal/billing"
 	"doula-cloud/api/internal/client"
 	"doula-cloud/api/internal/clientauth"
+	"doula-cloud/api/internal/contractnotice"
 	"doula-cloud/api/internal/dbpool"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/feedback"
@@ -250,7 +251,7 @@ func main() {
 	// worker literals by hand. platformMailer is Platform voice
 	// (ADR-0009/ADR-0011); practiceVoiceMailer is the one derived copy,
 	// swapping in the Client portal invite's noreply@ ReplyTo -- the only
-	// kind that speaks Practice voice.
+	// kinds that speak Practice voice: the invite and the Contract notices.
 	platformMailer := outbox.Mailer{
 		Sender: mailgunSender, Now: now, AppBaseURL: appBaseURL,
 		From: notificationsFrom, ReplyTo: supportReplyTo,
@@ -268,6 +269,7 @@ func main() {
 	staffInviteOutboxWorker := staffinvite.NewWorker(platformMailer)
 	offerOutboxWorker := offer.Worker{Mailer: platformMailer}
 	staffNoticeOutboxWorker := staffnotice.NewWorker(platformMailer)
+	contractNoticeOutboxWorker := contractnotice.NewWorker(practiceVoiceMailer)
 	engagementRequestOutboxWorker := engagementrequest.NewWorker(platformMailer)
 	// #613: verification/reset mail resolves its recipient live via the
 	// Admin SDK (verifier also satisfies authn.AccountManager) rather
@@ -383,6 +385,7 @@ func main() {
 		StaffInviteWorker:       staffInviteOutboxWorker,
 		OfferWorker:             offerOutboxWorker,
 		StaffNoticeWorker:       staffNoticeOutboxWorker,
+		ContractNoticeWorker:    contractNoticeOutboxWorker,
 		EngagementRequestWorker: engagementRequestOutboxWorker,
 		SiteBuildWorker:         siteBuildWorker,
 		PageVerifier:            pageVerifier,

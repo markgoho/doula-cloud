@@ -159,11 +159,11 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell(/Birth\s*,?\s*Born Oct 30/).first()).toBeVisible();
 	});
 
-	it('shows the fee and the Signed PDF column to a reader the PDF read serves', async () => {
+	it('shows the fee and the Action column (Signed PDF or reminder) to a reader the PDF read serves', async () => {
 		await setup();
 
 		await expect.element(testPage.getByRole('columnheader', { name: 'Fee', exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('columnheader', { name: 'Signed PDF', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('columnheader', { name: 'Action', exact: true })).toBeVisible();
 		await expect.element(cell('$1,500.00').first()).toBeVisible();
 	});
 
@@ -243,6 +243,51 @@ describe('the Signed PDF', () => {
 		await expect.element(testPage.getByRole('columnheader', { name: 'Signed PDF' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByRole('button', { name: /Download/ })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('$1,500.00')).not.toBeInTheDocument();
+	});
+});
+
+const sentName = items[1]!.clientName;
+const remindButton = () => testPage.getByRole('button', { name: `Remind the Client, ${sentName}` });
+
+describe('the reminder (#2951)', () => {
+
+	it('is offered on a sent row that can be reminded, and says when the Client was last reminded', async () => {
+		await setup();
+
+		await expect.element(remindButton()).toBeVisible();
+		await expect.element(testPage.getByText('Reminded Nov 13', { exact: false }).first()).toBeInTheDocument();
+	});
+
+	it('sends the reminder, then says so and takes the control away until tomorrow', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse({ status: 'sent', reminded: { at: '2026-11-15T15:00:00Z', by: 'Renata Alvarez' } }));
+		await setup();
+
+		await remindButton().click();
+
+		expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-2/contract/remind', { method: 'POST' });
+		await expect.element(testPage.getByRole('status').filter({ hasText: `Reminder sent for ${sentName}.` })).toBeVisible();
+		await expect.element(remindButton()).not.toBeInTheDocument();
+	});
+
+	it('says why in place when the reminder was refused', async () => {
+		apiFetchWithSession.mockResolvedValue(jsonResponse('This Client was already emailed about a Contract today. You can send a reminder tomorrow.', 409));
+		await setup();
+
+		await remindButton().click();
+
+		await expect.element(testPage.getByText('You can send a reminder tomorrow.', { exact: false })).toBeVisible();
+	});
+
+	it('is offered as a button on the card of a narrow list', async () => {
+		await setup({ width: 600 });
+
+		await expect.element(testPage.getByRole('button', { name: 'Remind the Client' })).toBeVisible();
+	});
+
+	it('is not offered on the Signed view, where nothing waits on the Client', async () => {
+		await setup({ query: '?show=signed' });
+
+		await expect.element(testPage.getByRole('columnheader', { name: 'Reminder' })).not.toBeInTheDocument();
 	});
 });
 
@@ -729,14 +774,14 @@ describe('coming back from an Engagement', () => {
 });
 
 describe('the columns each view draws', () => {
-	const HEADERS = ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Signed PDF'];
+	const HEADERS = ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Reminder', 'Signed PDF', 'Action'];
 	it.each([
-		['', 'not-signed', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
+		['', 'not-signed', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Reminder']],
 		['?show=draft', 'draft', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
-		['?show=sent', 'sent', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
+		['?show=sent', 'sent', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Reminder']],
 		['?show=signed', 'signed', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Signed PDF']],
 		['?show=voided', 'voided', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee']],
-		['?show=all', 'all', HEADERS]
+		['?show=all', 'all', ['Client', 'Status', 'Who', 'Doula', 'Care', 'Fee', 'Action']]
 	])('draws only the columns that can hold something in %j', async (query, view, drawn) => {
 		await setup({ query, props: { ...ownerProperties, data: { ...data, view } } });
 

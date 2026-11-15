@@ -22,6 +22,7 @@ var wantOutboxPaths = []string{
 	feedbackIssueOutboxPath,
 	idempotencySweepPath,
 	"/api/internal/notifications/process-connect-nudge-outbox",
+	contractNoticeOutboxPath,
 	"/api/internal/notifications/process-coverage-gap-outbox",
 	"/api/internal/notifications/process-engagement-request-outbox",
 	legalNoticeOutboxPath,
@@ -107,7 +108,8 @@ func TestOutboxRegistrations_NudgeTargetsAreDistinct(t *testing.T) {
 // because both its acts are inherently weeks out, and #1987's
 // idempotency sweep because a row is due for deletion 48 hours after
 // it was written and nobody waits on that, and #1381's welcome-credits
-// email because its fire time is fourteen days out, rather than letting some
+// email because its fire time is fourteen days out, and #2951's Contract notices
+// like the void notices to Staff, rather than letting some
 // other later outbox quietly join by leaving Nudge blank.
 func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 	var unnudged []string
@@ -122,7 +124,7 @@ func TestOutboxRegistrations_OnlyTheAuthMailOutboxesAreUnnudged(t *testing.T) {
 		staffEmailChangeOutboxPath, staffTokenMailOutboxPath,
 		portalMagicLinkOutboxPath, portalAddressChangeOutboxPath,
 		practiceDeletionOutboxPath, legalNoticeOutboxPath,
-		idempotencySweepPath, welcomeCreditsOutboxPath,
+		idempotencySweepPath, welcomeCreditsOutboxPath, contractNoticeOutboxPath,
 		webhookArrivalSweepPath,
 	}
 	sort.Strings(want)

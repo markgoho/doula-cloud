@@ -87,8 +87,19 @@
 		sent,
 		signed,
 		openedAt,
+		reminded,
+		onRemind,
 		children
 	}: {
+		/**
+		The latest reminder emailed to the Client and who sent it (#2951), absent until one has been.
+		*/
+		reminded?: Stamp;
+		/**
+		Emails the Client a reminder (#2951). Present exactly when a reminder is offered today: the page
+		decides, as it does for onVoid. A refusal it throws is shown here.
+		*/
+		onRemind?: () => Promise<void>;
 		/**
 		When the Client first opened it; said only of a Sent Contract.
 		*/
@@ -281,11 +292,29 @@
 						: { label: 'Opened', value: 'Not opened yet' }
 				]
 			: []),
+		...(status === 'sent' && reminded
+			? [{ label: 'Last reminded', value: stampText(reminded, timeZone), instant: reminded.at }]
+			: []),
 		...(amountChangedAt
 			? [{ label: 'Price changed', value: formatActivityTimestamp(amountChangedAt, timeZone), instant: amountChangedAt }]
 			: []),
 		...rows
 	]);
+
+	let isReminding = $state(false);
+	let remindError = $state('');
+
+	async function handleRemind() {
+		remindError = '';
+		isReminding = true;
+		try {
+			await onRemind!();
+		} catch (error_) {
+			remindError = error_ instanceof Error ? error_.message : 'Failed to send the reminder';
+		} finally {
+			isReminding = false;
+		}
+	}
 
 	// Same shape as handleVoid above: the page's onDownloadPdf does the
 	// fetch, Blob-to-object-URL conversion and the click that drives the
@@ -321,6 +350,15 @@
 </SummaryList>
 
 {@render children?.()}
+
+{#if status === 'sent' && onRemind}
+	<div>
+		<Button label="Remind the Client" variant="secondary" onClick={handleRemind} loading={isReminding} />
+	</div>
+	{#if remindError}
+		<p role="alert">{remindError}</p>
+	{/if}
+{/if}
 
 {#if hasSignedPdf && onDownloadPdf}
 	{#if isPreviousContractPdf}

@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/apierrtest"
 	"doula-cloud/api/internal/authntest"
 	"doula-cloud/api/internal/billing"
+	"doula-cloud/api/internal/contractnotice"
 	"doula-cloud/api/internal/engagementrequest"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/internalauth"
@@ -103,6 +104,7 @@ var testStaffInviteOutboxWorker = staffinvite.NewWorker(outbox.Mailer{Sender: &m
 var testOfferOutboxWorker = offer.Worker{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo}
 
 var testStaffNoticeOutboxWorker = staffnotice.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo})
+var testContractNoticeOutboxWorker = contractnotice.NewWorker(outbox.Mailer{Sender: &mail.FakeSender{}, Now: time.Now, AppBaseURL: testExpectedOrigin, From: testWorkerFrom, ReplyTo: testWorkerReplyTo})
 
 // testEngagementRequestOutboxWorker is every routes() test's stand-in for
 // the Engagement Request outbox worker (#398), the engagementrequest
@@ -164,6 +166,7 @@ func testDeps() Deps {
 		StaffInviteWorker:       testStaffInviteOutboxWorker,
 		OfferWorker:             testOfferOutboxWorker,
 		StaffNoticeWorker:       testStaffNoticeOutboxWorker,
+		ContractNoticeWorker:    testContractNoticeOutboxWorker,
 		EngagementRequestWorker: testEngagementRequestOutboxWorker,
 
 		NudgeEnqueuer:   testNudgeEnqueuer,

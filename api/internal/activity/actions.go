@@ -330,6 +330,12 @@ const (
 	// Contract (#2952), once, as her act. Staff-only on the ledger.
 	ActionContractOpened EngagementAction = "contract_opened"
 
+	// ActionContractReminded records a Staff member reminding the Client
+	// of her Sent Contract by email (#2951), one entry per reminder. In
+	// staffingActions below: the Practice's act of chasing, not a change
+	// to anything of hers.
+	ActionContractReminded EngagementAction = "contract_reminded"
+
 	// ActionContractPriced records a Contract's amount being set for the
 	// first time, at creation -- PostContractHandler's own write,
 	// alongside (never instead of) ActionContractCreated (#972). Diff
@@ -739,6 +745,8 @@ var staffingActions = map[EngagementAction]bool{
 	// #2520: a Draft she has not been sent.
 	ActionContractEdited: true,
 	ActionContractOpened: true,
+	// #2951: and a Staff member's reminder to her, which is the Practice's act.
+	ActionContractReminded: true,
 	// And an Invoice draft Stripe would not finalize: it never reached her.
 	ActionInvoiceNotSent: true,
 }

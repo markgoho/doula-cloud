@@ -24,6 +24,7 @@
 		nameWithInitial,
 		EVERY_CONTRACT_ORDER_OPTION,
 		downloadSignedContractPdf,
+		remindContract,
 		signedContractFilename,
 		signedPdfDownloadedWords,
 		loadPracticeContracts,
@@ -42,7 +43,7 @@
 	import { CsvDownload } from '#lib/csvDownload.svelte.js';
 	import { formatCalendarDayThisYear } from '#lib/dates.js';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
-	import { formatAmount } from '#lib/invoice.js';
+	import { calendarDayIn, formatAmount } from '#lib/invoice.js';
 	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
 	import { keepListReturn, tallyListReturns } from '#lib/listReturn.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
@@ -508,6 +509,26 @@
 		}
 	}
 
+	const REMIND_FAILED = 'The reminder did not send.';
+	let remindingId = $state('');
+	let remindRefusal = $state('');
+	let remindedWords = $state('');
+	async function remind(contract: ContractListItem) {
+		remindingId = contract.contractId;
+		remindRefusal = '';
+		remindedWords = '';
+		try {
+			const reminded = await remindContract(apiFetchWithSession, page.params.practiceId!, contract.engagementId);
+			contract.remindedOn = calendarDayIn(timeZone, new Date(reminded.reminded?.at ?? Date.now()));
+			contract.canRemind = false;
+			remindedWords = `Reminder sent for ${contract.clientName}.`;
+		} catch (error_) {
+			remindRefusal = error_ instanceof Error ? error_.message : REMIND_FAILED;
+		} finally {
+			remindingId = '';
+		}
+	}
+
 	const INSET = 'var(--data-table-cell-inset)';
 	const STATUS_STATE_TRACK = '9.5ch';
 	const STATUS_DAY_TRACK = '7ch';
@@ -546,6 +567,9 @@
 		return day ? `${kindLabel(contract.engagementKind)} · ${lead} ${day}` : kindLabel(contract.engagementKind);
 	}
 
+	const isRemindable = (contract: ContractListItem) => contract.status === 'sent';
+	const remindedText = (contract: ContractListItem) =>
+		contract.remindedOn ? `Reminded ${formatDay(contract.remindedOn)}` : '';
 	const columns = $derived([
 		{ label: 'Client', accessor: (contract: ContractListItem) => contract.clientName, grows: true, track: '16ch' },
 		{
@@ -588,15 +612,37 @@
 							contract.amountCents === undefined ? '' : formatAmount(contract.amountCents)
 					}
 				]),
-		...(isContractor || (shown?.view !== 'signed' && shown?.view !== 'all')
-			? []
-			: [
+		...(!isContractor && shown?.view === 'all'
+			? [
 					{
-						label: 'Signed PDF',
+						label: 'Action',
 						track: `calc(8ch + 2 * ${INSET})`,
-						accessor: (contract: ContractListItem) => (canDownload(contract) ? 'Download' : ''),
-						content: downloadCell
+						accessor: (contract: ContractListItem) =>
+							canDownload(contract) ? 'Download' : (isRemindable(contract) ? remindedText(contract) : ''),
+						content: actionCell
 					}
+				]
+			: [
+					...(shown?.view === 'not-signed' || shown?.view === 'sent' || shown?.view === 'all'
+						? [
+								{
+									label: 'Reminder',
+									track: `calc(6ch + 2 * ${INSET})`,
+									accessor: (contract: ContractListItem) => (isRemindable(contract) ? remindedText(contract) : ''),
+									content: reminderCell
+								}
+							]
+						: []),
+					...(isContractor || shown?.view !== 'signed'
+						? []
+						: [
+								{
+									label: 'Signed PDF',
+									track: `calc(8ch + 2 * ${INSET})`,
+									accessor: (contract: ContractListItem) => (canDownload(contract) ? 'Download' : ''),
+									content: downloadCell
+								}
+							])
 				])
 	]);
 
@@ -690,6 +736,46 @@
 	<span class="no-break"
 		>{kindLabel(contract.engagementKind)}{#if due.day}<span class="visually-hidden">, </span><span class="separator" aria-hidden="true">·</span><span class="lead">{due.lead}</span> {due.day}{:else}<span class="visually-hidden">, no due date</span>{/if}</span
 	>
+{/snippet}
+
+{#snippet remindWord()}<span aria-hidden="true">Remind</span>{/snippet}
+
+{#snippet reminderCell(contract: ContractListItem, tableView: DataTableView)}
+	{#if isRemindable(contract)}
+		<span class="reminder" title={tableView === 'table' && contract.remindedOn ? remindedText(contract) : undefined}>
+			{#if contract.remindedOn}
+				<span class:visually-hidden={tableView === 'table'}>{remindedText(contract)}</span>
+			{/if}
+			{#if contract.canRemind}
+				{#if tableView === 'table'}
+					<Button
+						variant="link"
+						iconOnly
+						visual={remindWord}
+						label={`Remind the Client, ${contract.clientName}`}
+						loading={remindingId === contract.contractId}
+						onClick={() => remind(contract)}
+					/>
+				{:else}
+					<Button
+						variant="secondary"
+						size="sm"
+						label="Remind the Client"
+						loading={remindingId === contract.contractId}
+						onClick={() => remind(contract)}
+					/>
+				{/if}
+			{/if}
+		</span>
+	{/if}
+{/snippet}
+
+{#snippet actionCell(contract: ContractListItem, tableView: DataTableView)}
+	{#if canDownload(contract)}
+		{@render downloadCell(contract, tableView)}
+	{:else}
+		{@render reminderCell(contract, tableView)}
+	{/if}
 {/snippet}
 
 {#snippet downloadWord()}<span aria-hidden="true">Download</span>{/snippet}
@@ -796,6 +882,12 @@
 		<DownloadCsvNotices refusal={csv.refusal} downloaded={csvWords} />
 		{#if pdfRefusal}
 			<Notice variant="error" message={pdfRefusal} />
+		{/if}
+		{#if remindRefusal}
+			<Notice variant="error" message={remindRefusal} />
+		{/if}
+		{#if remindedWords}
+			<Notice variant="status" message={remindedWords} isFocusedOnAppear />
 		{/if}
 		<stack-l class="bar-and-list" space="var(--space-related)">
 			{#if !isBookEmpty}
@@ -972,6 +1064,18 @@
 		}
 
 		:global(td) .no-break {
+			flex-wrap: nowrap;
+			white-space: nowrap;
+		}
+
+		.reminder {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: var(--space-1);
+		}
+
+		:global(td) .reminder {
 			flex-wrap: nowrap;
 			white-space: nowrap;
 		}

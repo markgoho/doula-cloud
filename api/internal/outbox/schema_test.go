@@ -70,8 +70,8 @@ func TestEverySharedOutboxHoldsTheDeclaredStates(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("iterate: %v", err)
 	}
-	if seen != 21 {
-		t.Errorf("found %d outbox tables on the shared lifecycle, want 21 (every outbox but site_build_outbox)", seen)
+	if seen != 22 {
+		t.Errorf("found %d outbox tables on the shared lifecycle, want 22 (every outbox but site_build_outbox)", seen)
 	}
 
 	var unvalidated string

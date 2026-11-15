@@ -34,6 +34,8 @@ import {
 	requestContractVoid,
 	saveContractValues,
 	openContract,
+	remindContract,
+	canRemind,
 	sendContract,
 	setMergeFieldValue,
 	signContract,
@@ -174,6 +176,51 @@ describe('sendContract', () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('contract is not a draft', 409));
 
 		await expect(sendContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow('contract is not a draft');
+	});
+});
+
+describe('remindContract', () => {
+	it('POSTs to the contract remind path and returns the decoded contract', async () => {
+		const contract = { engagementId: 'eng-1', status: 'sent', prose: '', mergeFields: [], values: {} };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(contract));
+
+		const result = await remindContract(fetcher, 'practice-1', 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/remind', {
+			method: 'POST'
+		});
+		expect(result).toEqual(contract);
+	});
+
+	it('throws with the refusal on a non-ok response', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse('This Client was already emailed about a Contract today.', 409));
+
+		await expect(remindContract(fetcher, 'practice-1', 'eng-1')).rejects.toThrow(
+			'This Client was already emailed about a Contract today.'
+		);
+	});
+});
+
+describe('canRemind', () => {
+	const now = new Date('2026-11-20T15:00:00Z');
+	const sentEarlier = { at: '2026-11-15T15:00:00Z', by: 'Dee Whitlock' };
+
+	it('offers a reminder on a Sent Contract sent and reminded before today', () => {
+		expect(canRemind({ status: 'sent', sent: sentEarlier }, 'UTC', now)).toBe(true);
+		expect(canRemind({ status: 'sent', sent: sentEarlier, reminded: { at: '2026-11-19T15:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(true);
+	});
+
+	it('does not offer one on any other status', () => {
+		for (const status of ['draft', 'signed', 'voided']) {
+			expect(canRemind({ status, sent: sentEarlier }, 'UTC', now)).toBe(false);
+		}
+	});
+
+	it('does not offer one on the day it was sent or reminded, by the Practice day rather than the UTC day', () => {
+		expect(canRemind({ status: 'sent', sent: { at: '2026-11-20T01:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(false);
+		expect(canRemind({ status: 'sent', sent: sentEarlier, reminded: { at: '2026-11-20T09:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(false);
+		const lateEvening = { at: '2026-11-20T03:00:00Z', by: 'Dee Whitlock' };
+		expect(canRemind({ status: 'sent', sent: lateEvening }, 'America/New_York', now)).toBe(true);
 	});
 });
 

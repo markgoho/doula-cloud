@@ -99,6 +99,46 @@ describe('ContractStatus.svelte', () => {
 		expect(page.getByText('Opened', { exact: true }).elements()).toHaveLength(0);
 	});
 
+	it('says when the Client was last reminded and by whom (#2951)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'America/New_York',
+			status: 'sent',
+			hasSignedPdf: false,
+			reminded: { at: '2026-11-13T15:04:05Z', by: 'Dee Whitlock' }
+		});
+
+		await expect.element(page.getByText('Last reminded')).toBeVisible();
+		await expect.element(page.getByText('by Dee Whitlock', { exact: false })).toBeVisible();
+	});
+
+	it('offers a reminder on a sent Contract and sends it when pressed (#2951)', async () => {
+		const onRemind = vi.fn().mockResolvedValue(undefined);
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
+
+		await page.getByRole('button', { name: 'Remind the Client' }).click();
+
+		expect(onRemind).toHaveBeenCalledOnce();
+	});
+
+	it.each([
+		['the reason a reminder was refused', new Error('This Client was already emailed about a Contract today.'), 'This Client was already emailed about a Contract today.'],
+		['a plain failure when the refusal is not an Error', 'nope', 'Failed to send the reminder']
+	])('shows %s beside the button (#2951)', async (_name, rejection, words) => {
+		const onRemind = vi.fn().mockRejectedValue(rejection);
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
+
+		await page.getByRole('button', { name: 'Remind the Client' }).click();
+
+		await expect.element(page.getByRole('alert')).toHaveTextContent(words);
+	});
+
+	it('offers no reminder without onRemind, or once the Contract is not sent (#2951)', async () => {
+		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false });
+		await render(ContractStatus, { timeZone: 'UTC', status: 'signed', hasSignedPdf: false, onRemind: vi.fn() });
+
+		expect(page.getByRole('button', { name: 'Remind the Client' }).elements()).toHaveLength(0);
+	});
+
 	it('says a voided Contract is no longer active', async () => {
 		await setup({ status: 'voided' });
 
