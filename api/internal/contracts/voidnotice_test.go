@@ -3,6 +3,7 @@ package contracts_test
 import (
 	"net/http"
 	"slices"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/contracts"
@@ -13,49 +14,26 @@ import (
 
 const kindVoidRequested = "void_requested"
 
-type queuedNotice struct{ recipient, kind, subject, triggeredBy string }
+// notice is one pending staff_notice_outbox row as the tests below read it:
+// kind, recipient, subject and the person who caused it.
+func notice(kind, recipient, subject, triggeredBy string) string {
+	return strings.Join([]string{kind, recipient, subject, triggeredBy}, " ")
+}
 
-func queuedNotices(t *testing.T, e *env) []queuedNotice {
+// expectQueued requires the pending Staff notices to be exactly want.
+func expectQueued(t *testing.T, e *env, want ...string) {
 	t.Helper()
-	rows, err := e.DB.Admin.QueryContext(t.Context(),
-		`SELECT recipient_staff_id, kind::text, subject_id, triggered_by_staff_id
-		   FROM staff_notice_outbox WHERE status = 'pending' ORDER BY kind, recipient_staff_id`)
-	if err != nil {
+	var joined string
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT COALESCE(string_agg(kind::text || ' ' || recipient_staff_id || ' ' || subject_id || ' ' || triggered_by_staff_id,
+		                            ',' ORDER BY kind::text, recipient_staff_id::text COLLATE "C"), '')
+		   FROM staff_notice_outbox WHERE status = 'pending'`).Scan(&joined); err != nil {
 		t.Fatalf("read staff_notice_outbox: %v", err)
 	}
-	defer func() { _ = rows.Close() }()
-	var out []queuedNotice
-	for rows.Next() {
-		var n queuedNotice
-		if err := rows.Scan(&n.recipient, &n.kind, &n.subject, &n.triggeredBy); err != nil {
-			t.Fatalf("scan: %v", err)
-		}
-		out = append(out, n)
+	slices.Sort(want)
+	if got := joined; got != strings.Join(want, ",") {
+		t.Fatalf("queued = %q, want %q", got, strings.Join(want, ","))
 	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("read rows: %v", err)
-	}
-	return out
-}
-
-func sortedNotices(n ...queuedNotice) []queuedNotice {
-	slices.SortFunc(n, func(a, b queuedNotice) int {
-		if a.kind != b.kind {
-			return compareStrings(a.kind, b.kind)
-		}
-		return compareStrings(a.recipient, b.recipient)
-	})
-	return n
-}
-
-func compareStrings(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
 }
 
 // #2953: a Doula asking for a void tells each Owner and Admin, in the
@@ -69,14 +47,10 @@ func TestPostVoidRequestHandler_TellsEachOwnerAndAdmin(t *testing.T) {
 
 	out := e.requestVoid("the client's plan changed", http.StatusCreated)
 
-	requestID := out.VoidRequests[0].ID
-	want := sortedNotices(
-		queuedNotice{owner.ID, kindVoidRequested, requestID, e.Staff.ID},
-		queuedNotice{admin.ID, kindVoidRequested, requestID, e.Staff.ID},
-	)
-	if got := queuedNotices(t, e); !slices.Equal(got, want) {
-		t.Fatalf("queued = %+v, want %+v", got, want)
-	}
+	id := out.VoidRequests[0].ID
+	expectQueued(t, e,
+		notice(kindVoidRequested, owner.ID, id, e.Staff.ID),
+		notice(kindVoidRequested, admin.ID, id, e.Staff.ID))
 }
 
 func TestPostVoidRequestHandler_DoesNotTellTheOwnerWhoAsked(t *testing.T) {
@@ -86,10 +60,7 @@ func TestPostVoidRequestHandler_DoesNotTellTheOwnerWhoAsked(t *testing.T) {
 
 	out := e.requestVoid("asking myself", http.StatusCreated)
 
-	want := []queuedNotice{{other.ID, kindVoidRequested, out.VoidRequests[0].ID, e.Staff.ID}}
-	if got := queuedNotices(t, e); !slices.Equal(got, want) {
-		t.Fatalf("queued = %+v, want %+v", got, want)
-	}
+	expectQueued(t, e, notice(kindVoidRequested, other.ID, out.VoidRequests[0].ID, e.Staff.ID))
 }
 
 func TestPostVoidRequestHandler_AContractorOnAGrantedAttachmentTellsThem(t *testing.T) {
@@ -100,10 +71,7 @@ func TestPostVoidRequestHandler_AContractorOnAGrantedAttachmentTellsThem(t *test
 
 	out := e.requestVoid("asking as a contractor", http.StatusCreated)
 
-	want := []queuedNotice{{owner.ID, kindVoidRequested, out.VoidRequests[0].ID, e.Staff.ID}}
-	if got := queuedNotices(t, e); !slices.Equal(got, want) {
-		t.Fatalf("queued = %+v, want %+v", got, want)
-	}
+	expectQueued(t, e, notice(kindVoidRequested, owner.ID, out.VoidRequests[0].ID, e.Staff.ID))
 }
 
 func TestPostVoidRequestHandler_ARefusedRequestTellsNobody(t *testing.T) {
@@ -113,9 +81,7 @@ func TestPostVoidRequestHandler_ARefusedRequestTellsNobody(t *testing.T) {
 
 	reqtest.ExpectStatus(t, http.MethodPost, e.voidRequestURL(), http.StatusBadRequest, e.SignedIn, reasoned(""))
 
-	if got := queuedNotices(t, e); len(got) != 0 {
-		t.Fatalf("queued = %+v, want none", got)
-	}
+	expectQueued(t, e)
 }
 
 // #2953: a decline tells the Doula who asked, not the one who declined,
@@ -130,10 +96,7 @@ func TestPostVoidRequestDeclineHandler_TellsTheDoulaWhoAsked(t *testing.T) {
 
 	e.decline(requestID, "not yet")
 
-	want := []queuedNotice{{asker.ID, "void_declined", requestID, e.Staff.ID}}
-	if got := queuedNotices(t, e); !slices.Equal(got, want) {
-		t.Fatalf("queued = %+v, want %+v", got, want)
-	}
+	expectQueued(t, e, notice("void_declined", asker.ID, requestID, e.Staff.ID))
 }
 
 func TestPostVoidRequestDeclineHandler_DoesNotTellTheOneWhoDeclinedHerOwn(t *testing.T) {
@@ -143,9 +106,7 @@ func TestPostVoidRequestDeclineHandler_DoesNotTellTheOneWhoDeclinedHerOwn(t *tes
 
 	e.decline(requestID, "changed my mind")
 
-	if got := queuedNotices(t, e); len(got) != 0 {
-		t.Fatalf("queued = %+v, want none", got)
-	}
+	expectQueued(t, e)
 }
 
 func TestPostVoidRequestDeclineHandler_ADecisionAlreadyMadeTellsNobodyAgain(t *testing.T) {
@@ -157,9 +118,7 @@ func TestPostVoidRequestDeclineHandler_ADecisionAlreadyMadeTellsNobodyAgain(t *t
 	e.decline(requestID, "not yet")
 	reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), http.StatusNotFound, e.SignedIn, reasoned("still not yet"))
 
-	if got := queuedNotices(t, e); len(got) != 1 {
-		t.Fatalf("queued = %+v, want the one", got)
-	}
+	expectQueued(t, e, notice("void_declined", asker.ID, requestID, e.Staff.ID))
 }
 
 // #2953: voiding the Contract tells every Doula whose request it closed.
@@ -173,13 +132,9 @@ func TestPostVoidContractHandler_TellsEachDoulaWhoAsked(t *testing.T) {
 
 	reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
 
-	want := sortedNotices(
-		queuedNotice{first.ID, "void_granted", firstID, e.Staff.ID},
-		queuedNotice{second.ID, "void_granted", secondID, e.Staff.ID},
-	)
-	if got := queuedNotices(t, e); !slices.Equal(got, want) {
-		t.Fatalf("queued = %+v, want %+v", got, want)
-	}
+	expectQueued(t, e,
+		notice("void_granted", first.ID, firstID, e.Staff.ID),
+		notice("void_granted", second.ID, secondID, e.Staff.ID))
 }
 
 func TestPostVoidContractHandler_DoesNotTellTheOwnerWhoAskedAndVoided(t *testing.T) {
@@ -189,7 +144,5 @@ func TestPostVoidContractHandler_DoesNotTellTheOwnerWhoAskedAndVoided(t *testing
 
 	reqtest.Expect[contracts.ContractResponse](t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
 
-	if got := queuedNotices(t, e); len(got) != 0 {
-		t.Fatalf("queued = %+v, want none", got)
-	}
+	expectQueued(t, e)
 }
