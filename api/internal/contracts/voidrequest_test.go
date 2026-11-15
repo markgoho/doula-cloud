@@ -120,12 +120,18 @@ func TestPostVoidRequestHandler_RefusesAReasonPastTheLimitInWordsThatSayIt(t *te
 	e := newEnv(t)
 	e.seedContract(statusSigned)
 
-	body := reqtest.ExpectBody(t, http.MethodPost, e.voidRequestURL(), http.StatusBadRequest, e.SignedIn,
-		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
+	e.expectReasonTooLong(e.voidRequestURL())
+}
 
+// expectReasonTooLong posts a reason one past the limit to url and expects
+// the 400 to name the reason field and the limit.
+func (e *env) expectReasonTooLong(url string) {
+	e.T.Helper()
+	body := reqtest.ExpectBody(e.T, http.MethodPost, url, http.StatusBadRequest, e.SignedIn,
+		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
 	want := fmt.Sprintf("Use %d characters or fewer for the reason", contracts.MaxVoidRequestReasonRunes)
 	if !strings.Contains(string(body), want) || !strings.Contains(string(body), `"reason"`) {
-		t.Fatalf("body = %s, want the reason field and %q", body, want)
+		e.T.Fatalf("body = %s, want the reason field and %q", body, want)
 	}
 }
 
@@ -348,12 +354,7 @@ func TestPostVoidRequestDeclineHandler_ReasonLimit(t *testing.T) {
 	e.seedContract(statusSigned)
 	requestID := e.openRequest()
 
-	body := reqtest.ExpectBody(t, http.MethodPost, e.declineURL(requestID), http.StatusBadRequest, e.SignedIn,
-		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
-	want := fmt.Sprintf("Use %d characters or fewer for the reason", contracts.MaxVoidRequestReasonRunes)
-	if !strings.Contains(string(body), want) || !strings.Contains(string(body), `"reason"`) {
-		t.Fatalf("body = %s, want the reason field and %q", body, want)
-	}
+	e.expectReasonTooLong(e.declineURL(requestID))
 
 	out := e.decline(requestID, strings.Repeat("é", contracts.MaxVoidRequestReasonRunes))
 	if got := onlyRequestOfASignedContract(t, out); got.Status != "declined" {
