@@ -78,7 +78,7 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page; "(s
 | A row peek or side panel | Declined | the row opens the Engagement at its Contract section, and Back restores the list; no job on record reads a Contract beside the list. One grader named it in round 1 |
 | Grouping, a calendar view | Declined | the views are the grouping, and a Contract book is not read by day |
 | Density and column choice | Declined | no job on record, and no column here is optional to a chaser; both readings accepted |
-| Keyboard shortcuts | Later (#2956) | one decision for the whole app, the founder's, on #2956 |
+| Keyboard shortcuts | Declined (#2956) | no persona asks for one on record; a single-key shortcut needs a setting to turn it off under WCAG 2.1.4; Tab and the browser find reach everything; revisit after the pilot |
 | Time zone shown | Have it | days only once the wait is a count of days; a time, where one shows, is the Practice's and says so (ADR-0036) |
 | The audit trail from the list | Have it | who sent it and when are on the row; the rest is the Engagement's Activity, which the row opens |
 

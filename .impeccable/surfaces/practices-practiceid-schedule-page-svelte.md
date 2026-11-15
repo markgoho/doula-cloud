@@ -45,7 +45,7 @@ Round 4's graders (2026-11-13) each wrote what they expected before reading this
 | Paging | Have it | "Load more"; the result line counts the rows shown and says whether more exist |
 | Bulk selection and bulk actions | Later | "Priya is ill" for a week is several Visits to move (`journeys/practice-owner.md:120`); it follows a row-level Reassign, which is declined below, so it waits with it |
 | Density and column choice | Declined | four columns leave nothing to choose |
-| Keyboard shortcuts | Later | one decision for the whole app, not one per list; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`) |
+| Keyboard shortcuts | Declined (#2956) | no persona asks for one on record, and a single-key shortcut such as `/` needs a setting to turn it off under WCAG 2.1.4; Tab, the search field label and the browser find reach everything; Dee is "the fastest typist in the Practice" (`personas/non-doula-admin.md:13`), which is not a request for one; revisit after the pilot with its own words |
 | A list-level export, print or copy | Later (#2871) | decided with the Invoices list's export (#2871); two of three graders found "no record of a printed cover sheet" weak for an office manager who prints a day's sheet |
 | Row actions without opening the record | Declined | Reassign needs the Engagement's own facts (who is attached, who may take the Visit), and the row opens it at that Visit with Reassign in view; one reading asked for Reassign on the row, the other accepted the decline |
 | A reader-chosen order (When: soonest or latest first) | Have it (#2869) | Linear and Stripe give the reader a chosen order beside the filters; soonest first stays the default; built 2026-11-13, an Order select in the bar and `aria-sort` on When |
