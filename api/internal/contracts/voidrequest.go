@@ -3,6 +3,7 @@ package contracts
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -10,8 +11,10 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/pgerr"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffnotice"
 )
 
 // msgVoidRequestReasonNeeded and msgVoidDeclineReasonNeeded are the two
@@ -140,6 +143,76 @@ func viewContract(w http.ResponseWriter, r *http.Request, c staffauth.Call, stat
 	})
 }
 
+// queueVoidRequestedNotices tells each Owner and Admin of the Practice,
+// other than the person who asked, that a request waits (#2953).
+func queueVoidRequestedNotices(ctx context.Context, c staffauth.Call, requestID string) error {
+	recipients, err := otherOwnersAndAdmins(ctx, c)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	for _, id := range recipients {
+		if err := staffnotice.Queue(ctx, c.Tx, staffnotice.Notice{
+			PracticeID:       c.PracticeID,
+			RecipientStaffID: id,
+			Kind:             staffnotice.KindVoidRequested,
+			SubjectID:        requestID,
+			TriggeredBy:      c.StaffID,
+		}); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return fmt.Errorf("contracts: queue void request notice: %w", err)
+		}
+	}
+	return nil
+}
+
+func otherOwnersAndAdmins(ctx context.Context, c staffauth.Call) ([]string, error) {
+	rows, err := c.Tx.QueryContext(ctx,
+		`SELECT staff_id FROM practice_memberships
+		  WHERE practice_id = $1 AND staff_id <> $2
+		    AND ('owner' = ANY(roles) OR 'admin' = ANY(roles))`,
+		c.PracticeID, c.StaffID,
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: list void request recipients: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("contracts: scan void request recipient: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: iterate void request recipients: %w", err)
+	}
+	return ids, nil
+}
+
+// queueVoidAnswer tells asker what became of her request, unless she is the
+// one who decided it (#2953).
+func queueVoidAnswer(ctx context.Context, c staffauth.Call, kind staffnotice.Kind, requestID, asker string) error {
+	if asker == c.StaffID {
+		return nil
+	}
+	if err := staffnotice.Queue(ctx, c.Tx, staffnotice.Notice{
+		PracticeID:       c.PracticeID,
+		RecipientStaffID: asker,
+		Kind:             kind,
+		SubjectID:        requestID,
+		TriggeredBy:      c.StaffID,
+	}); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return fmt.Errorf("contracts: queue void answer: %w", err)
+	}
+	return nil
+}
+
 // PostVoidRequestHandler is #971's own gap-filler: a Doula who reaches
 // :engagementId's Signed Contract at all -- an employee anywhere at the
 // Practice, a contractor on a granted attachment (AttachingWrite's reach
@@ -179,11 +252,13 @@ func PostVoidRequestHandler() http.Handler {
 			return
 		}
 
-		if _, err := c.Tx.ExecContext(r.Context(),
+		var requestID string
+		if err := c.Tx.QueryRowContext(r.Context(),
 			`INSERT INTO contract_void_requests (contract_id, engagement_id, practice_id, requested_by, reason)
-			 VALUES ($1, $2, $3, $4, $5)`,
+			 VALUES ($1, $2, $3, $4, $5)
+			 RETURNING id`,
 			ct.ID, c.EngagementID, c.PracticeID, c.StaffID, reason,
-		); err != nil {
+		).Scan(&requestID); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, msgVoidRequestAlreadyOpen, http.StatusConflict)
 				return
@@ -194,6 +269,12 @@ func PostVoidRequestHandler() http.Handler {
 		}
 
 		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractVoidRequested, nil); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+
+		if err := queueVoidRequestedNotices(r.Context(), c, requestID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
@@ -232,25 +313,26 @@ func PostVoidRequestDeclineHandler() http.Handler {
 			return
 		}
 
-		res, err := c.Tx.ExecContext(r.Context(),
+		var asker string
+		err := c.Tx.QueryRowContext(r.Context(),
 			`UPDATE contract_void_requests
-			    SET status = 'declined', decided_by = $1, decided_at = now(), decline_reason = $2
-			  WHERE id = $3 AND contract_id = $4 AND status = 'open'`,
-			c.StaffID, reason, c.ID("requestId"), ct.ID,
-		)
+			    SET status = 'declined', decided_by = $1, decided_at = $5, decline_reason = $2
+			  WHERE id = $3 AND contract_id = $4 AND status = 'open'
+			  RETURNING requested_by`,
+			c.StaffID, reason, c.ID("requestId"), ct.ID, clock.Now(r.Context()),
+		).Scan(&asker)
+		if errors.Is(err, sql.ErrNoRows) {
+			apierr.WriteError(w, msgVoidRequestNotFoundOrGone, http.StatusNotFound)
+			return
+		}
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		affected, err := res.RowsAffected()
-		if err != nil {
-			// coverage:ignore reason: driver always reports rows affected for an UPDATE, not exercised by unit tests
+		if err := queueVoidAnswer(r.Context(), c, staffnotice.KindVoidDeclined, c.ID("requestId"), asker); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if affected == 0 {
-			apierr.WriteError(w, msgVoidRequestNotFoundOrGone, http.StatusNotFound)
 			return
 		}
 

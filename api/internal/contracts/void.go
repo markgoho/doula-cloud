@@ -1,12 +1,64 @@
 package contracts
 
 import (
+	"context"
+	"fmt"
 	"net/http"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
+	"doula-cloud/api/internal/staffnotice"
 )
+
+// closeOpenVoidRequests marks every request still open against contractID
+// voided and tells each Doula who asked (#2953).
+func closeOpenVoidRequests(ctx context.Context, c staffauth.Call, contractID string) error {
+	closed, err := markOpenRequestsVoided(ctx, c, contractID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return err
+	}
+	for _, a := range closed {
+		if err := queueVoidAnswer(ctx, c, staffnotice.KindVoidGranted, a.id, a.by); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			return err
+		}
+	}
+	return nil
+}
+
+type closedRequest struct{ id, by string }
+
+func markOpenRequestsVoided(ctx context.Context, c staffauth.Call, contractID string) ([]closedRequest, error) {
+	rows, err := c.Tx.QueryContext(ctx,
+		`UPDATE contract_void_requests
+		    SET status = 'voided', decided_by = $1, decided_at = $3
+		  WHERE contract_id = $2 AND status = 'open'
+		  RETURNING id, requested_by`,
+		c.StaffID, contractID, clock.Now(ctx),
+	)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: close void requests: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	var closed []closedRequest
+	for rows.Next() {
+		var a closedRequest
+		if err := rows.Scan(&a.id, &a.by); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("contracts: scan closed void request: %w", err)
+		}
+		closed = append(closed, a)
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: iterate closed void requests: %w", err)
+	}
+	return closed, nil
+}
 
 // PostVoidContractHandler transitions the Contract for :engagementId from
 // 'signed' to 'voided' -- the only transition it permits; any other
@@ -47,12 +99,7 @@ func PostVoidContractHandler() http.Handler {
 		// grant. decline_reason stays NULL, which is what tells the
 		// requester (VoidRequests on her next GET) she got a void, not a
 		// decline.
-		if _, err := c.Tx.ExecContext(r.Context(),
-			`UPDATE contract_void_requests
-			    SET status = 'voided', decided_by = $1, decided_at = now()
-			  WHERE contract_id = $2 AND status = 'open'`,
-			c.StaffID, ct.ID,
-		); err != nil {
+		if err := closeOpenVoidRequests(r.Context(), c, ct.ID); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return

@@ -38,6 +38,16 @@ const (
 	KindVisitReassignedFrom Kind = "visit_reassigned_from"
 )
 
+// KindVoidRequested is a Doula asking for a Contract to be voided, told to
+// each Owner and Admin (#2953). KindVoidDeclined and KindVoidGranted are the
+// answer, told to the Doula who asked. Each subject is the
+// contract_void_requests row.
+const (
+	KindVoidRequested Kind = "void_requested"
+	KindVoidDeclined  Kind = "void_declined"
+	KindVoidGranted   Kind = "void_granted"
+)
+
 // Notice is one person to tell about one record.
 type Notice struct {
 	PracticeID       string
@@ -188,6 +198,26 @@ func compose(mailer outbox.Mailer) func(context.Context, *sql.Tx, pendingRow, ti
 				}
 				subject, text = visitReassignedFromSubject, visitReassignedFromText(link, isEnded)
 			}
+		case KindVoidRequested, KindVoidDeclined, KindVoidGranted:
+			engagementID, status, err := voidRequestState(ctx, tx, p.subjectID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			void := voidCopies[p.kind]
+			if engagementID == "" || status != void.status {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+			ok, err := p.mayOpenVoidRequest(ctx, tx, engagementID)
+			if err != nil {
+				// coverage:ignore reason: DB query failure, not exercised by unit tests
+				return "", "", "", err
+			}
+			if !ok {
+				return "", "", "", outbox.ErrAlreadyDone
+			}
+			link := mailer.AppBaseURL + "/practices/" + p.practiceID + "/engagements/" + engagementID + "#void-request-" + p.subjectID
+			subject, text = void.subject, voidText(void.sentence, link)
 		default:
 			// coverage:ignore reason: staff_notice_kind admits no value without a case here
 			return "", "", "", &outbox.DeadLetterError{Reason: "unknown staff notice kind " + string(p.kind)}
@@ -255,6 +285,34 @@ func visitHolder(ctx context.Context, tx *sql.Tx, visitID, staffID string) (stri
 		return "", false, fmt.Errorf("staffnotice: read visit: %w", err)
 	}
 	return engagementID, holder == staffID, nil
+}
+
+// voidRequestState reports the Engagement a void request is on and how it
+// stands, or no Engagement when it is gone. Read through
+// contract_void_requests' notification-worker policy (00179).
+func voidRequestState(ctx context.Context, tx *sql.Tx, requestID string) (string, string, error) {
+	var engagementID, status string
+	err := tx.QueryRowContext(ctx,
+		`SELECT engagement_id, status::text FROM contract_void_requests WHERE id = $1`, requestID,
+	).Scan(&engagementID, &status)
+	if err == sql.ErrNoRows {
+		return "", "", nil
+	}
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return "", "", fmt.Errorf("staffnotice: read void request: %w", err)
+	}
+	return engagementID, status, nil
+}
+
+// mayOpenVoidRequest rechecks, at send time, that the recipient can still
+// open the Engagement: an employee, Owner or Admin always can, and a
+// contractor who is neither only while she holds a granted Attachment.
+func (p pendingRow) mayOpenVoidRequest(ctx context.Context, tx *sql.Tx, engagementID string) (bool, error) {
+	if !p.isContractor {
+		return true, nil
+	}
+	return stillOn(ctx, tx, engagementID, p.recipientID)
 }
 
 // inZone is t in the Practice's own zone (ADR-0036), or UTC for a zone

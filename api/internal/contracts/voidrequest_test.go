@@ -42,9 +42,22 @@ func (e *env) requestVoid(reason string, want int) contracts.ContractResponse {
 
 // decline declines the request with a reason and returns the Contract it
 // answers with.
-func (e *env) decline(requestID, reason string, want int) contracts.ContractResponse {
+func (e *env) decline(requestID, reason string) contracts.ContractResponse {
 	e.T.Helper()
-	return reqtest.Expect[contracts.ContractResponse](e.T, http.MethodPost, e.declineURL(requestID), want, e.SignedIn, reasoned(reason))
+	return reqtest.Expect[contracts.ContractResponse](e.T, http.MethodPost, e.declineURL(requestID), http.StatusOK, e.SignedIn, reasoned(reason))
+}
+
+// onlyRequestOfASignedContract requires out to be a Contract still signed
+// with exactly one void request, and returns it.
+func onlyRequestOfASignedContract(t *testing.T, out contracts.ContractResponse) contracts.VoidRequestSummary {
+	t.Helper()
+	if out.Status != statusSigned {
+		t.Fatalf("contract status = %q, want unchanged at %q", out.Status, statusSigned)
+	}
+	if len(out.VoidRequests) != 1 {
+		t.Fatalf("voidRequests = %+v, want exactly one", out.VoidRequests)
+	}
+	return out.VoidRequests[0]
 }
 
 // TestPostVoidRequestHandler_RequiresSignedContract proves a void may
@@ -108,13 +121,7 @@ func TestPostVoidRequestHandler_Success(t *testing.T) {
 
 	out := e.requestVoid("the client's plan changed", http.StatusCreated)
 
-	if out.Status != statusSigned {
-		t.Fatalf("contract status = %q, want unchanged at %q", out.Status, statusSigned)
-	}
-	if len(out.VoidRequests) != 1 {
-		t.Fatalf("voidRequests = %+v, want exactly one", out.VoidRequests)
-	}
-	got := out.VoidRequests[0]
+	got := onlyRequestOfASignedContract(t, out)
 	if got.Status != "open" || got.Reason != "the client's plan changed" || got.RequestedBy != e.Staff.ID {
 		t.Fatalf("voidRequest = %+v, want open, reasoned, and attributed to %q", got, e.Staff.ID)
 	}
@@ -211,15 +218,9 @@ func TestPostVoidRequestDeclineHandler_Success(t *testing.T) {
 	// nobody else, which a single-person fixture can't discriminate.
 	requestID := e.seedVoidRequestBy(e.Colleague(fixture.Doula()), "asking")
 
-	out := e.decline(requestID, "not yet", http.StatusOK)
+	out := e.decline(requestID, "not yet")
 
-	if out.Status != statusSigned {
-		t.Fatalf("contract status = %q, want unchanged at %q", out.Status, statusSigned)
-	}
-	if len(out.VoidRequests) != 1 {
-		t.Fatalf("voidRequests = %+v, want exactly one", out.VoidRequests)
-	}
-	got := out.VoidRequests[0]
+	got := onlyRequestOfASignedContract(t, out)
 	if got.Status != "declined" || got.DeclineReason != "not yet" {
 		t.Fatalf("voidRequest = %+v, want declined with the decliner's reason", got)
 	}
@@ -237,7 +238,7 @@ func TestPostVoidRequestDeclineHandler_AlreadyResolved(t *testing.T) {
 	e.seedContract(statusSigned)
 	requestID := e.seedVoidRequestBy(e.Staff, "asking")
 
-	e.decline(requestID, "not yet", http.StatusOK)
+	e.decline(requestID, "not yet")
 	reqtest.ExpectStatus(t, http.MethodPost, e.declineURL(requestID), http.StatusNotFound, e.SignedIn, reasoned("still not yet"))
 }
 
