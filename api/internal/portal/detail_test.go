@@ -91,7 +91,7 @@ func TestDetailHandler_TotalToPayCents(t *testing.T) {
 
 	var contractID string
 	if err := e.DB.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, 'signed', 'Test prose', 15000) RETURNING id`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at) VALUES ($1, 'signed', 'Test prose', 15000, now(), now()) RETURNING id`,
 		e.Engagement.ID).Scan(&contractID); err != nil {
 		t.Fatalf("seed contract: %v", err)
 	}

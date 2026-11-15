@@ -68,7 +68,7 @@
 	} from '#lib/portalInvite.js';
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
-	import { landOnRow } from '#lib/landOnRow.js';
+	import { landOnRow, landOnSection } from '#lib/landOnRow.js';
 	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
 	import { formatGapTimes } from '#lib/coverageGap.js';
 	import CoverageGapWhen from '#lib/components/molecules/CoverageGapWhen.svelte';
@@ -220,6 +220,7 @@
 	);
 	// #2240: an Invoices list row links here with `#invoice-<id>`.
 	const landOnInvoiceId = $derived(/^#invoice-(.+)$/.exec(page.url.hash)?.[1]);
+	const isLandingOnContract = $derived(/^#(contract|void-request)-/.test(page.url.hash));
 
 	// #1998: the drawing's "← Clients" back link, to the Practice's
 	// Clients list, where every Engagement is reached from.
@@ -2098,6 +2099,11 @@
 			loadDoulaFeesSection(),
 			loadActivity()
 		]);
+
+		if (isLandingOnContract) {
+			await tick();
+			landOnSection('contract');
+		}
 
 		// #61: an open service worker push message ("a new Message arrived
 		// on this Engagement") triggers a refetch, the same content-free

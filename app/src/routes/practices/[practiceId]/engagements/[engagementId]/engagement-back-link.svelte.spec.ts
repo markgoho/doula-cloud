@@ -65,6 +65,14 @@ describe('the Engagement page back link (#2864)', () => {
 		await expect.element(back('Clients')).toHaveAttribute('href', `${practice}/clients`);
 	});
 
+	it('names the Clients list when the address was typed, where the navigation has no URL to come from', async () => {
+		await setup();
+
+		expect(() => navigation.afterNavigate?.({ from: { url: JSON.parse('null') as URL } })).not.toThrow();
+
+		await expect.element(back('Clients')).toHaveAttribute('href', `${practice}/clients`);
+	});
+
 	it('names the Schedule when opened from it, keeping the filters in its address', async () => {
 		await setup();
 		navigation.afterNavigate?.(arrivedFrom('/schedule?window=next30&mine=true'));
@@ -123,6 +131,33 @@ describe('the Engagement page back link (#2864)', () => {
 		await back('Back to Invoices').click();
 
 		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/invoices`, { state: { invoicesSearch: 'INV-0019' } });
+	});
+});
+
+describe('the Engagement page back link from Contracts', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+		navigation.goto.mockReset();
+		history.replaceState(undefined, '', location.pathname + location.search);
+	});
+
+	it('names Contracts and hands the list its search back once the page has moved', async () => {
+		await testPage.viewport(1280, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		const contractsBack = new ListBack(
+			() => ({ contracts: `${practice}/contracts` }),
+			() => pageState.url.pathname
+		);
+		await render(Page, { data: { ...fixtureDetail, session }, back: contractsBack });
+		holdListSearch('contracts', 'Quinn');
+		navigation.afterNavigate?.(arrivedFrom('/contracts?show=sent'));
+		history.replaceState(undefined, '', '#messages');
+
+		await back('Back to Contracts').click();
+
+		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/contracts?show=sent`, {
+			state: { contractsSearch: 'Quinn' }
+		});
 	});
 });
 

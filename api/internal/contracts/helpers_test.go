@@ -19,10 +19,36 @@ import (
 // Names of table rows that more than one table repeats, named once so
 // goconst does not see independent literals across this package's tests.
 const (
-	caseAdmin       = "admin"
-	caseBodyNotJSON = "body is not JSON"
-	caseNoContract  = "no contract"
+	caseAdmin         = "admin"
+	caseBodyNotJSON   = "body is not JSON"
+	caseNoContract    = "no contract"
+	caseEmployedDoula = "employed doula"
 )
+
+type roleCase struct {
+	name       string
+	staff      []fixture.StaffOption
+	wantStatus int
+}
+
+// refusedDoulaCases is the table's tail for a write only an Owner or an
+// Admin may make: an Admin is admitted and every Doula is refused.
+func refusedDoulaCases() []roleCase {
+	return []roleCase{
+		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
+		{caseEmployedDoula, []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
+		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
+	}
+}
+
+func eachRole(t *testing.T, cases []roleCase, body func(t *testing.T, e *env, wantStatus int)) {
+	t.Helper()
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			body(t, newEnv(t, signedInAs(tc.staff...)), tc.wantStatus)
+		})
+	}
+}
 
 // env is what a test in this package starts from: a Practice with this
 // package's whole surface mounted on a server, one Staff member at the

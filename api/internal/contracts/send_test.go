@@ -1,12 +1,14 @@
 package contracts_test
 
 import (
+	"database/sql"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
@@ -200,6 +202,30 @@ func TestPostSendContractHandler_Success(t *testing.T) {
 	}
 	if len(raw) != 1 {
 		t.Fatalf("push payload keys = %v, want only engagementId (body-free, no Contract content)", raw)
+	}
+}
+
+// TestPostSendContractHandler_RecordsWhenAndByWhomItWasSent proves Send
+// stamps the Contract with the instant it was sent, read from the clock,
+// and the Staff member who sent it, and leaves the void columns empty.
+func TestPostSendContractHandler_RecordsWhenAndByWhomItWasSent(t *testing.T) {
+	at := time.Date(2026, 11, 12, 16, 0, 0, 0, time.UTC)
+	e := newEnv(t, atInstant(at))
+	e.seedFilledDraft()
+	testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
+
+	reqtest.ExpectStatus(t, http.MethodPost, e.send(), http.StatusOK, e.SignedIn)
+
+	var sentAt time.Time
+	var sentBy string
+	var voidedAt sql.NullTime
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT sent_at, sent_by, voided_at FROM contracts WHERE engagement_id = $1`, e.Engagement.ID,
+	).Scan(&sentAt, &sentBy, &voidedAt); err != nil {
+		t.Fatalf("read sent columns: %v", err)
+	}
+	if !sentAt.Equal(at) || sentBy != e.Staff.ID || voidedAt.Valid {
+		t.Fatalf("sent_at = %v, sent_by = %q, voided_at = %v; want %v, %q and no void", sentAt, sentBy, voidedAt, at, e.Staff.ID)
 	}
 }
 

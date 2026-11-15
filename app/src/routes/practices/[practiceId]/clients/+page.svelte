@@ -6,6 +6,7 @@
 	import {
 		CLIENT_ORDER_OPTIONS,
 		clientOrderFrom,
+		dueParts,
 		clientsResultSummary,
 		loadClients,
 		NO_CARE_YET,
@@ -40,7 +41,6 @@
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { engagementStatusText } from '#lib/engagementDetail.js';
 	import { startHref } from './new/intake.js';
-	import { formatCalendarDay, formatPostpartum } from '#lib/dates.js';
 	import { practiceTimeZone } from '#lib/practiceZone.js';
 	import { formatAmount, invoiceMoneyState } from '#lib/invoice.js';
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
@@ -876,24 +876,11 @@
 	// recorded reads nothing.
 	// The word and the day apart, so the word can be muted and the days line
 	// up in a column of their own.
-	function dueParts(line: OpenEngagement): { lead: string; day: string; postpartum: string; bornOn: string } {
-		if (line.pregnancyEndedOn) {
-			const day = formatCalendarDay(line.pregnancyEndedOn);
-			if (line.birthOutcome === 'live_birth') {
-				return { lead: '', day, postpartum: formatPostpartum(line.pregnancyEndedOn, practiceTimeZone()), bornOn: line.pregnancyEndedOn };
-			}
-			return { lead: 'Ended', day, postpartum: '', bornOn: '' };
-		}
-		return line.dueDate
-			? { lead: 'Due', day: formatCalendarDay(line.dueDate), postpartum: '', bornOn: '' }
-			: { lead: '', day: '', postpartum: '', bornOn: '' };
-	}
-
 	function dueLines(client: ClientListItem): DueLine[] {
 		const lines = client.openEngagements ?? [];
 		return lines.map((line) => {
 			const prefix = lines.length > 1 ? `${kindLabel(line.kind)}: ` : '';
-			const { lead, day, postpartum, bornOn } = dueParts(line);
+			const { lead, day, postpartum, bornOn } = dueParts(line, practiceTimeZone());
 			const date = postpartum ? `${postpartum}, born ${day}` : (day && lead ? `${lead} ${day}` : day);
 			return { engagementId: line.engagementId, prefix, lead, day, postpartum, bornOn, date, text: `${prefix}${date || NO_DUE_DATE}` };
 		});

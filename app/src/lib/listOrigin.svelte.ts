@@ -9,7 +9,7 @@ import { afterNavigate, goto } from '$app/navigation';
  * restores it, or, when the page has moved on since, hands the held search
  * back through `goto`'s state. Memory only, as `clientsReturn.ts` is.
  */
-export type OriginList = 'schedule' | 'invoices' | 'on-call';
+export type OriginList = 'schedule' | 'invoices' | 'on-call' | 'contracts';
 
 export interface ListOrigin {
 	list: OriginList;
@@ -19,10 +19,11 @@ export interface ListOrigin {
 const LABEL: Record<OriginList, string> = {
 	schedule: 'Back to the Schedule',
 	invoices: 'Back to Invoices',
-	'on-call': 'Back to On call'
+	'on-call': 'Back to On call',
+	contracts: 'Back to Contracts'
 };
 
-const held: Record<OriginList, string> = { schedule: '', invoices: '', 'on-call': '' };
+const held: Record<OriginList, string> = { schedule: '', invoices: '', 'on-call': '', contracts: '' };
 
 export function holdListSearch(list: OriginList, search: string): void {
 	held[list] = search;
@@ -64,17 +65,18 @@ export class ListBack {
 			return;
 		}
 		const search = held[origin.list];
-		const states = { schedule: { scheduleSearch: search }, invoices: { invoicesSearch: search }, 'on-call': {} };
+		const states = { schedule: { scheduleSearch: search }, invoices: { invoicesSearch: search }, 'on-call': {}, contracts: { contractsSearch: search } };
 		void goto(origin.address, { state: states[origin.list] });
 	};
 
 	constructor(paths: () => Partial<Record<OriginList, string>>, here: () => string) {
 		afterNavigate(({ from }) => {
-			const found = originFrom(from?.url, paths());
+			const arrivedFrom: URL | null | undefined = from?.url;
+			const found = originFrom(arrivedFrom ?? undefined, paths());
 			if (found) {
 				this.origin = found;
 				this.#arrivedAt = location.href;
-			} else if (from?.url.pathname !== here()) {
+			} else if (arrivedFrom?.pathname !== here()) {
 				this.origin = undefined;
 			}
 		});

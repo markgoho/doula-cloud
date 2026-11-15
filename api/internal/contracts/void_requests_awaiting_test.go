@@ -3,6 +3,7 @@ package contracts_test
 import (
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/fixture"
@@ -62,6 +63,39 @@ func TestVoidRequestsAwaitingHandler_ListsOnlyOpenRequests(t *testing.T) {
 	}
 }
 
+// TestVoidRequestsAwaitingHandler_NamesTheContractAndCountsTheDays proves a
+// request carries the Contract it asks to void, and how many whole days of
+// the Practice's zone ago it was made: 0 for today, 1 a minute past the
+// Practice's midnight.
+func TestVoidRequestsAwaitingHandler_NamesTheContractAndCountsTheDays(t *testing.T) {
+	asked := time.Date(2026, 11, 10, 4, 30, 0, 0, time.UTC)
+	e := newEnv(t, signedInAs(fixture.Owner()), atInstant(asked.Add(10*time.Minute)))
+	e.Exec(`UPDATE practices SET timezone = 'America/New_York' WHERE id = $1`, e.Practice.ID)
+	contractID := seedListedContract(t, e.DB, e.Engagement.ID, statusSigned, asked)
+	requestID := seedVoidRequest(t, e.DB, e.Engagement.ID, e.Colleague(fixture.Doula()).ID, "wrong Client")
+	e.Exec(`UPDATE contract_void_requests SET created_at = $2 WHERE id = $1`, requestID, asked)
+
+	today := e.voidRequestsAwaiting("")
+	if len(today.Items) != 1 || today.Items[0].ContractID != contractID || today.Items[0].DaysAgo != 0 || today.Total != 1 {
+		t.Fatalf("response = %+v, want the Contract named, 0 days ago and a total of 1", today)
+	}
+
+	e.MoveClockTo(asked.Add(30 * time.Minute))
+	next := reqtest.Expect[contracts.VoidRequestsAwaitingResponse](t, http.MethodGet, e.voidRequestsAwaitingURL(), http.StatusOK, e.As(e.Staff))
+	if next.Items[0].DaysAgo != 1 {
+		t.Fatalf("daysAgo = %d, want 1 half an hour after the Practice's midnight", next.Items[0].DaysAgo)
+	}
+}
+
+// TestVoidRequestsAwaitingHandler_ABadStoredZoneIsAnError proves a Practice
+// whose stored zone will not load gets a 500 rather than the wrong day.
+func TestVoidRequestsAwaitingHandler_ABadStoredZoneIsAnError(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.Exec(`UPDATE practices SET timezone = 'Nowhere/Bad' WHERE id = $1`, e.Practice.ID)
+
+	reqtest.ExpectStatus(t, http.MethodGet, e.voidRequestsAwaitingURL(), http.StatusInternalServerError, e.SignedIn)
+}
+
 // TestVoidRequestsAwaitingHandler_RejectsAMalformedCursor mirrors
 // TestAwaitingSignatureHandler_RejectsAMalformedCursor (awaiting_test.go):
 // a cursor that doesn't decode is refused with the shared MsgInvalidCursor
@@ -90,7 +124,14 @@ func TestVoidRequestsAwaitingHandler_WalksTheCursor(t *testing.T) {
 			len(firstPage.Items), firstPage.HasMore, firstPage.NextCursor)
 	}
 
+	if firstPage.Total != total {
+		t.Fatalf("first page total = %d, want every open request, %d", firstPage.Total, total)
+	}
+
 	secondPage := e.voidRequestsAwaiting("?cursor=" + *firstPage.NextCursor)
+	if secondPage.Total != total {
+		t.Fatalf("second page total = %d, want %d on every page", secondPage.Total, total)
+	}
 	if len(secondPage.Items) != 1 || secondPage.HasMore || secondPage.NextCursor != nil {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 1/false/nil",
 			len(secondPage.Items), secondPage.HasMore, secondPage.NextCursor)

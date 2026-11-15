@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { landOnRow } from './landOnRow.js';
+import { landOnRow, landOnSection } from './landOnRow.js';
 
 function setup() {
 	document.body.innerHTML = '<input id="elsewhere"><div id="row" tabindex="-1">Row</div>';
@@ -10,6 +10,42 @@ function setup() {
 
 afterEach(() => {
 	document.body.replaceChildren();
+});
+
+function setupSection() {
+	document.body.innerHTML =
+		'<input id="elsewhere"><section id="contract"><h2 id="contract-heading">Contract</h2></section>';
+	return {
+		heading: document.querySelector<HTMLElement>('#contract-heading')!,
+		elsewhere: document.querySelector<HTMLInputElement>('#elsewhere')!
+	};
+}
+
+describe('landOnSection', () => {
+	it('focuses the section heading when focus is still on the page', () => {
+		const { heading } = setupSection();
+
+		landOnSection('contract');
+
+		expect(document.activeElement).toBe(heading);
+	});
+
+	it('leaves focus where the reader moved it', () => {
+		const { elsewhere } = setupSection();
+		elsewhere.focus();
+
+		landOnSection('contract');
+
+		expect(document.activeElement).toBe(elsewhere);
+	});
+
+	it('does nothing when the page has no such section', () => {
+		setup();
+
+		landOnSection('contract');
+
+		expect(document.activeElement).toBe(document.body);
+	});
 });
 
 describe('landOnRow', () => {

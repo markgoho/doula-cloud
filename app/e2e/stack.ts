@@ -662,8 +662,8 @@ export function seedInvoice(
 	execSQL(
 		`WITH existing AS (SELECT id FROM contracts WHERE engagement_id = ${engagement} LIMIT 1),
 		 made AS (
-		   INSERT INTO contracts (engagement_id, status, prose, amount_cents)
-		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents} WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
+		   INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at)
+		   SELECT ${engagement}, 'signed', 'Test prose', ${amountCents}, now(), now() WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
 		 )
 		 INSERT INTO invoices (id, practice_id, contract_id, stripe_invoice_id, status, amount_cents, currency, reference, due_at, paid_at)
 		 SELECT ${sqlLiteral(invoiceId)}::uuid, ${sqlLiteral(practiceId)}, (SELECT id FROM existing UNION ALL SELECT id FROM made LIMIT 1),
@@ -734,6 +734,79 @@ export function backdateEngagementStart(engagementId: string, days: number): voi
 		throw new Error(`stack: invalid day count ${days}`);
 	}
 	execSQL(`UPDATE engagements SET created_at = created_at - interval '${days} days' WHERE id = ${sqlLiteral(engagementId)}`);
+}
+
+/**
+ * Moves each Engagement's start and live Contract back `days`, with its sent, signed
+ * and voided instants and the Activity rows of its own lifecycle (created,
+ * priced, edited, sent, signed, voided), so the Contracts list reads a
+ * Contract waiting since that day. A Contract is made
+ * at the clock's now and no endpoint makes one in the past. A void request's
+ * Activity is not touched: backdateVoidRequests moves it.
+ */
+export function backdateContracts(moves: readonly { engagementId: string; days: number; signedAfter?: number }[]): void {
+	if (moves.length === 0) return;
+	for (const { days, signedAfter = 0 } of moves) {
+		if (!Number.isSafeInteger(days) || days <= 0 || !Number.isSafeInteger(signedAfter) || signedAfter < 0 || signedAfter >= days) {
+			throw new Error(`stack: invalid day count ${days} with signing ${signedAfter} days after`);
+		}
+	}
+	const rows = moves
+		.map(({ engagementId, days, signedAfter = 0 }) => `(${sqlLiteral(engagementId)}::uuid, interval '${days} days', interval '${signedAfter} days')`)
+		.join(', ');
+	execSQL(
+		`WITH moved(engagement_id, shift, wait) AS (VALUES ${rows}),
+		 engagement_moved AS (
+		   UPDATE engagements SET created_at = engagements.created_at - moved.shift
+		   FROM moved WHERE engagements.id = moved.engagement_id
+		 ),
+		 windows AS (
+		   SELECT c.engagement_id, c.created_at AS lo, c.status,
+		          COALESCE(LEAD(c.created_at) OVER (PARTITION BY c.engagement_id ORDER BY c.created_at, c.id), 'infinity'::timestamptz) AS hi
+		   FROM contracts c WHERE c.engagement_id IN (SELECT engagement_id FROM moved)
+		 ),
+		 activity_moved AS (
+		   UPDATE activity SET created_at = activity.created_at - moved.shift + CASE WHEN activity.action = 'contract_signed' THEN moved.wait ELSE interval '0' END
+		   FROM moved, windows
+		   WHERE activity.subject_kind = 'engagement'
+		     AND activity.subject_id = moved.engagement_id
+		     AND windows.engagement_id = moved.engagement_id AND windows.status <> 'voided'
+		     AND activity.created_at >= windows.lo AND activity.created_at < windows.hi
+		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed', 'contract_voided')
+		 )
+		 UPDATE contracts SET created_at = contracts.created_at - moved.shift,
+		   sent_at = contracts.sent_at - moved.shift,
+		   signed_at = contracts.signed_at - moved.shift + moved.wait,
+		   voided_at = contracts.voided_at - moved.shift
+		 FROM moved WHERE contracts.engagement_id = moved.engagement_id AND contracts.status <> 'voided'`
+	);
+}
+
+/**
+ * Moves open void requests back `days`, with the Activity row that recorded
+ * each ask. A request is made at the clock's now.
+ */
+export function backdateVoidRequests(moves: readonly { requestId: string; days: number }[]): void {
+	if (moves.length === 0) return;
+	for (const { days } of moves) {
+		if (!Number.isSafeInteger(days) || days <= 0) {
+			throw new Error(`stack: invalid day count ${days}`);
+		}
+	}
+	const rows = moves.map(({ requestId, days }) => `(${sqlLiteral(requestId)}::uuid, interval '${days} days')`).join(', ');
+	execSQL(
+		`WITH moved(id, shift) AS (VALUES ${rows}),
+		 asked AS (
+		   UPDATE contract_void_requests SET created_at = contract_void_requests.created_at - moved.shift
+		   FROM moved WHERE contract_void_requests.id = moved.id AND contract_void_requests.status = 'open'
+		   RETURNING contract_void_requests.engagement_id, contract_void_requests.requested_by,
+		             contract_void_requests.created_at + moved.shift AS asked_at, moved.shift
+		 )
+		 UPDATE activity SET created_at = activity.created_at - asked.shift
+		 FROM asked
+		 WHERE activity.subject_id = asked.engagement_id AND activity.action = 'contract_void_requested'
+		   AND activity.actor_staff_id = asked.requested_by AND activity.created_at = asked.asked_at`
+	);
 }
 
 /**

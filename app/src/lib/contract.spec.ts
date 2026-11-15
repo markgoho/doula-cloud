@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-	awaitingContractStatusLabel,
 	contractStatusText,
 	createContract,
 	declineContractVoidRequest,
@@ -11,17 +10,34 @@ import {
 	fillProse,
 	loadClientContract,
 	loadContract,
-	loadPracticeAwaitingContracts,
-	loadPracticeAwaitingVoidRequests,
+	CONTRACTS_RESULT_RULER,
+	CONTRACT_VIEW_TAGS,
+	contractOrderOf,
+	contractOrderOptions,
+	contractOrderedBy,
+	contractStatusWord,
+	contractViewOrder,
+	contractsQueryString,
+	contractsResultSummary,
+	contractsViewOf,
+	daysWaitingWords,
+	loadPracticeContracts,
+	loadPracticeVoidRequests,
 	mergeFieldLabel,
 	missingMergeFieldKeys,
-	practiceAwaitingContractsPath,
+	orderForView,
+	practiceContractsPath,
+	practiceVoidRequestsPath,
 	requestContractVoid,
 	saveContractValues,
 	sendContract,
 	setMergeFieldValue,
 	signContract,
-	voidContract
+	signedContractFilename,
+	signedPdfDownloadedWords,
+	voidContract,
+	voidRequestAsked,
+	voidRequestsHeading
 } from './contract.js';
 import { jsonResponse } from './testResponse.js';
 
@@ -365,6 +381,22 @@ describe('signContract', () => {
 	});
 });
 
+describe('signedContractFilename', () => {
+	it.each([
+		['Quinn Grier', 'signed-contract-quinn-grier.pdf'],
+		['Zoë  O’Brien-Núñez', 'signed-contract-zoe-o-brien-nunez.pdf'],
+		['  ', 'signed-contract.pdf']
+	])('names %j as %s', (name, filename) => {
+		expect(signedContractFilename(name)).toBe(filename);
+	});
+});
+
+describe('signedPdfDownloadedWords', () => {
+	it('names the Client', () => {
+		expect(signedPdfDownloadedWords('Quinn Grier')).toBe('Downloaded the Signed PDF for Quinn Grier.');
+	});
+});
+
 describe('fillProse', () => {
 	it('substitutes every merge field placeholder with its filled value', () => {
 		const result = fillProse('Agreement for {{client_name}} at {{price}}.', {
@@ -501,101 +533,252 @@ describe('mergeFieldLabel', () => {
 	});
 });
 
-describe('practiceAwaitingContractsPath', () => {
-	it('addresses the Practice-wide awaiting-signature roll-up', () => {
-		expect(practiceAwaitingContractsPath('practice-1')).toBe(
-			'/api/practices/practice-1/contracts/awaiting-signature'
-		);
+const parameters = (query: string) => new URLSearchParams(query);
+const summary = (overrides: Partial<Parameters<typeof contractsResultSummary>[0]> = {}) =>
+	contractsResultSummary({
+		view: 'not-signed',
+		order: '',
+		shown: 12,
+		hasMore: false,
+		total: 12,
+		isMine: false,
+		doulaName: '',
+		search: '',
+		...overrides
 	});
 
-	it('carries an encoded cursor when there is one', () => {
-		expect(practiceAwaitingContractsPath('practice-1', 'a+b/c=')).toBe(
-			'/api/practices/practice-1/contracts/awaiting-signature?cursor=a%2Bb%2Fc%3D'
-		);
+describe('contractsViewOf', () => {
+	it.each([
+		['', 'not-signed'],
+		['show=not-signed', 'not-signed'],
+		['show=nonsense', 'not-signed'],
+		['show=draft', 'draft'],
+		['show=sent', 'sent'],
+		['show=signed', 'signed'],
+		['show=voided', 'voided'],
+		['show=all', 'all']
+	] as const)('reads %j as the %s view', (query, view) => {
+		expect(contractsViewOf(parameters(query))).toBe(view);
 	});
 });
 
-describe('loadPracticeAwaitingContracts', () => {
-	const row = {
-		engagementId: 'eng-1',
-		contractId: 'contract-1',
-		clientId: 'client-1',
-		clientName: 'Ada',
-		status: 'draft',
-		createdAt: '2026-01-01T00:00:00Z'
-	};
-
-	it('fetches the Practice-wide path and returns the page', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
-
-		const result = await loadPracticeAwaitingContracts(fetcher, 'practice-1');
-
-		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/awaiting-signature');
-		expect(result).toEqual({ items: [row], hasMore: false });
+describe('the order a view reads in', () => {
+	it.each([
+		['not-signed', 'oldest'],
+		['draft', 'oldest'],
+		['sent', 'oldest'],
+		['signed', 'newest'],
+		['voided', 'newest'],
+		['all', 'newest']
+	] as const)("is %s's own: %s", (view, own) => {
+		expect(contractViewOrder(view)).toBe(own);
+		expect(orderForView(own, view)).toBe('');
 	});
 
-	it('carries the cursor to the next page', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+	it('keeps an order that is not the view own', () => {
+		expect(orderForView('newest', 'sent')).toBe('newest');
+		expect(orderForView('client', 'all')).toBe('client');
+		expect(orderForView('', 'all')).toBe('');
+	});
 
-		await loadPracticeAwaitingContracts(fetcher, 'practice-1', 'cursor-1');
+	it('reads the address order, leaving out the view own and an unknown one', () => {
+		expect(contractOrderOf(parameters('order=newest'), 'sent')).toBe('newest');
+		expect(contractOrderOf(parameters('order=oldest'), 'sent')).toBe('');
+		expect(contractOrderOf(parameters('order=client'), 'signed')).toBe('client');
+		expect(contractOrderOf(parameters('order=sideways'), 'signed')).toBe('');
+		expect(contractOrderOf(parameters(''), 'signed')).toBe('');
+	});
 
-		expect(fetcher).toHaveBeenCalledWith(
-			'/api/practices/practice-1/contracts/awaiting-signature?cursor=cursor-1'
+	it.each([
+		['not-signed', ['Longest wait first', 'Newest first']],
+		['draft', ['Made, oldest first', 'Made, newest first']],
+		['sent', ['Longest wait first', 'Shortest wait first']],
+		['signed', ['Signed, newest first', 'Signed, oldest first']],
+		['voided', ['Voided, newest first', 'Voided, oldest first']],
+		['all', ['Newest first', 'Oldest first']]
+	] as const)('offers the %s view its own order first, then the other and by Client', (view, [own, other]) => {
+		const options = contractOrderOptions(view);
+		expect(options.map((option) => option.label)).toEqual([own, other, 'Client, A to Z']);
+		expect(options[0]!.value).toBe('');
+		expect(options.map((option) => option.value)).toContain('client');
+	});
+
+	it('names the column an order sorts the table by', () => {
+		expect(contractOrderedBy('', 'not-signed')).toEqual({ column: 'Status', direction: 'ascending' });
+		expect(contractOrderedBy('', 'signed')).toEqual({ column: 'Status', direction: 'descending' });
+		expect(contractOrderedBy('oldest', 'signed')).toEqual({ column: 'Status', direction: 'ascending' });
+		expect(contractOrderedBy('client', 'sent')).toEqual({ column: 'Client', direction: 'ascending' });
+	});
+});
+
+describe('contractsQueryString', () => {
+	it('is empty for the default view in its own order', () => {
+		expect(contractsQueryString({ view: 'not-signed', order: '' })).toBe('');
+		expect(contractsQueryString({ view: 'not-signed', order: 'oldest' })).toBe('');
+	});
+
+	it('names each narrowing and leaves the Client search out', () => {
+		expect(
+			contractsQueryString({ view: 'sent', order: 'newest', isMine: true, doula: 'staff-1' })
+		).toBe('?show=sent&mine=true&doula=staff-1&order=newest');
+	});
+});
+
+describe('practiceContractsPath', () => {
+	it('is the bare list for the default view', () => {
+		expect(practiceContractsPath('practice-1', { view: 'not-signed', order: '', isMine: false, doula: '' })).toBe(
+			'/api/practices/practice-1/contracts'
 		);
 	});
 
-	it('throws with the response body text on a non-2xx response', async () => {
+	it('carries the view, order, narrowing and cursor', () => {
+		expect(
+			practiceContractsPath('practice-1', { view: 'signed', order: 'client', isMine: true, doula: 'staff-1' }, 'a+b')
+		).toBe('/api/practices/practice-1/contracts?view=signed&order=client&mine=true&doula=staff-1&cursor=a%2Bb');
+	});
+});
+
+describe('loadPracticeContracts', () => {
+	const query = { view: 'sent', order: '', isMine: false, doula: '' } as const;
+
+	it('reads a page by GET and returns it', async () => {
+		const page = { items: [], hasMore: false, total: 0 };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(page));
+
+		await expect(loadPracticeContracts(fetcher, 'practice-1', query, 'c1')).resolves.toEqual(page);
+
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts?view=sent&cursor=c1');
+	});
+
+	it('sends a search in a POST body, never in the address', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false, total: 0 }));
+
+		await loadPracticeContracts(fetcher, 'practice-1', { ...query, view: 'not-signed', search: 'quinn', isMine: true });
+
+		const [path, init] = fetcher.mock.calls[0]!;
+		expect(path).toBe('/api/practices/practice-1/contracts/list');
+		expect(init.method).toBe('POST');
+		expect(JSON.parse(init.body)).toEqual({ view: '', order: '', doula: '', mine: true, search: 'quinn', cursor: '' });
+	});
+
+	it('carries the cursor of a searched page', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false, total: 0 }));
+
+		await loadPracticeContracts(fetcher, 'practice-1', { ...query, search: 'q' }, 'next');
+
+		expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toMatchObject({ view: 'sent', cursor: 'next' });
+	});
+
+	it('throws with the response text on a refusal', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not permitted', 403));
 
-		await expect(loadPracticeAwaitingContracts(fetcher, 'practice-1')).rejects.toThrow('not permitted');
+		await expect(loadPracticeContracts(fetcher, 'practice-1', query)).rejects.toThrow('not permitted');
 	});
 });
 
-describe('loadPracticeAwaitingVoidRequests', () => {
-	const row = {
-		requestId: 'request-1',
-		engagementId: 'eng-1',
-		clientId: 'client-1',
-		clientName: 'Ada',
-		requestedByName: 'Jamie Doula',
-		reason: 'the client rescheduled',
-		createdAt: '2026-01-01T00:00:00Z'
-	};
-
-	it('fetches the Practice-wide path and returns the page', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false }));
-
-		const result = await loadPracticeAwaitingVoidRequests(fetcher, 'practice-1');
-
-		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/void-requests');
-		expect(result).toEqual({ items: [row], hasMore: false });
+describe('the void requests read', () => {
+	it('addresses the queue, with a cursor when given', () => {
+		expect(practiceVoidRequestsPath('practice-1')).toBe('/api/practices/practice-1/contracts/void-requests');
+		expect(practiceVoidRequestsPath('practice-1', 'a+b')).toBe(
+			'/api/practices/practice-1/contracts/void-requests?cursor=a%2Bb'
+		);
 	});
 
-	it('carries the cursor to the next page', async () => {
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+	it('returns the page', async () => {
+		const page = { items: [], hasMore: false, total: 0 };
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse(page));
 
-		await loadPracticeAwaitingVoidRequests(fetcher, 'practice-1', 'cursor-1');
-
-		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/void-requests?cursor=cursor-1');
+		await expect(loadPracticeVoidRequests(fetcher, 'practice-1', 'c1')).resolves.toEqual(page);
+		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/contracts/void-requests?cursor=c1');
 	});
 
-	it('throws with the response body text on a non-2xx response', async () => {
+	it('throws with the response text on a refusal', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('not permitted', 403));
 
-		await expect(loadPracticeAwaitingVoidRequests(fetcher, 'practice-1')).rejects.toThrow('not permitted');
+		await expect(loadPracticeVoidRequests(fetcher, 'practice-1')).rejects.toThrow('not permitted');
+	});
+
+	it('counts the requests and says when each was asked', () => {
+		expect(voidRequestsHeading(3)).toBe('3 void requests to decide');
+		expect(voidRequestsHeading(1)).toBe('1 void request to decide');
+		expect(voidRequestAsked(11)).toBe('asked 11 days ago');
+		expect(voidRequestAsked(1)).toBe('asked 1 day ago');
+		expect(voidRequestAsked(0)).toBe('asked today');
 	});
 });
 
-describe('awaitingContractStatusLabel', () => {
-	it('labels a draft Contract as work the Practice still owes', () => {
-		expect(awaitingContractStatusLabel('draft')).toBe('Draft');
+describe('contract words', () => {
+	it('says each state and a wait', () => {
+		expect(contractStatusWord('draft')).toBe('Draft');
+		expect(contractStatusWord('voided')).toBe('Voided');
+		expect(daysWaitingWords(12)).toBe('12 days');
+		expect(daysWaitingWords(1)).toBe('1 day');
 	});
 
-	it('labels a sent Contract as work the Client still owes', () => {
-		expect(awaitingContractStatusLabel('sent')).toBe('Sent');
+	it('tags the four states and not the default view or All', () => {
+		expect(CONTRACT_VIEW_TAGS).toEqual({
+			draft: 'Draft Contracts',
+			sent: 'Sent Contracts',
+			signed: 'Signed Contracts',
+			voided: 'Voided Contracts'
+		});
+	});
+});
+
+describe('contractsResultSummary', () => {
+	it('says a count, the view and the order', () => {
+		expect(summary()).toBe('Showing 12 Contracts not signed, longest wait first, then Drafts.');
+		expect(summary({ shown: 1, total: 1 })).toBe('Showing 1 Contract not signed, longest wait first, then Drafts.');
+		expect(summary({ view: 'signed', shown: 2, total: 2 })).toBe('Showing 2 Signed Contracts, newest first.');
+		expect(summary({ view: 'all', order: 'client' })).toBe('Showing 12 Contracts, Client A to Z.');
 	});
 
-	it('falls back to the raw status for anything unrecognized', () => {
-		expect(awaitingContractStatusLabel('signed')).toBe('signed');
+	it('says how many of how many while more exist', () => {
+		expect(summary({ view: 'signed', shown: 30, hasMore: true, total: 41 })).toBe(
+			'Showing the first 30 of 41 Signed Contracts, newest first.'
+		);
+		expect(summary({ shown: 30, hasMore: true, total: 41, isMine: true })).toBe(
+			'Showing the first 30 of your 41 Contracts not signed, longest wait first, then Drafts.'
+		);
+		expect(summary({ shown: 30, hasMore: true, total: 3 })).toContain('the first 30 of 30');
+	});
+
+	it('says whose Contracts and which search', () => {
+		expect(summary({ shown: 4, total: 4, isMine: true })).toBe(
+			'Showing 4 of your Contracts not signed, longest wait first, then Drafts.'
+		);
+		expect(summary({ view: 'sent', shown: 2, total: 2, doulaName: 'Priya Raman', search: 'quinn' })).toBe(
+			`Showing 2 Sent Contracts on Priya Raman's Engagements matching "quinn", longest wait first.`
+		);
+	});
+
+	it('says the Sent view by its wait', () => {
+		expect(summary({ view: 'sent', order: 'newest' })).toContain('shortest wait first');
+		expect(summary({ view: 'sent', order: 'client' })).toContain('Client A to Z');
+	});
+
+	it.each([
+		['not-signed', 'No Contract is waiting to be signed.'],
+		['draft', 'No Draft Contract is waiting to be sent.'],
+		['sent', 'No Sent Contract is waiting on a Client.'],
+		['signed', 'No Contract is signed.'],
+		['voided', 'No Contract has been voided.']
+	] as const)('says nothing in the %s view', (view, words) => {
+		expect(summary({ view, shown: 0 })).toBe(words);
+	});
+
+	it('says nothing in the whole book, and in a narrowed one', () => {
+		expect(summary({ view: 'all', shown: 0 })).toBe(
+			'No Contracts yet. One appears here when a Contract is made on an Engagement.'
+		);
+		expect(summary({ view: 'all', shown: 0, isMine: true })).toBe('No Contract of yours.');
+		expect(summary({ view: 'sent', shown: 0, isMine: true, doulaName: 'Priya Raman', search: 'q' })).toBe(
+			`No Sent Contract of yours on Priya Raman's Engagements matching "q" is waiting on a Client.`
+		);
+	});
+
+	it('holds room for the longest line it can say', () => {
+		expect(CONTRACTS_RESULT_RULER.length).toBeGreaterThan(summary().length);
+		expect(CONTRACTS_RESULT_RULER).toContain('D'.repeat(30));
 	});
 });

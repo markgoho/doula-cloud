@@ -155,7 +155,7 @@ func TestClientGetSignedContractPDFHandler_OtherClientsEngagementRejected(t *tes
 		voided bool
 	}{
 		{statusSigned, false},
-		{"voided", true},
+		{statusVoided, true},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

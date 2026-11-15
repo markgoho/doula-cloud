@@ -119,17 +119,8 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		if _, err := c.Tx.ExecContext(r.Context(),
-			`UPDATE contracts SET status = $1::contract_status WHERE id = $2`,
-			string(StatusSent), ct.ID,
-		); err != nil {
+		if !stampTransition(w, r, c, ct, `UPDATE contracts SET status = $1::contract_status, sent_at = $2, sent_by = $3 WHERE id = $4`, StatusSent, activity.ActionContractSent) {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if err := recordEngagementActivity(r.Context(), c, activity.ActionContractSent, nil); err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
 

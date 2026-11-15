@@ -377,6 +377,16 @@ const SELF_SUFFIX = ' (you)';
  * who has been filtered out is not a caller this picker can offer, so
  * she must not be marked or hoisted either. That order is also what lets
  * a further exclusion compose with this one rather than fight it. */
+export async function loadDoulaRoster(fetcher: Fetcher, practiceId: string): Promise<LabeledValue[]> {
+	try {
+		const response = await fetcher(staffPath(practiceId));
+		if (!response.ok) return [];
+		return doulaOptions(doulasOf((await response.json()) as Roster));
+	} catch {
+		return [];
+	}
+}
+
 export function doulaOptions(
 	doulas: readonly Doula[],
 	context: DoulaPickerContext = {}

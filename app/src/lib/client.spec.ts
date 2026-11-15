@@ -9,9 +9,45 @@ import {
 	mergeClient,
 	searchClients,
 	clientOrderFrom,
+	dueParts,
 	type ClientEditFields
 } from './client.js';
 import { jsonResponse as response } from './testResponse.js';
+import { formatCalendarDayThisYear } from './dates.js';
+
+describe('dueParts', () => {
+	const eastern = 'America/New_York';
+
+	it('says a due date with its lead word', () => {
+		expect(dueParts({ dueDate: '2027-01-13' }, eastern)).toEqual({ lead: 'Due', day: 'Jan 13, 2027', postpartum: '', bornOn: '' });
+	});
+
+	it('says nothing for a line with no day', () => {
+		expect(dueParts({}, eastern)).toEqual({ lead: '', day: '', postpartum: '', bornOn: '' });
+	});
+
+	it('says a live birth by the weeks since and keeps the day', () => {
+		const parts = dueParts({ pregnancyEndedOn: '2020-01-02', birthOutcome: 'live_birth' }, eastern);
+		expect(parts).toMatchObject({ lead: '', day: 'Jan 2, 2020', bornOn: '2020-01-02' });
+		expect(parts.postpartum).toMatch(/weeks postpartum$/);
+	});
+
+	it.each(['loss', 'unknown', undefined])('says a pregnancy that ended in %s as ended, never postpartum', (birthOutcome) => {
+		expect(dueParts({ pregnancyEndedOn: '2026-10-30', birthOutcome }, eastern)).toEqual({
+			lead: 'Ended',
+			day: 'Oct 30, 2026',
+			postpartum: '',
+			bornOn: ''
+		});
+	});
+
+	it('formats the day as its caller asks', () => {
+		const now = new Date('2026-11-13T14:00:00Z');
+		const thisYear = (day: string) => formatCalendarDayThisYear(day, eastern, now);
+		expect(dueParts({ dueDate: '2026-12-04' }, eastern, thisYear).day).toBe('Dec 4');
+		expect(dueParts({ dueDate: '2027-01-13' }, eastern, thisYear).day).toBe('Jan 13, 2027');
+	});
+});
 
 const editFields: ClientEditFields = {
 	givenName: 'Ada',

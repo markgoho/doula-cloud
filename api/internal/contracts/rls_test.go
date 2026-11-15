@@ -2,6 +2,7 @@ package contracts_test
 
 import (
 	"database/sql"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/fixture"
@@ -217,7 +218,7 @@ func TestRLS_ContractsClientSignsOnlyHerOwnSentContract(t *testing.T) {
 			}
 			tx := seeded.asClient(t)
 
-			rows := testdb.RowsAffected(t, tx, `UPDATE contracts SET status = 'signed'::contract_status WHERE engagement_id = $1`, engagementID)
+			rows := testdb.RowsAffected(t, tx, `UPDATE contracts SET status = 'signed'::contract_status, signed_at = now() WHERE engagement_id = $1`, engagementID)
 			if rows != c.want {
 				t.Fatalf("signing: %d rows affected, want %d", rows, c.want)
 			}
@@ -241,15 +242,16 @@ func TestRLS_ContractsClientWritesOutsideTheSignTransitionRejected(t *testing.T)
 		query string
 	}{
 		{"a field edit that leaves the status sent", `UPDATE contracts SET merge_field_values = '{"hacked":"true"}' WHERE engagement_id = $1`},
-		{"moving a sent Contract to voided", `UPDATE contracts SET status = 'voided'::contract_status WHERE engagement_id = $1`},
+		{"moving a sent Contract to voided", `UPDATE contracts SET status = 'voided'::contract_status, voided_at = now() WHERE engagement_id = $1`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			seeded := seedClientsContract(t, statusSent)
 			tx := seeded.asClient(t)
 
-			if _, err := tx.ExecContext(t.Context(), c.query, seeded.engagementID); err == nil {
-				t.Fatal("expected an RLS violation updating a Contract as a Client-portal session, got no error")
+			_, err := tx.ExecContext(t.Context(), c.query, seeded.engagementID)
+			if err == nil || !strings.Contains(err.Error(), "row-level security") {
+				t.Fatalf("update error = %v, want a row-level security violation", err)
 			}
 		})
 	}

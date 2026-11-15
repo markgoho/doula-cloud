@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"net/http"
 	"testing"
+	"time"
 
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/fixture"
@@ -66,6 +67,37 @@ func TestPostVoidContractHandler_Success(t *testing.T) {
 	storedObjectPath := testdb.Scalar[sql.NullString](t, e.DB.Admin, `SELECT signed_pdf_object_path FROM contracts WHERE engagement_id = $1`, e.Engagement.ID)
 	if !storedObjectPath.Valid || storedObjectPath.String != objectPath {
 		t.Fatalf("signed_pdf_object_path = %+v, want unchanged at %q", storedObjectPath, objectPath)
+	}
+}
+
+// TestPostVoidContractHandler_RecordsWhenAndByWhomItWasVoided proves Void
+// stamps the Contract with the instant it was voided, read from the clock,
+// and the Staff member who voided it, and leaves the sent columns as they
+// were.
+func TestPostVoidContractHandler_RecordsWhenAndByWhomItWasVoided(t *testing.T) {
+	at := time.Date(2026, 11, 12, 16, 0, 0, 0, time.UTC)
+	e := newEnv(t, signedInAs(fixture.Owner()), atInstant(at))
+	seedSignedContract(t, e.DB, e.Engagement.ID)
+	var sentBefore time.Time
+	if err := e.DB.Admin.QueryRowContext(t.Context(), `SELECT sent_at FROM contracts WHERE engagement_id = $1`, e.Engagement.ID).Scan(&sentBefore); err != nil {
+		t.Fatalf("read sent_at: %v", err)
+	}
+
+	reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), http.StatusOK, e.SignedIn)
+
+	var sentAt, voidedAt time.Time
+	var voidedBy string
+	var sentBy sql.NullString
+	if err := e.DB.Admin.QueryRowContext(t.Context(),
+		`SELECT sent_at, sent_by, voided_at, voided_by FROM contracts WHERE engagement_id = $1`, e.Engagement.ID,
+	).Scan(&sentAt, &sentBy, &voidedAt, &voidedBy); err != nil {
+		t.Fatalf("read void columns: %v", err)
+	}
+	if !voidedAt.Equal(at) || voidedBy != e.Staff.ID {
+		t.Fatalf("voided_at = %v, voided_by = %q; want %v and %q", voidedAt, voidedBy, at, e.Staff.ID)
+	}
+	if !sentAt.Equal(sentBefore) || sentBy.Valid {
+		t.Fatalf("sent_at = %v, sent_by = %v; want them untouched by Void", sentAt, sentBy)
 	}
 }
 
@@ -146,22 +178,10 @@ func TestPostContractHandler_AllowedAfterVoid(t *testing.T) {
 // contractor both reach the Engagement here just as freely as an Owner
 // does.
 func TestPostVoidContractHandler_RefusedByRole(t *testing.T) {
-	cases := []struct {
-		name       string
-		staff      []fixture.StaffOption
-		wantStatus int
-	}{
-		{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK},
-		{caseAdmin, []fixture.StaffOption{fixture.Admin()}, http.StatusOK},
-		{"employed doula", []fixture.StaffOption{fixture.Doula()}, http.StatusForbidden},
-		{"contractor doula", []fixture.StaffOption{fixture.Doula(), fixture.Contractor()}, http.StatusForbidden},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			e := newEnv(t, signedInAs(tc.staff...))
-			seedSignedContract(t, e.DB, e.Engagement.ID)
+	cases := append([]roleCase{{"owner", []fixture.StaffOption{fixture.Owner()}, http.StatusOK}}, refusedDoulaCases()...)
+	eachRole(t, cases, func(t *testing.T, e *env, wantStatus int) {
+		seedSignedContract(t, e.DB, e.Engagement.ID)
 
-			reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), tc.wantStatus, e.SignedIn)
-		})
-	}
+		reqtest.ExpectStatus(t, http.MethodPost, e.voidURL(), wantStatus, e.SignedIn)
+	})
 }

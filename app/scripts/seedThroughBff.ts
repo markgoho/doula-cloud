@@ -222,7 +222,7 @@ export async function contractFor(
 	today: string,
 	engagement: NamedEngagement,
 	portal: Session | undefined,
-	options: { send?: boolean } = {}
+	options: { send?: boolean; sender?: Record<string, string> } = {}
 ): Promise<void> {
 	const contractPath = `/api/practices/${practice.practiceId}/engagements/${engagement.engagementId}/contract`;
 	const { values } = await send<{ values: Record<string, string> }>(request, 'POST', contractPath, practice.owner);
@@ -239,7 +239,7 @@ export async function contractFor(
 		}
 	});
 	if (options.send === false) return;
-	await send(request, 'POST', `${contractPath}/send`, practice.owner);
+	await send(request, 'POST', `${contractPath}/send`, options.sender ?? practice.owner);
 	if (portal === undefined) return;
 	await send(request, 'POST', `/api/portal/engagements/${engagement.engagementId}/contract/sign`, portal, {
 		fullLegalName: `${engagement.client.givenName} ${engagement.client.familyName}`,

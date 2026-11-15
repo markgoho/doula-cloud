@@ -18,7 +18,7 @@
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatScheduledVisit } from '#lib/dates.js';
 	import { visitDoulaText, visitTypeLabel } from '#lib/engagementDetail.js';
-	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
+	import { keepListReturn, tallyListReturns } from '#lib/listReturn.js';
 	import { THIS_WEEK, rangeHold } from '#lib/dayRange.js';
 	import { focusResultAfterChange } from '#lib/listFocus.svelte.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
@@ -194,7 +194,7 @@
 		} catch {
 			if (thisSearch === latestSearch) {
 				failedKey = key;
-				heldReturn = undefined;
+				returns.held = undefined;
 			}
 		} finally {
 			if (thisSearch === latestSearch) isSearching = false;
@@ -244,42 +244,18 @@
 	 * with focus on that row. The place is held until the read for this
 	 * entry lands, and any move before it lands drops it.
 	 */
-	let pagesLoaded = 1;
-	let heldReturn: ListReturn | undefined;
-	let navigations = 0;
+	const returns = tallyListReturns(schedule, rowLink);
 	keepListReturn({
 		id: 'schedule-list',
-		pagesLoaded: () => pagesLoaded,
+		pagesLoaded: () => returns.pagesLoaded,
 		rowOf: (to) => (to.hash.startsWith('#visit-') ? to.hash.slice('#visit-'.length) : undefined),
 		restore: (back) => {
 			if (readFailure) return;
-			heldReturn = back;
-			if (!isReadPending && read && readKeyOf(read) === wantedKey) void restoreReturn(back);
+			returns.held = back;
+			if (!isReadPending && read && readKeyOf(read) === wantedKey) void returns.restore(back);
 		}
 	});
-	beforeNavigate(() => {
-		heldReturn = undefined;
-		navigations += 1;
-	});
-
-	async function didLoadMore(): Promise<boolean> {
-		const before = schedule.items.length;
-		await schedule.loadMore();
-		if (schedule.items.length === before) return false;
-		pagesLoaded += 1;
-		return true;
-	}
-
-	async function restoreReturn(back: ListReturn) {
-		heldReturn = undefined;
-		await restoreList(back, {
-			pagesLoaded: () => pagesLoaded,
-			navigations: () => navigations,
-			loadMore: didLoadMore,
-			inFlight: () => schedule.inFlight,
-			rowLink
-		});
-	}
+	beforeNavigate(returns.leave);
 
 	const rowDomId = (visitId: string, of: DataTableView) => `schedule-row-${visitId}-${of}`;
 
@@ -299,7 +275,7 @@
 	 * `reset` abandons anything in flight at the same time.
 	 */
 	$effect(() => {
-		if (hasReadFailed) heldReturn = undefined;
+		if (hasReadFailed) returns.held = undefined;
 	});
 	$effect(() => {
 		const landed = read;
@@ -307,8 +283,8 @@
 		untrack(() => {
 			schedule.reset(landed.page);
 			now = landed.now;
-			pagesLoaded = 1;
-			if (heldReturn) void restoreReturn(heldReturn);
+			returns.pagesLoaded = 1;
+			if (returns.held) void returns.restore(returns.held);
 		});
 	});
 
@@ -749,7 +725,7 @@
 						rowId={(visit, tableView) => rowDomId(visit.visitId, tableView)}
 						{rowLinkLabel}
 						hasMore={schedule.hasMore}
-						onLoadMore={didLoadMore}
+						onLoadMore={returns.didLoadMore}
 						isLoadingMore={schedule.isLoadingMore}
 						loadMoreError={schedule.loadMoreError}
 						emptyMessage={resultSummary}

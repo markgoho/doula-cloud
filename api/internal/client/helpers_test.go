@@ -196,7 +196,7 @@ func seedAttachmentWithFee(t *testing.T, db *testdb.DB, engagementID, staffID st
 func seedClientContract(t *testing.T, db *testdb.DB, engagementID, status string) (contractID string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents) VALUES ($1, $2, '', 15000) RETURNING id`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at, voided_at) VALUES ($1, $2, '', 15000, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'signed' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END) RETURNING id`,
 		engagementID, status,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed contract: %v", err)
