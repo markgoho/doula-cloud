@@ -472,7 +472,6 @@
 			: [
 					{
 						label: 'Doula',
-						recordLabel: 'Doula',
 						track: `calc(17ch + 2 * ${INSET})`,
 						accessor: doulaText,
 						content: doulaCell
@@ -566,6 +565,8 @@
 	{@const names = contract.doulaNames ?? []}
 	{#if tableView === 'table' && names.length > 1}
 		<span aria-hidden="true">{names[0]} +{names.length - 1}</span><span class="visually-hidden">{names.join(', ')}</span>
+	{:else if tableView === 'record' && names.length > 0}
+		<span aria-hidden="true">Doula&nbsp;</span>{doulaText(contract)}
 	{:else}
 		{doulaText(contract)}
 	{/if}

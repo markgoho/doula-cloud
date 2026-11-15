@@ -15,12 +15,9 @@
 	<ul>
 		{#each requests as request (request.requestId)}
 			<li id="void-request-row-{request.requestId}">
-				<p>
-					<span><Link href={hrefFor(request)} label={request.clientName} ariaLabel={`${request.clientName}, void request`} /></span>
-					<span aria-hidden="true" class="joiner"> · </span><span class="visually-hidden">, </span>
-					<span>{request.requestedByName} {voidRequestAsked(request.daysAgo)}:</span>
-					<span class="reason">{request.reason}</span>
-				</p>
+				<div class="title"><Link href={hrefFor(request)} label={request.clientName} ariaLabel={`${request.clientName}, void request`} /></div>
+				<p class="meta">{request.requestedByName} {voidRequestAsked(request.daysAgo)}</p>
+				<p class="reason">{request.reason}</p>
 			</li>
 		{/each}
 	</ul>
@@ -34,13 +31,24 @@
 		}
 
 		ul {
-			font-size: var(--text-body-size);
 			margin: 0;
 			padding: 0;
 			list-style: none;
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(min(100%, 36ch), 1fr));
+			gap: var(--space-related);
+		}
+
+		li {
 			display: flex;
 			flex-direction: column;
-			gap: 0;
+			gap: var(--space-1);
+			min-inline-size: 0;
+			padding: var(--space-3) var(--space-4);
+			border: var(--border-thin) solid var(--color-outline-variant);
+			border-radius: var(--radius);
+			background-color: var(--color-surface-bright);
+			scroll-margin-block-start: calc(var(--top-bar-height) + var(--space-4));
 		}
 
 		p {
@@ -48,27 +56,23 @@
 			overflow-wrap: anywhere;
 		}
 
-		@container void-requests (min-width: 60rem) {
-			ul {
-				display: grid;
-				grid-template-columns: minmax(0, max-content) minmax(0, max-content) minmax(0, 72ch);
-				column-gap: var(--space-3);
-				justify-content: start;
-			}
+		.title {
+			min-inline-size: 0;
+			overflow-wrap: anywhere;
+			font-size: var(--text-subheading-size);
+			font-weight: var(--text-subheading-weight);
+			line-height: var(--text-subheading-leading);
+			letter-spacing: var(--text-subheading-tracking);
+		}
 
-			li {
-				display: grid;
-				grid-column: 1 / -1;
-				grid-template-columns: subgrid;
-			}
+		.meta {
+			font-size: var(--text-body-sm-size);
+			line-height: var(--text-body-sm-leading);
+			color: var(--color-on-surface-variant);
+		}
 
-			p {
-				display: contents;
-			}
-
-			.joiner {
-				display: none;
-			}
+		.reason {
+			font-size: var(--text-body-size);
 		}
 	}
 </style>

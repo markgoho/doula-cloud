@@ -119,6 +119,19 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell('No Doula yet').first()).toBeVisible();
 	});
 
+	it('draws the Doula word on a narrow card only before a name, and reads it either way', async () => {
+		await setup({ width: 375 });
+
+		await expect.element(testPage.getByLabelText('Contracts', { exact: true })).toBeVisible();
+		// querySelector case 1: the table and the cards hold the same words; only CSS tells them apart
+		const cards = [...document.querySelectorAll('.record')];
+		const named = cards.find((card) => card.textContent?.includes('Marisol Terrazas'));
+		const none = cards.find((card) => card.textContent?.includes('No Doula yet'));
+		expect(named!.querySelectorAll('[aria-hidden="true"]')).toContainEqual(expect.objectContaining({ textContent: 'Doula ' }));
+		expect(none!.querySelectorAll('[aria-hidden="true"]')).not.toContainEqual(expect.objectContaining({ textContent: 'Doula ' }));
+		expect(none!.textContent).toContain('Doula: No Doula yet');
+	});
+
 	it('says the care with its due or ended day, the year only when it is not this one', async () => {
 		await setup();
 
@@ -225,8 +238,11 @@ describe('the void request queue', () => {
 		await expect
 			.element(testPage.getByRole('link', { name: `${first!.clientName}, void request` }))
 			.toHaveAttribute('href', `/practices/practice-1/engagements/${first!.engagementId}#void-request-${first!.requestId}`);
-		await expect.element(testPage.getByText(`Jamie Doula asked 11 days ago: ${first!.reason}`)).toBeVisible();
-		await expect.element(testPage.getByText(`Joss Adeyemi asked today: ${second!.reason}`)).toBeVisible();
+		await expect.element(testPage.getByText('Jamie Doula asked 11 days ago', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(first!.reason)).toBeVisible();
+		await expect.element(testPage.getByText('Joss Adeyemi asked today', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(second!.reason)).toBeVisible();
+		expect(testPage.getByRole('listitem').elements().filter((each) => each.id.startsWith('void-request-row-'))).toHaveLength(2);
 		await expect
 			.element(testPage.getByText('Open one to void its Contract or decline the request on the Engagement.'))
 			.toBeVisible();

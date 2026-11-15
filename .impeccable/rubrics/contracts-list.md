@@ -81,7 +81,7 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
    - d. Cards keep one field order.
    - e. No element on the page carries no information.
    - f. No fact is said twice in a row or a card, and the intro repeats nothing the result line or a tag states.
-   - g. At 1280×800 as Renata, with the seed's three requests waiting, and at 375×740 as Priya, who has no queue, the first Contract (Client, state, and the day or the wait) is wholly on the first screen under the title and the filters.
+   - g. With no request waiting (at 1280×800, and at 375×740 as Priya, who has no queue), the first Contract (Client, state, and the day or the wait) is wholly on the first screen under the title and the filters. With requests waiting, at 1280×800 as Renata the first screen holds every one of the seed's three requests whole, and the filter bar.
    - h. With no request waiting, one line says so and no empty table or heading-and-paragraph block stands above the Contracts (the seed always holds requests, so this is judged from the screen's spec).
 9. **Error recovery**
    - a. T10 passes.
@@ -101,4 +101,5 @@ Each is a hypothesis from the persona records (`docs/personas`, `docs/journeys`,
 
 ## Changes to this rubric
 
+- 2026-11-14, after round 2, on the founder's reading of the page: H8g held the first Contract to the first screen at 1280×800 with three requests waiting, and to pass it each request had been pressed onto one line of three tracks. The founder read that line on the rendered screen and said it was "very awkward to read" and that a request belongs in a card that groups its facts. A void is the one decision on this screen that is not undone, and the person deciding it reads who asked and why before anything else, so the check was wrong about that person's job: with requests waiting, the first screen holds the requests and the filter bar, and the first Contract is held to the first screen only when no request waits.
 - 2026-11-14, after the baseline round and the design call: T4 asked for the Signed PDF "under the Engagement's own label for it". That label, "Download signed Contract (PDF)", is 30 characters; as a visible cell it widens the table past the 1280px frame, and the list would then draw cards where its siblings draw a table (H4a). The person's job is to get the PDF in one action and to hear what the button does, so the label is the button's accessible name, and a card shows it whole. H2d now names the rule it had stated without a source: the year only when it is not this one is the Schedule's and On call's (`DESIGN.md`), and a day here carries no clock time.

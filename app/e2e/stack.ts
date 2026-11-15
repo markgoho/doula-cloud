@@ -737,7 +737,7 @@ export function backdateEngagementStart(engagementId: string, days: number): voi
 }
 
 /**
- * Moves each Engagement's live Contract back `days`, with its sent, signed
+ * Moves each Engagement's start and live Contract back `days`, with its sent, signed
  * and voided instants and the Activity rows of its own lifecycle (created,
  * priced, edited, sent, signed, voided), so the Contracts list reads a
  * Contract waiting since that day. A Contract is made
@@ -756,6 +756,10 @@ export function backdateContracts(moves: readonly { engagementId: string; days: 
 		.join(', ');
 	execSQL(
 		`WITH moved(engagement_id, shift, wait) AS (VALUES ${rows}),
+		 engagement_moved AS (
+		   UPDATE engagements SET created_at = engagements.created_at - moved.shift
+		   FROM moved WHERE engagements.id = moved.engagement_id
+		 ),
 		 activity_moved AS (
 		   UPDATE activity SET created_at = activity.created_at - moved.shift + CASE WHEN activity.action = 'contract_signed' THEN moved.wait ELSE interval '0' END
 		   FROM moved
