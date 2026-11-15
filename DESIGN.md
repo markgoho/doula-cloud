@@ -257,7 +257,7 @@ Every Template owns the page frame: one `center-l` with one `--page-gutter` (16p
 Spacing is ten fluid steps on a 4px base (growth factor 1.5). Templates and field molecules read the rhythm by name, never a raw step.
 
 ### Named Rules
-**The Named Rhythm Rule.** Space is chosen by what it separates: `--space-label` (step 1) a label from its own hint and control; `--space-related` (step 3) items that read as one group; `--space-field` (step 5) one field from the next; `--space-group` (step 7) a group, or the page title, from the next; `--space-section` (step 8) one section from the next.
+**The Named Rhythm Rule.** Space is chosen by what it separates: `--space-label` (step 1) a label from its own hint and control; `--space-related` (step 3) items that read as one group; `--space-field` (step 5) one field from the next; `--space-group` (step 7) a group, or a list's title and intro as one heading block, from the next; a list's title sits only `--space-related` from its own intro (`ListPage`, #2957); `--space-section` (step 8) one section from the next.
 
 **The One Left Edge Rule.** A screen's regions share the Template frame's inline-start edge; nothing is indented off it or centered away from it. Build-held through the Templates; the framed-title check is the only part a spec measures today.
 
