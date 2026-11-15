@@ -18,6 +18,7 @@
 
 <script lang="ts" generics="T">
 	import type { Snippet } from 'svelte';
+	import { headingOrder, type ColumnOrder } from '#lib/headingOrder.js';
 	import { rowTarget } from '#lib/rowTarget.js';
 	import Button from '../atoms/Button.svelte';
 	import Details from '../atoms/Details.svelte';
@@ -312,10 +313,23 @@
 		/**
 		 * The column the rows are in order by, named by its `label`, and which
 		 * way (#2869): `aria-sort` on that column's header and nowhere else.
-		 * The headers are not buttons; the order is chosen in the bar
-		 * (`FilterBar`'s `order`), so a header never acts as a second apply.
+		 * With `sortOrders` and `onSort`, a heading whose column has an order
+		 * to move to is also a button (#2955); the bar's Order select stays,
+		 * as the cards' only control.
 		 */
 		orderedBy?: { column: string; direction: 'ascending' | 'descending' };
+		/**
+		 * The orders each column can be read in (#2955), the first listed for a
+		 * column being what a press on its heading asks for. A column with none
+		 * has a plain heading; the sorted column with none to move to keeps its
+		 * button, unavailable, so focus is not lost when a press lands on it.
+		 */
+		sortOrders?: readonly ColumnOrder[];
+		/**
+		 * Called with the order a press on a heading asks for: the value the
+		 * bar's Order select holds for that order.
+		 */
+		onSort?: (order: string) => void;
 		/**
 		 * The heading level of a group's heading in the record view, which
 		 * only the page can know. The table's own heading row is a row group
@@ -348,6 +362,8 @@
 		isBusy = false,
 		rowGroup,
 		orderedBy,
+		sortOrders,
+		onSort,
 		groupHeadingLevel = 2
 	}: Properties<T> = $props();
 
@@ -526,6 +542,8 @@
 			<thead>
 				<tr>
 					{#each columns as column (column.label)}
+						{@const isSortable = Boolean(onSort && sortOrders?.some((entry) => entry.column === column.label))}
+						{@const next = isSortable ? headingOrder(sortOrders!, orderedBy, column.label) : undefined}
 						<th
 							scope="col"
 							aria-sort={orderedBy?.column === column.label ? orderedBy.direction : undefined}
@@ -533,7 +551,21 @@
 							class:wraps={column.wraps}
 							class:grows={column.grows}
 							class:tracked={column.track !== undefined}
-							style:--column-track={column.track}>{column.label}</th
+							style:--column-track={column.track}
+							>{#if isSortable}
+								<!-- eslint-disable-next-line svelte/no-restricted-html-elements -- a column heading's sort button takes the header's own type and no chrome (MOJ sortable table, #2955); Button has no such variant and this is its one user -->
+								<button
+									type="button"
+									class="sort"
+									class:ordered={orderedBy?.column === column.label}
+									class:descending={orderedBy?.column === column.label && orderedBy.direction === 'descending'}
+									aria-disabled={next === undefined || isBusy ? 'true' : undefined}
+									onclick={() => {
+										if (next !== undefined && !isBusy) onSort!(next);
+									}}
+									>{column.label}<span class="arrow" aria-hidden="true"></span></button
+								>
+							{:else}{column.label}{/if}</th
 						>
 					{/each}
 					{#if rowActions}
@@ -908,6 +940,49 @@
 			background-color: var(--color-surface-container);
 			color: var(--color-on-surface-variant);
 			font-weight: var(--font-weight-semibold);
+		}
+
+		/* #2955: a heading that is also a sort button draws as the heading does,
+		   with a quiet arrow after the label (before it in a numeric column,
+		   whose header ends on the amounts' edge). The arrow is drawn in every
+		   state, so a press never changes the cell's width. */
+		button.sort {
+			display: inline-flex;
+			align-items: center;
+			gap: var(--space-1);
+			block-size: 100%;
+			padding: 0;
+			border: 0;
+			background: none;
+			color: inherit;
+			font: inherit;
+			cursor: pointer;
+			text-align: inherit;
+			white-space: inherit;
+		}
+
+		button.sort .arrow::before {
+			content: '\2195';
+		}
+
+		button.sort.ordered .arrow::before {
+			content: '\2191';
+		}
+
+		button.sort.ordered.descending .arrow::before {
+			content: '\2193';
+		}
+
+		th.numeric button.sort .arrow {
+			order: -1;
+		}
+
+		button.sort:not([aria-disabled='true']):hover {
+			text-decoration: underline;
+		}
+
+		button.sort[aria-disabled='true'] {
+			cursor: default;
 		}
 
 		/* #2839: the header row stays at the top of the window while its

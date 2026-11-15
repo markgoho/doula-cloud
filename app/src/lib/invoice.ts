@@ -8,6 +8,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { ColumnOrder } from './headingOrder.js';
 import type { IconName } from './components/atoms/Icon/manifest.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -264,6 +265,15 @@ export function invoiceOrderedBy(order: InvoiceOrder, view: InvoicesView): { col
 	const { column, direction } = INVOICE_ORDERS[order || invoiceViewOrder(view)];
 	return { column, direction };
 }
+
+/**
+ * The orders each column's heading asks for (#2955); the first for a column is what a press asks for.
+ */
+export const INVOICE_COLUMN_ORDERS: readonly ColumnOrder[] = INVOICE_ORDER_NAMES.map((order) => ({
+	order,
+	column: INVOICE_ORDERS[order].column,
+	direction: INVOICE_ORDERS[order].direction
+}));
 
 /**
  * The query string that names a view and an order, empty for the whole

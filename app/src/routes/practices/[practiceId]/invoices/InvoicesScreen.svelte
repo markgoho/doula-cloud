@@ -40,6 +40,7 @@
 		invoiceDateLine,
 		invoiceMoneyState,
 		invoicesResultSummary,
+		INVOICE_COLUMN_ORDERS,
 		invoiceOrderedBy,
 		invoiceOrderOf,
 		invoiceOrderOptions,
@@ -421,6 +422,12 @@
 		return true;
 	}
 
+	// A heading's press is the Order select's pick: the bar as drawn, with the order it asks for.
+	function sortBy(picked: string) {
+		draftOrder = orderForView(picked as InvoiceOrder, draftView);
+		applyOnChange({ replace: false, changed: ['order'] });
+	}
+
 	/*
 	 * The GOV.UK "selected filters": one removable tag for the view and one
 	 * for the search, each a link to the list minus that one. The search is in
@@ -772,6 +779,8 @@
 					columnWidths="one-line"
 					recordLayout="compact"
 					orderedBy={invoiceOrderedBy(shown.order, shown.view)}
+					sortOrders={INVOICE_COLUMN_ORDERS}
+					onSort={sortBy}
 					{isBusy}
 				/>
 			</div>

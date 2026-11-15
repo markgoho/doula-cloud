@@ -10,6 +10,7 @@
 		careWhen,
 		CONTRACTS_RESULT_RULER,
 		NO_DOULA_FALLBACK,
+		contractColumnOrders,
 		contractOrderOf,
 		contractOrderOptions,
 		contractPeriodOf,
@@ -370,6 +371,12 @@
 		return true;
 	}
 	// jscpd:ignore-end
+
+	// A heading's press is the Order select's pick: the bar as drawn, with the order it asks for.
+	function sortBy(picked: string) {
+		draftOrder = orderForView(picked as ContractOrder, draftView);
+		applyOnChange({ replace: false, changed: ['order'] });
+	}
 
 	const VIEW_OPTIONS: readonly { value: ContractsView; label: string }[] = [
 		{ value: 'not-signed', label: 'Not signed' },
@@ -879,6 +886,8 @@
 						columnWidths="one-line"
 						recordLayout="compact"
 						orderedBy={contractOrderedBy(shown.order, shown.view)}
+						sortOrders={contractColumnOrders(shown.view)}
+						onSort={sortBy}
 						{isBusy}
 					/>
 				</div>

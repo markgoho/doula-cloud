@@ -154,6 +154,24 @@ describe('an applied order (#2869)', () => {
 		await expect.element(testPage.getByRole('columnheader', { name: 'Sent' })).toHaveAttribute('aria-sort', 'descending');
 	});
 
+	it('sorts by a heading (#2955): the opposite way for the sorted column, the view’s own order left out of the address', async () => {
+		await setupOrder();
+
+		await testPage.getByRole('columnheader', { name: 'Sent' }).getByRole('button').click();
+		expect(goto).toHaveBeenLastCalledWith(`${path}?order=sent-oldest`, { state: { invoicesSearch: '' }, replaceState: false, reset: false });
+
+		await testPage.getByRole('columnheader', { name: 'Money' }).getByRole('button').click();
+		expect(goto).toHaveBeenLastCalledWith(`${path}?order=amount-largest`, { state: { invoicesSearch: '' }, replaceState: false, reset: false });
+	});
+
+	it('asks for the view’s own order by its heading, which the address leaves out', async () => {
+		await setupOrder('?show=unpaid&order=amount-largest', { view: 'unpaid', order: 'amount-largest' });
+
+		await testPage.getByRole('columnheader', { name: 'Payment' }).getByRole('button').click();
+
+		expect(goto).toHaveBeenLastCalledWith(`${path}?show=unpaid`, { state: { invoicesSearch: '' }, replaceState: false, reset: false });
+	});
+
 	it('asks Load more for the same order', async () => {
 		apiFetchWithSession.mockResolvedValue(jsonResponse({ ...data, items: [{ ...data.items[0], id: 'inv-later', clientName: 'Cleo' }], hasMore: false }));
 		await setupOrder('?order=due-latest', { order: 'due-latest', hasMore: true, nextCursor: 'cursor-1', invoiceCount: 4 });

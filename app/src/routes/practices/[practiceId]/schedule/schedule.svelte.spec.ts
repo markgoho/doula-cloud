@@ -912,6 +912,21 @@ describe('the reader’s order (#2869)', () => {
 		expect(order.element().compareDocumentPosition(apply) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
+	it('sorts by the When heading (#2955): latest first from soonest, and back', async () => {
+		await setup();
+
+		await testPage.getByRole('columnheader', { name: 'When' }).getByRole('button').click();
+		expect(vi.mocked(goto).mock.lastCall![0]).toBe(`${schedulePath}?order=latest`);
+	});
+
+	it('asks for soonest first from the When heading once the order is latest', async () => {
+		setAddress('?order=latest');
+		await setup({ data: latestData() });
+
+		await testPage.getByRole('columnheader', { name: 'When' }).getByRole('button').click();
+		expect(vi.mocked(goto).mock.lastCall![0]).toBe(schedulePath);
+	});
+
 	it('goes to ?order=latest on Apply, beside the other narrowing, and leaves it out for Soonest first', async () => {
 		await setup();
 

@@ -623,7 +623,7 @@ describe('DataTable.svelte', () => {
 
 		const button = page.getByRole('button', { name: 'Load more' });
 		await expect.element(button).toBeVisible();
-		await button.click();
+		await button.click({ force: true });
 
 		expect(onLoadMore).toHaveBeenCalledOnce();
 	});
@@ -1451,6 +1451,88 @@ describe('rows grouped under a heading (#2867)', () => {
 		await setupGrouped({ rowGroup: undefined });
 
 		await expect.element(page.getByRole('columnheader', { name: 'Status' })).not.toHaveAttribute('aria-sort');
+	});
+
+	describe('sortable headings (#2955)', () => {
+		const sortOrders = [
+			{ order: '', column: 'Name', direction: 'ascending' as const },
+			{ order: 'status', column: 'Status', direction: 'ascending' as const },
+			{ order: 'status-desc', column: 'Status', direction: 'descending' as const }
+		];
+
+		it('draws a button in the heading of a column that has an order, and none for one that has not', async () => {
+			await setupGrouped({
+				rowGroup: undefined,
+				sortOrders: sortOrders.slice(1),
+				onSort: vi.fn(),
+				orderedBy: { column: 'Name', direction: 'ascending' }
+			});
+
+			await expect.element(page.getByRole('columnheader', { name: 'Status' }).getByRole('button')).toBeVisible();
+			await expect.element(page.getByRole('columnheader', { name: 'Name' }).getByRole('button')).not.toBeInTheDocument();
+		});
+
+		it('keeps the sorted column’s button, unavailable, when it has no order to move to', async () => {
+			const onSort = vi.fn();
+			await setupGrouped({ rowGroup: undefined, sortOrders, onSort, orderedBy: { column: 'Name', direction: 'ascending' } });
+
+			const button = page.getByRole('columnheader', { name: 'Name' }).getByRole('button');
+			await expect.element(button).toHaveAttribute('aria-disabled', 'true');
+			await button.click({ force: true });
+			expect(onSort).not.toHaveBeenCalled();
+		});
+
+		it('does nothing while the list is busy', async () => {
+			const onSort = vi.fn();
+			await setupGrouped({
+				rowGroup: undefined,
+				sortOrders,
+				onSort,
+				isBusy: true,
+				orderedBy: { column: 'Name', direction: 'ascending' }
+			});
+
+			await page.getByRole('columnheader', { name: 'Status' }).getByRole('button').click({ force: true });
+			expect(onSort).not.toHaveBeenCalled();
+		});
+
+		it('asks for the order the press leads to, and the opposite once the rows are in order by the column', async () => {
+			const onSort = vi.fn();
+			const { rerender } = await setupGrouped({
+				rowGroup: undefined,
+				sortOrders,
+				onSort,
+				orderedBy: { column: 'Name', direction: 'ascending' }
+			});
+
+			await page.getByRole('columnheader', { name: 'Status' }).getByRole('button').click();
+			expect(onSort).toHaveBeenLastCalledWith('status');
+
+			await rerender({ orderedBy: { column: 'Status', direction: 'ascending' } });
+			await page.getByRole('columnheader', { name: 'Status' }).getByRole('button').click();
+			expect(onSort).toHaveBeenLastCalledWith('status-desc');
+		});
+
+		it('draws no buttons without an onSort', async () => {
+			await setupGrouped({ rowGroup: undefined, sortOrders });
+
+			await expect.element(page.getByRole('button', { name: 'Status' })).not.toBeInTheDocument();
+		});
+
+		it('does not open the row when a heading is pressed', async () => {
+			const onSort = vi.fn();
+			await setupGrouped({
+				rowGroup: undefined,
+				sortOrders,
+				onSort,
+				rowHref: () => '#row',
+				orderedBy: { column: 'Name', direction: 'ascending' }
+			});
+
+			await page.getByRole('columnheader', { name: 'Status' }).getByRole('button').click();
+
+			expect(location.hash).not.toBe('#row');
+		});
 	});
 
 	it('spans the actions column too', async () => {

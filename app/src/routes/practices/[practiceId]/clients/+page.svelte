@@ -29,6 +29,7 @@
 	} from '#lib/clientsDue.js';
 	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
 	import { dayIn } from '#lib/zonedTime.js';
+	import type { ColumnOrder } from '#lib/headingOrder.js';
 	import { typedIn } from '#lib/typedIn.js';
 	import { clientsDownloadedWords, requestClientsExport } from '#lib/clientExport.js';
 	import { saveFile } from '#lib/csvExport.js';
@@ -528,6 +529,20 @@
 		rangeErrors = {};
 		void applyDrawn({ replace });
 		return true;
+	}
+
+	const sortOrders: readonly ColumnOrder[] = [
+		{ order: '', column: 'Date', direction: 'ascending' },
+		{ order: 'name', column: 'Name', direction: 'ascending' },
+		{ order: 'name-desc', column: 'Name', direction: 'descending' },
+		{ order: 'owed', column: 'Money', direction: 'descending' }
+	];
+
+	// A heading's press is the Order select's pick: the bar as drawn, with the order it asks for.
+	function sortBy(order: string) {
+		touched.push('order');
+		draftOrder = order as ClientOrder;
+		applyOnChange({ replace: false, changed: ['order'] });
 	}
 
 	// The roster has not landed and the address names a Doula: the select holds her id, with no name to claim.
@@ -1522,6 +1537,8 @@
 				caption="Clients"
 				columnWidths="one-line"
 				{orderedBy}
+				sortOrders={isContractor ? undefined : sortOrders}
+				onSort={sortBy}
 				recordLayout="compact"
 				recordColumns="fill"
 				describedBy={isContractor ? undefined : RESULT_ID}

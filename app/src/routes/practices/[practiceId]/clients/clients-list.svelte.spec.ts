@@ -925,6 +925,24 @@ describe('the "Order" select (#2869)', () => {
 		expect(label).not.toBe('');
 	});
 
+	it.each([
+		['Name', '', 'order=name'],
+		['Money', '', 'order=owed'],
+		['Name', 'name', 'order=name-desc'],
+		['Name', 'name-desc', 'order=name'],
+		['Date', 'name', '']
+	])('sorts by the %s heading from `?order=%s` (#2955)', async (column, from, expected) => {
+		if (from) pageState.url.searchParams.set('order', from);
+		await setup();
+
+		await testPage.getByRole('columnheader', { name: column }).getByRole('button').click();
+
+		await vi.waitFor(() => expect(goto).toHaveBeenCalled());
+		const last = String(goto.mock.calls.at(-1)![0]);
+		expect(last.endsWith(expected ? `?${expected}` : `/clients`)).toBe(true);
+		pageState.url.searchParams.delete('order');
+	});
+
 	it('reads an order the list does not offer as its own', async () => {
 		pageState.url.searchParams.set('order', 'newest');
 
