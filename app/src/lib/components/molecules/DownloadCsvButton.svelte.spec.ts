@@ -20,6 +20,13 @@ describe('DownloadCsvButton', () => {
 		expect(onDownload).toHaveBeenCalledOnce();
 	});
 
+	it('takes no margin when flush', async () => {
+		await render(DownloadCsvButton, { isExporting: false, hasRows: true, description: 'x', onDownload: async () => {}, isFlush: true });
+
+		const box = page.getByRole('button', { name: 'Download CSV' }).element().parentElement!;
+		expect(getComputedStyle(box).marginBlockStart).toBe('0px');
+	});
+
 	it('stays in its place, unavailable, while there is nothing to download', async () => {
 		await setup({ hasRows: false });
 

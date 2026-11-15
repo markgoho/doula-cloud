@@ -12,14 +12,15 @@
 		hasRows: boolean;
 		description: string;
 		onDownload: () => Promise<void>;
+		isFlush?: boolean;
 	}
 
-	let { isExporting, hasRows, description, onDownload }: Properties = $props();
+	let { isExporting, hasRows, description, onDownload, isFlush = false }: Properties = $props();
 
 	const noteId = $props.id();
 </script>
 
-<div class="download">
+<div class="download" class:flush={isFlush}>
 	<Button label="Download CSV" variant="secondary" loading={isExporting} ariaDisabled={!hasRows} describedBy={noteId} onClick={onDownload} />
 	<span class="visually-hidden" id={noteId}>{description}</span>
 </div>
@@ -31,6 +32,10 @@
 		   row, and the list under it, stay where they were. */
 		.download {
 			margin-block: calc((var(--start-button-block-size) - var(--hit-target-min)) / 2);
+		}
+
+		.flush {
+			margin-block: 0;
 		}
 	}
 </style>
