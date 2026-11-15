@@ -8,29 +8,27 @@
 	 * filter a `FilterBar` and the book a `DataTable`, the pieces the
 	 * Clients list is built from (#2746).
 	 */
-	import { onMount, tick, untrack } from 'svelte';
+	import { untrack } from 'svelte';
 	import { page } from '#lib/appState.svelte.js';
-	import DateRangeFields from '#lib/components/molecules/DateRangeFields.svelte';
-	import Select from '#lib/components/atoms/Select.svelte';
+	import DownloadCsvButton from '#lib/components/molecules/DownloadCsvButton.svelte';
+	import DownloadCsvNotices from '#lib/components/molecules/DownloadCsvNotices.svelte';
+	import SentPeriodFields from '#lib/components/molecules/SentPeriodFields.svelte';
+	import { CsvDownload } from '#lib/csvDownload.svelte.js';
+	import { SentPeriodDraft } from '#lib/sentPeriodDraft.svelte.js';
 	import {
-		INVOICE_PERIOD_OPTIONS,
-		invoicePeriodChoiceOf,
-		invoicePeriodDays,
-		invoicePeriodKey,
-		invoicePeriodOf,
-		invoicePeriodWords,
-		type InvoiceDays,
-		type InvoicePeriod,
-		type InvoicePeriodChoice
-	} from '#lib/invoicePeriod.js';
-	import { downloadedWords as downloadedWordsOf, requestInvoicesExport, saveFile } from '#lib/invoiceExport.js';
-	import { scheduleRangeErrors, type ScheduleRangeErrors } from '#lib/visitSchedule.js';
+		sentPeriodDays,
+		sentPeriodKey,
+		sentPeriodOf,
+		sentPeriodWords,
+		type SentDays,
+		type SentPeriod
+	} from '#lib/sentPeriod.js';
+	import { downloadedWords as downloadedWordsOf, requestInvoicesExport } from '#lib/invoiceExport.js';
 	import { readerTimeZone } from '#lib/zonedTime.js';
 	import { afterNavigate, beforeNavigate, goto } from '$app/navigation';
 	import { keepListReturn, restoreList, type ListReturn } from '#lib/listReturn.js';
 	import { holdListSearch } from '#lib/listOrigin.svelte.js';
 	import { typedIn } from '#lib/typedIn.js';
-	import Button from '#lib/components/atoms/Button.svelte';
 	import { resolve } from '$app/paths';
 	import { apiFetchWithSession } from '#lib/api.js';
 	import { formatCalendarDay } from '#lib/dates.js';
@@ -129,15 +127,15 @@
 		holdListSearch('invoices', appliedSearch);
 	});
 	// #2871: the period the address names, and the Practice's zone it is counted in.
-	const period = $derived(invoicePeriodOf(page.url.searchParams));
+	const period = $derived(sentPeriodOf(page.url.searchParams));
 	const timeZone = $derived(session?.timezone ?? readerTimeZone());
 	const mountedAt = new Date();
 	const now = $derived(data?.now ?? mountedAt);
-	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string; period?: InvoicePeriod };
+	type ReadKey = { view: InvoicesView; order: InvoiceOrder; search: string; period?: SentPeriod };
 	const isSameKey = (a: ReadKey | undefined, b: ReadKey) =>
-		a?.view === b.view && a.order === b.order && a.search === b.search && invoicePeriodKey(a.period) === invoicePeriodKey(b.period);
+		a?.view === b.view && a.order === b.order && a.search === b.search && sentPeriodKey(a.period) === sentPeriodKey(b.period);
 	const wanted = $derived<ReadKey>({ view, order, search: appliedSearch, period });
-	const wantedDays = $derived(invoicePeriodDays(period, timeZone, now));
+	const wantedDays = $derived(sentPeriodDays(period, timeZone, now));
 
 	/*
 	 * What the rows on screen were read under, and the latest page read for
@@ -153,7 +151,7 @@
 	let shown = $state.raw<ReadKey>();
 	let book = $state.raw<PracticeInvoicePage>();
 	// The two days the rows on screen were read as, which every later page asks for again.
-	let shownDays = $state.raw<InvoiceDays>();
+	let shownDays = $state.raw<SentDays>();
 	// The searched read that failed, so the list is not left marked busy.
 	let failedKey = $state.raw<ReadKey>();
 	let isApplying = $state(false);
@@ -179,7 +177,7 @@
 		failureMessage: LOAD_MORE_FAILED
 	});
 
-	function adopt(first: PracticeInvoicePage, key: ReadKey, days: InvoiceDays | undefined) {
+	function adopt(first: PracticeInvoicePage, key: ReadKey, days: SentDays | undefined) {
 		shown = key;
 		shownDays = days;
 		invoices.reset(first);
@@ -275,7 +273,7 @@
 	async function readSearch(key: ReadKey, thisSearch: number) {
 		isSearching = true;
 		try {
-			const days = invoicePeriodDays(key.period, timeZone, now);
+			const days = sentPeriodDays(key.period, timeZone, now);
 			const first = await loadPracticeInvoices(apiFetchWithSession, page.params.practiceId!, undefined, key.view, key.search, key.order, days);
 			if (thisSearch === latestSearch) adopt(first, key, days);
 		} catch {
@@ -361,10 +359,7 @@
 	let draftOrder = $state<InvoiceOrder>('');
 	let draftSearch = $state('');
 	let searchBox = $state<HTMLElement>();
-	let draftChoice = $state<InvoicePeriodChoice>('');
-	let fromValue = $state('');
-	let toValue = $state('');
-	let rangeErrors = $state<ScheduleRangeErrors>({});
+	const draftPeriod = new SentPeriodDraft();
 	let isSearchTouched = false;
 	let filterBar = $state<{ focusStatus: () => void }>();
 	let isFocusPending = $state(false);
@@ -372,10 +367,7 @@
 	function seedDrafts() {
 		draftView = view;
 		draftOrder = order;
-		draftChoice = invoicePeriodChoiceOf(period);
-		fromValue = period && 'days' in period ? period.days.from : '';
-		toValue = period && 'days' in period ? period.days.to : '';
-		rangeErrors = {};
+		draftPeriod.seed(period);
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
@@ -414,25 +406,12 @@
 		}
 	}
 
-	const draftPeriod = $derived<InvoicePeriod | undefined>(
-		draftChoice === '' ? undefined : (draftChoice === 'choose' ? { days: { from: fromValue, to: toValue } } : { preset: draftChoice })
-	);
-	const isChoosingDays = $derived(draftChoice === 'choose');
-
-	const drawnHref = () => `${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView), draftPeriod)}`;
-
-	// Two typed days that are not a range are said beside them; the others send as drawn.
-	function hasRangeProblem(): boolean {
-		const problems = isChoosingDays ? scheduleRangeErrors(fromValue, toValue) : {};
-		rangeErrors = problems;
-		return Boolean(problems.from || problems.to);
-	}
+	const drawnHref = () => `${invoicesHref}${invoicesViewQuery(draftView, orderForView(draftOrder, draftView), draftPeriod.period)}`;
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
-		if (hasRangeProblem()) {
-			await tick();
-			document.querySelector<HTMLInputElement>(rangeErrors.from ? 'input[name="from"]' : 'input[name="to"]')?.focus();
+		if (draftPeriod.hasProblem()) {
+			await draftPeriod.focusProblem();
 			return;
 		}
 		await showFilter(drawnHref(), typedIn(searchBox, draftSearch));
@@ -440,8 +419,7 @@
 
 	// A radio, a select or the order applies when changed (#2888); the search and typed days wait for Apply, and "Choose days" alone only opens its fields.
 	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
-		if (isChoosingDays && changed.length === 1 && changed[0] === 'sent') return false;
-		if (hasRangeProblem()) return false;
+		if (draftPeriod.isOnlyOpeningDays(changed) || draftPeriod.hasProblem()) return false;
 		void showFilter(drawnHref(), typedIn(searchBox, draftSearch), { replace });
 		return true;
 	}
@@ -461,7 +439,7 @@
 			tags.push({ text: viewTag, href: `${invoicesHref}${invoicesViewQuery('all', orderForView(order, 'all'), period)}`, search: appliedSearch });
 		}
 		if (wantedDays) {
-			tags.push({ text: `Sent ${invoicePeriodWords(wantedDays)}`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: appliedSearch });
+			tags.push({ text: `Sent ${sentPeriodWords(wantedDays)}`, href: `${invoicesHref}${invoicesViewQuery(view, order)}`, search: appliedSearch });
 		}
 		if (appliedSearch) {
 			tags.push({ text: `Matching "${appliedSearch}"`, href: `${invoicesHref}${invoicesViewQuery(view, order, period)}`, search: '' });
@@ -491,18 +469,11 @@
 	 * #2871: the export reads the list's applied view, search, order and period,
 	 * as a POST so the search, which can be a Client's name, stays out of the
 	 * address, and it needs script to hand the file over, so with none the
-	 * button is not drawn. Money is not offline (ADR-0059): a refusal is said in
-	 * place and the button stays for another try.
+	 * button is not drawn.
 	 */
-	let isScripted = $state(false);
-	onMount(() => {
-		isScripted = true;
-	});
-	let isExporting = $state(false);
-	let exportRefusal = $state('');
-	let downloaded = $state.raw<{ key: ReadKey; words: string }>();
-	const downloadedWords = $derived(downloaded && downloaded.key === shown && isSameKey(shown, wanted) ? downloaded.words : '');
-	const isExportDrawn = $derived(isScripted && session !== undefined && isOwnerOrAdmin(session));
+	const csv = new CsvDownload<ReadKey | undefined>();
+	const downloadedWords = $derived(csv.wordsWhile((key) => key === shown && isSameKey(shown, wanted)));
+	const isExportDrawn = $derived(csv.isScripted && session !== undefined && isOwnerOrAdmin(session));
 	// Drawn from the first frame so the title row never changes height when the list lands; there is nothing to download until it has.
 	const hasExportRows = $derived(shown !== undefined && !isBookEmpty && readFailure === '');
 	// The result line's own count, or none where a search leaves it unknown.
@@ -519,22 +490,12 @@
 	);
 	async function downloadCsv() {
 		if (!shown) return;
-		isExporting = true;
-		exportRefusal = '';
-		downloaded = undefined;
-		const key = shown;
-		const result = await requestInvoicesExport(apiFetchWithSession, page.params.practiceId!, {
-			view: shown.view,
-			search: shown.search,
-			order: shown.order,
-			days: shownDays
-		});
-		isExporting = false;
-		if ('refusal' in result) exportRefusal = result.refusal;
-		else {
-			saveFile(result.blob, result.filename);
-			downloaded = { key, words: downloadedWordsOf(result.filename, result.count) };
-		}
+		const { view, search, order, days } = { ...shown, days: shownDays };
+		await csv.run(
+			shown,
+			() => requestInvoicesExport(apiFetchWithSession, page.params.practiceId!, { view, search, order, days }),
+			downloadedWordsOf
+		);
 	}
 
 	// H10: a search that found nothing in a narrowed view is run again over every
@@ -722,12 +683,7 @@
 	{/if}
 
 	<!-- Under the title row, with the button still there to try again. -->
-	{#if exportRefusal}
-		<Notice variant="error" message={exportRefusal} />
-	{/if}
-	{#if downloadedWords}
-		<Notice variant="status" message={downloadedWords} />
-	{/if}
+	<DownloadCsvNotices refusal={csv.refusal} downloaded={downloadedWords} />
 
 	<!--
 		#270: an empty book looks the same whether nobody has billed yet or
@@ -783,31 +739,13 @@
 				{/snippet}
 				{@render searchField()}
 				{#snippet folded()}
-					<div class="field sent">
-						<LabeledField label="Sent" width={20}>
-							{#snippet children({ id, describedBy, invalid, width })}
-								<Select
-									{id}
-									{describedBy}
-									{invalid}
-									{width}
-									name="sent"
-									options={INVOICE_PERIOD_OPTIONS}
-									value={draftChoice}
-									onChange={(chosen) => (draftChoice = chosen as InvoicePeriodChoice)}
-								/>
-							{/snippet}
-						</LabeledField>
-					</div>
-					{#if isChoosingDays}
-						<DateRangeFields
-							bind:from={fromValue}
-							bind:to={toValue}
-							fromError={rangeErrors.from}
-							toError={rangeErrors.to}
-							hint="Both days are included."
-						/>
-					{/if}
+					<SentPeriodFields
+						bind:choice={draftPeriod.choice}
+						bind:from={draftPeriod.from}
+						bind:to={draftPeriod.to}
+						fromError={draftPeriod.errors.from}
+						toError={draftPeriod.errors.to}
+					/>
 				{/snippet}
 			</FilterBar>
 		{/if}
@@ -848,17 +786,7 @@
 
 {#snippet actions()}
 	{#if isExportDrawn}
-		<div class="download">
-			<Button
-				label="Download CSV"
-				variant="secondary"
-				loading={isExporting}
-				ariaDisabled={!hasExportRows}
-				describedBy="invoices-export-note"
-				onClick={downloadCsv}
-			/>
-			<span class="visually-hidden" id="invoices-export-note">{exportDescription}</span>
-		</div>
+		<DownloadCsvButton isExporting={csv.isExporting} hasRows={hasExportRows} description={exportDescription} onDownload={downloadCsv} />
 	{/if}
 {/snippet}
 
@@ -905,13 +833,6 @@
 
 		.reserve {
 			visibility: hidden;
-		}
-
-		/* The title row holds a start button's height, a little under a button's
-		   target, so the button takes the difference out of its own margin and the
-		   row, and the list under it, stay where they were. */
-		.download {
-			margin-block: calc((var(--start-button-block-size) - var(--hit-target-min)) / 2);
 		}
 
 		.totals-note {

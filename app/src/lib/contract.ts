@@ -14,6 +14,7 @@ import { dueParts, type DueParts } from './client.js';
 import { formatCalendarDay } from './dates.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
+import { sentPeriodOf, sentPeriodQuery, sentPeriodWords, SENT_PERIOD_RULER, type SentDays, type SentPeriod } from './sentPeriod.js';
 
 export interface Contract {
 	engagementId: string;
@@ -425,6 +426,12 @@ export interface ContractsListData extends ContractsPage {
 	order: ContractOrder;
 	isMine: boolean;
 	doula: string;
+	/**
+	 * The period the address named, and the two days it was read as in the
+	 * Practice's zone (#2954), which every later page asks for again.
+	 */
+	period?: SentPeriod;
+	days?: SentDays;
 	now: Date;
 }
 
@@ -434,6 +441,7 @@ export interface ContractsQuery {
 	isMine: boolean;
 	doula: string;
 	search?: string;
+	days?: SentDays;
 }
 
 export interface AwaitingVoidRequest {
@@ -475,6 +483,13 @@ const VIEW_ORDER: Record<ContractsView, 'oldest' | 'newest'> = {
 
 export function contractViewOrder(view: ContractsView): 'oldest' | 'newest' {
 	return VIEW_ORDER[view];
+}
+
+/**
+The period the address names (#2954), none in the Draft view: a Draft was never sent, so no period can hold one and the view is not offered one.
+*/
+export function contractPeriodOf(search: Pick<URLSearchParams, 'get'>, view: ContractsView): SentPeriod | undefined {
+	return view === 'draft' ? undefined : sentPeriodOf(search);
 }
 
 export function orderForView(order: ContractOrder, view: ContractsView): ContractOrder {
@@ -552,15 +567,17 @@ export interface ContractsAddress {
 	order: ContractOrder;
 	isMine?: boolean;
 	doula?: string;
+	period?: SentPeriod | undefined;
 }
 
-export function contractsQueryString({ view, order, isMine = false, doula = '' }: ContractsAddress): string {
+export function contractsQueryString({ view, order, isMine = false, doula = '', period }: ContractsAddress): string {
 	const query = new URLSearchParams();
 	if (view !== 'not-signed') query.set('show', view);
 	if (isMine) query.set('mine', 'true');
 	if (doula) query.set('doula', doula);
 	const own = orderForView(order, view);
 	if (own) query.set('order', own);
+	if (view !== 'draft') for (const [name, value] of sentPeriodQuery(period)) query.set(name, value);
 	const text = query.toString();
 	return text ? `?${text}` : '';
 }
@@ -575,6 +592,10 @@ export function practiceContractsPath(practiceId: string, query: ContractsQuery,
 	if (query.order) search.set('order', query.order);
 	if (query.isMine) search.set('mine', 'true');
 	if (query.doula) search.set('doula', query.doula);
+	if (query.days) {
+		search.set('sentFrom', query.days.from);
+		search.set('sentTo', query.days.to);
+	}
 	if (cursor) search.set('cursor', cursor);
 	const text = search.toString();
 	return text ? `${contractsBase(practiceId)}?${text}` : contractsBase(practiceId);
@@ -597,6 +618,7 @@ export async function loadPracticeContracts(
 					doula: query.doula,
 					mine: query.isMine,
 					search,
+					...(query.days && { sentFrom: query.days.from, sentTo: query.days.to }),
 					cursor: cursor ?? ''
 				})
 			})
@@ -687,10 +709,10 @@ export const CONTRACT_VIEW_TAGS: Partial<Record<ContractsView, string>> = {
 
 export const NO_DOULA_FALLBACK = 'that Doula';
 
-function orderWords(view: ContractsView, order: ContractOrder): string {
+function orderWords(view: ContractsView, order: ContractOrder, hasPeriod: boolean): string {
 	const named: NamedContractOrder = order || VIEW_ORDER[view];
 	if (named === 'client') return 'Client A to Z';
-	if (view === 'not-signed' && named === 'oldest') return 'longest wait first, then Drafts';
+	if (view === 'not-signed' && named === 'oldest') return hasPeriod ? 'longest wait first' : 'longest wait first, then Drafts';
 	if (view === 'sent') return named === 'oldest' ? 'longest wait first' : 'shortest wait first';
 	return `${named} first`;
 }
@@ -704,15 +726,17 @@ export interface ContractsSummaryInput {
 	isMine: boolean;
 	doulaName: string;
 	search: string;
+	days?: SentDays;
 }
 
 export function contractsResultSummary(input: ContractsSummaryInput): string {
-	const { view, order, shown, hasMore, total, isMine, doulaName, search } = input;
+	const { view, order, shown, hasMore, total, isMine, doulaName, search, days } = input;
 	const noun = NOUNS[view];
 	const doula = doulaName ? ` on ${doulaName}'s Engagements` : '';
 	const matching = search ? ` matching "${search}"` : '';
+	const sent = days ? ` sent ${sentPeriodWords(days)}` : '';
 	if (shown === 0) {
-		const scope = `${isMine ? ' of yours' : ''}${doula}${matching}`;
+		const scope = `${isMine ? ' of yours' : ''}${sent}${doula}${matching}`;
 		if (view === 'all') {
 			return scope ? `No Contract${scope}.` : 'No Contracts yet. One appears here when a Contract is made on an Engagement.';
 		}
@@ -722,7 +746,7 @@ export function contractsResultSummary(input: ContractsSummaryInput): string {
 	if (hasMore) count = `the first ${shown} of ${isMine ? 'your ' : ''}${Math.max(total, shown)} ${noun.plural}`;
 	else if (isMine) count = `${shown} of your ${noun.plural}`;
 	else count = shown === 1 ? `1 ${noun.singular}` : `${shown} ${noun.plural}`;
-	return `Showing ${count}${doula}${matching}, ${orderWords(view, order)}.`;
+	return `Showing ${count}${sent}${doula}${matching}, ${orderWords(view, order, Boolean(days))}.`;
 }
 
 const RULER_DOULA = 'D'.repeat(30);
@@ -730,17 +754,20 @@ const RULER_DOULA = 'D'.repeat(30);
 export const CONTRACTS_RESULT_RULER = (Object.keys(NOUNS) as ContractsView[])
 	.flatMap((view) =>
 		(['', 'oldest', 'newest', 'client'] as const).flatMap((order) =>
-			[true, false].map((isMine) =>
-				contractsResultSummary({
-					view,
-					order,
-					shown: 99,
-					hasMore: true,
-					total: 9999,
-					isMine,
-					doulaName: RULER_DOULA,
-					search: ''
-				})
+			[true, false].flatMap((isMine) =>
+				[undefined, SENT_PERIOD_RULER].map((days) =>
+					contractsResultSummary({
+						view,
+						order,
+						shown: 99,
+						hasMore: true,
+						total: 9999,
+						isMine,
+						doulaName: RULER_DOULA,
+						search: '',
+						days
+					})
+				)
 			)
 		)
 	)

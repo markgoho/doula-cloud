@@ -171,6 +171,7 @@ const STAFF_ACTIVITY_PHRASES: Record<string, Phrase> = {
 	practice_data_exported: fixed('Practice data downloaded'),
 	invoices_exported: fixed('Invoices downloaded'),
 	clients_exported: fixed('Clients downloaded'),
+	contracts_exported: fixed('Contracts downloaded'),
 	practice_deletion_requested: fixed('Practice set to be deleted'),
 	practice_deletion_restored: fixed('Practice deletion canceled'),
 	practice_deletion_finalized: fixed('Practice deleted'),

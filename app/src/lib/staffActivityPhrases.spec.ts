@@ -43,6 +43,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 		"Doula payment for Amara's care removed",
 		"Doula payment for the Client's care removed"
 	],
+	['contracts_exported', 'Contracts downloaded', 'Contracts downloaded'],
 	['coverage_gap_cleared', 'Gap in on-call cover closed for Amara', 'Gap in on-call cover closed for the Client'],
 	['coverage_gap_created', 'Gap in on-call cover added for Amara', 'Gap in on-call cover added for the Client'],
 	['coverage_gap_updated', 'Gap in on-call cover changed for Amara', 'Gap in on-call cover changed for the Client'],

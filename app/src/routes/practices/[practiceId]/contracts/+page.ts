@@ -2,6 +2,7 @@ import { apiFetch } from '#lib/api.js';
 import {
 	CONTRACTS_READ,
 	contractOrderOf,
+	contractPeriodOf,
 	contractsViewOf,
 	practiceContractsPath,
 	practiceVoidRequestsPath,
@@ -9,6 +10,7 @@ import {
 	type ContractsPage,
 	type VoidRequestsPage
 } from '#lib/contract.js';
+import { sentPeriodDays } from '#lib/sentPeriod.js';
 import { canNarrowToMine, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
 import { mapRead, streamRead, type StreamedRead } from '#lib/streamedRead.svelte.js';
 import { loadDoulaRoster } from '#lib/staff.js';
@@ -28,12 +30,14 @@ export const load: PageLoad = async ({ params, url, fetch, depends, parent }): P
 	const order = contractOrderOf(url.searchParams, view);
 	const isMine = canNarrowToMine(session) && url.searchParams.get('mine') === 'true';
 	const doula = url.searchParams.get('doula') ?? '';
+	const period = contractPeriodOf(url.searchParams, view);
 	const now = new Date();
+	const days = sentPeriodDays(period, session.timezone, now);
 	const isQueueRead = isOwnerOrAdmin(session);
 	return {
 		read: mapRead(
-			streamRead<ContractsPage>(practiceContractsPath(params.practiceId, { view, order, isMine, doula }), fetch),
-			(contracts) => ({ ...contracts, view, order, isMine, doula, now })
+			streamRead<ContractsPage>(practiceContractsPath(params.practiceId, { view, order, isMine, doula, days }), fetch),
+			(contracts) => ({ ...contracts, view, order, isMine, doula, period, days, now })
 		),
 		voidRequests: isQueueRead ? streamRead<VoidRequestsPage>(practiceVoidRequestsPath(params.practiceId), fetch) : undefined,
 		doulas: isQueueRead ? loadDoulaRoster((path, init) => apiFetch(path, init, fetch), params.practiceId) : Promise.resolve([])

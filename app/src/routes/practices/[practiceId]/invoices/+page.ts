@@ -6,7 +6,7 @@ import {
 	type PracticeInvoiceListData,
 	type PracticeInvoicePage
 } from '#lib/invoice.js';
-import { invoicePeriodDays, invoicePeriodOf } from '#lib/invoicePeriod.js';
+import { sentPeriodDays, sentPeriodOf } from '#lib/sentPeriod.js';
 import type { PageLoad } from './$types';
 
 export const _INVOICES_READ = 'app:invoices';
@@ -36,10 +36,10 @@ export const load: PageLoad = async ({
 	const view = invoicesViewOf(url.searchParams);
 	const order = invoiceOrderOf(url.searchParams, view);
 	// #2871: the BFF takes two days, so a preset is counted here, in the Practice's zone.
-	const period = invoicePeriodOf(url.searchParams);
+	const period = sentPeriodOf(url.searchParams);
 	const now = new Date();
 	const { session } = await parent();
-	const days = invoicePeriodDays(period, session.timezone, now);
+	const days = sentPeriodDays(period, session.timezone, now);
 	const path = practiceInvoicesPath(params.practiceId, undefined, view, order, days);
 	return {
 		read: mapRead(streamRead<PracticeInvoicePage>(path, fetch), (invoices) => ({

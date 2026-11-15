@@ -15,6 +15,7 @@ import {
 	CONTRACTS_RESULT_RULER,
 	CONTRACT_VIEW_TAGS,
 	contractOrderOf,
+	contractPeriodOf,
 	contractOrderOptions,
 	contractOrderedBy,
 	contractStatusWord,
@@ -813,5 +814,33 @@ describe('isVoidRequestReasonTooLong', () => {
 		expect(isVoidRequestReasonTooLong('\u{E9}'.repeat(VOID_REQUEST_REASON_LIMIT))).toBe(false);
 		expect(isVoidRequestReasonTooLong(` ${'a'.repeat(VOID_REQUEST_REASON_LIMIT)} `)).toBe(false);
 		expect(isVoidRequestReasonTooLong('a'.repeat(VOID_REQUEST_REASON_LIMIT + 1))).toBe(true);
+	});
+});
+
+describe('the Contracts list narrowed to a period (#2954)', () => {
+	const october = { from: '2026-10-01', to: '2026-10-31' };
+
+	it('reads the period from the address, and none in the Draft view', () => {
+		expect(contractPeriodOf(parameters('sent=last-month'), 'signed')).toEqual({ preset: 'last-month' });
+		expect(contractPeriodOf(parameters('sent=last-month'), 'draft')).toBeUndefined();
+	});
+
+	it('names the period in the address, and drops it in the Draft view', () => {
+		expect(contractsQueryString({ view: 'signed', order: '', period: { preset: 'last-month' } })).toBe('?show=signed&sent=last-month');
+		expect(contractsQueryString({ view: 'draft', order: '', period: { preset: 'last-month' } })).toBe('?show=draft');
+	});
+
+	it('asks the BFF for the two days, by GET and by POST', async () => {
+		expect(practiceContractsPath('p1', { view: 'sent', order: '', isMine: false, doula: '', days: october })).toBe(
+			'/api/practices/p1/contracts?view=sent&sentFrom=2026-10-01&sentTo=2026-10-31'
+		);
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false, total: 0 }));
+		await loadPracticeContracts(fetcher, 'p1', { view: 'sent', order: '', isMine: false, doula: '', search: 'q', days: october });
+		expect(JSON.parse(fetcher.mock.calls[0]![1].body)).toMatchObject({ sentFrom: '2026-10-01', sentTo: '2026-10-31' });
+	});
+
+	it('says the period in the result line, and that Drafts no longer follow', () => {
+		expect(summary({ days: october })).toBe('Showing 12 Contracts not signed sent in October 2026, longest wait first.');
+		expect(summary({ shown: 0, total: 0, view: 'signed', days: october })).toBe('No Contract sent in October 2026 is signed.');
 	});
 });

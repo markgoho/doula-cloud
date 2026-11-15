@@ -19,6 +19,7 @@ import { clientActivityPhrase } from './clientRegister.js';
 import { formatActivityTimestamp, formatCalendarDay, hasClockTime, formatInstantWithClock, formatInstantWithSeconds } from './dates.js';
 import type { CursorPage } from './paginatedList.svelte.js';
 import { clientsExportedDetail } from './clientExport.js';
+import { contractsExportedDetail } from './contractExport.js';
 import { invoicesExportedDetail } from './invoiceExport.js';
 import { birthOutcomeLabel, endingReasons, engagementStatusText, type EngagementReference } from './engagementDetail.js';
 import { kindLabel } from './engagementRequest.js';
@@ -185,10 +186,14 @@ function factChangeText(row: ActivityEntry): string | undefined {
 }
 
 /**
- * The Invoices and Clients downloads' line (#2871, #2891): what left, from the row's diff, after the row's own words.
+ * The Invoices, Clients and Contracts downloads' line (#2871, #2891, #2954): what left, from the row's diff, after the row's own words.
  */
 function exportedText(row: ActivityEntry): string | undefined {
-	const detailOf = { invoices_exported: invoicesExportedDetail, clients_exported: clientsExportedDetail }[row.action];
+	const detailOf = {
+		invoices_exported: invoicesExportedDetail,
+		clients_exported: clientsExportedDetail,
+		contracts_exported: contractsExportedDetail
+	}[row.action];
 	const detail = detailOf && row.diff ? detailOf(row.diff) : undefined;
 	return detail ? `${staffActivityPhrase(row.action)}. ${detail}` : undefined;
 }

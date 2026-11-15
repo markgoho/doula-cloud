@@ -8,7 +8,7 @@ import {
 } from './csvExport.js';
 import type { Fetcher } from './fetcher.js';
 import { invoiceOrderPhrase, type InvoiceOrder, type InvoicesView } from './invoice.js';
-import { invoicePeriodWords, type InvoiceDays } from './invoicePeriod.js';
+import { sentPeriodWords, type SentDays } from './sentPeriod.js';
 
 /**
  * What the Invoices list shows, as the export is asked for it (#2871): the
@@ -18,7 +18,7 @@ export interface InvoicesExportScope {
 	view: InvoicesView;
 	search: string;
 	order: InvoiceOrder;
-	days?: InvoiceDays;
+	days?: SentDays;
 }
 
 const INVOICES: CsvExportKind = {
@@ -46,7 +46,7 @@ export function invoicesExportedDetail(diff: Record<string, unknown>): string | 
 	const orderWords = typeof order === 'string' ? invoiceOrderPhrase(order) : undefined;
 	const parts = [
 		viewWords,
-		days && `sent ${invoicePeriodWords(days)}`,
+		days && `sent ${sentPeriodWords(days)}`,
 		orderWords,
 		searched === true ? 'with a search' : undefined
 	].filter(Boolean);

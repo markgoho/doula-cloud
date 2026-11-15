@@ -14,7 +14,7 @@ import { apiErrorMessage } from './apiErrorMessage.js';
 import { formatCalendarDay } from './dates.js';
 import { refusalError } from './formErrors.js';
 import { formatMoney } from './money.js';
-import { invoicePeriodQuery, invoicePeriodWords, INVOICE_PERIOD_RULER, type InvoiceDays, type InvoicePeriod } from './invoicePeriod.js';
+import { sentPeriodQuery, sentPeriodWords, SENT_PERIOD_RULER, type SentDays, type SentPeriod } from './sentPeriod.js';
 
 export interface Invoice {
 	id: string;
@@ -269,11 +269,11 @@ export function invoiceOrderedBy(order: InvoiceOrder, view: InvoicesView): { col
  * The query string that names a view and an order, empty for the whole
  * book in its own order.
  */
-export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = '', period?: InvoicePeriod): string {
+export function invoicesViewQuery(view: InvoicesView, order: InvoiceOrder = '', period?: SentPeriod): string {
 	const query = new URLSearchParams();
 	if (view !== 'all') query.set('show', view);
 	if (order) query.set('order', order);
-	for (const [name, value] of invoicePeriodQuery(period)) query.set(name, value);
+	for (const [name, value] of sentPeriodQuery(period)) query.set(name, value);
 	const text = query.toString();
 	return text ? `?${text}` : '';
 }
@@ -289,8 +289,8 @@ export interface PracticeInvoiceListData extends PracticeInvoicePage {
 	 * The period the address named, and the two days it was read as in the
 	 * Practice's zone (#2871), which every later page asks for again.
 	 */
-	period?: InvoicePeriod;
-	days?: InvoiceDays;
+	period?: SentPeriod;
+	days?: SentDays;
 	now?: Date;
 }
 
@@ -303,7 +303,7 @@ export function practiceInvoicesPath(
 	cursor?: string,
 	view: InvoicesView = 'all',
 	order: InvoiceOrder = '',
-	days?: InvoiceDays
+	days?: SentDays
 ): string {
 	const path = `/api/practices/${practiceId}/invoices`;
 	const query = new URLSearchParams();
@@ -337,7 +337,7 @@ export async function loadPracticeInvoices(
 	view: InvoicesView = 'all',
 	search = '',
 	order: InvoiceOrder = '',
-	days?: InvoiceDays
+	days?: SentDays
 ): Promise<PracticeInvoicePage> {
 	const response = search
 		? await fetcher(`/api/practices/${practiceId}/invoices/list`, {
@@ -1011,11 +1011,11 @@ export function invoicesResultSummary(
 	counts: Pick<PracticeInvoicePage, 'invoiceCount' | 'outstandingCount' | 'overdueCount'>,
 	search = '',
 	order: InvoiceOrder = '',
-	days?: InvoiceDays
+	days?: SentDays
 ): string {
 	const words = orderWords(view, order);
 	const kind = view === 'all' ? '' : `${view} `;
-	const sent = days ? ` sent ${invoicePeriodWords(days)}` : '';
+	const sent = days ? ` sent ${sentPeriodWords(days)}` : '';
 	if (search) {
 		if (shown === 0) return `No ${kind}Invoice${sent} matches "${search}".`;
 		const matching = `matching "${search}"`;
@@ -1037,8 +1037,8 @@ export function invoicesResultSummary(
  * The one line over the totals while a period is applied (#2871): whose
  * figures they are, since they count only what was sent in it.
  */
-export function invoiceTotalsNote(days: InvoiceDays): string {
-	return `Totals for Invoices sent ${invoicePeriodWords(days)}.`;
+export function invoiceTotalsNote(days: SentDays): string {
+	return `Totals for Invoices sent ${sentPeriodWords(days)}.`;
 }
 
 /** The longest wording the result line can say, which the filter bar
@@ -1046,7 +1046,7 @@ export function invoiceTotalsNote(days: InvoiceDays): string {
 export const INVOICES_RESULT_RULER = (['all', 'unpaid', 'overdue'] as const)
 	.flatMap((view) =>
 		(['', ...Object.keys(INVOICE_ORDERS)] as InvoiceOrder[]).map((order) =>
-			invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 }, '', order, INVOICE_PERIOD_RULER)
+			invoicesResultSummary(view, 999, true, { invoiceCount: 9999, outstandingCount: 9999, overdueCount: 9999 }, '', order, SENT_PERIOD_RULER)
 		)
 	)
 	.toSorted((a, b) => b.length - a.length)[0];

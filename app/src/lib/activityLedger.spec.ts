@@ -291,6 +291,14 @@ describe('activityLedgerColumns', () => {
 		});
 	});
 
+	it('says what a Contracts download took, from its diff (#2954)', () => {
+		const what = activityLedgerColumns('America/New_York')[1];
+		const diff = { view: 'signed', sentFrom: '2026-10-01', sentTo: '2026-10-31', rows: 3, searched: false };
+
+		expect(what.accessor(entry({ action: 'contracts_exported', diff }))).toBe('Contracts downloaded. 3 Contracts: signed, sent in October 2026');
+		expect(what.accessor(entry({ action: 'contracts_exported' }))).toBe('Contracts downloaded');
+	});
+
 	// #2871: the download's row says what left, never the search's text.
 	it('says what an Invoices download took, from its diff', () => {
 		const what = activityLedgerColumns('America/New_York')[1];
