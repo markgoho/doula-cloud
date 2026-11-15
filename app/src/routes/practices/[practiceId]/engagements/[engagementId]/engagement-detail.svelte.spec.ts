@@ -3849,13 +3849,27 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('$12,620.00, the fee you accepted on Jul 22, 2026')).toBeVisible();
 	});
 
+	it('tells a contractor which words are her terms and which are the Client’s Contract (#2958)', async () => {
+		await setupMoney(contractorReader);
+
+		await expect.element(testPage.getByText('Read the Client’s Contract text')).toBeVisible();
+		await expect.element(testPage.getByText('Read the Contract text')).not.toBeInTheDocument();
+	});
+
+	it('keeps the Contracts a voided one replaced as history under their own anchors (#2958)', async () => {
+		await setupMoney(session);
+
+		await expect.element(testPage.getByRole('heading', { name: 'Earlier Contract' })).toBeVisible();
+		await expect.element(testPage.getByText('Jul 2, 2026 by Anne-Marie Ochieng-Whitfield')).toBeVisible();
+	});
+
 	it('shows a contractor the terms she accepted beside her fee (#2269)', async () => {
 		await setupMoney(contractorReader, {
 			...fixtureDetail,
 			yourFee: { amountCents: 45_000, acceptedOn: '2026-10-27', terms: 'Backup for the birth, on call from 38 weeks.' }
 		});
 
-		await expect.element(testPage.getByText('Terms', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText('Your terms', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Backup for the birth, on call from 38 weeks.')).toBeVisible();
 	});
 

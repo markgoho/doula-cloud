@@ -159,7 +159,7 @@ export function yourFeeValue(fee: AgreedFee): string {
 export function yourFeeRows(fee: AgreedFee): { label: string; value: string }[] {
 	return [
 		{ label: 'Your fee', value: yourFeeValue(fee) },
-		...(fee.terms ? [{ label: 'Terms', value: fee.terms }] : [])
+		...(fee.terms ? [{ label: 'Your terms', value: fee.terms }] : [])
 	];
 }
 

@@ -9,7 +9,7 @@
 	/** What a void costs, said before the button and again in the
 	 * confirmation (#2004). */
 	export const VOID_CONSEQUENCE =
-		'Voiding ends this Contract for good. Nothing more can be invoiced under it, and a new Contract starts again from a Draft.';
+		'Voiding ends this Contract for good. Nothing more can be invoiced under it, and an Invoice already raised stays as it is, owed until it is paid or written off. A new Contract starts again from a Draft.';
 </script>
 
 <script lang="ts">
@@ -78,6 +78,7 @@
 		hasSignedPdf,
 		amountChangedAt,
 		voidRequests = [],
+		viewerId = '',
 		onVoid,
 		onDownloadPdf,
 		onRequestVoid,
@@ -110,6 +111,10 @@
 		hasSignedPdf: boolean;
 		amountChangedAt?: string;
 		voidRequests?: VoidRequestSummary[];
+		/**
+		The signed-in Staff member, so a request she made reads "You asked" (#2958).
+		*/
+		viewerId?: string;
 		onVoid?: () => Promise<void>;
 		onDownloadPdf?: () => Promise<void>;
 		onRequestVoid?: (reason: string) => Promise<void>;
@@ -318,7 +323,11 @@
 -->
 {#if status === 'signed' && onRequestVoid}
 	{#if openVoidRequests.length > 0}
-		<p role="status">Void requested — waiting for an owner or admin to decide.</p>
+		{@const asking = openVoidRequests[0]!}
+		<p role="status">
+			Void requested. {asking.requestedBy === viewerId ? 'You asked' : `${asking.requestedByName} asked`} on
+			<time datetime={asking.createdAt}>{formatInstant(asking.createdAt, timeZone)}</time>. An Owner or an Admin will decide.
+		</p>
 	{:else if isRequestFormShown}
 		<LabeledField label="Reason">
 			{#snippet children({ id, describedBy, invalid })}
@@ -386,7 +395,10 @@
 			     requests at once), only from Svelte's own reactivity
 			     internals -- the same category OfferInbox.svelte's own
 			     comment already names. -->
-			<p>{request.requestedByName} asked to void this Contract: {request.reason}</p>
+			<p>
+				{request.requestedByName} asked on <time datetime={request.createdAt}>{formatInstant(request.createdAt, timeZone)}</time> to
+				void this Contract: {request.reason}
+			</p>
 			{#if declineFormRequestId === request.id}
 				<LabeledField label="Reason for declining">
 					{#snippet children({ id, describedBy, invalid })}

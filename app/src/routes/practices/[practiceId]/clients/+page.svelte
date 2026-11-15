@@ -47,6 +47,7 @@
 	import type { LabeledValue } from '#lib/roles.js';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import DoulaNames from '#lib/components/molecules/DoulaNames.svelte';
 	import MoneyAmount from '#lib/components/molecules/MoneyAmount.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Checkbox from '#lib/components/atoms/Checkbox.svelte';
@@ -783,8 +784,7 @@
 	// ('+1 more'), so the Doula column is as wide as one name however many a
 	// Client has; a screen reader hears every name, and a card, which wraps,
 	// says them all.
-	const DOULA_NAMES_SHOWN = 1;
-	type DoulaLine = { engagementId: string; prefix: string; text: string; shown: string; moreCount: number };
+	type DoulaLine = { engagementId: string; prefix: string; text: string; names: string[]; ids: string[] };
 	function doulaLines(client: ClientListItem): DoulaLine[] {
 		const lines = client.openEngagements ?? [];
 		return lines.map((line) => {
@@ -794,8 +794,8 @@
 				engagementId: line.engagementId,
 				prefix,
 				text: `${prefix}${doulaNamesText(line)}`,
-				shown: `${prefix}${names.slice(0, DOULA_NAMES_SHOWN).join(', ')}`,
-				moreCount: Math.max(0, names.length - DOULA_NAMES_SHOWN)
+				names,
+				ids: line.doulaIds ?? []
 			};
 		});
 	}
@@ -1226,11 +1226,13 @@
 {/snippet}
 
 {#snippet doulaNames(line: DoulaLine, view: DataTableView)}
-	{#if view === 'table' && line.moreCount > 0}
-		<span class="doula-names"><span aria-hidden="true">{line.shown} +{line.moreCount} more</span><span class="visually-hidden">{line.text}</span></span>
-	{:else}
-		<span class="doula-names">{line.text}</span>
-	{/if}
+	<span class="doula-names">
+		{#if line.names.length === 0}
+			{line.text}
+		{:else}
+			<DoulaNames names={line.names} ids={line.ids} readerId={session?.staffId} isTable={view === 'table'} prefix={line.prefix} />
+		{/if}
+	</span>
 {/snippet}
 
 {#snippet moneyCell(client: ClientListItem)}

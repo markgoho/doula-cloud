@@ -76,6 +76,11 @@ type ContractResponse struct {
 	// never the record that it was made.
 	Sent   *activitypage.Stamp `json:"sent,omitempty"`
 	Signed *activitypage.Stamp `json:"signed,omitempty"`
+	// ID and Earlier are a Staff read's: the current Contract's id, which
+	// the Contracts list's row anchors to, and the voided Contracts it
+	// replaced (#2958), newest first.
+	ID      string            `json:"id,omitempty"`
+	Earlier []EarlierContract `json:"earlier,omitempty"`
 }
 
 // PutContractRequest is the body of a PUT Contract request: a full
@@ -127,6 +132,12 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 	out.HasSignedPDF = hasSignedPDF
 	if staff != nil {
 		out.Sent, out.Signed, err = contractTrail(r.Context(), tx, staff.PracticeID, out.EngagementID)
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		if err != nil {
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		out.ID, out.Earlier, err = contractHistory(r.Context(), tx, out.EngagementID)
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -263,8 +274,8 @@ func PostContractHandler() http.Handler {
 		}
 
 		if _, err := c.Tx.ExecContext(r.Context(),
-			`INSERT INTO contracts (engagement_id, prose, merge_field_values, amount_cents) VALUES ($1, $2, $3, $4)`,
-			c.EngagementID, prose, valuesJSON, amountCents,
+			`INSERT INTO contracts (engagement_id, prose, merge_field_values, amount_cents, created_by) VALUES ($1, $2, $3, $4, $5)`,
+			c.EngagementID, prose, valuesJSON, amountCents, c.StaffID,
 		); err != nil {
 			if pgerr.IsUniqueViolation(err) {
 				apierr.WriteError(w, "a contract already exists for this work", http.StatusConflict)

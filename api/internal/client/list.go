@@ -136,6 +136,8 @@ type OpenEngagement struct {
 	ContractStatus   *string `json:"contractStatus,omitempty"`
 	// DoulaNames is a list so a comma inside one name never splits it.
 	DoulaNames []string `json:"doulaNames,omitempty"`
+	// DoulaIDs are the Staff ids beside DoulaNames, in the same order.
+	DoulaIDs []string `json:"doulaIds,omitempty"`
 
 	// InvoiceStatus/InvoiceAmountCents: Owner, Admin, and an employed
 	// Doula (ADR-0008 as amended by #282). Never set for a contractor
@@ -852,6 +854,21 @@ func attachOpenEngagements(ctx context.Context, tx *sql.Tx, practiceID string, l
 // Doula names with (its E'\x1f'), split again in shapeOpenEngagement.
 const doulaNameSeparator = "\x1f"
 
+// DoulaAgg is the SQL that joins a Practice's Doulas on an Engagement as
+// "<id><RS><name>" entries, in the order a list reads them. The id lets a
+// screen call the reader "You"; SplitDoulas reads it back.
+const DoulaAgg = `string_agg(s.id::text || E'\x1e' || s.name, E'\x1f' ORDER BY s.last_name, s.first_name)`
+
+// SplitDoulas reads a DoulaAgg value back into names and the ids beside them.
+func SplitDoulas(joined string) (names, ids []string) {
+	for entry := range strings.SplitSeq(joined, doulaNameSeparator) {
+		id, name, _ := strings.Cut(entry, "\x1e")
+		ids = append(ids, id)
+		names = append(names, name)
+	}
+	return names, ids
+}
+
 // openEngagementRollupQueryTemplate is fetchOpenEngagements' query, with
 // two %-verbs standing in for placeholder indices that shift depending on
 // how many clientIDs the caller passes -- staffIdx and attachedOnlyIdx
@@ -887,7 +904,7 @@ const doulaNameSeparator = "\x1f"
 const openEngagementRollupQueryTemplate = `
 	SELECT e.client_id, e.id, e.kind, e.status, to_char(e.due_date, 'YYYY-MM-DD'),
 	       e.birth_outcome::text, to_char(e.pregnancy_ended_on, 'YYYY-MM-DD'), ct.status,
-	       (SELECT string_agg(s.name, E'\x1f' ORDER BY s.last_name, s.first_name)
+	       (SELECT ` + DoulaAgg + `
 	        FROM engagement_attachments ea
 	        JOIN staff s ON s.id = ea.staff_id
 	        WHERE ea.engagement_id = e.id AND ea.state = 'granted'),
@@ -1039,7 +1056,7 @@ func shapeOpenEngagement(reader staffauth.Reader, raw rawOpenEngagement, days in
 		oe.ContractStatus = &status
 	}
 	if raw.doulaNames.Valid {
-		oe.DoulaNames = strings.Split(raw.doulaNames.String, doulaNameSeparator)
+		oe.DoulaNames, oe.DoulaIDs = SplitDoulas(raw.doulaNames.String)
 	}
 	if !reader.IsAmbientContractor() {
 		if raw.invoiceStatus.Valid {

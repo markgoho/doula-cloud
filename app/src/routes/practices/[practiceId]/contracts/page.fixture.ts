@@ -19,7 +19,9 @@ export const items: ContractListItem[] = [
 		status: 'draft',
 		steppedOn: '2026-11-08',
 		dueDate: '2027-01-13',
+		madeByName: 'Dee Whitlock',
 		doulaNames: ['Marisol Terrazas'],
+		doulaIds: ['staff-9'],
 		amountCents: 150_000,
 		hasSignedPdf: false,
 		voidRequested: false
@@ -35,6 +37,7 @@ export const items: ContractListItem[] = [
 		daysWaiting: 12,
 		sentByName: 'Dee Whitlock',
 		doulaNames: ['Kimiko Nakashima', 'Joss Adeyemi'],
+		doulaIds: ['staff-8', 'staff-7'],
 		amountCents: 95_000,
 		hasSignedPdf: false,
 		voidRequested: false
@@ -51,6 +54,7 @@ export const items: ContractListItem[] = [
 		pregnancyEndedOn: '2026-10-30',
 		birthOutcome: 'live_birth',
 		doulaNames: ['Priya Raman'],
+		doulaIds: ['staff-2'],
 		amountCents: 150_000,
 		hasSignedPdf: true,
 		voidRequested: true
@@ -64,6 +68,7 @@ export const items: ContractListItem[] = [
 		status: 'voided',
 		steppedOn: '2026-11-09',
 		sentByName: 'Renata Alvarez',
+		voidedByName: 'Dee Whitlock',
 		doulaNames: [],
 		amountCents: 150_000,
 		hasSignedPdf: true,

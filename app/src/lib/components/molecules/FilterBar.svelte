@@ -225,7 +225,15 @@
 		 * order and is left out of the address. `onChange` reports a pick
 		 * before Apply, for a route that builds its address from its own state.
 		 */
-		order?: { options: readonly { value: string; label: string }[]; value: string; onChange?: (value: string) => void };
+		order?: {
+			options: readonly { value: string; label: string }[];
+			/**
+			Every wording the order takes in the route's other views, so its cell holds one width across them (#2958).
+			*/
+			alsoSizedBy?: readonly { value: string; label: string }[];
+			value: string;
+			onChange?: (value: string) => void;
+		};
 		/**
 		 * The summary's words for what folds, when the route knows better than
 		 * the bar: "Order" where `folded` is given but draws nothing for this reader.
@@ -277,7 +285,12 @@
 		return `${noun}: ${activeLabels.length} on`;
 	});
 
-	const longestOption = $derived(order?.options.toSorted((a, b) => b.label.length - a.label.length)[0]);
+	// Wordings within two characters of the longest are all drawn, since the longest in letters is not always the widest drawn.
+	const longestOptions = $derived.by(() => {
+		const sorted = [...order!.options, ...(order!.alsoSizedBy ?? [])].toSorted((a, b) => b.label.length - a.label.length);
+		const reach = sorted[0]!.label.length - 2;
+		return new Map(sorted.filter((option) => option.label.length >= reach).map((option) => [option.label, option])).values().toArray();
+	});
 
 	const clearTo = $derived(appliedCount === 1 && !hasUntaggedFilter ? undefined : clearHref);
 
@@ -424,9 +437,11 @@
 							onChange={order.onChange}
 						/>
 						<!-- The longest option drawn unseen in the same cell: the cell takes its width, so the select is as wide for every pick. -->
-						<span class="longest" aria-hidden="true" inert>
-							<Select options={[longestOption!]} value={longestOption!.value} />
-						</span>
+						{#each longestOptions as longest (longest.label)}
+							<span class="longest" aria-hidden="true" inert>
+								<Select options={[longest]} value={longest.value} />
+							</span>
+						{/each}
 					</div>
 				{/snippet}
 			</LabeledField>

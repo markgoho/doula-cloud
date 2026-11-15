@@ -329,6 +329,18 @@ export const contract: Contract = {
 	// a typed legal name, both as long as a real one runs.
 	sent: { at: '2026-08-12T15:00:00Z', by: 'Anne-Marie Ochieng-Whitfield' },
 	signed: { at: '2026-08-14T20:12:00Z', by: 'Oluwaseun Adebayo-Montgomery Fitzwilliam' },
+	// #2958: a voided Contract this one replaced, kept as history with the
+	// longest names and the longest reason the section has to hold.
+	id: 'contract-2',
+	earlier: [
+		{
+			id: 'contract-1',
+			voidedAt: '2026-07-02T15:00:00Z',
+			voidedBy: 'Anne-Marie Ochieng-Whitfield',
+			requestedBy: 'Priyanka Venkataraman-Solberg',
+			reason: 'Signed the postpartum template for a birth Client; the scope and the fee were both wrong.'
+		}
+	],
 	// #971: one request still waiting on an Owner's decision, and one
 	// already declined -- the two states ContractStatus renders
 	// differently. A granted request needs no row: `status` reads 'voided'
