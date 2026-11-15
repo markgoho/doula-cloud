@@ -230,6 +230,17 @@ func TestPostRemindContractHandler_ADayIsThePracticesDay(t *testing.T) {
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusConflict, e.As(e.Staff))
 }
 
+func TestPostRemindContractHandler_ABadStoredZoneIsAnErrorNotUTC(t *testing.T) {
+	e := remindable(t)
+	e.Exec(`UPDATE practices SET timezone = 'Nowhere/Bad' WHERE id = $1`, e.Practice.ID)
+
+	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusInternalServerError, e.SignedIn)
+
+	if got := len(e.reminders()); got != 0 {
+		t.Fatalf("reminders = %d, want none", got)
+	}
+}
+
 func TestPostRemindContractHandler_RefusesOnTheDayTheContractWasSent(t *testing.T) {
 	e := remindable(t)
 	e.Exec(`UPDATE contracts SET sent_at = $2 WHERE engagement_id = $1`, e.Engagement.ID, remindedNov20.Add(-time.Hour))
