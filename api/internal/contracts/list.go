@@ -15,6 +15,7 @@ import (
 	"doula-cloud/api/internal/pagecursor"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
+	"doula-cloud/api/internal/sentperiod"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/textmatch"
 )
@@ -57,6 +58,7 @@ type ContractListItem struct {
 	VoidRequested    bool     `json:"voidRequested"`
 
 	steppedAt time.Time
+	sentOn    string
 	sortName  string
 }
 
@@ -71,15 +73,19 @@ type ListResponse struct {
 }
 
 // ListRequest is the body of the Contracts list read sent as a
-// POST: the view, order, Doula, Mine and cursor the GET reads from its query
-// string, plus the one thing it refuses there, a search.
+// POST: the view, order, Doula, Mine, period and cursor the GET reads from its
+// query string, plus the one thing it refuses there, a search. The period is
+// the two days a Contract was sent between, both included, in the Practice's
+// zone (#2954).
 type ListRequest struct {
-	View   string `json:"view"`
-	Order  string `json:"order"`
-	Doula  string `json:"doula"`
-	Mine   bool   `json:"mine"`
-	Search string `json:"search"`
-	Cursor string `json:"cursor"`
+	View     string `json:"view"`
+	Order    string `json:"order"`
+	Doula    string `json:"doula"`
+	Mine     bool   `json:"mine"`
+	Search   string `json:"search"`
+	SentFrom string `json:"sentFrom"`
+	SentTo   string `json:"sentTo"`
+	Cursor   string `json:"cursor"`
 }
 
 // ListContractsHandler lists the Practice's Contracts by view, with the
@@ -88,7 +94,8 @@ type ListRequest struct {
 // holds a granted attachment on. ?view= is empty (not signed, Draft and
 // Sent), draft, sent, signed, voided or all; ?order= is empty (the view's
 // own), oldest, newest or client; ?doula= and ?mine=true narrow to granted
-// attachments. A GET that carries ?search is refused, since a search can be
+// attachments; ?sentFrom= and ?sentTo= together narrow to the Contracts sent
+// on those days, which leaves out a Draft, since it was never sent. A GET that carries ?search is refused, since a search can be
 // a Client's name and a URL is logged (#1829). Must be mounted behind
 // staffauth.Middleware.
 func ListContractsHandler() http.Handler {
@@ -99,11 +106,13 @@ func ListContractsHandler() http.Handler {
 			return
 		}
 		serveContracts(w, r, c, ListRequest{
-			View:   query.Get("view"),
-			Order:  query.Get("order"),
-			Doula:  query.Get("doula"),
-			Mine:   query.Get("mine") == "true",
-			Cursor: query.Get("cursor"),
+			View:     query.Get("view"),
+			Order:    query.Get("order"),
+			Doula:    query.Get("doula"),
+			Mine:     query.Get("mine") == "true",
+			SentFrom: query.Get("sentFrom"),
+			SentTo:   query.Get("sentTo"),
+			Cursor:   query.Get("cursor"),
 		})
 	})
 }
@@ -130,11 +139,13 @@ type listQuery struct {
 	doula      string
 	mine       bool
 	search     string
+	period     sentperiod.Period
+	zone       *time.Location
 	ambient    bool
 	staffID    string
 }
 
-func newListQuery(w http.ResponseWriter, c staffauth.Call, req ListRequest) (listQuery, bool) {
+func newListQuery(w http.ResponseWriter, c staffauth.Call, req ListRequest, zone *time.Location) (listQuery, bool) {
 	view, ok := resolveView(req.View)
 	if !ok {
 		apierr.WriteError(w, msgInvalidView, http.StatusBadRequest)
@@ -154,6 +165,10 @@ func newListQuery(w http.ResponseWriter, c staffauth.Call, req ListRequest) (lis
 		apierr.WriteError(w, msgSearchLength, http.StatusBadRequest)
 		return listQuery{}, false
 	}
+	period, ok := sentperiod.Parse(w, req.SentFrom, req.SentTo)
+	if !ok {
+		return listQuery{}, false
+	}
 	return listQuery{
 		statuses:   view.statuses,
 		sort:       sort,
@@ -161,14 +176,16 @@ func newListQuery(w http.ResponseWriter, c staffauth.Call, req ListRequest) (lis
 		doula:      doula,
 		mine:       req.Mine,
 		search:     search,
+		period:     period,
+		zone:       zone,
 		ambient:    c.Reader.IsAmbientContractor(),
 		staffID:    c.StaffID,
 	}, true
 }
 
 // where is the narrowing both the page and the count share, always ANDed:
-// the view's statuses, the contractor's reach, Mine, the Doula and the
-// search. Every value is a bound parameter appended to args.
+// the view's statuses, the contractor's reach, Mine, the Doula, the period
+// (in the Practice's zone) and the search. Every value is a bound parameter appended to args.
 func (q listQuery) where(practiceID string, args *[]any) string {
 	bind := func(v any) string {
 		*args = append(*args, v)
@@ -185,6 +202,7 @@ func (q listQuery) where(practiceID string, args *[]any) string {
 	if q.doula != "" {
 		fmt.Fprintf(&out, " AND "+grantedAttachmentSQL, bind(q.doula))
 	}
+	out.WriteString(q.period.Clause("c.sent_at", q.zone, bind))
 	if q.search != "" {
 		out.WriteString(" AND " + textmatch.ClientNameExpr("cl", len(*args)+1))
 		bind(textmatch.Contains(q.search))
@@ -212,7 +230,7 @@ const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name,
 	       ` + nameKeyExpr
 
 // pageQuery builds one page's query and its arguments: at most limit rows
-// after the cursor's position, in q's order.
+// after the cursor's position, in q's order, or every row when limit is 0.
 func (q listQuery) pageQuery(practiceID string, after *listAfter, limit int) (string, []any) {
 	args := []any{}
 	query := listColumns + listFrom + "\n\tWHERE " + q.where(practiceID, &args)
@@ -221,8 +239,11 @@ func (q listQuery) pageQuery(practiceID string, after *listAfter, limit int) (st
 		args = append(args, after.keys...)
 		args = append(args, after.id)
 	}
-	args = append(args, limit)
-	query += " ORDER BY " + q.sort.orderBy() + fmt.Sprintf(" LIMIT $%d", len(args))
+	query += " ORDER BY " + q.sort.orderBy()
+	if limit > 0 {
+		args = append(args, limit)
+		query += fmt.Sprintf(" LIMIT $%d", len(args))
+	}
 	return query, args
 }
 
@@ -237,12 +258,12 @@ func practiceZoneAndNow(w http.ResponseWriter, r *http.Request, c staffauth.Call
 }
 
 func serveContracts(w http.ResponseWriter, r *http.Request, c staffauth.Call, req ListRequest) {
-	q, ok := newListQuery(w, c, req)
+	ctx := r.Context()
+	zone, now, ok := practiceZoneAndNow(w, r, c)
 	if !ok {
 		return
 	}
-	ctx := r.Context()
-	zone, now, ok := practiceZoneAndNow(w, r, c)
+	q, ok := newListQuery(w, c, req, zone)
 	if !ok {
 		return
 	}
@@ -269,7 +290,13 @@ func serveContracts(w http.ResponseWriter, r *http.Request, c staffauth.Call, re
 // read fetches one page past the cursor, one row more than a page so the
 // caller can tell whether another follows.
 func (q listQuery) read(ctx context.Context, tx *sql.Tx, practiceID string, after *listAfter, zone *time.Location, now time.Time) ([]ContractListItem, error) {
-	query, args := q.pageQuery(practiceID, after, listPageSize+1)
+	return q.readRows(ctx, tx, practiceID, after, listPageSize+1, zone, now)
+}
+
+// readRows is the rows past the cursor in q's order: at most limit of them,
+// or every one when limit is 0, which the export reads.
+func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, after *listAfter, limit int, zone *time.Location, now time.Time) ([]ContractListItem, error) {
+	query, args := q.pageQuery(practiceID, after, limit)
 	rows, err := tx.QueryContext(ctx, query, args...) //nolint:gosec // G701: the only text spliced in is a column and a direction from listSort's literals; every value is bound
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -292,9 +319,12 @@ func (q listQuery) read(ctx context.Context, tx *sql.Tx, practiceID string, afte
 		}
 		item.ClientName = personname.Full(givenName, preferredName.String, familyName.String)
 		item.SteppedOn = item.steppedAt.In(zone).Format(dayLayout)
-		if item.Status == string(StatusSent) && sentAt.Valid {
-			days := practiceDaysBetween(sentAt.Time, now, zone)
-			item.DaysWaiting = &days
+		if sentAt.Valid {
+			item.sentOn = sentAt.Time.In(zone).Format(dayLayout)
+			if item.Status == string(StatusSent) {
+				days := practiceDaysBetween(sentAt.Time, now, zone)
+				item.DaysWaiting = &days
+			}
 		}
 		item.SentByName = sentByName.String
 		item.MadeByName = madeByName.String
@@ -324,7 +354,7 @@ func (q listQuery) count(ctx context.Context, tx *sql.Tx, practiceID string) (in
 	args := []any{}
 	query := `SELECT count(*)` + listFrom + "\n\tWHERE " + q.where(practiceID, &args)
 	var n int
-	if err := tx.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+	if err := tx.QueryRowContext(ctx, query, args...).Scan(&n); err != nil { //nolint:gosec // G701: the only text spliced in is the period's column from a literal; every value is bound
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return 0, fmt.Errorf("contracts: count list: %w", err)
 	}

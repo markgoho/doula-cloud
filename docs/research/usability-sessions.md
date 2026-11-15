@@ -199,7 +199,7 @@ Every card exercises a moment-of-truth stage, and a moment-of-truth stage carrie
 
 ## The debrief
 
-After the card, with the recording still on. The questions follow [_The Mom Test_](books/the-mom-test.md), which is on the values track and synthesized in [`who-it-is-for-and-how-the-product-learns.md`](books/themes/who-it-is-for-and-how-the-product-learns.md): ask about the person's life and not about the product, ask for a specific past case and not an opinion about the future, and talk less than they do (ch. 1, p. 13). Three questions per card, in the same shape: what they did last time, what it cost, and what they tried.
+After the card, with the recording still on. The questions follow [_The Mom Test_](books/the-mom-test.md), which is on the values track and synthesized in [`who-it-is-for-and-how-the-product-learns.md`](books/themes/who-it-is-for-and-how-the-product-learns.md): ask about the person's life and not about the product, ask for a specific past case and not an opinion about the future, and talk less than they do (ch. 1, p. 13). Three questions per card, in the same shape: what they did last time, what it cost, and what they tried. Cards 1 and 2 carry a fourth, about the Contracts of a period ([#2954](https://github.com/markgoho/doula-cloud/issues/2954)), asked as a past case like the rest: what a period list or a download of it would be for is learned from the last time the person needed one, never by asking what they would do with it.
 
 **Never asked**, in any form: whether they like it, whether they would use it, whether they would pay for it or how much, whether it is better than what they use now, or what they would add. Each one invites a polite answer, and a polite answer is narration, not evidence (ch. 1, p. 16; ch. 2, p. 25). When the person offers an opinion anyway, it goes on the sheet in quotation marks, and the next question asks for the last time it happened (ch. 2, pp. 30–32).
 
@@ -208,12 +208,14 @@ After the card, with the recording still on. The questions follow [_The Mom Test
 1. Tell me about the last night two of your clients were in labor at the same time. How did you find out who could go?
 2. What did that night cost you: the calls, the waiting, the sleep?
 3. What have you tried, to make that easier? What happened to it?
+4. Tell me about the last time you needed the Contracts you had sent in one month or one year, together. What was it for, and where did you get them from? Did you take them out of the system as a file, and what did you do with it?
 
 **Card 2, the admin**
 
 1. Think of the last payment that came in by check or bank transfer. Walk me through what you did with it.
 2. How long did that take, and what happened the last time one got missed?
 3. What have you used to keep track of who has paid? What did you stop using, and why?
+4. Tell me about the last time you needed the Contracts you had sent in one month or one year, together. What was it for, and where did you get them from? Did you take them out of the system as a file, and what did you do with it?
 
 **Cards 3 and 4, a doula**
 

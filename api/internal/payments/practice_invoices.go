@@ -16,6 +16,7 @@ import (
 	"doula-cloud/api/internal/paymentstanding"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/practicetimezone"
+	"doula-cloud/api/internal/sentperiod"
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/textmatch"
 )
@@ -184,7 +185,7 @@ func GetPracticeInvoicesHandler() http.Handler {
 			return
 		}
 		query := r.URL.Query()
-		period, ok := parseInvoicePeriod(w, query.Get("sentFrom"), query.Get("sentTo"))
+		period, ok := sentperiod.Parse(w, query.Get("sentFrom"), query.Get("sentTo"))
 		if !ok {
 			return
 		}
@@ -255,7 +256,7 @@ func newBodyInvoiceListQuery(w http.ResponseWriter, req PracticeInvoicesListRequ
 		apierr.WriteError(w, "Use 100 characters or fewer for the search.", http.StatusBadRequest)
 		return invoiceListQuery{}, false
 	}
-	period, ok := parseInvoicePeriod(w, req.SentFrom, req.SentTo)
+	period, ok := sentperiod.Parse(w, req.SentFrom, req.SentTo)
 	if !ok {
 		return invoiceListQuery{}, false
 	}
@@ -278,7 +279,7 @@ type invoiceListQuery struct {
 	cursorName string
 	after      *invoiceAfter
 	search     string
-	period     invoicePeriod
+	period     sentperiod.Period
 }
 
 // newInvoiceListQuery resolves the order a request named for its view and
@@ -323,7 +324,7 @@ func servePracticeInvoices(w http.ResponseWriter, r *http.Request, c staffauth.C
 		return
 	}
 
-	sentFrom, sentBefore := q.period.bounds(days.zone)
+	sentFrom, sentBefore := q.period.Bounds(days.zone)
 	totals, err := practiceInvoiceTotals(r.Context(), tx, practiceID, overdue.From(days.now, days.zone), sentFrom, sentBefore)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -462,7 +463,7 @@ func listPracticeInvoicesQuery(practiceID string, q invoiceListQuery, days bookD
 	} else {
 		query += q.narrowing.clause("")
 	}
-	query += q.period.clause(days.zone, bind)
+	query += q.period.Clause("i.created_at", days.zone, func(v any) string { return fmt.Sprintf("$%d", bind(v)) })
 	if q.search != "" {
 		query += searchExpr(bind(textmatch.Contains(q.search)))
 	}

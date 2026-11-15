@@ -45,6 +45,12 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	ir.ExemptGated("POST /api/practices/{practiceId}/contracts/list",
 		"a read sent as a POST so a Client's name stays out of the URL (#1829): it writes nothing, so a repeat has nothing to replay",
 		false, staffauth.AnyStaff, SearchContractsHandler())
+	// #2954: every Contract the list's view, search and period match, as a
+	// CSV. Owner and Admin, the readers of the Practice's money leaving the
+	// product, and limited as a heavy endpoint (docs/api-design.md section 6).
+	ir.ExemptGated("POST /api/practices/{practiceId}/contracts/export",
+		"a read whose one write is its audit row; a replay would store a book of Client names in the idempotency table",
+		false, staffauth.OwnerAndAdmin, ExportContractsHandler())
 	// #971: the mirror roll-up for a void a Doula has asked for but
 	// nobody has decided yet -- same reach as the row above, since void
 	// itself is Owner/Admin-only (#970).

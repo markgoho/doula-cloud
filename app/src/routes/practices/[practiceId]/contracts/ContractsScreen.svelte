@@ -12,6 +12,7 @@
 		NO_DOULA_FALLBACK,
 		contractOrderOf,
 		contractOrderOptions,
+		contractPeriodOf,
 		contractOrderedBy,
 		contractStatusWord,
 		contractsQueryString,
@@ -36,6 +37,8 @@
 		type ContractsView,
 		type VoidRequestsPage
 	} from '#lib/contract.js';
+	import { contractsDownloadedWords, requestContractsExport } from '#lib/contractExport.js';
+	import { CsvDownload } from '#lib/csvDownload.svelte.js';
 	import { formatCalendarDayThisYear } from '#lib/dates.js';
 	import { kindLabel, NO_DOULA_YET_LABEL } from '#lib/engagementRequest.js';
 	import { formatAmount } from '#lib/invoice.js';
@@ -45,6 +48,8 @@
 	import { PaginatedList } from '#lib/paginatedList.svelte.js';
 	import { canNarrowToMine, isAmbientContractor, isOwnerOrAdmin, type LabeledValue } from '#lib/roles.js';
 	import { rowLinkLabeler } from '#lib/rowLinkLabel.js';
+	import { sentPeriodDays, sentPeriodKey, sentPeriodWords, type SentDays, type SentPeriod } from '#lib/sentPeriod.js';
+	import { SentPeriodDraft } from '#lib/sentPeriodDraft.svelte.js';
 	import { typedIn } from '#lib/typedIn.js';
 	import Badge from '#lib/components/atoms/Badge.svelte';
 	import Button from '#lib/components/atoms/Button.svelte';
@@ -58,6 +63,9 @@
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import type { EmptyStateAction } from '#lib/components/molecules/EmptyState.svelte';
 	import DoulaNames from '#lib/components/molecules/DoulaNames.svelte';
+	import DownloadCsvButton from '#lib/components/molecules/DownloadCsvButton.svelte';
+	import DownloadCsvNotices from '#lib/components/molecules/DownloadCsvNotices.svelte';
+	import SentPeriodFields from '#lib/components/molecules/SentPeriodFields.svelte';
 	import FilterBar from '#lib/components/molecules/FilterBar.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
 	import RadioGroup from '#lib/components/molecules/RadioGroup.svelte';
@@ -111,6 +119,7 @@
 	const order = $derived(contractOrderOf(page.url.searchParams, view));
 	const isMine = $derived(canMine && page.url.searchParams.get('mine') === 'true');
 	const doula = $derived(page.url.searchParams.get('doula') ?? '');
+	const period = $derived(contractPeriodOf(page.url.searchParams, view));
 	const appliedSearch = $derived((page.state.contractsSearch ?? '').trim());
 	$effect(() => {
 		holdListSearch('contracts', appliedSearch);
@@ -119,13 +128,20 @@
 	const mountedAt = new Date();
 	const now = $derived(data?.now ?? mountedAt);
 
-	type ReadKey = { view: ContractsView; order: ContractOrder; isMine: boolean; doula: string; search: string };
+	type ReadKey = { view: ContractsView; order: ContractOrder; isMine: boolean; doula: string; search: string; period?: SentPeriod };
 	const isSameKey = (a: ReadKey | undefined, b: ReadKey) =>
-		a?.view === b.view && a.order === b.order && a.isMine === b.isMine && a.doula === b.doula && a.search === b.search;
-	const wanted = $derived<ReadKey>({ view, order, isMine, doula, search: appliedSearch });
+		a?.view === b.view &&
+		a.order === b.order &&
+		a.isMine === b.isMine &&
+		a.doula === b.doula &&
+		a.search === b.search &&
+		sentPeriodKey(a.period) === sentPeriodKey(b.period);
+	const wanted = $derived<ReadKey>({ view, order, isMine, doula, search: appliedSearch, period });
+	const wantedDays = $derived(sentPeriodDays(period, timeZone, now));
 
 	let shown = $state.raw<ReadKey>();
 	let book = $state.raw<ContractsPage>();
+	let shownDays = $state.raw<SentDays>();
 	let failedKey = $state.raw<ReadKey>();
 	let isApplying = $state(false);
 
@@ -137,7 +153,7 @@
 				const next = await loadPracticeContracts(
 					apiFetchWithSession,
 					page.params.practiceId!,
-					{ view: under.view, order: under.order, isMine: under.isMine, doula: under.doula, search: under.search },
+					{ view: under.view, order: under.order, isMine: under.isMine, doula: under.doula, search: under.search, days: shownDays },
 					cursor
 				);
 				if (shown === under) book = next;
@@ -149,8 +165,9 @@
 		failureMessage: LOAD_MORE_FAILED
 	});
 
-	function adopt(first: ContractsPage, key: ReadKey) {
+	function adopt(first: ContractsPage, key: ReadKey, days: SentDays | undefined) {
 		shown = key;
+		shownDays = days;
 		contracts.reset(first);
 		book = first;
 		returns.pagesLoaded = 1;
@@ -187,6 +204,7 @@
 		);
 	}
 
+	// jscpd:ignore-start -- the landed read and the latest-search guard are the Invoices list's, over this list's own key; they share its reactive state, so a helper would take five closures
 	let adopted: ContractsListData | undefined;
 	$effect(() => {
 		const landed = data;
@@ -194,7 +212,7 @@
 		untrack(() => {
 			if (landed === adopted && shown?.search === '') return;
 			adopted = landed;
-			adopt(landed, { view: landed.view, order: landed.order, isMine: landed.isMine, doula: landed.doula, search: '' });
+			adopt(landed, { view: landed.view, order: landed.order, isMine: landed.isMine, doula: landed.doula, search: '', period: landed.period }, landed.days);
 		});
 	});
 
@@ -210,11 +228,13 @@
 		const thisSearch = ++latestSearch;
 		untrack(() => void readSearch(key, thisSearch));
 	});
+	// jscpd:ignore-end
 	async function readSearch(key: ReadKey, thisSearch: number) {
 		isSearching = true;
 		try {
-			const first = await loadPracticeContracts(apiFetchWithSession, page.params.practiceId!, key);
-			if (thisSearch === latestSearch) adopt(first, key);
+			const days = sentPeriodDays(key.period, timeZone, now);
+			const first = await loadPracticeContracts(apiFetchWithSession, page.params.practiceId!, { ...key, days });
+			if (thisSearch === latestSearch) adopt(first, key, days);
 		// jscpd:ignore-start -- the latest-search guard shares its state with this screen's own reactive reads; a helper would take five closures
 		} catch {
 			if (thisSearch === latestSearch) {
@@ -285,6 +305,7 @@
 	let isMineDrafted = $state(false);
 	let draftDoula = $state('');
 	let draftSearch = $state('');
+	const draftPeriod = new SentPeriodDraft();
 	let searchBox = $state<HTMLElement>();
 	let isSearchTouched = false;
 	let filterBar = $state<{ focusStatus: () => void }>();
@@ -294,6 +315,7 @@
 		draftOrder = order;
 		isMineDrafted = isMine;
 		draftDoula = doula;
+		draftPeriod.seed(period);
 		if (!isSearchTouched) draftSearch = appliedSearch;
 	}
 	seedDrafts();
@@ -308,15 +330,16 @@
 		focus: () => filterBar?.focusStatus()
 	});
 
-	type Address = { view: ContractsView; order: ContractOrder; isMine: boolean; doula: string };
+	type Address = { view: ContractsView; order: ContractOrder; isMine: boolean; doula: string; period?: SentPeriod | undefined };
 	const hrefFor = (address: Address) => `${basePath}${contractsQueryString(address)}`;
-	const current = $derived<Address>({ view, order, isMine, doula });
+	const current = $derived<Address>({ view, order, isMine, doula, period });
 	const drawnHref = () =>
 		hrefFor({
 			view: draftView,
 			order: orderForView(draftOrder, draftView),
 			isMine: canMine && isMineDrafted,
-			doula: canPickDoula ? draftDoula : doula
+			doula: canPickDoula ? draftDoula : doula,
+			period: draftPeriod.period
 		});
 
 	async function showFilter(href: string, search: string, change?: { replace: boolean }) {
@@ -336,13 +359,17 @@
 
 	async function applyFilters(event: SubmitEvent) {
 		event.preventDefault();
+		if (await draftPeriod.refusesToApply()) return;
 		await showFilter(drawnHref(), typedIn(searchBox, draftSearch));
 	}
 
-	function applyOnChange({ replace }: { replace: boolean; changed: readonly string[] }) {
+	// jscpd:ignore-start -- FilterBar's onChangeApply contract, which each list answers over its own address and search
+	function applyOnChange({ replace, changed }: { replace: boolean; changed: readonly string[] }) {
+		if (draftPeriod.isOnlyOpeningDays(changed) || draftPeriod.hasProblem()) return false;
 		void showFilter(drawnHref(), typedIn(searchBox, draftSearch), { replace });
 		return true;
 	}
+	// jscpd:ignore-end
 
 	const VIEW_OPTIONS: readonly { value: ContractsView; label: string }[] = [
 		{ value: 'not-signed', label: 'Not signed' },
@@ -362,6 +389,7 @@
 		if (viewTag) tags.push({ text: viewTag, href: without({ view: 'not-signed', order: orderForView(order, 'not-signed') }), search });
 		if (isMine) tags.push({ text: 'Mine', href: without({ isMine: false }), search });
 		if (doula && isRosterLanded) tags.push({ text: `Doula: ${doulaNameOf(doula)}`, href: without({ doula: '' }), search });
+		if (wantedDays) tags.push({ text: `Sent ${sentPeriodWords(wantedDays)}`, href: without({ period: undefined }), search });
 		if (search) tags.push({ text: `Matching "${search}"`, href: hrefFor(current), search: '' });
 		return tags;
 	});
@@ -371,7 +399,7 @@
 		void showFilter(tag.href, tag.search);
 	}
 
-	const isNarrowed = $derived(view !== 'not-signed' || order !== '' || isMine || doula !== '' || appliedSearch !== '');
+	const isNarrowed = $derived(view !== 'not-signed' || order !== '' || isMine || doula !== '' || period !== undefined || appliedSearch !== '');
 
 	const resultSummary = $derived(
 		shown && book
@@ -383,7 +411,8 @@
 					total: book.total,
 					isMine: shown.isMine,
 					doulaName: shown.doula ? doulaNameOf(shown.doula) : '',
-					search: shown.search
+					search: shown.search,
+					days: shownDays
 				})
 			: ''
 	);
@@ -394,6 +423,7 @@
 			!shown.isMine &&
 			shown.doula === '' &&
 			shown.search === '' &&
+			shown.period === undefined &&
 			contracts.items.length === 0
 	);
 	const emptyBookWords = $derived(
@@ -403,14 +433,51 @@
 	const emptyListAction = $derived.by((): EmptyStateAction => {
 		const search = shown?.search ?? '';
 		if (search !== '' && shown?.view !== 'all') {
-			const allHref = hrefFor({ view: 'all', order: orderForView(shown?.order ?? '', 'all'), isMine: shown?.isMine ?? false, doula: shown?.doula ?? '' });
+			const allHref = hrefFor({
+				view: 'all',
+				order: orderForView(shown?.order ?? '', 'all'),
+				isMine: shown?.isMine ?? false,
+				doula: shown?.doula ?? '',
+				period: shown?.period
+			});
 			return { label: `Search all Contracts for "${search}"`, onClick: () => void showFilter(allHref, search) };
+		}
+		if (shown?.period) {
+			return {
+				label: 'Show Contracts sent any time',
+				href: hrefFor({ view: shown.view, order: shown.order, isMine: shown.isMine, doula: shown.doula })
+			};
 		}
 		if (shown?.isMine) {
 			return { label: "Show everyone's Contracts", href: hrefFor({ view: shown.view, order: shown.order, isMine: false, doula: shown.doula }) };
 		}
 		return { label: 'Show all Contracts', href: hrefFor({ view: 'all', order: '', isMine: false, doula: '' }) };
 	});
+
+	/*
+	 * #2954: the export reads the list's applied view, search, order, Mine,
+	 * Doula and period, as a POST so the search, which can be a Client's name,
+	 * stays out of the address, and it needs script to hand the file over.
+	 */
+	const csv = new CsvDownload<ReadKey | undefined>();
+	const csvWords = $derived(csv.wordsWhile((key) => key === shown && isSameKey(shown, wanted)));
+	const isExportDrawn = $derived(csv.isScripted && isAdmin);
+	const hasExportRows = $derived(shown !== undefined && readFailure === '' && contracts.items.length > 0);
+	const exportCount = $derived(contracts.hasMore ? book?.total : contracts.items.length);
+	const exportDescription = $derived(
+		exportCount === undefined
+			? 'A spreadsheet of every Contract this list shows.'
+			: `A spreadsheet of the ${exportCount} ${exportCount === 1 ? 'Contract' : 'Contracts'} this list shows.`
+	);
+	async function downloadCsv() {
+		if (!shown) return;
+		const { view, order, isMine, doula, search } = shown;
+		await csv.run(
+			shown,
+			() => requestContractsExport(apiFetchWithSession, page.params.practiceId!, { view, order, isMine, doula, search, days: shownDays }),
+			contractsDownloadedWords
+		);
+	}
 
 	let downloadingId = $state('');
 	let pdfRefusal = $state('');
@@ -704,6 +771,7 @@
 		{#if isQueueExpected}
 			{@render queueSection()}
 		{/if}
+		<DownloadCsvNotices refusal={csv.refusal} downloaded={csvWords} />
 		{#if pdfRefusal}
 			<Notice variant="error" message={pdfRefusal} />
 		{/if}
@@ -758,6 +826,15 @@
 					{/snippet}
 					{@render searchField()}
 					{#snippet folded()}
+						{#if draftView !== 'draft'}
+							<SentPeriodFields
+								bind:choice={draftPeriod.choice}
+								bind:from={draftPeriod.from}
+								bind:to={draftPeriod.to}
+								fromError={draftPeriod.errors.from}
+								toError={draftPeriod.errors.to}
+							/>
+						{/if}
 						{#if canPickDoula}
 							<div class="field doula">
 								<LabeledField label="Doula" width={30}>
@@ -812,7 +889,13 @@
 	{/if}
 {/snippet}
 
-<ListPage title="Contracts" {intro} {content} />
+{#snippet actions()}
+	{#if isExportDrawn}
+		<DownloadCsvButton isExporting={csv.isExporting} hasRows={hasExportRows} description={exportDescription} onDownload={downloadCsv} />
+	{/if}
+{/snippet}
+
+<ListPage title="Contracts" {intro} {content} {actions} />
 
 <style>
 	@layer components {

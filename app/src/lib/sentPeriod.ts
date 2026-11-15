@@ -2,17 +2,17 @@ import { formatCalendarDay } from './dates.js';
 import { isCalendarDay } from './visitSchedule.js';
 import { dayIn } from './zonedTime.js';
 
-export type InvoicePreset = 'this-month' | 'last-month' | 'this-year' | 'last-year';
+export type SentPreset = 'this-month' | 'last-month' | 'this-year' | 'last-year';
 
-const PRESETS: readonly InvoicePreset[] = ['this-month', 'last-month', 'this-year', 'last-year'];
+const PRESETS: readonly SentPreset[] = ['this-month', 'last-month', 'this-year', 'last-year'];
 
-export type InvoiceDays = { from: string; to: string };
+export type SentDays = { from: string; to: string };
 
-export type InvoicePeriod = { preset: InvoicePreset } | { days: InvoiceDays };
+export type SentPeriod = { preset: SentPreset } | { days: SentDays };
 
-export type InvoicePeriodChoice = '' | InvoicePreset | 'choose';
+export type SentPeriodChoice = '' | SentPreset | 'choose';
 
-export const INVOICE_PERIOD_OPTIONS: readonly { value: InvoicePeriodChoice; label: string }[] = [
+export const SENT_PERIOD_OPTIONS: readonly { value: SentPeriodChoice; label: string }[] = [
 	{ value: '', label: 'Any time' },
 	{ value: 'this-month', label: 'This month' },
 	{ value: 'last-month', label: 'Last month' },
@@ -28,7 +28,7 @@ export const INVOICE_PERIOD_OPTIONS: readonly { value: InvoicePeriodChoice; labe
  * is not a period is no period, so an address never asks for what the
  * BFF would refuse.
  */
-export function invoicePeriodOf(search: Pick<URLSearchParams, 'get'>): InvoicePeriod | undefined {
+export function sentPeriodOf(search: Pick<URLSearchParams, 'get'>): SentPeriod | undefined {
 	const sent = search.get('sent');
 	const preset = PRESETS.find((name) => name === sent);
 	if (preset) return { preset };
@@ -41,12 +41,12 @@ export function invoicePeriodOf(search: Pick<URLSearchParams, 'get'>): InvoicePe
  * The period as the address says it: a preset's name, or the two days. Equal
  * for equal periods, and empty for none, so it keys a read.
  */
-export function invoicePeriodKey(period: InvoicePeriod | undefined): string {
+export function sentPeriodKey(period: SentPeriod | undefined): string {
 	if (!period) return '';
 	return 'preset' in period ? period.preset : `${period.days.from}..${period.days.to}`;
 }
 
-export function invoicePeriodQuery(period: InvoicePeriod | undefined): [string, string][] {
+export function sentPeriodQuery(period: SentPeriod | undefined): [string, string][] {
 	if (!period) return [];
 	if ('preset' in period) return [['sent', period.preset]];
 	return [
@@ -64,7 +64,7 @@ const lastDayOfMonth = (year: number, month: number) =>
  * The two days a period covers in the Practice's zone: the BFF takes days,
  * never a name, and a preset is counted from today there.
  */
-export function invoicePeriodDays(period: InvoicePeriod | undefined, timeZone: string, now: Date): InvoiceDays | undefined {
+export function sentPeriodDays(period: SentPeriod | undefined, timeZone: string, now: Date): SentDays | undefined {
 	if (!period) return undefined;
 	if ('days' in period) return period.days;
 	const [year, month] = dayIn(now, timeZone).split('-').map(Number) as [number, number];
@@ -94,7 +94,7 @@ const withoutYear = (day: string) => formatCalendarDay(day).replace(/, \d{4}$/, 
  * next month: "in October 2026", "in 2026", "Oct 3 to Oct 17, 2026". A
  * range that is a whole month or year reads as one.
  */
-export function invoicePeriodWords({ from, to }: InvoiceDays): string {
+export function sentPeriodWords({ from, to }: SentDays): string {
 	const [fromYear, fromMonth] = from.split('-', 2);
 	const isWholeYear = from === `${fromYear}-01-01` && to === `${fromYear}-12-31`;
 	if (isWholeYear) return `in ${fromYear}`;
@@ -108,12 +108,12 @@ export function invoicePeriodWords({ from, to }: InvoiceDays): string {
 /**
  * The longest wording a period can say, for the result line's ruler.
  */
-export const INVOICE_PERIOD_RULER: InvoiceDays = { from: '2026-09-30', to: '2027-12-31' };
+export const SENT_PERIOD_RULER: SentDays = { from: '2026-09-30', to: '2027-12-31' };
 
 /**
  * What the select shows for a period.
  */
-export function invoicePeriodChoiceOf(period: InvoicePeriod | undefined): InvoicePeriodChoice {
+export function sentPeriodChoiceOf(period: SentPeriod | undefined): SentPeriodChoice {
 	if (!period) return '';
 	return 'preset' in period ? period.preset : 'choose';
 }

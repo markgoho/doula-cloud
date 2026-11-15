@@ -76,7 +76,7 @@ func ExportPracticeInvoicesHandler() http.Handler {
 		return csvexport.File{
 			Body: writeInvoicesCSV(items),
 			Diff: invoicesExportScope{
-				View: q.narrowing.name(), SentFrom: q.period.sentFrom, SentTo: q.period.sentTo,
+				View: q.narrowing.name(), SentFrom: q.period.SentFrom, SentTo: q.period.SentTo,
 				Order: req.Order, Rows: len(items), Searched: q.search != "",
 			},
 			Headers: map[string]string{"Invoice-Count": strconv.Itoa(len(items))},

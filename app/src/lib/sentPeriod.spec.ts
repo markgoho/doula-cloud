@@ -1,17 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import {
-	invoicePeriodChoiceOf,
-	invoicePeriodDays,
-	invoicePeriodKey,
-	invoicePeriodOf,
-	invoicePeriodQuery,
-	invoicePeriodWords
-} from './invoicePeriod.js';
+	sentPeriodChoiceOf,
+	sentPeriodDays,
+	sentPeriodKey,
+	sentPeriodOf,
+	sentPeriodQuery,
+	sentPeriodWords
+} from './sentPeriod.js';
 import { invoiceTotalsNote, invoicesResultSummary, invoicesViewQuery } from './invoice.js';
 
-const parse = (query: string) => invoicePeriodOf(new URLSearchParams(query));
+const parse = (query: string) => sentPeriodOf(new URLSearchParams(query));
 
-describe('invoicePeriodOf', () => {
+describe('sentPeriodOf', () => {
 	it.each([
 		['sent=this-month', { preset: 'this-month' }],
 		['sent=last-year', { preset: 'last-year' }],
@@ -30,7 +30,7 @@ describe('invoicePeriodOf', () => {
 	);
 });
 
-describe('invoicePeriodDays', () => {
+describe('sentPeriodDays', () => {
 	const noon = new Date('2026-11-14T17:00:00Z');
 
 	it.each([
@@ -39,31 +39,31 @@ describe('invoicePeriodDays', () => {
 		['this-year', { from: '2026-01-01', to: '2026-12-31' }],
 		['last-year', { from: '2025-01-01', to: '2025-12-31' }]
 	] as const)('counts %s from Nov 14, 2026', (preset, days) => {
-		expect(invoicePeriodDays({ preset }, 'America/New_York', noon)).toEqual(days);
+		expect(sentPeriodDays({ preset }, 'America/New_York', noon)).toEqual(days);
 	});
 
 	it('counts last month across a year end and a leap February', () => {
-		expect(invoicePeriodDays({ preset: 'last-month' }, 'UTC', new Date('2027-01-05T12:00:00Z'))).toEqual({ from: '2026-12-01', to: '2026-12-31' });
-		expect(invoicePeriodDays({ preset: 'this-month' }, 'UTC', new Date('2028-02-10T12:00:00Z'))).toEqual({ from: '2028-02-01', to: '2028-02-29' });
+		expect(sentPeriodDays({ preset: 'last-month' }, 'UTC', new Date('2027-01-05T12:00:00Z'))).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+		expect(sentPeriodDays({ preset: 'this-month' }, 'UTC', new Date('2028-02-10T12:00:00Z'))).toEqual({ from: '2028-02-01', to: '2028-02-29' });
 	});
 
 	it('counts today in the Practice zone, not the reader zone', () => {
 		const lateOnThe31st = new Date('2026-12-01T03:00:00Z');
-		expect(invoicePeriodDays({ preset: 'this-month' }, 'America/New_York', lateOnThe31st)).toEqual({ from: '2026-11-01', to: '2026-11-30' });
-		expect(invoicePeriodDays({ preset: 'this-month' }, 'UTC', lateOnThe31st)).toEqual({ from: '2026-12-01', to: '2026-12-31' });
+		expect(sentPeriodDays({ preset: 'this-month' }, 'America/New_York', lateOnThe31st)).toEqual({ from: '2026-11-01', to: '2026-11-30' });
+		expect(sentPeriodDays({ preset: 'this-month' }, 'UTC', lateOnThe31st)).toEqual({ from: '2026-12-01', to: '2026-12-31' });
 	});
 
 	it('hands chosen days on and no period as none', () => {
-		expect(invoicePeriodDays({ days: { from: '2026-10-03', to: '2026-10-17' } }, 'UTC', noon)).toEqual({ from: '2026-10-03', to: '2026-10-17' });
-		expect(invoicePeriodDays(undefined, 'UTC', noon)).toBeUndefined();
+		expect(sentPeriodDays({ days: { from: '2026-10-03', to: '2026-10-17' } }, 'UTC', noon)).toEqual({ from: '2026-10-03', to: '2026-10-17' });
+		expect(sentPeriodDays(undefined, 'UTC', noon)).toBeUndefined();
 	});
 });
 
 describe('the period as an address and a key', () => {
 	it('names a preset and two days', () => {
-		expect(invoicePeriodQuery(undefined)).toEqual([]);
-		expect(invoicePeriodQuery({ preset: 'last-month' })).toEqual([['sent', 'last-month']]);
-		expect(invoicePeriodQuery({ days: { from: '2026-10-03', to: '2026-10-17' } })).toEqual([
+		expect(sentPeriodQuery(undefined)).toEqual([]);
+		expect(sentPeriodQuery({ preset: 'last-month' })).toEqual([['sent', 'last-month']]);
+		expect(sentPeriodQuery({ days: { from: '2026-10-03', to: '2026-10-17' } })).toEqual([
 			['sentFrom', '2026-10-03'],
 			['sentTo', '2026-10-17']
 		]);
@@ -71,19 +71,19 @@ describe('the period as an address and a key', () => {
 	});
 
 	it('keys equal periods alike and none as empty', () => {
-		expect(invoicePeriodKey(undefined)).toBe('');
-		expect(invoicePeriodKey({ preset: 'this-month' })).toBe('this-month');
-		expect(invoicePeriodKey({ days: { from: '2026-10-03', to: '2026-10-17' } })).toBe('2026-10-03..2026-10-17');
+		expect(sentPeriodKey(undefined)).toBe('');
+		expect(sentPeriodKey({ preset: 'this-month' })).toBe('this-month');
+		expect(sentPeriodKey({ days: { from: '2026-10-03', to: '2026-10-17' } })).toBe('2026-10-03..2026-10-17');
 	});
 
 	it('says what the select shows', () => {
-		expect(invoicePeriodChoiceOf(undefined)).toBe('');
-		expect(invoicePeriodChoiceOf({ preset: 'last-year' })).toBe('last-year');
-		expect(invoicePeriodChoiceOf({ days: { from: '2026-10-03', to: '2026-10-17' } })).toBe('choose');
+		expect(sentPeriodChoiceOf(undefined)).toBe('');
+		expect(sentPeriodChoiceOf({ preset: 'last-year' })).toBe('last-year');
+		expect(sentPeriodChoiceOf({ days: { from: '2026-10-03', to: '2026-10-17' } })).toBe('choose');
 	});
 });
 
-describe('invoicePeriodWords', () => {
+describe('sentPeriodWords', () => {
 	it.each([
 		[{ from: '2026-10-01', to: '2026-10-31' }, 'in October 2026'],
 		[{ from: '2026-02-01', to: '2026-02-28' }, 'in February 2026'],
@@ -93,7 +93,7 @@ describe('invoicePeriodWords', () => {
 		[{ from: '2026-12-28', to: '2027-01-03' }, 'Dec 28, 2026 to Jan 3, 2027'],
 		[{ from: '2026-10-01', to: '2026-11-30' }, 'Oct 1 to Nov 30, 2026']
 	])('says %j as "%s"', (days, words) => {
-		expect(invoicePeriodWords(days)).toBe(words);
+		expect(sentPeriodWords(days)).toBe(words);
 	});
 });
 
