@@ -76,9 +76,7 @@ type ContractResponse struct {
 	// never the record that it was made.
 	Sent   *activitypage.Stamp `json:"sent,omitempty"`
 	Signed *activitypage.Stamp `json:"signed,omitempty"`
-	// OpenedAt is the Client's first portal read of this Sent Contract
-	// (#2952), a Staff read's only: omitted until she has read it, and
-	// never set on her own read.
+	// OpenedAt is when the Client first opened it, a Staff read's only.
 	OpenedAt *time.Time `json:"openedAt,omitempty"`
 	// ID and Earlier are a Staff read's: the current Contract's id, which
 	// the Contracts list's row anchors to, and the voided Contracts it

@@ -51,8 +51,9 @@ export interface Contract {
 	/** When the Contract was signed and the full legal name typed to sign
 	 * it (#2104). A voided Contract keeps it. */
 	signed?: Stamp;
-	/** When the Client first read the Sent Contract on the portal (#2952).
-	 * Absent until she has, and on a Client-portal read. */
+	/**
+	When the Client first opened it. Staff read only.
+	*/
 	openedAt?: string;
 	/** The current Contract's id, which a list row's `#contract-<id>`
 	 * anchor names. Absent on a Client-portal read (#2958). */
@@ -296,6 +297,15 @@ export async function sendContract(
 	return response.json();
 }
 
+/** Tells the BFF the Client has her Sent Contract on screen. A GET is
+ * preloaded, so only this POST records the open. Throws on a non-2xx. */
+export async function openContract(fetcher: Fetcher, engagementId: string): Promise<void> {
+	const response = await fetcher(`${clientContractPath(engagementId)}/open`, { method: 'POST' });
+	if (!response.ok) {
+		throw new Error(await apiErrorMessage(response));
+	}
+}
+
 /** Signs the sent Contract for engagementId -- transitions it to signed,
  * one-way, and only while it's still sent (a non-sent Contract 409s).
  * fullLegalName and isAttestation are the only fields the caller supplies;
@@ -406,7 +416,7 @@ export interface ContractListItem {
 	steppedOn: string;
 	daysWaiting?: number;
 	/**
-	The Practice-zone day the Client first read a Sent Contract (#2952).
+	The Practice-zone day the Client first opened it.
 	*/
 	openedOn?: string;
 	sentByName?: string;

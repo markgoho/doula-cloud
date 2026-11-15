@@ -43,9 +43,8 @@ func ClientContractGlance(ctx context.Context, tx *sql.Tx, engagementID string) 
 	return glance, true, nil
 }
 
-// recordFirstOpen stamps contractID with the Client's first read and records
-// it as her act (#2952). The stamp is guarded on opened_at being null, so a
-// second read, or two at once, changes nothing and records nothing.
+// recordFirstOpen stamps contractID with the Client's first open and records
+// it as her act. A repeat or a race changes and records nothing.
 func recordFirstOpen(ctx context.Context, tx *sql.Tx, engagementID, contractID string) error {
 	res, err := tx.ExecContext(ctx,
 		`UPDATE contracts SET opened_at = $1 WHERE id = $2 AND opened_at IS NULL`,
@@ -75,6 +74,18 @@ func recordFirstOpen(ctx context.Context, tx *sql.Tx, engagementID, contractID s
 	return nil
 }
 
+// clientContractHandler runs handle on the Client's Contract, answering 404
+// when she has none.
+func clientContractHandler(handle func(w http.ResponseWriter, r *http.Request, c clientauth.Call, ct contractRow)) http.Handler {
+	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
+		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
+		if !ok {
+			return
+		}
+		handle(w, r, c, ct)
+	})
+}
+
 // ClientGetContractHandler views the Contract for the Client-portal
 // caller's Engagement -- read-only, no PUT/POST route for this
 // population; the signing flow itself is #70. clientauth.Middleware has
@@ -85,18 +96,7 @@ func recordFirstOpen(ctx context.Context, tx *sql.Tx, engagementID, contractID s
 // error" shape plans.ClientGetBirthPlanHandler relies on. Must be
 // mounted behind clientauth.Middleware.
 func ClientGetContractHandler() http.Handler {
-	return clientauth.Handler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call) {
-		ct, ok := requireContract(w, r, c.Tx, c.EngagementID)
-		if !ok {
-			return
-		}
-		if ok, _ := TransitionOpen.Check(Status(ct.Status)); ok {
-			if err := recordFirstOpen(r.Context(), c.Tx, c.EngagementID, ct.ID); err != nil {
-				// coverage:ignore reason: DB query failure, not exercised by unit tests
-				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-				return
-			}
-		}
+	return clientContractHandler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call, ct contractRow) {
 		mergeFields := extractMergeFields(ct.Prose)
 
 		out := ContractResponse{
@@ -108,5 +108,23 @@ func ClientGetContractHandler() http.Handler {
 			AmountChangedAt: ct.AmountChangedAt,
 		}
 		writeClientContract(w, r, c.Tx, http.StatusOK, out)
+	})
+}
+
+// ClientPostOpenContractHandler records that the Client has her Sent
+// Contract on screen (#2974). Only this POST counts, never the GET, which
+// is preloaded; the first wins and a repeat answers the same.
+func ClientPostOpenContractHandler() http.Handler {
+	return clientContractHandler(func(w http.ResponseWriter, r *http.Request, c clientauth.Call, ct contractRow) {
+		if ok, refusal := TransitionOpen.Check(Status(ct.Status)); !ok {
+			apierr.WriteError(w, refusal, http.StatusConflict)
+			return
+		}
+		if err := recordFirstOpen(r.Context(), c.Tx, c.EngagementID, ct.ID); err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
 	})
 }

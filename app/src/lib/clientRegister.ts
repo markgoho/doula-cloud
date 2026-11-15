@@ -91,8 +91,9 @@ export const NO_CONTRACT_MESSAGE = 'No contract has been sent for your care yet.
  * `api/internal/contracts/pdf.go`, held to this by a Go test, #2214). */
 export const SIGN_CONSENT_LABEL = 'I have read this contract and I am signing it electronically';
 
-/** The one line on a Sent Contract's page that tells her what the Practice
- * sees of her reading (#2952): the first open is recorded and shown to it. */
+/**
+Tells her the Practice sees her first open of a Sent Contract.
+*/
 export function contractOpenedNotice(practiceName: string): string {
 	return `${practiceName} can see that you have opened this contract.`;
 }

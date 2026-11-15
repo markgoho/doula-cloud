@@ -45,8 +45,7 @@ type ContractListItem struct {
 	// DaysWaiting is set on a Sent Contract only: whole Practice days since
 	// it was sent, 0 for today.
 	DaysWaiting *int `json:"daysWaiting,omitempty"`
-	// OpenedOn is the Practice-zone day the Client first read a Sent
-	// Contract (#2952), empty until she has.
+	// OpenedOn is the Practice-zone day the Client first opened it.
 	OpenedOn         string   `json:"openedOn,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
 	MadeByName       string   `json:"madeByName,omitempty"`

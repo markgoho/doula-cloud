@@ -120,6 +120,9 @@ func Mount(g *staffauth.GatedRouter, ir *idempotency.Router, db *sql.DB, store o
 	// a 409 for a Contract she has signed. The replay gives her the first
 	// response instead. PortalReplayable applies clientauth.Middleware.
 	ir.PortalReplayable("POST /api/portal/engagements/{engagementId}/contract/sign", ClientPostSignContractHandler(store))
+	ir.PortalExempt("POST /api/portal/engagements/{engagementId}/contract/open",
+		"guarded on opened_at being null, so a retry changes and records nothing",
+		clientauth.Middleware(db)(ClientPostOpenContractHandler()))
 	g.OpenGet("/api/portal/engagements/{engagementId}/contract/pdf", clientauth.PortalPopulation,
 		clientauth.Middleware(db)(ClientGetSignedContractPDFHandler(store)))
 }

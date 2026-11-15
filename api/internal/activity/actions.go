@@ -326,10 +326,8 @@ const (
 	// changed until it is sent.
 	ActionContractEdited EngagementAction = "contract_edited"
 
-	// ActionContractOpened records the Client's first read of her Sent
-	// Contract on the portal (#2952), recorded once, as her act. In
-	// staffingActions below: the Practice is told, and she is told on the
-	// Contract page itself, so her ledger does not repeat it.
+	// ActionContractOpened records the Client's first open of her Sent
+	// Contract (#2952), once, as her act. Staff-only on the ledger.
 	ActionContractOpened EngagementAction = "contract_opened"
 
 	// ActionContractPriced records a Contract's amount being set for the
@@ -740,7 +738,6 @@ var staffingActions = map[EngagementAction]bool{
 	ActionPortalInviteRefused: true,
 	// #2520: a Draft she has not been sent.
 	ActionContractEdited: true,
-	// #2952: and her own first read of a Contract, which is the Practice's to see.
 	ActionContractOpened: true,
 	// And an Invoice draft Stripe would not finalize: it never reached her.
 	ActionInvoiceNotSent: true,

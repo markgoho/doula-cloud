@@ -33,6 +33,7 @@ import {
 	practiceVoidRequestsPath,
 	requestContractVoid,
 	saveContractValues,
+	openContract,
 	sendContract,
 	setMergeFieldValue,
 	signContract,
@@ -353,6 +354,22 @@ describe('downloadSignedContractPdf', () => {
 		await expect(downloadSignedContractPdf(fetcher, 'practice-1', 'eng-1')).rejects.toThrow(
 			'signed PDF not found'
 		);
+	});
+});
+
+describe('openContract', () => {
+	it('POSTs to the portal engagement open path', async () => {
+		const fetcher = vi.fn().mockResolvedValue({ ok: true });
+
+		await openContract(fetcher, 'eng-1');
+
+		expect(fetcher).toHaveBeenCalledWith('/api/portal/engagements/eng-1/contract/open', { method: 'POST' });
+	});
+
+	it('throws the response message on a refusal', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ error: 'Contract is signed' }, 409));
+
+		await expect(openContract(fetcher, 'eng-1')).rejects.toThrow('Contract is signed');
 	});
 });
 
