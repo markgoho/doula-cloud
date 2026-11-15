@@ -33,6 +33,7 @@ type fixture struct {
 	contractID   string
 }
 
+// jscpd:ignore-start -- the fixture and the worker-door drive are staffnotice's, over this package's own worker and tables
 func newFixture(t *testing.T, email string) fixture {
 	t.Helper()
 	db := testdb.New(t)
@@ -88,6 +89,8 @@ func (f fixture) run(t *testing.T, sender mail.Sender) {
 		t.Fatalf("worker status = %d: %s", resp.StatusCode, body)
 	}
 }
+
+// jscpd:ignore-end
 
 func (f fixture) mails(t *testing.T) []mail.Message {
 	t.Helper()

@@ -120,22 +120,16 @@ describe('ContractStatus.svelte', () => {
 		expect(onRemind).toHaveBeenCalledOnce();
 	});
 
-	it('shows the reason a reminder was refused beside the button (#2951)', async () => {
-		const onRemind = vi.fn().mockRejectedValue(new Error('This Client was already emailed about a Contract today.'));
+	it.each([
+		['the reason a reminder was refused', new Error('This Client was already emailed about a Contract today.'), 'This Client was already emailed about a Contract today.'],
+		['a plain failure when the refusal is not an Error', 'nope', 'Failed to send the reminder']
+	])('shows %s beside the button (#2951)', async (_name, rejection, words) => {
+		const onRemind = vi.fn().mockRejectedValue(rejection);
 		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
 
 		await page.getByRole('button', { name: 'Remind the Client' }).click();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('This Client was already emailed about a Contract today.');
-	});
-
-	it('shows a plain failure when the refusal is not an Error (#2951)', async () => {
-		const onRemind = vi.fn().mockRejectedValue('nope');
-		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, onRemind });
-
-		await page.getByRole('button', { name: 'Remind the Client' }).click();
-
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to send the reminder');
+		await expect.element(page.getByRole('alert')).toHaveTextContent(words);
 	});
 
 	it('offers no reminder without onRemind, or once the Contract is not sent (#2951)', async () => {

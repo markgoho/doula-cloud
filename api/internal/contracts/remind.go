@@ -60,17 +60,11 @@ func PostRemindContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
+		if !requirePortalAccess(w, r, c, remindRefusal) {
+			return
+		}
+
 		ctx := r.Context()
-		access, err := clientPortalAccess(ctx, c.Tx, c.EngagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !access.CanReachPortal() {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, remindRefusal(access), nil)
-			return
-		}
 
 		emailed, err := emailedToday(ctx, c)
 		if err != nil {

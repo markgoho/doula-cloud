@@ -98,14 +98,7 @@ func PostSendContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		access, err := clientPortalAccess(r.Context(), c.Tx, c.EngagementID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if !access.CanReachPortal() {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, portalRefusal(access), nil)
+		if !requirePortalAccess(w, r, c, portalRefusal) {
 			return
 		}
 
@@ -163,6 +156,23 @@ func clientPortalAccess(ctx context.Context, tx *sql.Tx, engagementID string) (*
 		return nil, fmt.Errorf("contracts: fetch client portal invite state: %w", err)
 	}
 	return state.Access, nil
+}
+
+// requirePortalAccess refuses 409 FAILED_PRECONDITION, in the words refusal
+// gives for her access, unless the Engagement's Client can reach the
+// portal. It writes the refusal and returns false when it does.
+func requirePortalAccess(w http.ResponseWriter, r *http.Request, c staffauth.Call, refusal func(*portalinvite.Access) string) bool {
+	access, err := clientPortalAccess(r.Context(), c.Tx, c.EngagementID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+		return false
+	}
+	if !access.CanReachPortal() {
+		apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, refusal(access), nil)
+		return false
+	}
+	return true
 }
 
 // portalRefusal is the sentence a send is refused with when access
