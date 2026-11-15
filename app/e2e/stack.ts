@@ -760,10 +760,18 @@ export function backdateContracts(moves: readonly { engagementId: string; days: 
 		   UPDATE engagements SET created_at = engagements.created_at - moved.shift
 		   FROM moved WHERE engagements.id = moved.engagement_id
 		 ),
+		 windows AS (
+		   SELECT c.engagement_id, c.created_at AS lo, c.status,
+		          COALESCE(LEAD(c.created_at) OVER (PARTITION BY c.engagement_id ORDER BY c.created_at, c.id), 'infinity'::timestamptz) AS hi
+		   FROM contracts c WHERE c.engagement_id IN (SELECT engagement_id FROM moved)
+		 ),
 		 activity_moved AS (
 		   UPDATE activity SET created_at = activity.created_at - moved.shift + CASE WHEN activity.action = 'contract_signed' THEN moved.wait ELSE interval '0' END
-		   FROM moved
-		   WHERE activity.subject_id = moved.engagement_id
+		   FROM moved, windows
+		   WHERE activity.subject_kind = 'engagement'
+		     AND activity.subject_id = moved.engagement_id
+		     AND windows.engagement_id = moved.engagement_id AND windows.status <> 'voided'
+		     AND activity.created_at >= windows.lo AND activity.created_at < windows.hi
 		     AND activity.action IN ('contract_created', 'contract_priced', 'contract_edited', 'contract_sent', 'contract_signed', 'contract_voided')
 		 )
 		 UPDATE contracts SET created_at = contracts.created_at - moved.shift,

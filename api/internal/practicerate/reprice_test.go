@@ -20,8 +20,8 @@ func (e *env) seedContract(kind, status string, overridden bool) (engagementID s
 	e.T.Helper()
 	engagementID = e.AnotherEngagement(fixture.Kind(kind)).ID
 	e.Exec(
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, amount_overridden, sent_at, voided_at)
-		 VALUES ($1, $2::contract_status, 'Agreement.', 15000, $3, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, amount_overridden, sent_at, signed_at, voided_at)
+		 VALUES ($1, $2::contract_status, 'Agreement.', 15000, $3, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'signed' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)`,
 		engagementID, status, overridden)
 	return engagementID
 }

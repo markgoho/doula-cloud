@@ -70,6 +70,12 @@ UPDATE contracts c
   LEFT JOIN voids v ON v.id = cc.id
  WHERE c.id = cc.id AND c.status = 'voided';
 
+-- A signed row that never kept its signed_at gets the instant it was sent, so
+-- stepped_at below is never NULL for a signed Contract.
+UPDATE contracts
+   SET signed_at = COALESCE(sent_at, created_at)
+ WHERE status = 'signed' AND signed_at IS NULL;
+
 -- sent_by and voided_by stay nullable: a backfilled row whose Activity is
 -- gone has no one to name.
 ALTER TABLE contracts ADD CONSTRAINT contracts_sent_at_matches_status CHECK (
@@ -78,6 +84,10 @@ ALTER TABLE contracts ADD CONSTRAINT contracts_sent_at_matches_status CHECK (
 
 ALTER TABLE contracts ADD CONSTRAINT contracts_voided_at_matches_status CHECK (
     (status = 'voided') = (voided_at IS NOT NULL)
+);
+
+ALTER TABLE contracts ADD CONSTRAINT contracts_signed_at_matches_status CHECK (
+    status <> 'signed' OR signed_at IS NOT NULL
 );
 
 ALTER TABLE contracts ADD COLUMN stepped_at timestamptz GENERATED ALWAYS AS (
@@ -91,6 +101,7 @@ ALTER TABLE contracts ADD COLUMN stepped_at timestamptz GENERATED ALWAYS AS (
 
 -- +goose Down
 ALTER TABLE contracts DROP COLUMN stepped_at;
+ALTER TABLE contracts DROP CONSTRAINT contracts_signed_at_matches_status;
 ALTER TABLE contracts DROP CONSTRAINT contracts_voided_at_matches_status;
 ALTER TABLE contracts DROP CONSTRAINT contracts_sent_at_matches_status;
 ALTER TABLE contracts

@@ -197,7 +197,11 @@
 	let isSearching = $state(false);
 	$effect(() => {
 		const key = wanted;
-		if (key.search === '') return;
+		if (key.search === '') {
+			latestSearch += 1;
+			untrack(() => (isSearching = false));
+			return;
+		}
 		const thisSearch = ++latestSearch;
 		untrack(() => void readSearch(key, thisSearch));
 	});

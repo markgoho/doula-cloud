@@ -259,8 +259,8 @@ func TestPutHandler_OnlyAnUnsentContractTakesTheNewName(t *testing.T) {
 		_, engagementID := testdb.SeedEngagement(t, db, practiceID)
 		var id string
 		if err := db.Admin.QueryRowContext(t.Context(),
-			`INSERT INTO contracts (engagement_id, status, prose, merge_field_values, amount_cents, sent_at, voided_at)
-			 VALUES ($1, $2::contract_status, 'Between {{practice_name}}', jsonb_build_object('practice_name', $3::text), 15000, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)
+			`INSERT INTO contracts (engagement_id, status, prose, merge_field_values, amount_cents, sent_at, signed_at, voided_at)
+			 VALUES ($1, $2::contract_status, 'Between {{practice_name}}', jsonb_build_object('practice_name', $3::text), 15000, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'signed' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)
 			 RETURNING id`,
 			engagementID, status, mergeName,
 		).Scan(&id); err != nil {

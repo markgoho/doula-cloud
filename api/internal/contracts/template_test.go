@@ -36,7 +36,7 @@ func seedContractTemplate(t *testing.T, db *testdb.DB, practiceID, prose string)
 func seedContract(t *testing.T, db *testdb.DB, engagementID, status, prose string) {
 	t.Helper()
 	if _, err := db.Admin.ExecContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, voided_at) VALUES ($1, $2::contract_status, $3, 15000, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)`,
+		`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at, voided_at) VALUES ($1, $2::contract_status, $3, 15000, CASE WHEN $2::contract_status <> 'draft' THEN now() END, CASE WHEN $2::contract_status = 'signed' THEN now() END, CASE WHEN $2::contract_status = 'voided' THEN now() END)`,
 		engagementID, status, prose,
 	); err != nil {
 		t.Fatalf("seed contract: %v", err)
@@ -101,8 +101,8 @@ func seedPriorSignedContract(t *testing.T, db *testdb.DB, engagementID string) (
 func seedSignedContractRow(t *testing.T, db *testdb.DB, engagementID string, status contracts.Status, age string) (contractID, pdfObjectPath string) {
 	t.Helper()
 	if err := db.Admin.QueryRowContext(t.Context(),
-		`INSERT INTO contracts (engagement_id, status, prose, created_at, amount_cents, sent_at, voided_at)
-		 VALUES ($1, $2::contract_status, $3, now() - $4::interval, 15000, now() - $4::interval, CASE WHEN $2::contract_status = 'voided' THEN now() - $4::interval END) RETURNING id`,
+		`INSERT INTO contracts (engagement_id, status, prose, created_at, amount_cents, sent_at, signed_at, voided_at)
+		 VALUES ($1, $2::contract_status, $3, now() - $4::interval, 15000, now() - $4::interval, CASE WHEN $2::contract_status <> 'sent' THEN now() - $4::interval END, CASE WHEN $2::contract_status = 'voided' THEN now() - $4::interval END) RETURNING id`,
 		engagementID, string(status), mergeFieldProse, age,
 	).Scan(&contractID); err != nil {
 		t.Fatalf("seed signed contract: %v", err)

@@ -118,6 +118,7 @@ func TestMigration00178_BackfillsEachContractFromItsOwnWindow(t *testing.T) {
 	voidedSigned := contract(fixture.Engagement(t, db, practice).ID, "voided", t0, day(1))
 	sentBare := contract(fixture.Engagement(t, db, practice).ID, "sent", day(7), nil)
 	voidedBare := contract(fixture.Engagement(t, db, practice).ID, "voided", day(8), nil)
+	signedNoInstant := contract(fixture.Engagement(t, db, practice).ID, "signed", day(11), nil)
 	draftEngagement := fixture.Engagement(t, db, practice).ID
 	draft := contract(draftEngagement, "draft", day(9), nil)
 	activity(draftEngagement, "contract_sent", sender.ID, day(10))
@@ -159,6 +160,9 @@ func TestMigration00178_BackfillsEachContractFromItsOwnWindow(t *testing.T) {
 	requireInstant(t, "never signed sent_at", never.sentAt, day(8))
 	requireInstant(t, "never signed voided_at", never.voidedAt, day(8))
 
+	filled := readBackfilled(t, db, signedNoInstant)
+	requireInstant(t, "signed with no signed_at stepped_at", filled.steppedAt, day(11))
+
 	notSent := readBackfilled(t, db, draft)
 	if notSent.sentAt.Valid || notSent.sentBy.Valid || notSent.voidedAt.Valid {
 		t.Errorf("draft = %+v, want it left unsent despite an Activity row in its window", notSent)
@@ -168,20 +172,21 @@ func TestMigration00178_BackfillsEachContractFromItsOwnWindow(t *testing.T) {
 	t.Run("each CHECK refuses a row that breaks it", func(t *testing.T) {
 		now := t0
 		cases := []struct {
-			name, constraint, status string
-			sentAt, voidedAt         any
+			name, constraint, status   string
+			sentAt, voidedAt, signedAt any
 		}{
-			{"a sent Contract with no sent_at", "contracts_sent_at_matches_status", statusSent, nil, nil},
-			{"a draft with a sent_at", "contracts_sent_at_matches_status", statusDraft, now, nil},
-			{"a voided Contract with no voided_at", "contracts_voided_at_matches_status", statusVoided, now, nil},
-			{"a signed Contract with a voided_at", "contracts_voided_at_matches_status", statusSigned, now, now},
+			{"a sent Contract with no sent_at", "contracts_sent_at_matches_status", statusSent, nil, nil, nil},
+			{"a draft with a sent_at", "contracts_sent_at_matches_status", statusDraft, now, nil, nil},
+			{"a voided Contract with no voided_at", "contracts_voided_at_matches_status", statusVoided, now, nil, nil},
+			{"a signed Contract with a voided_at", "contracts_voided_at_matches_status", statusSigned, now, now, now},
+			{"a signed Contract with no signed_at", "contracts_signed_at_matches_status", statusSigned, now, nil, nil},
 		}
 		for _, c := range cases {
 			t.Run(c.name, func(t *testing.T) {
 				_, err := db.Admin.ExecContext(t.Context(),
-					`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, voided_at)
-					 VALUES ($1, $2::contract_status, 'Agreement.', 150000, $3, $4)`,
-					fixture.Engagement(t, db, practice).ID, c.status, c.sentAt, c.voidedAt)
+					`INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, voided_at, signed_at)
+					 VALUES ($1, $2::contract_status, 'Agreement.', 150000, $3, $4, $5)`,
+					fixture.Engagement(t, db, practice).ID, c.status, c.sentAt, c.voidedAt, c.signedAt)
 				if err == nil || !strings.Contains(err.Error(), c.constraint) {
 					t.Fatalf("insert error = %v, want it refused by %s", err, c.constraint)
 				}

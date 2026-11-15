@@ -605,6 +605,29 @@ describe('a typed name', () => {
 	});
 });
 
+class HistoryState {
+	contractsSearch = $state<string>();
+}
+
+describe('a search removed before it lands', () => {
+	it('leaves the unsearched rows and the result line, and the table not busy', async () => {
+		const history = new HistoryState();
+		let release!: (response: Response) => void;
+		apiFetchWithSession.mockReturnValue(new Promise<Response>((resolve) => (release = resolve)));
+		await setup({ state: history });
+
+		history.contractsSearch = 'alma';
+		await vi.waitFor(() => expect(apiFetchWithSession).toHaveBeenCalledOnce());
+		history.contractsSearch = '';
+		release(jsonResponse({ items: [items[2]], hasMore: false, total: 1 }));
+
+		const table = testPage.getByRole('table', { name: 'Contracts' });
+		await expect.element(table).toHaveAttribute('aria-busy', 'false');
+		await expect.element(table).toHaveAccessibleDescription('Showing 5 Contracts, newest first.');
+		await expect.element(testPage.getByRole('link', { name: 'Rowan Okafor' })).toBeVisible();
+	});
+});
+
 // T2, T3 (#2749): Back from an Engagement puts the list where it was left, with focus on the row.
 describe('coming back from an Engagement', () => {
 

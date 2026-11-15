@@ -45,8 +45,8 @@ func TestOpenEngagementRollupQueryPlanAtScale(t *testing.T) {
 		     SELECT id, $1, 'active', 'birth' FROM c
 		     RETURNING id
 		 ), k AS (
-		     INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at)
-		     SELECT id, 'signed', '', 150000, now() FROM e
+		     INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at)
+		     SELECT id, 'signed', '', 150000, now(), now() FROM e
 		     RETURNING id
 		 )
 		 INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at, paid_at)
@@ -106,8 +106,8 @@ func TestListQueryPlanAtScale(t *testing.T) {
 		     SELECT id, $1, 'active', 'birth', current_date + (row_number() OVER ())::int % 300 FROM c
 		     RETURNING id
 		 ), k AS (
-		     INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at)
-		     SELECT id, 'signed', '', 150000, now() FROM e
+		     INSERT INTO contracts (engagement_id, status, prose, amount_cents, sent_at, signed_at)
+		     SELECT id, 'signed', '', 150000, now(), now() FROM e
 		     RETURNING id
 		 ), i AS (
 		     INSERT INTO invoices (practice_id, contract_id, stripe_invoice_id, status, amount_cents, reference, due_at)
