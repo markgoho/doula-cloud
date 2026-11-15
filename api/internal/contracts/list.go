@@ -213,8 +213,9 @@ func (q listQuery) pageQuery(practiceID string, after *listAfter, limit int) (st
 	args := []any{}
 	query := listColumns + listFrom + "\n\tWHERE " + q.where(practiceID, &args)
 	if after != nil {
-		args = append(args, after.key, after.id)
-		query += " AND " + q.sort.after(fmt.Sprintf("$%d", len(args)-1), fmt.Sprintf("$%d", len(args)))
+		query += " AND " + q.sort.after(len(args)+1)
+		args = append(args, after.keys...)
+		args = append(args, after.id)
 	}
 	args = append(args, limit)
 	query += " ORDER BY " + q.sort.orderBy() + fmt.Sprintf(" LIMIT $%d", len(args))

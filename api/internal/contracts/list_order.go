@@ -3,6 +3,8 @@ package contracts
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"doula-cloud/api/internal/pagecursor"
 )
@@ -40,14 +42,15 @@ const maxSearchRunes = 100
 // listView is one view resolved to the statuses it holds ("" for every
 // status) and the order "" means in it.
 type listView struct {
-	statuses string
-	own      string
+	statuses   string
+	own        string
+	draftsLast bool
 }
 
 func resolveView(view string) (listView, bool) {
 	switch view {
 	case viewNotSigned:
-		return listView{statuses: `c.status IN ('draft', 'sent')`, own: orderOldest}, true
+		return listView{statuses: `c.status IN ('draft', 'sent')`, own: orderOldest, draftsLast: true}, true
 	case viewDraft:
 		return listView{statuses: `c.status = 'draft'`, own: orderOldest}, true
 	case viewSent:
@@ -68,8 +71,9 @@ const nameKeyExpr = `lower(concat_ws(' ', COALESCE(NULLIF(cl.preferred_name, '')
 
 // listSort is one order resolved to what it sorts on.
 type listSort struct {
-	desc   bool
-	byName bool
+	desc       bool
+	byName     bool
+	draftsLast bool
 }
 
 func resolveSort(order string, view listView) (listSort, bool) {
@@ -78,7 +82,7 @@ func resolveSort(order string, view listView) (listSort, bool) {
 	}
 	switch order {
 	case orderOldest:
-		return listSort{}, true
+		return listSort{draftsLast: view.draftsLast}, true
 	case orderNewest:
 		return listSort{desc: true}, true
 	case orderClient:
@@ -87,11 +91,23 @@ func resolveSort(order string, view listView) (listSort, bool) {
 	return listSort{}, false
 }
 
+const draftsLastKeyExpr = `(c.status = 'draft'), c.stepped_at`
+
 func (s listSort) keyExpr() string {
 	if s.byName {
 		return nameKeyExpr
 	}
+	if s.draftsLast {
+		return draftsLastKeyExpr
+	}
 	return "c.stepped_at"
+}
+
+func (s listSort) keyCount() int {
+	if s.draftsLast {
+		return 2
+	}
+	return 1
 }
 
 func (s listSort) direction() string {
@@ -102,22 +118,31 @@ func (s listSort) direction() string {
 }
 
 func (s listSort) orderBy() string {
+	if s.draftsLast {
+		return "(c.status = 'draft') ASC, c.stepped_at ASC, c.id ASC"
+	}
 	return fmt.Sprintf("%s %s, c.id %s", s.keyExpr(), s.direction(), s.direction())
 }
 
-func (s listSort) after(keyParam, idParam string) string {
+// after is the condition for the rows past a cursor, its key values bound
+// from parameter first on and its id the one after them.
+func (s listSort) after(first int) string {
 	op := ">"
 	if s.desc {
 		op = "<"
 	}
-	return fmt.Sprintf("(%s, c.id) %s (%s, %s)", s.keyExpr(), op, keyParam, idParam)
+	params := make([]string, 0, s.keyCount()+1)
+	for i := range s.keyCount() + 1 {
+		params = append(params, fmt.Sprintf("$%d", first+i))
+	}
+	return fmt.Sprintf("(%s, c.id) %s (%s)", s.keyExpr(), op, strings.Join(params, ", "))
 }
 
 // listAfter is the position a keyed cursor decodes to: the sort key of the
 // last row of the page before, and its id.
 type listAfter struct {
-	key any
-	id  string
+	keys []any
+	id   string
 }
 
 // decode reads a cursor minted for cursorName, refusing one minted under
@@ -128,17 +153,25 @@ func (s listSort) decode(cursorName string) func(string) (listAfter, error) {
 		if err != nil {
 			return listAfter{}, fmt.Errorf("contracts: list cursor: %w", err)
 		}
-		if len(c.Keys) != 1 {
+		if len(c.Keys) != s.keyCount() {
 			return listAfter{}, errors.New("contracts: list cursor: wrong key count")
 		}
 		if s.byName {
-			return listAfter{key: c.Keys[0], id: c.ID}, nil
+			return listAfter{keys: []any{c.Keys[0]}, id: c.ID}, nil
 		}
-		at, err := pagecursor.ParseTimeKey(c.Keys[0])
+		keys := make([]any, 0, len(c.Keys))
+		if s.draftsLast {
+			isDraft, err := strconv.ParseBool(c.Keys[0])
+			if err != nil {
+				return listAfter{}, fmt.Errorf("contracts: list cursor: %w", err)
+			}
+			keys = append(keys, isDraft)
+		}
+		at, err := pagecursor.ParseTimeKey(c.Keys[len(c.Keys)-1])
 		if err != nil {
 			return listAfter{}, fmt.Errorf("contracts: list cursor: %w", err)
 		}
-		return listAfter{key: at, id: c.ID}, nil
+		return listAfter{keys: append(keys, at), id: c.ID}, nil
 	}
 }
 
@@ -147,5 +180,9 @@ func (s listSort) cursorKeys(item ContractListItem) []string {
 	if s.byName {
 		return []string{item.sortName}
 	}
-	return []string{pagecursor.TimeKey(item.steppedAt)}
+	at := pagecursor.TimeKey(item.steppedAt)
+	if s.draftsLast {
+		return []string{strconv.FormatBool(item.Status == string(StatusDraft)), at}
+	}
+	return []string{at}
 }

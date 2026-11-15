@@ -25,7 +25,8 @@ FORM: The category standard (canon). No signature component: a list is not a rec
 - **What a reader holds differs by role in the BFF, and the screen follows it.** An employed Doula reads every Contract at the Practice and a contractor only those on an Engagement she holds a granted attachment on (ADR-0008's Engagements row; #973). Neither decides a void, so neither is shown the void requests, and neither meets that read's refusal (#2851).
 - **The amount is on the row for a reader who may read it.** An Owner, an Admin and an employed Doula read Contract money; a contractor who holds neither role reads the list without it (ADR-0008's Money line).
 - **A Contract has no expiry and no reminder.** The lifecycle is draft, sent, signed, voided (`GLOSSARY.md:59`); nothing lapses.
-- **The default view is what is not signed,** not the whole book: the screen was made for chasing (#273, DW-G5). The whole book is one choice away.
+- **The default view is what is not signed,** not the whole book: the screen was made for chasing (#273, DW-G5). The whole book is one choice away. In it the Contracts sent come first, the longest wait first, and the Contracts not sent yet stand after them, the oldest made first: the one a Client has sat on longest leads, and what the Practice still owes is together at the end. "Clear filters" returns here, the view the screen opens on, as it does on every list.
+- **A column is drawn only where the view can fill it.** The Signed PDF in the Signed and All views; who sent it everywhere but the Draft view; the Doula except under a Doula filter.
 
 ## Category baseline
 
@@ -73,6 +74,8 @@ Read on 2026-11-14 by an Opus agent, each claim from the product's own page; "(s
 | Bulk selection and bulk actions | Later (#2951) | the category's bulk act is reminding several signers at once; it is decided with the reminder. Nothing else on record is done to several Contracts at once |
 | A period, and an export of what the list shows | Later (#2954) | PandaDoc's Date filter, HoneyBook's "sent only This month, This year, or Last year", Stripe's export (https://docs.stripe.com/dashboard/basics). Both readings rejected a decline, as they did on the Invoices list (#2871). No persona has a job on record for a Contracts register by period, so #2954 asks three first and then builds both on the Invoices list's model |
 | A saved view | Declined | the address is the saved view, and the nav's link is each reader's own default; the sibling lists' recorded reason. Two graders named it at the baseline |
+| A search that applies as it is typed | Declined | the lists post a Client's name and wait for Apply, so no name reaches the address or a request for each keystroke (#1829); two graders named it in round 1 |
+| A row peek or side panel | Declined | the row opens the Engagement at its Contract section, and Back restores the list; no job on record reads a Contract beside the list. One grader named it in round 1 |
 | Grouping, a calendar view | Declined | the views are the grouping, and a Contract book is not read by day |
 | Density and column choice | Declined | no job on record, and no column here is optional to a chaser; both readings accepted |
 | Keyboard shortcuts | Later (#2956) | one decision for the whole app, the founder's, on #2956 |

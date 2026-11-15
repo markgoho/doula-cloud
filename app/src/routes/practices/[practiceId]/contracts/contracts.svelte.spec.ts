@@ -645,3 +645,23 @@ describe('coming back from an Engagement', () => {
 		scrollTo.mockRestore();
 	});
 });
+
+describe('the columns each view draws', () => {
+	const HEADERS = ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee', 'Signed PDF'];
+	it.each([
+		['', 'not-signed', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
+		['?show=draft', 'draft', ['Client', 'Status', 'Doula', 'Care', 'Fee']],
+		['?show=sent', 'sent', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
+		['?show=signed', 'signed', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee', 'Signed PDF']],
+		['?show=voided', 'voided', ['Client', 'Status', 'Sent by', 'Doula', 'Care', 'Fee']],
+		['?show=all', 'all', HEADERS]
+	])('draws only the columns that can hold something in %j', async (query, view, drawn) => {
+		await setup({ query, props: { ...ownerProperties, data: { ...data, view } } });
+
+		for (const header of HEADERS) {
+			const column = testPage.getByRole('columnheader', { name: header, exact: true });
+			if (drawn.includes(header)) await expect.element(column).toBeVisible();
+			else await expect.element(column).not.toBeInTheDocument();
+		}
+	});
+});

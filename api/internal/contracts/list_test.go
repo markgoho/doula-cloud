@@ -183,7 +183,8 @@ type seededContract struct {
 // seedBook seeds perStatus Contracts in each status with ties on the date
 // of the current step and on the Client's name, so every order has a tie
 // for the id to break.
-func seedBook(t *testing.T, e *env, perStatus int) []seededContract {
+func seedBook(t *testing.T, e *env) []seededContract {
+	const perStatus = listPageSize + 1
 	t.Helper()
 	var book []seededContract
 	for _, status := range []string{statusDraft, statusSent, statusSigned, statusVoided} {
@@ -244,6 +245,9 @@ func expectedOrder(book []seededContract, view, order string) []string {
 				return a.nameKey < b.nameKey
 			}
 		default:
+			if view == "" && (a.status == statusDraft) != (b.status == statusDraft) {
+				return b.status == statusDraft
+			}
 			if !a.stepped.Equal(b.stepped) {
 				return a.stepped.Before(b.stepped)
 			}
@@ -263,7 +267,7 @@ func expectedOrder(book []seededContract, view, order string) []string {
 // every page equal to the rows across them.
 func TestListContracts_EveryViewAndOrderWalksItsCursor(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	book := seedBook(t, e, listPageSize+1)
+	book := seedBook(t, e)
 
 	for _, view := range []string{"", statusDraft, statusSent, statusSigned, statusVoided, viewAll} {
 		for _, order := range []string{"", orderOldest, orderNewest, orderClient} {
@@ -303,7 +307,7 @@ func TestListContracts_EveryViewAndOrderWalksItsCursor(t *testing.T) {
 // decode.
 func TestListContracts_ACursorBelongsToItsViewAndOrder(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	seedBook(t, e, listPageSize+1)
+	seedBook(t, e)
 	first := e.list("?view=" + statusSigned + "&order=" + orderNewest + "")
 	if first.NextCursor == nil {
 		t.Fatal("first page carries no cursor")
@@ -333,7 +337,7 @@ func TestListContracts_ACursorBelongsToItsViewAndOrder(t *testing.T) {
 // client order's cursor decodes its name key.
 func TestListContracts_ACursorFromAClientOrderCarriesItsName(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
-	seedBook(t, e, listPageSize+1)
+	seedBook(t, e)
 
 	first := e.search(contracts.ListRequest{View: statusSigned, Order: orderClient})
 	second := e.search(contracts.ListRequest{View: statusSigned, Order: orderClient, Cursor: *first.NextCursor})
@@ -682,4 +686,74 @@ func TestListContracts_ABadStoredZoneIsAnErrorNotUTC(t *testing.T) {
 	e.Exec(`UPDATE practices SET timezone = 'Nowhere/Bad' WHERE id = $1`, e.Practice.ID)
 
 	reqtest.ExpectStatus(t, http.MethodGet, e.listURL(""), http.StatusInternalServerError, e.SignedIn)
+}
+
+// TestListContracts_NotSignedHoldsTheSentLongestWaitFirstThenTheDrafts
+// proves the default view's own order: every Sent Contract by the day it
+// was sent, then every Draft by the day it was made, whatever the dates, and
+// that asking for oldest in that view is the same order.
+func TestListContracts_NotSignedHoldsTheSentLongestWaitFirstThenTheDrafts(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	_, oldDraft := e.seedListed(statusDraft, listBase)
+	_, lateSent := e.seedListed(statusSent, listBase.Add(48*time.Hour))
+	_, earlySent := e.seedListed(statusSent, listBase.Add(24*time.Hour))
+	_, newDraft := e.seedListed(statusDraft, listBase.Add(72*time.Hour))
+	want := []string{earlySent, lateSent, oldDraft, newDraft}
+
+	for _, query := range []string{"", "?order=oldest", "?view=&order="} {
+		if got := ids(e.list(query)); !slices.Equal(got, want) {
+			t.Errorf("GET %q = %v, want %v", query, got, want)
+		}
+	}
+	if got := ids(e.list("?order=newest")); !slices.Equal(got, []string{newDraft, lateSent, earlySent, oldDraft}) {
+		t.Errorf("order=newest = %v, want newest first with no Drafts-last rule", got)
+	}
+	if got := ids(e.list("?view=draft")); !slices.Equal(got, []string{oldDraft, newDraft}) {
+		t.Errorf("view=draft = %v, want the Drafts oldest first", got)
+	}
+}
+
+// TestListContracts_NotSignedCursorKeepsBothKeys proves the default view's
+// cursor carries the Draft flag and the day, and refuses one that does not.
+func TestListContracts_NotSignedCursorKeepsBothKeys(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	seedBook(t, e)
+	first := e.list("")
+	if first.NextCursor == nil {
+		t.Fatal("first page carries no cursor")
+	}
+	if got := e.list("?cursor=" + *first.NextCursor); len(got.Items) != listPageSize || got.Items[0].Status != statusSent {
+		t.Fatalf("second page = %d items starting %q, want 30 starting on the last Sent", len(got.Items), got.Items[0].Status)
+	}
+
+	stamp := listBase.Format(time.RFC3339Nano)
+	for _, cursor := range []string{
+		pagecursor.EncodeKeyed(":", []string{stamp}, "an-id"),
+		pagecursor.EncodeKeyed(":", []string{"maybe", stamp}, "an-id"),
+		pagecursor.EncodeKeyed(":", []string{"true", "yesterday"}, "an-id"),
+		*first.NextCursor + "x",
+	} {
+		got := apierrtest.Expect(t, http.MethodGet, e.listURL("?cursor="+cursor), http.StatusBadRequest, e.SignedIn)
+		if got.Message != pagecursor.MsgInvalidCursor {
+			t.Errorf("cursor %q message = %q, want %q", cursor, got.Message, pagecursor.MsgInvalidCursor)
+		}
+	}
+	other := apierrtest.Expect(t, http.MethodGet, e.listURL("?order=oldest&cursor="+*first.NextCursor), http.StatusBadRequest, e.SignedIn)
+	if other.Message != pagecursor.MsgInvalidCursor {
+		t.Errorf("a cursor from the view's own order under order=oldest message = %q, want %q", other.Message, pagecursor.MsgInvalidCursor)
+	}
+}
+
+// TestListContracts_NotSignedOrderHoldsForAContractor proves a contractor's
+// narrowing and the Drafts-last order together.
+func TestListContracts_NotSignedOrderHoldsForAContractor(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Doula(), fixture.Contractor()))
+	_, draft := e.seedListed(statusDraft, listBase, fixture.WithDoula(e.Staff))
+	_, sent := e.seedListed(statusSent, listBase.Add(24*time.Hour), fixture.WithDoula(e.Staff))
+	e.seedListed(statusSent, listBase)
+
+	out := e.list("")
+	if got := ids(out); !slices.Equal(got, []string{sent, draft}) || out.Total != 2 {
+		t.Fatalf("ids = %v (total %d), want [%s %s]", got, out.Total, sent, draft)
+	}
 }

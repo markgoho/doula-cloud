@@ -24,7 +24,6 @@
 		loadPracticeContracts,
 		loadPracticeVoidRequests,
 		orderForView,
-		voidRequestAsked,
 		voidRequestsHeading,
 		type AwaitingVoidRequest,
 		type ContractListItem,
@@ -62,6 +61,7 @@
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeSession } from '../+layout.js';
+	import VoidRequestList from './VoidRequestList.svelte';
 
 	let {
 		data,
@@ -456,13 +456,17 @@
 			accessor: statusText,
 			content: statusCell
 		},
-		{
-			label: 'Sent by',
-			recordLabel: 'Sent by',
-			track: `calc(12ch + 2 * ${INSET})`,
-			accessor: (contract: ContractListItem) => contract.sentByName ?? '',
-			content: sentByCell
-		},
+		...(shown?.view === 'draft'
+			? []
+			: [
+					{
+						label: 'Sent by',
+						recordLabel: 'Sent by',
+						track: `calc(12ch + 2 * ${INSET})`,
+						accessor: (contract: ContractListItem) => contract.sentByName ?? '',
+						content: sentByCell
+					}
+				]),
 		...(shown?.doula
 			? []
 			: [
@@ -490,7 +494,11 @@
 						track: `calc(8ch + 2 * ${INSET})`,
 						accessor: (contract: ContractListItem) =>
 							contract.amountCents === undefined ? '' : formatAmount(contract.amountCents)
-					},
+					}
+				]),
+		...(isContractor || (shown?.view !== 'signed' && shown?.view !== 'all')
+			? []
+			: [
 					{
 						label: 'Signed PDF',
 						track: `calc(8ch + 2 * ${INSET})`,
@@ -623,17 +631,7 @@
 				<Heading level={2} variant="section" id="void-requests-heading" text={voidRequestsHeading(queueTotal)} />
 				<Text step="meta" tone="muted" text="Open one to void its Contract or decline the request on the Engagement." />
 			</cluster-l>
-			<ul class="requests">
-				{#each queueList.items as request (request.requestId)}
-					<li id="void-request-row-{request.requestId}">
-						<p>
-							<Link href={requestHref(request)} label={request.clientName} ariaLabel={`${request.clientName}, void request`} />
-							<span aria-hidden="true"> · </span><span class="visually-hidden">, </span>
-							{request.requestedByName} {voidRequestAsked(request.daysAgo)}: {request.reason}
-						</p>
-					</li>
-				{/each}
-			</ul>
+			<VoidRequestList requests={queueList.items} hrefFor={requestHref} />
 			{#if queueList.hasMore}
 				<Button
 					variant="secondary"
@@ -795,20 +793,6 @@
 			flex-direction: column;
 			gap: var(--space-1);
 			align-items: start;
-		}
-
-		.requests {
-			margin: 0;
-			padding: 0;
-			list-style: none;
-			display: flex;
-			flex-direction: column;
-			gap: 0;
-		}
-
-		.requests p {
-			margin: 0;
-			overflow-wrap: anywhere;
 		}
 
 		.contracts-table {

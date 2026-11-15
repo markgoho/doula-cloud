@@ -590,7 +590,7 @@ describe('the order a view reads in', () => {
 	});
 
 	it.each([
-		['not-signed', ['Oldest first', 'Newest first']],
+		['not-signed', ['Longest wait first', 'Newest first']],
 		['draft', ['Made, oldest first', 'Made, newest first']],
 		['sent', ['Longest wait first', 'Shortest wait first']],
 		['signed', ['Signed, newest first', 'Signed, oldest first']],
@@ -727,8 +727,8 @@ describe('contract words', () => {
 
 describe('contractsResultSummary', () => {
 	it('says a count, the view and the order', () => {
-		expect(summary()).toBe('Showing 12 Contracts not signed, oldest first.');
-		expect(summary({ shown: 1, total: 1 })).toBe('Showing 1 Contract not signed, oldest first.');
+		expect(summary()).toBe('Showing 12 Contracts not signed, longest wait first, then Drafts.');
+		expect(summary({ shown: 1, total: 1 })).toBe('Showing 1 Contract not signed, longest wait first, then Drafts.');
 		expect(summary({ view: 'signed', shown: 2, total: 2 })).toBe('Showing 2 Signed Contracts, newest first.');
 		expect(summary({ view: 'all', order: 'client' })).toBe('Showing 12 Contracts, Client A to Z.');
 	});
@@ -738,14 +738,14 @@ describe('contractsResultSummary', () => {
 			'Showing the first 30 of 41 Signed Contracts, newest first.'
 		);
 		expect(summary({ shown: 30, hasMore: true, total: 41, isMine: true })).toBe(
-			'Showing the first 30 of your 41 Contracts not signed, oldest first.'
+			'Showing the first 30 of your 41 Contracts not signed, longest wait first, then Drafts.'
 		);
 		expect(summary({ shown: 30, hasMore: true, total: 3 })).toContain('the first 30 of 30');
 	});
 
 	it('says whose Contracts and which search', () => {
 		expect(summary({ shown: 4, total: 4, isMine: true })).toBe(
-			'Showing 4 of your Contracts not signed, oldest first.'
+			'Showing 4 of your Contracts not signed, longest wait first, then Drafts.'
 		);
 		expect(summary({ view: 'sent', shown: 2, total: 2, doulaName: 'Priya Raman', search: 'quinn' })).toBe(
 			`Showing 2 Sent Contracts on Priya Raman's Engagements matching "quinn", longest wait first.`

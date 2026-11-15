@@ -468,7 +468,7 @@ export function contractOrderOf(search: Pick<URLSearchParams, 'get'>, view: Cont
 }
 
 const ORDER_LABELS: Record<ContractsView, { oldest: string; newest: string }> = {
-	'not-signed': { oldest: 'Oldest first', newest: 'Newest first' },
+	'not-signed': { oldest: 'Longest wait first', newest: 'Newest first' },
 	draft: { oldest: 'Made, oldest first', newest: 'Made, newest first' },
 	sent: { oldest: 'Longest wait first', newest: 'Shortest wait first' },
 	signed: { oldest: 'Signed, oldest first', newest: 'Signed, newest first' },
@@ -631,6 +631,7 @@ export const NO_DOULA_FALLBACK = 'that Doula';
 function orderWords(view: ContractsView, order: ContractOrder): string {
 	const named: NamedContractOrder = order || VIEW_ORDER[view];
 	if (named === 'client') return 'Client A to Z';
+	if (view === 'not-signed' && named === 'oldest') return 'longest wait first, then Drafts';
 	if (view === 'sent') return named === 'oldest' ? 'longest wait first' : 'shortest wait first';
 	return `${named} first`;
 }
