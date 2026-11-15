@@ -3091,6 +3091,7 @@
 				viewerId={data.session.staffId}
 				sent={contract.sent}
 				signed={contract.signed}
+				openedAt={contract.openedAt}
 				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}
 				onDownloadPdf={canReadContractMoney ? handleDownloadSignedContractPdf : undefined}

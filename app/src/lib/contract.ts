@@ -51,6 +51,9 @@ export interface Contract {
 	/** When the Contract was signed and the full legal name typed to sign
 	 * it (#2104). A voided Contract keeps it. */
 	signed?: Stamp;
+	/** When the Client first read the Sent Contract on the portal (#2952).
+	 * Absent until she has, and on a Client-portal read. */
+	openedAt?: string;
 	/** The current Contract's id, which a list row's `#contract-<id>`
 	 * anchor names. Absent on a Client-portal read (#2958). */
 	id?: string;
@@ -402,6 +405,10 @@ export interface ContractListItem {
 	status: 'draft' | 'sent' | 'signed' | 'voided';
 	steppedOn: string;
 	daysWaiting?: number;
+	/**
+	The Practice-zone day the Client first read a Sent Contract (#2952).
+	*/
+	openedOn?: string;
 	sentByName?: string;
 	madeByName?: string;
 	voidedByName?: string;

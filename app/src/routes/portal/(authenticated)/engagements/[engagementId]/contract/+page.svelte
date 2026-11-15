@@ -13,6 +13,7 @@
 	import { PageRead } from '#lib/pageRead.svelte.js';
 	import {
 		NO_CONTRACT_MESSAGE,
+		contractOpenedNotice,
 		contractSignedNotice,
 		contractStatusLabel,
 		contractVoidedNotice
@@ -86,6 +87,9 @@
 			<Badge label={contractStatusLabel(contract.status)} variant={STATUS_BADGE_VARIANT[contract.status] ?? 'neutral'} />
 			{#if contract.status === 'voided'}
 				<Notice variant="info" message={contractVoidedNotice(page.data.practiceName)} />
+			{/if}
+			{#if contract.status === 'sent'}
+				<Notice variant="info" message={contractOpenedNotice(page.data.practiceName)} />
 			{/if}
 			<ContractView prose={contract.prose} values={contract.values} />
 			{#if contract.status === 'sent'}

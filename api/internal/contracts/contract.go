@@ -76,6 +76,10 @@ type ContractResponse struct {
 	// never the record that it was made.
 	Sent   *activitypage.Stamp `json:"sent,omitempty"`
 	Signed *activitypage.Stamp `json:"signed,omitempty"`
+	// OpenedAt is the Client's first portal read of this Sent Contract
+	// (#2952), a Staff read's only: omitted until she has read it, and
+	// never set on her own read.
+	OpenedAt *time.Time `json:"openedAt,omitempty"`
 	// ID and Earlier are a Staff read's: the current Contract's id, which
 	// the Contracts list's row anchors to, and the voided Contracts it
 	// replaced (#2958), newest first.
@@ -131,7 +135,7 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 	}
 	out.HasSignedPDF = hasSignedPDF
 	if staff != nil {
-		out.Sent, out.Signed, err = contractTrail(r.Context(), tx, staff.PracticeID, out.EngagementID)
+		out.Sent, out.Signed, out.OpenedAt, err = contractTrail(r.Context(), tx, staff.PracticeID, out.EngagementID)
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		if err != nil {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -153,19 +157,20 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 // signed and under what name. A send is recorded against the
 // Engagement, not the Contract, so the lookup starts at this Contract's
 // own created_at: a voided predecessor's send came before it.
-func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (sent, signed *activitypage.Stamp, err error) {
+func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (sent, signed *activitypage.Stamp, opened *time.Time, err error) {
 	var (
 		createdAt  time.Time
 		signedAt   sql.NullTime
+		openedAt   sql.NullTime
 		signerName sql.NullString
 	)
 	if err := tx.QueryRowContext(ctx,
-		`SELECT created_at, signed_at, signer_full_name FROM contracts
+		`SELECT created_at, signed_at, signer_full_name, opened_at FROM contracts
 		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
-	).Scan(&createdAt, &signedAt, &signerName); err != nil {
+	).Scan(&createdAt, &signedAt, &signerName, &openedAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read or written this Contract
-		return nil, nil, fmt.Errorf("contracts: read contract trail: %w", err)
+		return nil, nil, nil, fmt.Errorf("contracts: read contract trail: %w", err)
 	}
 	sent, err = activitypage.Latest(ctx, tx, activitypage.LatestQuery{
 		PracticeID:  practiceID,
@@ -176,12 +181,15 @@ func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID str
 	})
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, nil, fmt.Errorf("contracts: read contract sent: %w", err)
+		return nil, nil, nil, fmt.Errorf("contracts: read contract sent: %w", err)
 	}
 	if signedAt.Valid {
 		signed = &activitypage.Stamp{At: signedAt.Time, By: signerName.String}
 	}
-	return sent, signed, nil
+	if openedAt.Valid {
+		opened = &openedAt.Time
+	}
+	return sent, signed, opened, nil
 }
 
 // mergeFieldPattern matches a {{merge_field_key}} placeholder in Contract

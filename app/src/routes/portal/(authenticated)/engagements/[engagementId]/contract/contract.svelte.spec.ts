@@ -43,6 +43,21 @@ describe('Client-portal Contract status (#212, NH-G5)', () => {
 		expect(page.getByText('sent', { exact: true }).elements()).toHaveLength(0);
 	});
 
+	it('tells her the Practice can see she has opened a sent Contract (#2952)', async () => {
+		await setup();
+
+		await expect
+			.element(page.getByText('Riverside Doula Collective can see that you have opened this contract.'))
+			.toBeVisible();
+	});
+
+	it('says nothing of opening once the Contract is signed (#2952)', async () => {
+		await setup(() => jsonResponse({ ...contract, status: 'signed' }));
+
+		await expect.element(page.getByText('Signed')).toBeVisible();
+		expect(page.getByText(/can see that you have opened/).elements()).toHaveLength(0);
+	});
+
 	it('shows the register label and a Client-worded terminal notice for a voided Contract', async () => {
 		await setup(() => jsonResponse({ ...contract, status: 'voided' }));
 

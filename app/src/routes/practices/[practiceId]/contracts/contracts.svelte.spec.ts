@@ -98,8 +98,8 @@ describe('the Practice-wide Contracts list rows', () => {
 		await setup();
 
 		await expect.element(cell(heard('Draft made Nov 8'))).toBeVisible();
-		await expect.element(cell(heard('Sent Nov 2, waiting 12 days'))).toBeVisible();
-		await expect.element(cell(heard('Sent today'))).toBeVisible();
+		await expect.element(cell(heard('Sent Nov 2, waiting 12 days Opened Nov 12'))).toBeVisible();
+		await expect.element(cell(heard('Sent today Not opened'))).toBeVisible();
 		await expect.element(cell(heard('Signed Dec 30, 2025 Void requested'))).toBeVisible();
 		await expect.element(cell(heard('Voided Nov 9'))).toBeVisible();
 	});

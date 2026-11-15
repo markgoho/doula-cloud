@@ -35,6 +35,7 @@ export const items: ContractListItem[] = [
 		status: 'sent',
 		steppedOn: '2026-11-02',
 		daysWaiting: 12,
+		openedOn: '2026-11-12',
 		sentByName: 'Dee Whitlock',
 		doulaNames: ['Kimiko Nakashima', 'Joss Adeyemi'],
 		doulaIds: ['staff-8', 'staff-7'],
