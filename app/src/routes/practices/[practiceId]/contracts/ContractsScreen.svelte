@@ -65,6 +65,7 @@
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import ListPage from '#lib/components/templates/ListPage.svelte';
 	import type { PracticeSession } from '../+layout.js';
+	import ShowOnly from '#lib/components/molecules/ShowOnly.svelte';
 	import VoidRequestList from './VoidRequestList.svelte';
 
 	let {
@@ -434,6 +435,9 @@
 	}
 
 	const INSET = 'var(--data-table-cell-inset)';
+	const STATUS_STATE_TRACK = '9.5ch';
+	const STATUS_DAY_TRACK = '10.5ch';
+	const STATUS_WAIT_TRACK = '6ch';
 	const NO_ONE_ON_RECORD = 'No one on record';
 	const VOID_REQUESTED = 'void requested';
 	const formatDay = (day: string) => formatCalendarDayThisYear(day, timeZone, now);
@@ -466,7 +470,7 @@
 		{ label: 'Client', accessor: (contract: ContractListItem) => contract.clientName, grows: true, track: '16ch' },
 		{
 			label: 'Status',
-			track: `calc(22ch + 2 * ${INSET})`,
+			track: `calc(${STATUS_STATE_TRACK} + ${STATUS_DAY_TRACK} + ${STATUS_WAIT_TRACK} + 2 * var(--space-1) + 2 * ${INSET})`,
 			accessor: statusText,
 			content: statusCell
 		},
@@ -541,22 +545,29 @@
 	);
 </script>
 
-{#snippet statusCell(contract: ContractListItem)}
-	<span class="status">
+{#snippet statusCell(contract: ContractListItem, tableView: DataTableView)}
+	<span
+		class="status"
+		class:tracked={tableView === 'table' && !contract.voidRequested}
+		style:--status-state-track={STATUS_STATE_TRACK}
+		style:--status-day-track={STATUS_DAY_TRACK}
+	>
 		{#if contract.status === 'draft'}
 			<Badge variant="warning" label="Draft" />
-			<span><span class="lead">made</span> <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
+			<span class="day"><span class="lead">made</span> <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
 		{:else if contract.status === 'sent'}
 			<Badge variant="info" label="Sent" />
 			{#if contract.daysWaiting}
-				<span><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time><span aria-hidden="true">,</span><span class="visually-hidden">, waiting</span> {daysWaitingWords(contract.daysWaiting)}</span>
+				<span class="day"><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time>{#if tableView !== 'table'}<span aria-hidden="true">,</span>{/if}<span class="visually-hidden">, waiting</span></span>
+				<span class="wait">{daysWaitingWords(contract.daysWaiting)}</span>
 			{:else}
-				<span>today</span>
+				<span class="day">today</span>
 			{/if}
 		{:else}
-			<span>{contractStatusWord(contract.status)} <time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
+			<span>{contractStatusWord(contract.status)}</span>
+			<span class="day"><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
 			{#if contract.voidRequested}
-				<Badge variant="warning" label="Void requested" />
+				<span class="wait"><Badge variant="warning" label="Void requested" /></span>
 			{/if}
 		{/if}
 	</span>
@@ -643,7 +654,7 @@
 		<section class="queue" aria-labelledby="void-requests-heading"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 			<cluster-l space="var(--space-2)" align="baseline">
 				<Heading level={2} variant="section" id="void-requests-heading" text={voidRequestsHeading(queueTotal)} />
-				<Text step="meta" tone="muted" text="Open one to void its Contract or decline the request on the Engagement." />
+				<Text step="meta" tone="muted" text="Open one to void its Contract or decline it, both on the Engagement." />
 			</cluster-l>
 			<VoidRequestList requests={queueList.items} hrefFor={requestHref} />
 			{#if queueList.hasMore}
@@ -736,11 +747,13 @@
 							isInline
 						/>
 						{#if canMine}
-							<LabeledField label="Mine" orientation="inline">
-								{#snippet children(control)}
-									<Checkbox name="mine" value="true" checked={isMineDrafted} onChange={(checked) => (isMineDrafted = checked)} {...control} />
-								{/snippet}
-							</LabeledField>
+							<ShowOnly>
+								<LabeledField label="Mine" orientation="inline">
+									{#snippet children(control)}
+										<Checkbox name="mine" value="true" checked={isMineDrafted} onChange={(checked) => (isMineDrafted = checked)} {...control} />
+									{/snippet}
+								</LabeledField>
+							</ShowOnly>
 						{/if}
 					{/snippet}
 					{@render searchField()}
@@ -838,7 +851,19 @@
 			gap: var(--space-1);
 		}
 
-		:global(td) .status,
+		:global(td) .status:not(.tracked) {
+			flex-wrap: nowrap;
+			white-space: nowrap;
+		}
+
+		.status.tracked {
+			display: grid;
+			justify-items: start;
+			grid-template-columns: var(--status-state-track) var(--status-day-track) auto;
+			white-space: nowrap;
+			font-variant-numeric: tabular-nums;
+		}
+
 		:global(td) .no-break {
 			flex-wrap: nowrap;
 			white-space: nowrap;

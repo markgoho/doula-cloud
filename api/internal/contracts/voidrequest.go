@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
@@ -16,6 +17,13 @@ import (
 	"doula-cloud/api/internal/staffauth"
 	"doula-cloud/api/internal/staffnotice"
 )
+
+// MaxVoidRequestReasonRunes is the longest a void request's reason may be,
+// in runes as the form counts it: three lines of a card on the Contracts
+// screen at 1280px, so three requests are read on its first screen.
+const MaxVoidRequestReasonRunes = 120
+
+var msgVoidRequestReasonTooLong = fmt.Sprintf("Use %d characters or fewer for the reason", MaxVoidRequestReasonRunes)
 
 // msgVoidRequestReasonNeeded and msgVoidDeclineReasonNeeded are the two
 // reason fields #971 asks for -- imperative, no "please"/"required"/
@@ -249,6 +257,10 @@ func PostVoidRequestHandler() http.Handler {
 		reason := strings.TrimSpace(body.Reason)
 		if reason == "" {
 			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", msgVoidRequestReasonNeeded)
+			return
+		}
+		if utf8.RuneCountInString(reason) > MaxVoidRequestReasonRunes {
+			apierr.WriteFieldError(w, http.StatusBadRequest, apierr.CodeInvalidArgument, "reason", msgVoidRequestReasonTooLong)
 			return
 		}
 

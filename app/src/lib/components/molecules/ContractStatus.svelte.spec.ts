@@ -318,6 +318,21 @@ describe('ContractStatus.svelte', () => {
 			expect(onRequestVoid).not.toHaveBeenCalled();
 		});
 
+		it('states the limit on the form and refuses a reason past it without calling onRequestVoid', async () => {
+			const onRequestVoid = vi.fn();
+			await setup({ status: 'signed', onRequestVoid });
+
+			await page.getByRole('button', { name: 'Request void' }).click();
+			await expect.element(page.getByText('You can enter up to 120 characters')).toBeVisible();
+			await page.getByLabelText('Reason').fill('a'.repeat(121));
+			await page.getByRole('button', { name: 'Send request' }).click();
+
+			await expect
+				.element(page.getByRole('alert'))
+				.toHaveTextContent('Use 120 characters or fewer for the reason');
+			expect(onRequestVoid).not.toHaveBeenCalled();
+		});
+
 		it('calls onRequestVoid with the typed reason and closes the form on success', async () => {
 			const onRequestVoid = vi.fn().mockResolvedValue(undefined);
 			await setup({ status: 'signed', onRequestVoid });

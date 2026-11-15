@@ -21,10 +21,11 @@
 
 	`maxLength` is optional and almost nothing passes it. GOV.UK's rule is
 	kept verbatim -- a counter on a field with no limit reads as a target
-	and makes people write to it -- and #468 established that exactly one
-	field in this application has a server-enforced maximum: the two
-	Practice website facts, at `website.MaxFactLength`, refused by the
-	handler and again by 00045's CHECK constraint.
+	and makes people write to it -- and #468 established that a field has
+	one only where the server enforces a maximum: the two Practice website
+	facts, at `website.MaxFactLength`, refused by the handler and again by
+	00045's CHECK constraint, and a void request's reason (#2959), at
+	`contracts.MaxVoidRequestReasonRunes`.
 
 	Where it does ship, the shape is govuk-frontend's, with the parts this
 	app does not need left out. There are three nodes, not one:

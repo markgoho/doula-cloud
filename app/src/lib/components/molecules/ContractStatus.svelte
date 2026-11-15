@@ -23,7 +23,7 @@
 	import SummaryList, { type SummaryListRow } from '#lib/components/molecules/SummaryList.svelte';
 	import { formatActivityTimestamp, formatInstant } from '#lib/dates.js';
 	import { stampText, type Stamp } from '#lib/stamp.js';
-	import { contractStatusText, type VoidRequestSummary } from '#lib/contract.js';
+	import { contractStatusText, VOID_REQUEST_REASON_LIMIT, isVoidRequestReasonTooLong, type VoidRequestSummary } from '#lib/contract.js';
 
 	/**
 	 * Status display for a Contract on the Staff Engagement view: the raw
@@ -174,6 +174,10 @@
 		requestError = '';
 		if (!requestReason.trim()) {
 			requestError = 'Enter why this Contract needs to be voided';
+			return;
+		}
+		if (isVoidRequestReasonTooLong(requestReason)) {
+			requestError = `Use ${VOID_REQUEST_REASON_LIMIT} characters or fewer for the reason`;
 			return;
 		}
 		isRequestingVoid = true;
@@ -336,6 +340,7 @@
 					{describedBy}
 					{invalid}
 					value={requestReason}
+					maxLength={VOID_REQUEST_REASON_LIMIT}
 					onInput={(value) => (requestReason = value)}
 				/>
 			{/snippet}

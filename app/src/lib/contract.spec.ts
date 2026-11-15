@@ -39,7 +39,9 @@ import {
 	signedPdfDownloadedWords,
 	voidContract,
 	voidRequestAsked,
-	voidRequestsHeading
+	voidRequestsHeading,
+	isVoidRequestReasonTooLong,
+	VOID_REQUEST_REASON_LIMIT
 } from './contract.js';
 import { jsonResponse } from './testResponse.js';
 
@@ -803,5 +805,13 @@ describe('who took a Contract\u{2019}s step', () => {
 		expect(nameWithInitial('Anne-Marie Ochieng-Whitfield')).toBe('Anne-Marie O.');
 		expect(nameWithInitial('Mary Ann Smith')).toBe('Mary Ann S.');
 		expect(nameWithInitial('Cher')).toBe('Cher');
+	});
+});
+
+describe('isVoidRequestReasonTooLong', () => {
+	it('counts characters, not bytes, after trimming', () => {
+		expect(isVoidRequestReasonTooLong('\u{E9}'.repeat(VOID_REQUEST_REASON_LIMIT))).toBe(false);
+		expect(isVoidRequestReasonTooLong(` ${'a'.repeat(VOID_REQUEST_REASON_LIMIT)} `)).toBe(false);
+		expect(isVoidRequestReasonTooLong('a'.repeat(VOID_REQUEST_REASON_LIMIT + 1))).toBe(true);
 	});
 });

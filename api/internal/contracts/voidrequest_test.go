@@ -1,7 +1,9 @@
 package contracts_test
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
@@ -93,6 +95,7 @@ func TestPostVoidRequestHandler_Refusals(t *testing.T) {
 		{caseBodyNotJSON, true, reqtest.RawJSON([]byte("not json")), http.StatusBadRequest},
 		{"empty reason", true, reasoned(""), http.StatusBadRequest},
 		{"whitespace reason", true, reasoned("   "), http.StatusBadRequest},
+		{"reason past the limit", true, reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)), http.StatusBadRequest},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -109,6 +112,34 @@ func TestPostVoidRequestHandler_Refusals(t *testing.T) {
 func TestPostVoidRequestHandler_RefusesAnEngagementItCannotReach(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))
 	e.refusesEngagementsItCannotReach(http.MethodPost, "/void-request", reasoned("asking"))
+}
+
+// TestPostVoidRequestHandler_RefusesAReasonPastTheLimitInWordsThatSayIt proves
+// the refusal names the field and the number the form counts down from.
+func TestPostVoidRequestHandler_RefusesAReasonPastTheLimitInWordsThatSayIt(t *testing.T) {
+	e := newEnv(t)
+	e.seedContract(statusSigned)
+
+	body := reqtest.ExpectBody(t, http.MethodPost, e.voidRequestURL(), http.StatusBadRequest, e.SignedIn,
+		reasoned(strings.Repeat("a", contracts.MaxVoidRequestReasonRunes+1)))
+
+	want := fmt.Sprintf("Use %d characters or fewer for the reason", contracts.MaxVoidRequestReasonRunes)
+	if !strings.Contains(string(body), want) || !strings.Contains(string(body), `"reason"`) {
+		t.Fatalf("body = %s, want the reason field and %q", body, want)
+	}
+}
+
+// TestPostVoidRequestHandler_ReasonLimitCountsRunes proves the limit is
+// in characters, as the form counts them: 120 two-byte characters pass.
+func TestPostVoidRequestHandler_ReasonLimitCountsRunes(t *testing.T) {
+	e := newEnv(t)
+	e.seedContract(statusSigned)
+
+	out := e.requestVoid(strings.Repeat("é", contracts.MaxVoidRequestReasonRunes), http.StatusCreated)
+
+	if got := onlyRequestOfASignedContract(t, out); got.Status != "open" {
+		t.Fatalf("voidRequest = %+v, want open", got)
+	}
 }
 
 // TestPostVoidRequestHandler_Success proves the happy path: a request
