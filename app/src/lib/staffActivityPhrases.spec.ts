@@ -39,6 +39,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	],
 	['contract_void_requested', 'Asked to void the Contract for Amara', 'Asked to void the Contract for the Client'],
 	['contract_voided', 'Contract for Amara voided', 'Contract for the Client voided'],
+	['contract_voided_by_erasure', 'Contract for Amara voided by erasure', 'Contract for the Client voided by erasure'],
 	['contractor_fee_paid', "Doula paid for Amara's care", "Doula paid for the Client's care"],
 	[
 		'contractor_fee_payment_reversed',

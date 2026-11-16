@@ -123,7 +123,7 @@ export const voidRequests: AwaitingVoidRequest[] = [
 
 export const queue: VoidRequestsPage = { items: voidRequests, hasMore: false, total: 2 };
 
-const withheldReasons = ['on_its_way', 'not_invited', 'invite_lost', 'no_access', 'erased', 'merged'] as const;
+const withheldReasons = ['on_its_way', 'not_invited', 'invite_lost', 'no_access', 'merged'] as const;
 
 export const withheldItems: ContractListItem[] = withheldReasons.map((reason, index) => ({
 	contractId: `withheld-${reason}`,

@@ -27,6 +27,7 @@
  */
 
 import type { Fetcher } from './fetcher.js';
+import type { ClientStanding } from './clientStanding.js';
 import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -108,6 +109,9 @@ export interface EngagementSummary {
 	 * pre-#255 assumption). A Client with none cannot be invited to the
 	 * portal at all. */
 	clientHasEmail?: boolean;
+	/** The Client record's standing (#2990): an erased one is offered no
+	 * new Contract. Absent on an older cached response, which reads live. */
+	clientStanding?: ClientStanding;
 	/** Whether Clients can pay this Practice at all (#270), sourced from
 	 * practices.stripe_connect_card_payments_status being 'active'. A
 	 * standing fact InvoiceSection reads before ever showing the Create

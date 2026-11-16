@@ -233,7 +233,7 @@ const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name,
 	       (SELECT max(o.created_at) FROM contract_notice_outbox o WHERE o.contract_id = c.id AND o.kind = 'reminder' AND o.status IN ('pending', 'sent')),
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
-	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by),
+	       COALESCE((SELECT s.name FROM staff s WHERE s.id = c.voided_by), CASE WHEN c.voided_by_erasure THEN 'erasure' END),
 	       to_char(e.due_date, 'YYYY-MM-DD'), to_char(e.pregnancy_ended_on, 'YYYY-MM-DD'), e.birth_outcome::text,
 	       (SELECT ` + client.DoulaAgg + `
 	          FROM engagement_attachments ea

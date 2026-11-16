@@ -66,6 +66,7 @@
 		refusedInviteWayOn,
 		type PortalInviteSubject
 	} from '#lib/portalInvite.js';
+	import { isErased } from '#lib/clientStanding.js';
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
 	import { landOnRow, landOnSection } from '#lib/landOnRow.js';
@@ -892,6 +893,8 @@
 	const hasRateForKind = $derived(
 		typeof ratesState.value?.find((rate) => rate.kind === displayKind)?.amountCents === 'number'
 	);
+	const isClientErased = $derived(isErased(detail?.clientStanding ? { standing: detail.clientStanding } : undefined));
+	const canCreateContract = $derived(hasRateForKind && !isClientErased);
 	const isRateMissing = $derived(ratesState.value !== undefined && !hasRateForKind);
 	// The settings hub lists Rates only for an Owner or Admin, so only they
 	// get the link; anyone else is told who can set the rate.
@@ -3186,7 +3189,7 @@
 					Engagement's activity, with who did them.
 				-->
 				{@render contractRateBlock()}
-				{#if hasRateForKind}
+				{#if canCreateContract}
 					<cluster-l space="var(--space-3)">
 						<Button label="Create a Draft Contract" variant="secondary" onClick={handleCreateContract} />
 					</cluster-l>
@@ -3219,7 +3222,7 @@
 				{#if !hasClientEmailOnFile}
 					<Notice variant="info" message={noEmailForInviteMessage} />
 				{/if}
-				{#if hasClientEmailOnFile || hasRateForKind}
+				{#if hasClientEmailOnFile || canCreateContract}
 					<cluster-l space="var(--space-3)">
 						{#if hasClientEmailOnFile}
 							<Button
@@ -3229,7 +3232,7 @@
 								loading={isSendingPortalInvite}
 							/>
 						{/if}
-						{#if hasRateForKind}
+						{#if canCreateContract}
 							<Button label="Create a Draft Contract" variant="secondary" onClick={handleCreateContract} />
 						{/if}
 					</cluster-l>
@@ -3237,7 +3240,7 @@
 			{:else}
 				<EmptyState
 					message="No Contract yet."
-					action={hasRateForKind ? { label: 'Create a Draft Contract', onClick: handleCreateContract } : undefined}
+					action={canCreateContract ? { label: 'Create a Draft Contract', onClick: handleCreateContract } : undefined}
 				/>
 			{/if}
 		{/if}

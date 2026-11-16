@@ -1327,7 +1327,7 @@ func TestListHandler_OpenEngagementsRollup_MultipleOpenNoneDroppedCompletedExclu
 	if birth.EngagementStatus != "active" {
 		t.Fatalf("birth line status = %q, want active", birth.EngagementStatus)
 	}
-	if birth.ContractStatus == nil || *birth.ContractStatus != "sent" {
+	if birth.ContractStatus == nil || *birth.ContractStatus != contractSent {
 		t.Fatalf("birth line contract status = %v, want \"sent\"", birth.ContractStatus)
 	}
 	if want := []string{"Kimiko Nakashima", "Priya Raman, Jr."}; !slices.Equal(birth.DoulaNames, want) {
@@ -1813,7 +1813,7 @@ func TestListHandler_OpenEngagementsRollup_VoidedContractDoesNotDuplicateLine(t 
 	if recreated[0].EngagementID != recreatedEngagement {
 		t.Fatalf("recreated line engagement = %q, want %q", recreated[0].EngagementID, recreatedEngagement)
 	}
-	if recreated[0].ContractStatus == nil || *recreated[0].ContractStatus != "draft" {
+	if recreated[0].ContractStatus == nil || *recreated[0].ContractStatus != contractDraft {
 		t.Fatalf("recreated line contract status = %v, want \"draft\" (the live Contract wins over the voided one)", recreated[0].ContractStatus)
 	}
 

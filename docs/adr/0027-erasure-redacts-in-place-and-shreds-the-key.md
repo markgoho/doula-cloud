@@ -87,6 +87,14 @@ An Offer ([ADR-0008](0008-employment-type-gates-the-practice-attachment-gates-th
 
 Migration 00137 lets the three columns take `NULL`; a sender still has to give all three. A redacted Offer reads with the three empty, as a terminal one already does under #230: an open one still opens and can still be decided, and an accepted one on the Doula's inbox carries no due month. The export writes them empty. [ADR-0031](0031-practice-deletion-is-a-thirty-day-window-then-the-erasure-cascade.md)'s deletion cascade runs the same act per Client under the Practice's own row-level context and inherits this unchanged.
 
+## Amendment, 2026-11-15: erasure voids her unsigned Contracts ([#2990](https://github.com/markgoho/doula-cloud/issues/2990))
+
+A Draft or Sent Contract to an erased Client used to stay where it was, in the Sent and Not signed views as "Erased Client", with nobody who could sign it or be reminded of it and a row Staff could never clear. Decided on 2026-11-15: **erasure voids every Contract of hers that is not signed.** A voided Contract is a closed record that leaves the Practice's history whole, as the first section says, so this resolves the Contract's state without destroying anything that section keeps. A signed Contract is untouched, and so is one already voided.
+
+The void is part of `redact_client_record` (migration 00184), so the BFF's erasure, the seed and the merged records `redact_absorbed_client` reaches all take it in the same transaction as the redaction, at the erasure's own instant. It records its origin on the Contract (`voided_by_erasure`, with `voided_by` left empty, so no reader words it as a Staff member's void) and as one Activity entry per Contract on its Engagement, `contract_voided_by_erasure`, whose actor is whoever erased her and whose time is the erasure's. The `erased` row's scope counts them as `contractsVoided`. The Contracts list and an earlier-Contract line read "Voided by erasure".
+
+Because an erased Client then holds no Sent Contract, Remind's "erased" withheld reason is gone: a Contract that is not Sent is refused first.
+
 ## Considered and rejected
 
 **Deleting the `clients` row.** It would take every Invoice, Contract and Visit with it, or leave them dangling. The Practice's financial and clinical record is not hers to delete, and it is not the product's either.

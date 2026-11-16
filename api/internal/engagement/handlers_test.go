@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/engagement"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
@@ -180,6 +181,15 @@ func TestDetailHandler_ClientPortalState(t *testing.T) {
 	}
 	if d := detailOf(engagementFor(noEmail)); d.ClientHasEmail {
 		t.Fatal("no-email detail hasEmail = true, want false")
+	}
+	if d := detailOf(neverInvited); d.ClientStanding != string(clientstanding.Live) {
+		t.Fatalf("live Client's clientStanding = %q, want live", d.ClientStanding)
+	}
+	erasedClient := fixture.Client(t, e.DB, e.Practice)
+	erasedEngagement := engagementFor(erasedClient)
+	fixture.EraseClient(t, e.DB, erasedClient.ID)
+	if d := detailOf(erasedEngagement); d.ClientStanding != string(clientstanding.Erased) {
+		t.Fatalf("erased Client's clientStanding = %q, want erased", d.ClientStanding)
 	}
 }
 
