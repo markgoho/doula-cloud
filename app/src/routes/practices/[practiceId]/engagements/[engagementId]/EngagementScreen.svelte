@@ -1446,7 +1446,7 @@
 			);
 			return factLink('On call tonight', 'On call', who.join('; '));
 		}
-		if (detail.doulas.length === 0) return factLink('On call tonight', 'On call', 'No Doula yet');
+		if (attachedDoulas.length === 0) return factLink('On call tonight', 'On call', 'No Doula yet');
 		const from = detail.onCallWindow?.from;
 		return factLink(
 			'On call tonight',
