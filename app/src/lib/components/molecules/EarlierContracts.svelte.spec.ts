@@ -42,6 +42,15 @@ describe('EarlierContracts', () => {
 		await expect.element(page.getByText('Nov 10, 2026')).toBeVisible();
 	});
 
+	it('says the Client was erased where her erasure voided it, with no name (#2997)', async () => {
+		await render(EarlierContracts, {
+			timeZone: TIME_ZONE,
+			earlier: [{ id: 'c3', voidedAt: '2026-11-09T15:00:00Z', voidedByErasure: true }]
+		});
+
+		await expect.element(page.getByText('Nov 9, 2026 because the Client was erased')).toBeVisible();
+	});
+
 	it('draws nothing for no earlier Contract', async () => {
 		await render(EarlierContracts, { timeZone: TIME_ZONE, earlier: [] });
 

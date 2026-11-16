@@ -1,10 +1,13 @@
 package client_test
 
 import (
+	"encoding/json/v2"
 	"slices"
 	"testing"
 
 	"doula-cloud/api/internal/activity"
+	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/testdb"
 )
 
@@ -79,5 +82,36 @@ func TestEraseHandler_VoidsHerUnsignedContracts(t *testing.T) {
 	e.readErasureScope(&scope)
 	if scope.ContractsVoided != 2 {
 		t.Errorf("erasureScope.contractsVoided = %d, want 2", scope.ContractsVoided)
+	}
+}
+
+// TestEraseHandler_CountsContractsVoidedOnAMergedInRecord proves the erased
+// row's contractsVoided counts every Contract the erasure voided, those on a
+// record merged into her as well as those on her own (#2997).
+func TestEraseHandler_CountsContractsVoidedOnAMergedInRecord(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	survivorID, absorbedID, absorbedEngagementID := e.twoRecordsOfOneWoman("Rosa Lind", "birth")
+	survivorEngagementID := seedEngagementForClient(t, e.DB, survivorID, e.Practice.ID, "active", "birth")
+	own := seedClientContract(t, e.DB, survivorEngagementID, contractSent)
+	mergedIn := seedClientContract(t, e.DB, absorbedEngagementID, contractDraft)
+	e.mergeOK(absorbedID, client.MergeRequest{GivenName: "Rosa Lind", Email: "second@example.com", OtherClientID: survivorID})
+
+	e.erasure(survivorID)
+
+	for name, id := range map[string]string{"her own": own, "merged-in": mergedIn} {
+		if got := testdb.Scalar[string](t, e.DB.Admin, `SELECT status::text FROM contracts WHERE id = $1`, id); got != contractVoided {
+			t.Errorf("%s Contract status after erasure = %q, want %q", name, got, contractVoided)
+		}
+	}
+	var scope struct {
+		ContractsVoided int `json:"contractsVoided"`
+	}
+	diff := testdb.Scalar[[]byte](t, e.DB.Admin,
+		`SELECT diff FROM activity WHERE subject_kind = 'client' AND subject_id = $1 AND action = 'erased'`, survivorID)
+	if err := json.Unmarshal(diff, &scope); err != nil {
+		t.Fatalf("decode erasure scope: %v", err)
+	}
+	if scope.ContractsVoided != 2 {
+		t.Errorf("erasureScope.contractsVoided = %d, want 2 (one on her own record, one on the record merged into her)", scope.ContractsVoided)
 	}
 }

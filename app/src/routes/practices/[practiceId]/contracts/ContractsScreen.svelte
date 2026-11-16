@@ -21,6 +21,8 @@
 		contractsViewOf,
 		contractStepper,
 		daysWaitingWords,
+		ERASURE_VOID_SHORT,
+		ERASURE_VOID_WORDS,
 		nameWithInitial,
 		EVERY_CONTRACT_ORDER_OPTION,
 		downloadSignedContractPdf,
@@ -562,6 +564,7 @@
 	}
 
 	function whoText(contract: ContractListItem): string {
+		if (contract.voidedByErasure) return ERASURE_VOID_WORDS;
 		const step = contractStepper(contract);
 		return step ? `${step.verb} by ${step.name}` : '';
 	}
@@ -726,7 +729,13 @@
 
 {#snippet whoCell(contract: ContractListItem, tableView: DataTableView)}
 	{@const step = contractStepper(contract)}
-	{#if step && tableView === 'table'}
+	{#if contract.voidedByErasure && tableView === 'table'}
+		<span class="no-break"
+			><span aria-hidden="true">{ERASURE_VOID_SHORT}</span><span class="visually-hidden">{ERASURE_VOID_WORDS}</span></span
+		>
+	{:else if contract.voidedByErasure}
+		{ERASURE_VOID_WORDS}
+	{:else if step && tableView === 'table'}
 		<span class="no-break"
 			><span aria-hidden="true">{nameWithInitial(step.name)}</span><span class="visually-hidden">{whoText(contract)}</span></span
 		>

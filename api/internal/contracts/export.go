@@ -124,6 +124,9 @@ func exportWho(it ContractListItem) string {
 	case string(StatusDraft):
 		verb, name = "Made", it.MadeByName
 	case string(StatusVoided):
+		if it.VoidedByErasure {
+			return "Voided because the Client was erased"
+		}
 		verb, name = "Voided", it.VoidedByName
 	}
 	if name == "" {

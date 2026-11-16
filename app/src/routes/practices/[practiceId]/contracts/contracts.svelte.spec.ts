@@ -116,6 +116,22 @@ describe('the Practice-wide Contracts list rows', () => {
 		await expect.element(cell('Voided by Dee Whitlock')).toBeVisible();
 	});
 
+	const erasedRows = [items[3]!, { ...items[3]!, voidedByName: undefined, voidedByErasure: true }];
+
+	it('says the Client was erased, beside named rows, for a Contract her erasure voided (#2997)', async () => {
+		await setup({ props: { ...ownerProperties, data: { ...data, items: erasedRows } } });
+
+		await expect.element(cell('Voided by Dee Whitlock')).toBeVisible();
+		await expect.element(cell('Voided because the Client was erased')).toBeVisible();
+	});
+
+	it('says it in full on a narrow card (#2997)', async () => {
+		await setup({ width: 375, props: { ...ownerProperties, data: { ...data, items: erasedRows } } });
+
+		// The table and the cards hold the same words; only CSS tells them apart, so the card's is the last.
+		await expect.element(testPage.getByText('Voided because the Client was erased').last()).toBeVisible();
+	});
+
 	it('says no one is on record where a backfilled Contract has no name for its step', async () => {
 		await setup({
 			props: { ...ownerProperties, data: { ...data, items: [{ ...items[1]!, sentByName: undefined }] } }

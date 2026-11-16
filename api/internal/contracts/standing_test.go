@@ -47,8 +47,8 @@ func TestPostSendContractHandler_RefusesASendForAnErasedClient(t *testing.T) {
 
 // TestListContracts_AnErasedClientsContractIsVoidedByErasure: a Sent
 // Contract leaves the Sent and Not signed views when its Client is erased,
-// and sits in Voided under "erasure", not under a Staff member's name
-// (#2990).
+// and sits in Voided as voided by erasure, under no Staff member's name
+// (#2990, #2997).
 func TestListContracts_AnErasedClientsContractIsVoidedByErasure(t *testing.T) {
 	e := newEnv(t)
 	e.seedContract(statusSent)
@@ -60,7 +60,7 @@ func TestListContracts_AnErasedClientsContractIsVoidedByErasure(t *testing.T) {
 		}
 	}
 	got := e.list("?view=voided").Items
-	if len(got) != 1 || got[0].VoidedByName != "erasure" {
+	if len(got) != 1 || !got[0].VoidedByErasure || got[0].VoidedByName != "" {
 		t.Fatalf("voided view = %+v, want one Contract voided by erasure", got)
 	}
 	if page := e.contract(); page.Status != "voided" {
