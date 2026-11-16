@@ -796,14 +796,21 @@
 		   declaration would silently resolve against the page instead. */
 		.frame {
 			container: data-table / inline-size;
+			--outer-text-size: var(--text-body-size);
 		}
 
-		/* The base size re-resolved against the frame (#544): a `cqi`
-		   resolves against the nearest ANCESTOR container, so `.frame`
-		   cannot answer its own. The cells below declare `body-sm` and are
-		   unaffected; this covers everything in the record view that does
-		   not. */
-		.frame > * {
+		/* The body size the page resolved where the frame sits (#2983; #544
+		   before it). A `cqi` resolves against the nearest ANCESTOR
+		   container, so `.frame` cannot answer its own, and re-resolving
+		   inside it gave a cell 17.17px beside a facts row's 17.9. The four
+		   steps that share the body size take the frame's registered length
+		   (properties.css), so a cell, a record view's `<dd>` and any text
+		   inside carry the page's px; the frame's own width never decides it. */
+		.frame > :global(*) {
+			--text-body-size: var(--outer-text-size);
+			--text-body-sm-size: var(--outer-text-size);
+			--text-label-size: var(--outer-text-size);
+			--text-meta-size: var(--outer-text-size);
 			font-size: var(--text-body-size);
 		}
 

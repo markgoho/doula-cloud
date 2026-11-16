@@ -242,6 +242,8 @@ Every step is a fluid `clamp()` on `cqi`: the floor is its size at a 320px colum
 ### Named Rules
 **The One Title Rule.** Every page title is the page Heading at `heading-lg`. `templates/pageTitle.usage.spec.ts` fails a raw `<h1>` outside QuestionPage, a title at another step, or a level-1 Heading in another variant; `expectOneFramedHeading` holds one `<h1>` per screen inside the Template's frame.
 
+**The One Body Size Rule.** Table text and body text are one size step, and they compute to the same px wherever a table sits beside facts or summary rows (#2983). A record shows a table beside facts, and two sizes under 1px apart read as a mistake, not a choice; a deliberate two-step gap would shrink every table's cells or grow body text, and #1945 already set table cells to the 16px floor so they read as body. `DataTable`'s frame and `RecordDetail`'s body resolve the size where they sit (`--outer-text-size`, `properties.css`), never against their own width, so a table's cells, the facts and the status line above them are one px.
+
 **The Sixteen Floor Rule.** No text is under 16px at any width (ADR-0060). Hierarchy below the headings is weight, leading, tracking and ink, never a smaller size.
 
 **The Lined-Up Figures Rule.** Every date, amount and count is set in tabular figures. DataTable sets it on every cell and right-aligns a numeric column, header and body alike (`DataTable.svelte.spec.ts`); `base.css` also sets it on `time`, `data`, `output`, `dd` and `.tabular` (build-held).
