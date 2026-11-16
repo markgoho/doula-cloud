@@ -423,9 +423,15 @@
 					{:else if facts}
 						<div class="facts">{@render facts()}</div>
 					{/if}
+					{#if state.status === 'loading'}
+						{@render loadingSections(state.label)}
+					{:else}
+						{@render recordSections()}
+					{/if}
 					{#if state.status !== 'loading' && details}
-						<!-- The wide copy of Details, right after the facts in the DOM so the
-						     Tab order is the drawn order. -->
+						<!-- The wide copy of Details, after the sections in the DOM: it is
+						     drawn below the facts beside them, so heading navigation and Tab
+						     reach it after the main column, as a related-items column. -->
 						<aside class="details details-aside" id={shownDetails === 'aside' ? 'details' : undefined} aria-labelledby="details-aside-heading" {@attach trackShownDetails}> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 							<stack-l space="var(--space-3)">
 								<!-- An h2 drawn as the facts column's label: in one column the aside is display: none, so Details is announced once, as the last section's h2. -->
@@ -433,11 +439,6 @@
 								{@render details('aside', shownDetails === 'aside')}
 							</stack-l>
 						</aside>
-					{/if}
-					{#if state.status === 'loading'}
-						{@render loadingSections(state.label)}
-					{:else}
-						{@render recordSections()}
 					{/if}
 				</div>
 			</div>

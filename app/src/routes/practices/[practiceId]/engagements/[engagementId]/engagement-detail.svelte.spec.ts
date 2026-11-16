@@ -2172,7 +2172,7 @@ describe('the note when work started (#2597)', () => {
 });
 
 describe('the order of the sections (#2146)', () => {
-	it('runs a postpartum Engagement by its care phase, the Care Plan not started last of the filled, Activity at the end, Details an h2 after the facts (#2991)', async () => {
+	it('runs a postpartum Engagement by its care phase, the Care Plan not started last of the filled, Activity at the end, Details an h2 after the sections (#2991)', async () => {
 		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
 		// Offers and Doula fees are an Owner's or an Admin's, drawn once
 		// each read lands.
@@ -2182,10 +2182,10 @@ describe('the order of the sections (#2146)', () => {
 			.getByRole('heading', { level: 2 })
 			.all()
 			.map((heading) => heading.element().textContent?.trim());
-		// The wide window draws the aside after the facts, its title an h2 reached
-		// in the order it is drawn; the narrow copy is not drawn, so none repeats.
+		// The wide window draws the aside beside the sections, after them in the
+		// document, so heading navigation reads the main column first; the narrow
+		// copy is not drawn, so none repeats.
 		expect(headings).toEqual([
-			'Details',
 			'Visits',
 			'Messages',
 			'Invoices',
@@ -2197,7 +2197,8 @@ describe('the order of the sections (#2146)', () => {
 			'Care Plan',
 			'On call',
 			'Note when work started',
-			'Activity'
+			'Activity',
+			'Details'
 		]);
 	});
 });
