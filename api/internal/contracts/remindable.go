@@ -84,9 +84,6 @@ func readLatestReminder(ctx context.Context, tx *sql.Tx, contractID string) (r C
 // the reminder endpoint, the Contracts list and the Engagement all ask it.
 func clientsEmailedSince(ctx context.Context, tx *sql.Tx, clientIDs []string, since time.Time) (map[string]bool, error) {
 	emailed := map[string]bool{}
-	if len(clientIDs) == 0 {
-		return emailed, nil
-	}
 	rows, err := tx.QueryContext(ctx,
 		`SELECT DISTINCT e.client_id::text
 		   FROM contract_notice_outbox o
