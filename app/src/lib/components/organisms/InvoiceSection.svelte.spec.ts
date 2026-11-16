@@ -315,7 +315,7 @@ describe('InvoiceSection.svelte', () => {
 
 		await page.getByRole('button', { name: 'Create Invoice' }).click();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to create invoice');
+		await expect.element(page.getByRole('alert')).toHaveTextContent('We could not create the Invoice.');
 	});
 
 	// The question is not on screen once a billing mode is set, so there
@@ -927,7 +927,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-			await expect.element(page.getByText('Failed to record payment')).toBeVisible();
+			await expect.element(page.getByText('We could not record the payment.')).toBeVisible();
 		});
 
 		// #1038: PostManualPaymentHandler's own `details` map (#1037) --
@@ -1083,7 +1083,7 @@ describe('InvoiceSection.svelte', () => {
 
 			await page.getByRole('button', { name: 'Void' }).click();
 
-			await expect.element(page.getByText('Failed to void this Invoice')).toBeVisible();
+			await expect.element(page.getByText('We could not void this Invoice.')).toBeVisible();
 		});
 
 		it('falls back to a generic message when onWriteOffInvoice rejects with a non-Error', async () => {
@@ -1092,7 +1092,7 @@ describe('InvoiceSection.svelte', () => {
 
 			await page.getByRole('button', { name: 'Write off' }).click();
 
-			await expect.element(page.getByText('Failed to write off this Invoice')).toBeVisible();
+			await expect.element(page.getByText('We could not write off this Invoice.')).toBeVisible();
 		});
 	});
 
@@ -1170,7 +1170,7 @@ describe('InvoiceSection.svelte', () => {
 			await page.getByRole('button', { name: 'Continue' }).click();
 			await page.getByRole('button', { name: 'Confirm and reverse' }).click();
 
-			await expect.element(page.getByText('Failed to reverse this payment')).toBeVisible();
+			await expect.element(page.getByText('We could not reverse this payment.')).toBeVisible();
 		});
 
 		// #1038: PostReversePaymentHandler's own `reason` details key
@@ -1267,7 +1267,7 @@ describe('InvoiceSection.svelte', () => {
 			await setup({ invoices: [partlyRefunded], isOwnerOrAdmin: true });
 
 			await expect.element(invoiceFact('$100.00')).toBeVisible();
-			await expect.element(page.getByRole('term').filter({ hasText: 'Refunded' })).toBeVisible();
+			await expect.element(page.getByRole('definition').filter({ hasText: '$100.00 refunded' })).toBeVisible();
 			await expect.element(invoiceFact('Paid')).toBeVisible();
 			await expect.element(page.getByRole('button', { name: 'Refund payment' })).toBeVisible();
 			expect(page.getByRole('button', { name: 'Reverse payment' }).all()).toHaveLength(0);
@@ -1614,12 +1614,9 @@ describe('InvoiceSection.svelte when part of the Contract is billed (#2829)', ()
 	it('says the Contract price, what is billed and what is not', async () => {
 		await setup({ invoices: [invoiceOpen], billing: partBilled });
 
-		await expect.element(page.getByText('Contract price')).toBeVisible();
-		await expect.element(page.getByText('$4,500.00')).toBeVisible();
-		await expect.element(page.getByText('Billed', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('$1,500.00', { exact: true })).toBeVisible();
-		await expect.element(page.getByText('Not yet billed')).toBeVisible();
-		await expect.element(page.getByText('$3,000.00', { exact: true })).toBeVisible();
+		await expect
+			.element(page.getByText('Of the $4,500.00 Contract price, $1,500.00 is billed and $3,000.00 is not billed yet.'))
+			.toBeVisible();
 	});
 
 	it('asks the amount, filled in with what is not yet billed, and sends the figure typed', async () => {
@@ -1788,7 +1785,11 @@ describe('InvoiceSection.svelte when everything is billed (#2829)', () => {
 	it('says so and offers no Create Invoice', async () => {
 		await setup({ billing: { priceCents: 15_000, billedCents: 15_000, unbilledCents: 0 } });
 
-		await expect.element(page.getByText(nothingLeft)).toBeVisible();
+		// One sentence with the figure, not that and a Notice saying it again (#2755).
+		await expect
+			.element(page.getByText('Of the $150.00 Contract price, all is billed, so there is nothing left to invoice.'))
+			.toBeVisible();
+		expect(page.getByText(nothingLeft).elements()).toHaveLength(0);
 		await expect.element(page.getByRole('button', { name: 'Create Invoice' })).not.toBeInTheDocument();
 	});
 

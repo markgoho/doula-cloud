@@ -120,7 +120,7 @@
 				return;
 			}
 		}
-		formError = error_ instanceof Error ? error_.message : 'Failed to record payment';
+		formError = error_ instanceof Error ? error_.message : 'We could not record the payment.';
 	}
 
 	/**
@@ -215,5 +215,7 @@
 		/>
 		<Button label="Confirm and record" onClick={confirm} loading={isConfirming} />
 		<Button label="Change" variant="secondary" onClick={() => (step = 'form')} />
+		<!-- Nothing is recorded until Confirm; Cancel leaves as the form's does, focus back on the row's opener (3b, T9). -->
+		<Button label="Cancel" variant="secondary" onClick={onCancel} />
 	{/if}
 </section>

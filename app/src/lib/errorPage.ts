@@ -32,6 +32,7 @@ export type ErrorKind =
 	| 'secondFactor'
 	| 'actSecondFactor'
 	| 'unavailable'
+	| 'unreachable'
 	| 'problem';
 
 /**

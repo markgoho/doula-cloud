@@ -1,0 +1,13 @@
+Walk log: Lena Vasquez (persona-walker, blind), round 1 at 563c2f5c. Profile 375x740x2 mobile touch, pointer. Shots shots/lena-act-<n>.png. 11 acts; nothing saved.
+
+Acts 1–4: sign in → Overview ("Recent activity" shows Reese Bishop's record changes) → Menu → Clients (Morgan Grier card: "Money: Your fee $450.00"; Reese Bishop) → Morgan's Client page (Change links on name, birth date, email, phone, address; no fee).
+Act 5: "Birth" → the record. Header: "Message the Client", "Add a Visit", "Due Dec 3, 2026, 37 weeks", "Doulas Marisol Terrazas, Lena Vasquez", Jump to. On call: "Marisol Terrazas is on call tonight."; Marisol Nov 12–Nov 25, Lena Nov 26–Dec 17; Marisol's gap Wed Nov 18 5:00pm–Thu Nov 19 9:00am "Lena Vasquez covering, Her daughter's recital in Buffalo"; "Record a time a Doula cannot be reached". Visits: five of Marisol's, each with "Change". Contract: "Your fee $450.00, the fee you accepted on Nov 15, 2026", "Terms Backup for the birth, on call from 38 weeks, one prenatal visit", "Read the Contract text", "Request void". Buttons "Start the Birth Plan", "Write a message", "Start the Care Plan"; Details "Add Morgan's details"; Activity filters. 880 ms.
+Act 6: Jump to Invoices: "1 Invoice open, due Dec 6."; rows Owed / Void with dates, no amounts; "You see when each Invoice was raised and where it stands, not what the Client pays. Your own fee is in the Contract section."
+Act 7: Jump to On call: her days clear; no entry for her own unreachable days.
+Act 8: Activity "Contract and money": Contract signed / sent / changed / drafted; nothing about her fee or its payment (GET activity?kind=money 200).
+Act 9: "Read the Contract text": Rooted–Morgan agreement (on call from 37 weeks, two prenatal visits) under "Terms" that say 38 weeks, one prenatal visit.
+Acts 10–11: Menu → Offers: "Accepted … Fee $450.00, Paid Not recorded yet, Terms …"; no Client name on the cards.
+
+Thought Rooted's business, not hers: other Clients' activity on the Overview; Marisol's reason for being away; Morgan's Invoice statuses; the Rooted–Morgan Contract text; Renata's trail.
+Buttons she thought she should not have (none pressed): Client page Change links; "Request void"; "Change" on Marisol's Visits; "Add a Visit"; "Record a time a Doula cannot be reached"; "Start the Birth Plan"/"Start the Care Plan"; "Add Morgan's details"; menu "Contracts", "Settings".
+Reached for and did not find: whether her fee is paid, on the record (only on Offers, "Paid Not recorded yet"; #2271); who covers her own unreachable days; one statement of what she agreed to (Terms vs Contract text disagree); the Client's name on Offers cards.

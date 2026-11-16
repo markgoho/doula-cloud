@@ -1,11 +1,14 @@
 package oncall
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"net/http"
+	"time"
 
 	"doula-cloud/api/internal/apierr"
+	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/staffauth"
 )
 
@@ -19,6 +22,55 @@ type EngagementOnCall struct {
 	Rule           RuleView          `json:"rule"`
 	Doulas         []EngagementDoula `json:"doulas"`
 	Gaps           []Gap             `json:"gaps"`
+	// Tonight says who holds the birth for the rest of the Practice's today
+	// (#2755), by the roster's own tonightOf over the same Doulas, window and
+	// gaps. Absent where today is outside the birth's days.
+	Tonight *Tonight `json:"tonight,omitempty"`
+}
+
+// EngagementGlance is one Engagement's on-call window and who holds the
+// birth tonight (#2755), for the Engagement read: the same derivation the
+// on-call panel makes. Window is nil where the Engagement has none, and
+// Tonight where today is outside its days. A birth nobody is on yet is
+// derived as though a Doula were put on it today, as the roster does.
+func EngagementGlance(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (*Window, *Tonight, error) {
+	settings, err := loadPracticeSettings(ctx, tx, practiceID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, nil, err
+	}
+	now := clock.Now(ctx)
+	today := now.In(settings.zone).Format(dateLayout)
+	found, err := loadEngagements(ctx, tx, practiceID, settings, oneEngagementFilter(engagementID, today))
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, nil, err
+	}
+	if len(found) == 0 || found[0].window == nil {
+		return nil, nil, nil
+	}
+	e := found[0]
+	from, to := e.window.Bounds(settings.zone)
+	gaps, err := loadLiveGaps(ctx, tx, []string{e.id}, from, to)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, nil, err
+	}
+	return e.window, tonightFor(e, settings.zone, now, gaps[e.id]), nil
+}
+
+// oneEngagementFilter is the one read of a single Engagement that both the
+// Engagement read's glance and the on-call panel make, so they derive the
+// same window and tonight: a birth nobody is on is derived as though a
+// Doula were put on it today.
+func oneEngagementFilter(engagementID, today string) engagementsFilter {
+	return engagementsFilter{engagementID: engagementID, unattendedOn: today}
+}
+
+// tonightFor is tonightOf for the one day the Practice is on at now.
+func tonightFor(e engagementOnCall, zone *time.Location, now time.Time, gaps []Gap) *Tonight {
+	today := now.In(zone).Format(dateLayout)
+	return tonightOf(e, rosterQuery{rng: Window{Start: today, End: today}, today: today, now: now}, zone, gaps)
 }
 
 // RuleView is the rule in force and where it came from. Overridden is
@@ -85,7 +137,8 @@ func EngagementHandler() http.Handler {
 			Gaps:   []Gap{},
 		}
 
-		engagements, err := loadEngagements(r.Context(), c.Tx, c.PracticeID, settings, engagementsFilter{engagementID: c.EngagementID})
+		today := clock.Now(r.Context()).In(settings.zone).Format(dateLayout)
+		engagements, err := loadEngagements(r.Context(), c.Tx, c.PracticeID, settings, oneEngagementFilter(c.EngagementID, today))
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -121,6 +174,7 @@ func EngagementHandler() http.Handler {
 			if g := gaps[e.id]; g != nil {
 				resp.Gaps = g
 			}
+			resp.Tonight = tonightFor(e, settings.zone, clock.Now(r.Context()), resp.Gaps)
 		}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	}, staffauth.EngagementID())

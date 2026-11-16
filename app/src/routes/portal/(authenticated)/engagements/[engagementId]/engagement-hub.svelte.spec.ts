@@ -543,7 +543,10 @@ describe('the Activity disclosure (#486)', () => {
 // when the Visit page arrives, so a node held from before that is
 // detached and keeps the empty table's text forever.
 function visitsTableText(container: HTMLElement) {
-	return () => container.querySelector(':scope .table-view:not(details *)')?.textContent;
+	return () =>
+		[...(container.querySelector(':scope .table-view:not(details *)')?.querySelectorAll('th, td') ?? [])]
+			.map((cell) => cell.textContent?.trim())
+			.join(' | ');
 }
 
 // #478: GLOSSARY.md's Visit entry settles the Client register's word for

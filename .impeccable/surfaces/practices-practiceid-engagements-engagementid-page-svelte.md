@@ -1,0 +1,73 @@
+---
+version: 1
+slug: "practices-practiceid-engagements-engagementid-page-svelte"
+primary_target: "app/src/routes/practices/[practiceId]/engagements/[engagementId]/EngagementScreen.svelte"
+related_targets: ["app/src/routes/practices/[practiceId]/engagements/[engagementId]/+page.svelte","app/src/routes/practices/[practiceId]/engagements/[engagementId]/birth-plan/+page.svelte","app/src/lib/components/templates/RecordDetail.svelte","app/src/lib/components/molecules/ContractStatus.svelte","app/src/lib/components/organisms/InvoiceSection.svelte","app/src/lib/components/organisms/MessageThread.svelte","app/src/lib/activityLedger.ts","app/src/lib/threadSummary.ts","api/internal/engagement/activity.go","api/internal/message/awaiting.go","app/src/lib/styles/tokens.css"]
+---
+
+Scope: the Staff app, sixth surface and the first record, the Engagement (#2755). Mode: Operate. Audience and jobs: `.impeccable/rubrics/engagement-record.md` (Priya, Renata, Dee, Lena, keyboard, screen reader, phone). Grading: that rubric (40) and `.impeccable/rubrics/craft.md` (20), three blind graders, median.
+
+## Direction contract
+
+THESIS: The category standard for a record page, executed at the craft level of Linear, Stripe Dashboard and GOV.UK services (ADR-0063): a header that says who and where the care stands, a column of facts beside the work at wide widths, and sections a person can scan, with nothing out of place. It reads as the climbed lists' product: same top bar, title, `SummaryList`, `DataTable` and Badge hues.
+
+OWN-WORLD: The Staff world as `DESIGN.md` records it. One blue for links and the primary action, one primary per section (`govuk-alignment.md:160`). Amber where someone must act (nobody on call tonight, a Contract not sent, a thread unanswered), blue where it waits on the Client (a Contract sent), red for late or failed (an Invoice overdue), and an Invoice owed and not yet due neutral (`DESIGN.md:205`, `:213`, #2891). Red otherwise only on an error and the confirm step of an act that is not undone. Days as ADR-0022 says them, times in the Practice's zone (ADR-0036).
+
+STORY: Priya, in a corridor, opens Camille's record on her phone and reaches the Birth Plan's answers before the nurse finishes the question (`journeys/employed-doula.md:12`). Renata opens the same record at her desk and, without scrolling, reads where the care stands: the phase, the due date and how far along, who is on it and who has tonight (or that nobody has), the next Visit, the Contract's state and what is owed. Dee reads the money and sends what is waiting. Lena reads her own fee and terms. Anyone asked "how did this come to be?" answers from the Activity, the record's signature (ADR-0063:28).
+
+FIRST VIEWPORT: Back link; the Client's name with care phase, due date and weeks, and the Doula(s) under it; the header's one move, "Message the Client", beside the title (ADR-0018:293); at wide widths the main column at its measure with the facts column beside it (at a glance: on call tonight, next Visit, Contract state, money owed or overdue, Messages unanswered, each linking to its section) and, under them, Details (contact, created, and the acts that change the due date, care phase and Doulas), drawn in the facts column and as the last block in one column; "Jump to" under the title; the first section's heading in view at 1280×800. At 375×740 the header, the at-a-glance facts and the "Birth Plan" link in "Jump to" are on the first screen (PR-G10, `journeys/employed-doula.md:169`).
+
+FORM: Canon, on `RecordDetail` (ADR-0018). The facts column is a `RecordDetail` region, not the screen's own CSS, so the Client record (#2754) takes it as its second consumer. The signature is the activity ledger (ADR-0063:28); no other. seed: none (the roll was skipped: the arrangement is canon, decided by the design call `engagement-record-design-call.md`, not dealt)
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict and `DESIGN.md`.
+
+## Where this screen differs from the climbed lists, and why
+
+- **A record, not a list.** No filter bar, result line or order on the page. Its lists (Visits, Invoices, Messages, Activity) are related lists, paged in place by "Load more", 30 at a time.
+- **Two widths, chosen by content, from the container (ADR-0024).** Prose, summary lists, Notices and the Messages thread sit at `--measure`; a table is as wide as its columns need and no wider; the facts column takes the room to the main column's right where both fit (at 1280px and 1440px always), and stacks above the sections, after the header, where they do not. The title stays at the gutter: ADR-0018:293 dropped a rail that pushed the title about 300px in, and keeps "the spare room to its right". The facts column is content beside the work, not the removed "On this page" contents rail.
+- **Long documents are reachable in full, not laid inline at full length.** The Birth Plan's answers stay on the record at a capped height (at most one screen at 375×740), so Priya reads "No epidural unless I ask twice." one action from arriving; the full plan, with Print and the PDF, is its own page (`birth-plan/+page.svelte`, #280), one action from the section. The Care Plan may go behind its own page or a capped view.
+- **The order follows the care phase.** #2146 recorded one order for every Engagement, for a Doula during a birth: On call and Birth outcome first (`EngagementScreen.svelte:3714`). Until the design call writes the order for each phase here (before round 1), the rubric's 6d reads: no empty section above a filled one, except On call during the on-call days and Birth outcome from the due date. The design call's table then replaces that wording. This amends #2146's single order; the orchestrator records it on #2146.
+- **Void is a secondary act.** "Void this Contract" is a secondary Button in the Contract section's last subsection, after its WarningText, with a red fill on its confirm step only. The first build amends `DESIGN.md` and `docs/design/govuk-alignment.md` to say so.
+- **The header's one move.** "Message the Client", for a reader the BFF lets send, opening the compose; "Add a Visit" is the first control of the Visits section, for a reader the BFF lets add one (r2 D2). No destructive act in the header.
+- **What a reader holds differs by role in the BFF, and the screen follows it.** Priya reads every Engagement and no money she is refused; Lena only an Engagement she holds a granted attachment on, with her own fee and terms (ADR-0008). Add a Visit, Request void and Start the Care Plan are hers on her Engagements (#2949's note).
+- **Weeks.** Beside the due date, how far along ("37 weeks"), counted as 40 weeks at the due date in the Practice's zone; nothing before week 0 or once the birth outcome is recorded. Maya plans in weeks ("Prenatals at 32 and 36 weeks, then the birth", `journeys/solo-birth-doula.md:121`), and the Practice's on-call rule is set in weeks (`GLOSSARY.md:45`).
+
+## Category baseline
+
+Read 2026-11-15 by an Opus agent from each product's own page (scratchpad `category-baseline.md`, quotes and addresses there); unread rows carry no decline. Verdicts by the orchestrator, 2026-11-15. Still owed before the baseline round: the two readings (an Opus agent and `agy` with Gemini) of the declines.
+
+| Convention | Verdict | Reason |
+| --- | --- | --- |
+| 1. Status in the header (care phase, due, Doula) | Build | MOJ identity bar, Dubsado's properties bar "directly beneath the project title", Salesforce's highlights panel. Today care phase is the summary's third row, under a 10-chip "Jump to" |
+| 2. The main moves in the header | Build | Stripe: "the most commonly used actions in the page header". The header holds one move, "Message the Client" (T4), which opens the compose in Messages with focus in the Message field; "Add a Visit" is the Visits section's own first control (T3), where Priya reached for it (round 1 walk) and where a phone's first screen then holds three decisions (PR-G10; all three round 1 graders counted four with two outline buttons). No destructive act in the header. Round 1 had both in the header |
+| 3. A second column of facts at wide widths | Build | Stripe, HubSpot, Linear, Dubsado, HoneyBook. Content, not a contents list: ADR-0018's 2026-11-07 amendment removed the "On this page" rail, not a facts column. Arranged by container width (ADR-0024), one column where two do not fit; second consumer the Client record (#2754) through `RecordDetail` |
+| 4. At a glance: next Visit, Contract state, money owed or overdue, on call tonight, thread unanswered | Build | Jane's metrics row, Dubsado's amount remaining. Each links to its section; each from what the BFF serves, never computed from a partly loaded page (the Visits list pages 30) |
+| 5. Due countdown, weeks | Build (weeks); Declined ("due in N days") | Weeks: see the differs list (`journeys/solo-birth-doula.md:121`, `GLOSSARY.md:45`). Priya and Renata: nothing on record. "Due in N days": no record asks for it |
+| 6. Tabs | Declined | ADR-0018 2026-11-07 ("Jump to" under the title at every width) and GOV.UK tabs: "do not use the tabs component as a form of page navigation" |
+| 7. Sticky in-page navigation | Declined | ADR-0018 2026-11-07: GOV.UK's sticky-element test dropped it for zoom faults and focus hidden under it. "Back to top": Build where the page is taller than 2700px at 1440×900, after each section taller than 900px and at the page's end, moving focus to "Jump to" |
+| 8. A new or unread marker on Messages | Build (unanswered); Declined (unread) | Unanswered is the domain fact (`GLOSSARY.md:75`): the BFF serves it Practice-wide (`api/internal/message/awaiting.go`, `mount.go:31`) and the thread's newest page, which the screen reads first, settles it for one Engagement (`EngagementScreen.svelte:817`). Unread: whether someone opened a Message "is not recorded" (`GLOSSARY.md:75`) |
+| 9. Activity newest first, with who and when | Have it | `api/internal/activitypage/activitypage.go:253` orders `created_at DESC`, served at `engagement/mount.go:28`; the ledger's When, What, Who (`activityLedger.ts:296`) |
+| 9b. Activity narrowed by kind | Build | All, Care and Visits, Contract and money, Doulas and on call, served by the BFF, never by filtering loaded rows. T6 asks who sent the Contract and who put a Doula on in ≤ 2 actions, and on a busy record those entries fall past the first 30; HubSpot ("Filter by date range, activity owner, activity properties") and Salesforce readers expect it. The first draft's "no job on record" was contradicted by T6 |
+| 10. Related lists with "View all" | Have it | "Load more" in place on Visits, Messages and Activity; one Client's care is tens of rows |
+| 11. Edit a property from the property | Have it | each summary row's Change (`govuk-alignment.md:135`) |
+| 12. Status badges, sparingly, never by color alone | Have it | GOV.UK tag, MOJ badge; checked on the page against One Meaning Per Hue |
+| 13. An empty section says so and offers the way to fill it | Have it | `EmptyState` (#2015); the rubric holds it to one line |
+| 14. A deep link to a section | Have it | an `id` per section, re-scrolled after load (#2508). A copy-link button: Declined, no job on record |
+| 15. Copy the record's link or ID | Declined | no job on record; the address bar holds it |
+| 16. Keyboard shortcuts with `?` | Later (#2956) | one decision for the whole app, the founder's, on #2956 |
+| 17. Next or previous record | Declined | no job on record; Back returns to the list (#2949 asks it return to the row) |
+| 18. Print the record | Declined | no job on record for the whole record; the Birth Plan prints ("Print for the hospital") and has its PDF |
+| 19. Times in a stated zone | Have it | the Practice's zone, said where the reader's differs (ADR-0036, `EngagementScreen.svelte:925`) |
+| 20. Money events on a timeline | Have it | Invoice events reach Activity |
+| 21. Loading holds the layout; a failed read says so in place | Have it | #2248, #2258; T10 checks it per section |
+| 21b. Breadcrumbs | Declined | GOV.UK's back link names the list it returns to (ADR-0021, `govuk-alignment.md`), and the top bar marks that list as the current place (the rubric's 3e, 8i) |
+| 22. Practice Better's quick actions and recent-activity feed | Declined | no job on record beyond rows 2 and 9 |
+| 23. One width rule | Build | the differs list. Today's widths: summary 660, Visits table 1265, Invoices 1215, Notice 1359, Messages 1359, Activity 680 at 1440 |
+| 24. Long documents capped on the record, in full on their own page | Build | the Birth Plan (1141px) and Care Plan (644px) are laid inline at full length today; the Birth Plan's answers stay at a capped height for T1 |
+| 25. Section order by the care phase | Build | the differs list; amends #2146 |
+| 26. A destructive act is a secondary control, last in its section | Build | `govuk-alignment.md:160`, one primary per section; today the red "Void this Contract" is the loudest on a signed Contract (`ContractStatus.svelte:448`). The differs list says where it goes |
+| 27. The Client's phone and email on the record, a phone number a `tel:` link | Build | named by two of three baseline graders (HubSpot, Jane); Priya calls from a corridor (`personas/employed-doula.md:13`); added after the baseline round, 2026-11-15 |
+| 28. An overflow "Actions" menu | Declined | The header holds one move (8h's budget of three decisions on a phone); every other act sits in its section beside the fact it changes (`govuk-alignment.md:135`); GOV.UK has no overflow-menu pattern, and a menu puts each act behind a disclosure, two actions where there is one. Destructive acts stay last in their section and ask first (5a, 8f). Decided 2026-11-15 (round 2 design call, D9) |
+| 29. Internal Staff notes the Client never sees | Build | GLOSSARY.md:51 (Care Plan: internal working notes, staff-only, never shown in the Client portal) and :43 (Visit notes). The Care Plan's state line ends "Camille Boyd never sees the Care Plan." Decided 2026-11-15 (round 2 design call, D9); not a founder question |
+
+Tickets that land on this page, filed and out of this climb; no check depends on them: #2958 (the Engagement side: the day a void was asked, what voiding does to an Invoice still owed, the roles' capitals, a contractor's terms told from the Client's Contract, a voided Contract's who and when), #2945 (a Coverage gap's cover before and after in Activity), #2949 (Back returns to the row; the gap form's order and overlap), #2420 (an open decision under ADR-0055), #2950 (the "cannot be reached" act on its own route), #1581 (a shared molecule, no change to a job).

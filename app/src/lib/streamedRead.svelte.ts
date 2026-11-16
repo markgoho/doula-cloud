@@ -116,7 +116,7 @@ export class Streamed<Value> {
 async function failureOf(
 	response: Response | undefined
 ): Promise<{ kind: ErrorKind; refusal?: { code?: string; message?: string } } | undefined> {
-	if (response === undefined) return { kind: 'problem' };
+	if (response === undefined) return { kind: 'unreachable' };
 	if (await didFollowSessionRefusal(response)) return undefined;
 	const { code, message } = await parseRefusal(response, { opaque5xx: false });
 	return { kind: errorKindForStatus(response.status, code), refusal: { code, message } };

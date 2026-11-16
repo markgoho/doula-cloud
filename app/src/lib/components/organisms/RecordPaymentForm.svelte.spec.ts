@@ -181,6 +181,16 @@ describe('RecordPaymentForm', () => {
 
 		await page.getByRole('button', { name: 'Confirm and record' }).click();
 
-		await expect.element(page.getByText('Failed to record payment')).toBeVisible();
+		await expect.element(page.getByText('We could not record the payment.')).toBeVisible();
+	});
+
+	it('offers Cancel on the check step too, recording nothing', async () => {
+		const { onCancel, onConfirm } = await setup();
+		await reachReview();
+
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		expect(onCancel).toHaveBeenCalledOnce();
+		expect(onConfirm).not.toHaveBeenCalled();
 	});
 });

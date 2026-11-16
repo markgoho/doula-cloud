@@ -336,6 +336,17 @@
 		 * header and has no level.
 		 */
 		groupHeadingLevel?: 2 | 3;
+		/**
+		 * What a row opens beneath itself (a form for the row it changes): drawn
+		 * straight under that row's `<tr>` as one full-width row, and straight
+		 * under its card in the record view, only for a row `isOpen` says is
+		 * open. Rendered into both trees like `rowActions`, so the caller
+		 * scopes any id by `view`.
+		 */
+		rowDetail?: {
+			isOpen: (row: T) => boolean;
+			content: Snippet<[row: T, view: DataTableView]>;
+		};
 	}
 
 	let {
@@ -364,7 +375,8 @@
 		orderedBy,
 		sortOrders,
 		onSort,
-		groupHeadingLevel = 2
+		groupHeadingLevel = 2,
+		rowDetail
 	}: Properties<T> = $props();
 
 	interface Entry<T> {
@@ -435,6 +447,35 @@
 			candidate.focus();
 		}
 	});
+
+	/*
+	 * Which of the two trees the container query is drawing. A row's detail
+	 * (a form) is rendered into that one only, so the hidden tree never holds
+	 * a second copy of its controls. Read from the table's own `display`
+	 * whenever its size changes, which it does when the query swaps trees.
+	 */
+	let shownView = $state<DataTableView>('table');
+
+	function trackShownView(table: HTMLElement) {
+		const read = () => {
+			const view = getComputedStyle(table).display === 'none' ? 'record' : 'table';
+			if (view !== shownView) shownView = view;
+		};
+		read();
+		// The frame, which is always laid out: a table that starts hidden gives
+		// its own observer no first callback. The read waits a frame, because
+		// drawing the detail resizes the frame being observed.
+		let frame = 0;
+		const observer = new ResizeObserver(() => {
+			cancelAnimationFrame(frame);
+			frame = requestAnimationFrame(read);
+		});
+		observer.observe(table.parentElement as HTMLElement);
+		return () => {
+			cancelAnimationFrame(frame);
+			observer.disconnect();
+		};
+	}
 
 	/*
 	 * Whether a given cell actually renders its column's snippet (#740),
@@ -535,6 +576,7 @@
 			class:even={columnWidths === 'even'}
 			class:one-line={columnWidths === 'one-line'}
 			class:has-wrapping-column={columns.some((column) => column.wraps)}
+			{@attach rowDetail ? trackShownView : undefined}
 		>
 			{#if caption}
 				<caption class="visually-hidden">{caption}</caption>
@@ -617,6 +659,13 @@
 							</td>
 						{/if}
 					</tr>
+					{#if rowDetail?.isOpen(row) && shownView === 'table'}
+						<tr class="row-detail">
+							<td colspan={columns.length + (rowActions ? 1 : 0)}>
+								{@render rowDetail.content(row, 'table')}
+							</td>
+						</tr>
+					{/if}
 				{/each}
 			</tbody>
 			{/each}
@@ -707,6 +756,9 @@
 						</cluster-l>
 					{/if}
 				</div>
+				{#if rowDetail?.isOpen(row) && shownView === 'record'}
+					<div class="record-detail">{@render rowDetail.content(row, 'record')}</div>
+				{/if}
 			{/each}
 			{/each}
 		</div>
@@ -1052,6 +1104,22 @@
 			line-height: var(--text-body-sm-leading);
 		}
 
+		/* A row's opened detail (a form): the table's whole width, the card
+		   grid's whole width, with room above and below it. */
+		.row-detail > td {
+			block-size: auto;
+			max-inline-size: none;
+			padding-block: var(--space-group);
+			overflow-wrap: normal;
+		}
+
+		.record-detail {
+			grid-column: 1 / -1;
+			min-inline-size: 0;
+			/* Closer to its card than the cards are to each other. */
+			margin-block-start: calc(var(--space-related) - var(--space-group));
+		}
+
 		.group-title:not(:first-child) {
 			margin-block-start: var(--space-related);
 		}
@@ -1059,7 +1127,7 @@
 		/* A row hover tint, never the only cue for anything. A row with a
 		   link is a click target as a whole (#2888): the pointer says so, and
 		   the row's own controls, which are not part of it, say they are not. */
-		tbody tr:not(.group-heading):hover > :is(td, th) {
+		tbody tr:not(.group-heading, .row-detail):hover > :is(td, th) {
 			background-color: var(--color-surface-container);
 		}
 

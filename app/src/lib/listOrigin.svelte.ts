@@ -1,4 +1,5 @@
 import { afterNavigate, goto } from '$app/navigation';
+import { recordOrigin } from './recordOrigin.svelte.js';
 
 /*
  * The list an Engagement was opened from (#2864), for the Engagement page's
@@ -17,10 +18,10 @@ export interface ListOrigin {
 }
 
 const LABEL: Record<OriginList, string> = {
-	schedule: 'Back to the Schedule',
-	invoices: 'Back to Invoices',
-	'on-call': 'Back to On call',
-	contracts: 'Back to Contracts'
+	schedule: 'Schedule',
+	invoices: 'Invoices',
+	'on-call': 'On call',
+	contracts: 'Contracts'
 };
 
 const held: Record<OriginList, string> = { schedule: '', invoices: '', 'on-call': '', contracts: '' };
@@ -75,9 +76,11 @@ export class ListBack {
 			const found = originFrom(arrivedFrom ?? undefined, paths());
 			if (found) {
 				this.origin = found;
+				recordOrigin.list = found.list;
 				this.#arrivedAt = location.href;
 			} else if (arrivedFrom?.pathname !== here()) {
 				this.origin = undefined;
+				recordOrigin.list = undefined;
 			}
 		});
 	}

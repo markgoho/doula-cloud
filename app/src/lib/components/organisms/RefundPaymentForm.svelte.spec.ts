@@ -213,7 +213,7 @@ describe('RefundPaymentForm', () => {
 		it('falls back to a generic message when the call rejects with a non-Error', async () => {
 			await confirmRefused(byCard, 'boom');
 
-			await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to refund this payment');
+			await expect.element(page.getByRole('alert')).toHaveTextContent('We could not refund this payment.');
 		});
 	});
 

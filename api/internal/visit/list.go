@@ -53,6 +53,11 @@ type ListResponse struct {
 	Items      []Visit `json:"items"`
 	NextCursor *string `json:"nextCursor,omitempty"`
 	HasMore    bool    `json:"hasMore"`
+	// Next (#2755) is the earliest Visit scheduled at or after now, over the
+	// whole Engagement rather than this page, so the record's at-a-glance
+	// "Next Visit" does not wait on paging. Present on the first page only,
+	// and only where such a Visit exists.
+	Next *Visit `json:"next,omitempty"`
 }
 
 // ListHandler lists Visits under an Engagement, most recent first,
@@ -68,6 +73,7 @@ type ListResponse struct {
 // display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
+		var next *Visit
 		page, ok := pagecursor.Fetch(w, r, "invalid cursor", pageSize,
 			func(after *pagecursor.Cursor) ([]Visit, error) {
 				// Read once for the whole page, before the rows: every Visit on
@@ -78,6 +84,13 @@ func ListHandler() http.Handler {
 				if err != nil {
 					return nil, err //nolint:wrapcheck // Fetch turns any error into the 500
 				}
+				if after == nil {
+					// #2755: the first page also names the Visit that is next.
+					if next, err = nextVisit(r.Context(), c.Tx, c.EngagementID, zone); err != nil {
+						// coverage:ignore reason: DB query failure, not exercised by unit tests
+						return nil, err
+					}
+				}
 				return listVisits(r.Context(), c.Tx, c.EngagementID, after, zone)
 			},
 			func(v Visit) (time.Time, string) { return v.CreatedAt, v.VisitID })
@@ -85,7 +98,8 @@ func ListHandler() http.Handler {
 			return
 		}
 
-		apierr.WriteJSON(w, http.StatusOK, ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next})
+		resp := ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next, Next: next}
+		apierr.WriteJSON(w, http.StatusOK, resp)
 	}, staffauth.EngagementReach("engagement not found"))
 }
 
@@ -117,11 +131,7 @@ func ListHandler() http.Handler {
 // it decides which calendar day each row's instant falls on, and every
 // row on the page uses the same one.
 func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pagecursor.Cursor, zone *time.Location) ([]Visit, error) {
-	query := `SELECT v.id, v.staff_id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text,
-		        ` + offEngagementBefore + `$2` + offEngagementAfter + `
-		 FROM visits v
-		 LEFT JOIN staff s ON s.id = v.staff_id
-		 JOIN engagements e ON e.id = v.engagement_id
+	query := visitSelect + `
 		 WHERE v.engagement_id = $1`
 	args := []any{engagementID, clock.Now(ctx)}
 	if after != nil {
@@ -132,6 +142,32 @@ func listVisits(ctx context.Context, tx *sql.Tx, engagementID string, after *pag
 		args = append(args, pageSize+1)
 	}
 
+	return queryVisits(ctx, tx, query, args, zone)
+}
+
+// visitSelect is the columns and joins every Visit read shares; $2 is now,
+// which offEngagement reads.
+const visitSelect = `SELECT v.id, v.staff_id, s.name, v.created_at, v.scheduled_at, v.notes, e.pregnancy_ended_on::text,
+		        ` + offEngagementBefore + `$2` + offEngagementAfter + `
+		 FROM visits v
+		 LEFT JOIN staff s ON s.id = v.staff_id
+		 JOIN engagements e ON e.id = v.engagement_id`
+
+// nextVisit is the earliest Visit on engagementID scheduled at or after
+// now (#2755), or nil where none is. It is read under the same RLS and
+// Engagement filter as the list.
+func nextVisit(ctx context.Context, tx *sql.Tx, engagementID string, zone *time.Location) (*Visit, error) {
+	list, err := queryVisits(ctx, tx, visitSelect+`
+		 WHERE v.engagement_id = $1 AND v.scheduled_at >= $2
+		 ORDER BY v.scheduled_at, v.id LIMIT 1`, []any{engagementID, clock.Now(ctx)}, zone)
+	if err != nil || len(list) == 0 {
+		return nil, err
+	}
+	return &list[0], nil
+}
+
+// queryVisits runs one visitSelect-shaped query and scans its rows.
+func queryVisits(ctx context.Context, tx *sql.Tx, query string, args []any, zone *time.Location) ([]Visit, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {

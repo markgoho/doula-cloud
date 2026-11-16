@@ -343,14 +343,30 @@ export async function loadPracticeActivityPage(
 	return (await response.json()) as CursorPage<ActivityEntry>;
 }
 
+/** The kind an Engagement's Activity is narrowed to by the BFF (#2755):
+ * none is every entry. */
+export type ActivityKind = '' | 'care' | 'money' | 'doulas';
+
+/**
+ * The record's Activity filter, in the words it shows.
+ */
+export const ACTIVITY_KINDS: readonly { kind: ActivityKind; label: string }[] = [
+	{ kind: '', label: 'All' },
+	{ kind: 'care', label: 'Care and Visits' },
+	{ kind: 'money', label: 'Contract and money' },
+	{ kind: 'doulas', label: 'Doulas and on call' }
+];
+
 /** One page of one Engagement's own ledger (#486 AC4), the staff side --
  * engagement.ListActivityHandler, unchanged by #486. */
 export async function loadEngagementActivityPage(
 	fetcher: Fetcher,
 	reference: EngagementReference,
-	cursor: string
+	cursor: string,
+	kind: ActivityKind = ''
 ): Promise<CursorPage<ActivityEntry>> {
-	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+	const parameters = [cursor && `cursor=${encodeURIComponent(cursor)}`, kind && `kind=${kind}`].filter(Boolean);
+	const query = parameters.length > 0 ? `?${parameters.join('&')}` : '';
 	const response = await fetcher(
 		`/api/practices/${reference.practiceId}/engagements/${reference.engagementId}/activity${query}`
 	);

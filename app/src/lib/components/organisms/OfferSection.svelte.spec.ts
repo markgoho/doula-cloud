@@ -24,6 +24,8 @@ const openOffer: Offer = {
 	targetAddress: 'renata@example.test'
 };
 
+const declinedOffer: Offer = { ...openOffer, offerId: 'offer-2', state: 'declined', decidedAt: '2026-08-03T00:00:00Z' };
+
 const employees = (count: number) =>
 	Array.from({ length: count }, (_, index) => ({
 		staffId: `staff-${index}`,
@@ -136,6 +138,22 @@ async function fillFactsAndSend() {
 }
 
 describe('OfferSection.svelte', () => {
+	// #2755: the section's first line.
+	it.each([
+		['one open', [openOffer], '1 Offer open, sent Jul 31, 2026.'],
+		['none open', [declinedOffer], 'No Offer is open.']
+	])('says how many Offers are open: %s', async (_case, offers, line) => {
+		await setup({ offers, isFormOpened: false });
+
+		await expect.element(page.getByText(line)).toBeVisible();
+	});
+
+	it('says how many Offers are open, in the plural', async () => {
+		await setup({ offers: [openOffer, { ...openOffer, offerId: 'offer-3' }], isFormOpened: false });
+
+		await expect.element(page.getByText('2 Offers open, sent Jul 31, 2026.')).toBeVisible();
+	});
+
 	it('says so when nobody has been offered the work yet, and offers the work from there', async () => {
 		await setup({ isFormOpened: false });
 
@@ -252,7 +270,7 @@ describe('OfferSection.svelte', () => {
 
 		await page.getByRole('button', { name: 'Withdraw' }).click();
 
-		await expect.element(page.getByText('Failed to withdraw offer')).toBeVisible();
+		await expect.element(page.getByText('We could not withdraw the Offer.')).toBeVisible();
 	});
 
 	it("pre-fills the Client's first initial from her name", async () => {

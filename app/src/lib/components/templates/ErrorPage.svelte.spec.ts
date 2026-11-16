@@ -81,6 +81,13 @@ describe('ErrorPage.svelte', () => {
 		await expect.element(page.getByText('Try again in a few minutes.')).toBeVisible();
 	});
 
+	it('renders the words for a read that never reached the service, and no "offline"', async () => {
+		await setup({ kind: 'unreachable' });
+
+		await expect.element(page.getByRole('heading', { name: 'We could not reach the service' })).toBeVisible();
+		await expect.element(page.getByText('Check your connection and try again.')).toBeVisible();
+	});
+
 	// #2710: a page met in place of an error page brings its own words.
 	it('renders a title and body the caller wrote, in place of a kind', async () => {
 		await render(ErrorPage, {

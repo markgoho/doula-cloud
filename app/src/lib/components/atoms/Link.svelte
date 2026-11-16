@@ -8,6 +8,7 @@
 		variant?:
 			| 'primary'
 			| 'secondary'
+			| 'outline'
 			| 'card'
 			| 'rail'
 			| 'chip'
@@ -284,6 +285,27 @@
 
 		a.secondary:hover {
 			color: var(--color-primary);
+		}
+
+		/* A link that goes somewhere on the page and is a move the page offers,
+		   drawn as the secondary Button is (GOV.UK allows a link styled as a
+		   button): the Engagement record's header moves, "Message the Client"
+		   and "Add a Visit" (#2755), its only consumers so far (ADR-0058:
+		   the Engagement's header and its loading frame). */
+		a.outline {
+			justify-content: center;
+			--link-inset-start: var(--space-4);
+			--link-inset-end: var(--space-4);
+			padding-block: var(--space-2);
+			padding-inline: var(--link-inset-start) var(--link-inset-end);
+			border: var(--border-thin) solid var(--color-outline);
+			border-radius: var(--radius);
+			color: var(--color-on-surface);
+			text-decoration: none;
+		}
+
+		a.outline:hover {
+			background-color: var(--color-outline-variant);
 		}
 
 		/* A shell's own name, doubling as a link back to its root

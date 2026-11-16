@@ -1,0 +1,14 @@
+Walk log: Priya Raman (persona-walker, blind), round 2 at f4cacd20. Profile 375x740x2 mobile touch, pointer. Shots shots/priya-r2-act-<n>.png. 10 acts; nothing saved or sent.
+
+Act 1: sign in → Overview; "Clients waiting on a reply": Camille Boyd, "Last message Thursday, 9:22am". 142 ms.
+Act 2: "Camille Boyd" → the record: "Message the Client"; "Care phase Active", "Due Dec 5, 2026, 37 weeks", "Doulas Priya Raman, Bethany Kroll", "Nobody on call tonight"; Jump to: On call, Birth Plan, Visits, Messages, Care Plan, Contract, Invoices, Birth outcome, Activity, Details; facts "On call tonight Nobody", "Next Visit Wed Nov 18, 11:00am", "Contract Signed", "Owed $750.00, due Nov 29", "Messages Unanswered since Thursday, 9:22am". On call line: "Nobody on call tonight: Priya Raman cannot be reached until Mon Nov 16, 10:00am." with "At a wedding four hours away". 1064 ms.
+Act 3 (goal 1): Jump to "Birth Plan" → "4 of 6 questions answered · last changed Nov 1, 2026 by Priya Raman · Camille has not read it yet"; Pain Relief: "No epidural unless I ask twice. Nitrous if it is offered." at y=624 of 740, on screen. 1 action from the record.
+Act 4 (goal 2): scrolled to Visits: "Next: Wed Nov 18, 11:00am, Priya Raman."; "Add a Visit"; Coming up (Wed Nov 18), Not scheduled yet, Earlier: "Sun Nov 1, 3:00pm … Third prenatal visit. Walked the way to the hospital entrance…"; "Show earlier Visits". (Earlier is ~1800px below the Birth Plan; she scrolled rather than using Jump to.)
+Act 5: "Change" on the Sun Nov 1 Visit → the form opened right under that Visit, focus on its heading; Notes holds the existing note; Save changes, Cancel.
+Act 6: appended a few words to Notes (onto the Nov 1 note).
+Act 7: Cancel → form closed, focus back on that Visit's Change; typed words discarded without a prompt.
+Act 8 (goal 3): "Add a Visit" under the Visits heading → form with "Scheduled date and time (optional)", Save Visit, Cancel; no type, Doula or notes field. 1 action from Visits.
+Act 9 (goal 4): "Write a message" at the bottom of Messages: "Unanswered since Thursday, 9:22am.", "Show earlier Messages", Priya Nov 3 6:05pm, Camille Nov 12, 2026, 9:22am "Thank you. Could we move Thursday's visit to the afternoon?"; compose opened, focus on its heading "Write a message", not the text box.
+Act 10: tapped Message, typed a reply; not sent.
+
+Reached for and did not find: a place for tonight's labor note (only Change on an old Visit; Cancel discards without asking); Visit type, Doula and notes on Add a Visit; which Visit "Thursday's visit" is, or a way to change it from the Message; focus in the message box from "Write a message" (the header's "Message the Client" does focus it); the on-call line saying she cannot be reached while she is at the birth; money and Contract shown though not hers; Earlier Visits and Messages far down the phone page.

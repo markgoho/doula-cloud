@@ -73,11 +73,17 @@ const Unbounded = 0
 // Client -- or empty to exclude nothing. They are bound as parameters,
 // so this is a list of action names and never a fragment of SQL: a
 // caller has no way to put anything but a value here.
+//
+// IncludedActions is the other direction (#2755): when non-empty the read
+// returns only these actions, ANDed with ExcludedActions, so a filter a
+// reader chooses never lifts a gate the reader's role sets. Bound as
+// parameters the same way.
 type Query struct {
 	PracticeID      string
 	SubjectKind     string
 	SubjectID       string
 	ExcludedActions []string
+	IncludedActions []string
 	After           *pagecursor.Cursor
 	PageSize        int
 }
@@ -236,6 +242,16 @@ func Statement[T any](q Query, p Projection[T]) (string, []any) {
 	if len(q.ExcludedActions) > 0 {
 		sb.WriteString("\n	  AND a.action NOT IN (")
 		for i, action := range q.ExcludedActions {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(placeholder(action))
+		}
+		sb.WriteString(")")
+	}
+	if len(q.IncludedActions) > 0 {
+		sb.WriteString("\n	  AND a.action IN (")
+		for i, action := range q.IncludedActions {
 			if i > 0 {
 				sb.WriteString(", ")
 			}

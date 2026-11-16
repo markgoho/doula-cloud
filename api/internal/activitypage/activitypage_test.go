@@ -301,6 +301,23 @@ func TestList_PagesNewestFirstPastAnExclusionAndAnExtraJoin(t *testing.T) {
 		t.Fatalf("second page = %d items, hasMore=%v, cursor=%v; want 2/false/nil -- the excluded row must not reappear",
 			len(second.Items), second.HasMore, second.NextCursor)
 	}
+
+	// #2755: an inclusion narrows to the actions named, and it is ANDed
+	// with the exclusion, so naming an excluded action cannot bring it back.
+	only, err := activitypage.List(t.Context(), tx, activitypage.Query{
+		PracticeID:      practiceID,
+		SubjectKind:     activity.SubjectEngagement,
+		SubjectID:       engagementID,
+		IncludedActions: []string{"visit_1", "visit_3", q.ExcludedActions[1]},
+		ExcludedActions: q.ExcludedActions,
+		PageSize:        10,
+	}, joined)
+	if err != nil {
+		t.Fatalf("List with an inclusion: %v", err)
+	}
+	if len(only.Items) != 2 || only.Items[0] != "visit_3/Renata Alvarez" || only.Items[1] != "visit_1/Renata Alvarez" {
+		t.Errorf("included = %v, want visit_3 then visit_1 and no excluded row", only.Items)
+	}
 }
 
 // TestList_RefusesAnotherPracticesRows is where visibility is enforced

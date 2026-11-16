@@ -13,7 +13,8 @@ import {
 	formatScheduledVisit,
 	scheduledVisitParts,
 	hasClockTime,
-	toDatetimeLocalValue
+	toDatetimeLocalValue,
+	weeksAlong
 } from './dates.js';
 import { instantFromWall } from './zonedTime.js';
 
@@ -199,6 +200,30 @@ describe('formatInstantWithSeconds (#2666)', () => {
 		['morning', local(2026, 11, 2, 10, 46, 43), 'Nov 2, 2026, 10:46:43am']
 	])('reads %s to the second, in the reader own zone', (_name, iso, want) => {
 		expect(formatInstantWithSeconds(iso, 'America/New_York')).toBe(want);
+	});
+});
+
+describe('weeksAlong', () => {
+	const now = new Date('2026-11-15T15:00:00Z');
+
+	it('counts 280 days to the due day as 40 weeks and a due day in 20 days as 37', () => {
+		expect(weeksAlong('2026-12-05', EASTERN, now)).toBe(37);
+		expect(weeksAlong('2027-08-22', EASTERN, now)).toBe(0);
+	});
+
+	it('keeps counting once the due day has passed', () => {
+		expect(weeksAlong('2026-11-10', EASTERN, now)).toBe(40);
+	});
+
+	it('has no weeks before the first', () => {
+		expect(weeksAlong('2027-09-01', EASTERN, now)).toBeUndefined();
+	});
+
+	it('counts against the Practice calendar day, not the reader or UTC', () => {
+		const lateEvening = new Date('2026-11-16T03:00:00Z');
+		expect(weeksAlong('2026-12-05', EASTERN, lateEvening)).toBe(37);
+		expect(weeksAlong('2026-12-05', 'Asia/Tokyo', lateEvening)).toBe(37);
+		expect(weeksAlong('2026-11-22', 'Asia/Tokyo', lateEvening)).toBe(39);
 	});
 });
 

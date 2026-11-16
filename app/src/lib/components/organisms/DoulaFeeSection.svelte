@@ -17,6 +17,7 @@
 	import { formatCalendarDay } from '#lib/dates.js';
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
 	import RecordPaymentForm from '#lib/components/organisms/RecordPaymentForm.svelte';
 	import ReversePaymentForm from '#lib/components/organisms/ReversePaymentForm.svelte';
@@ -63,6 +64,14 @@
 		close();
 		status = `Payment to ${fee.doulaName} removed.`;
 	}
+
+	// #2755: how many of the fees the Practice has recorded paying.
+	const feeStateLine = $derived.by(() => {
+		const paid = fees.filter((fee) => fee.paid).length;
+		if (paid === 0) return 'Nothing paid yet.';
+		if (paid === fees.length) return 'All paid.';
+		return `${paid} of ${fees.length} paid.`;
+	});
 
 	function rowId(fee: DoulaFee, view: DataTableView): string {
 		return `doula-fee-${view}-${fee.attachmentId}`;
@@ -116,6 +125,10 @@
 	<Notice variant="status" message={status} isFocusedOnAppear />
 {/if}
 
+{#if fees.length > 0}
+	<!-- #2755: the section's first line. -->
+	<Text text={feeStateLine} />
+{/if}
 <DataTable
 	{columns}
 	rows={fees}

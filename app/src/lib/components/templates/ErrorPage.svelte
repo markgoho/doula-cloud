@@ -68,6 +68,11 @@
 			title: 'DoulaCloud is unavailable',
 			body: 'This is planned, and does not mean anything went wrong. Try again shortly.'
 		},
+		// The read never reached the service (ADR-0059): no "You are offline".
+		unreachable: {
+			title: 'We could not reach the service',
+			body: 'Check your connection and try again.'
+		},
 		problem: {
 			title: 'Sorry, there is a problem',
 			body: 'Something went wrong on our end, not because of anything you did. Try again in a few minutes.'

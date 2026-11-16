@@ -46,6 +46,8 @@ interface SetupOptions {
 	composeOpener?: string;
 	cannotSendReason?: string;
 	sentConfirmation?: string;
+	emptyMessage?: string;
+	composeRequest?: number;
 }
 
 async function setup({
@@ -58,11 +60,13 @@ async function setup({
 	readerSenderType,
 	composeOpener,
 	cannotSendReason,
-	sentConfirmation
+	sentConfirmation,
+	emptyMessage,
+	composeRequest
 }: SetupOptions = {}) {
 	const onLoadOlder = vi.fn();
 	const onDownloadAttachment = vi.fn();
-	const { container } = await render(MessageThread, {
+	const { container, rerender } = await render(MessageThread, {
 		timeZone: 'America/New_York',
 		messages: messagesOption,
 		error,
@@ -75,12 +79,54 @@ async function setup({
 		readerSenderType,
 		composeOpener,
 		cannotSendReason,
-		sentConfirmation
+		sentConfirmation,
+		emptyMessage,
+		composeRequest
 	});
-	return { container, onLoadOlder, onSend, onDownloadAttachment };
+	return { container, rerender, onLoadOlder, onSend, onDownloadAttachment };
+}
+
+function recordScrolls(): Element[] {
+	const scrolled: Element[] = [];
+	vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
+		scrolled.push(this);
+	});
+	return scrolled;
 }
 
 describe('MessageThread.svelte', () => {
+	it('says the empty words the caller gives it, and its own otherwise', async () => {
+		await setup({ messages: [], emptyMessage: 'No Messages yet.' });
+		await expect.element(page.getByText('No Messages yet.')).toBeVisible();
+	});
+
+	it('offers no form to a request when nothing can be sent', async () => {
+		const { rerender } = await setup({
+			composeOpener: 'Write a message',
+			composeRequest: 0,
+			cannotSendReason: 'The Client has no portal account.'
+		});
+		await rerender({ composeRequest: 1 });
+
+		await expect.element(page.getByText('The Client has no portal account.')).toBeVisible();
+		expect(page.getByLabelText('Message').query()).toBeNull();
+	});
+
+	it('opens the compose form and puts focus in the Message field when the caller asks (#2755)', async () => {
+		const { container, rerender } = await setup({ composeOpener: 'Write a message', composeRequest: 0 });
+		await rerender({ composeRequest: 1 });
+
+		await expect.element(page.getByLabelText('Message')).toBeVisible();
+		await expect.poll(() => container.ownerDocument.activeElement?.id).toMatch(/-body$/);
+	});
+
+	it('does not open the compose for a request raised before it mounted (#2755)', async () => {
+		await setup({ composeOpener: 'Write a message', composeRequest: 3 });
+
+		await expect.element(page.getByText('Write a message')).toBeVisible();
+		expect(page.getByLabelText('Message').query()).toBeNull();
+	});
+
 	it('renders each message with sender, type, timestamp, and body', async () => {
 		await setup();
 
@@ -355,22 +401,19 @@ describe('MessageThread.svelte compose behind an opener (#2004)', () => {
 		expect(page.getByLabelText('Message').elements()).toHaveLength(0);
 		await page.getByRole('button', { name: 'Write a message' }).click();
 
-		await expect.element(page.getByRole('heading', { level: 3, name: 'Write a message' })).toHaveFocus();
-		await expect.element(page.getByLabelText('Message')).toBeVisible();
+		await expect.element(page.getByLabelText('Message')).toHaveFocus();
+		await expect.element(page.getByRole('heading', { level: 3, name: 'Write a message' })).toBeVisible();
 	});
 
 	// #2602: on a phone the opener is often at the bottom edge, so the form
 	// is brought into view whole; where it lands is checked on the page.
-	it('scrolls the form it opens into view, with focus on its heading', async () => {
-		const scrolled: Element[] = [];
-		vi.spyOn(HTMLElement.prototype, 'scrollIntoView').mockImplementation(function (this: Element) {
-			scrolled.push(this);
-		});
+	it('scrolls the form it opens into view, with focus in the Message field', async () => {
+		const scrolled = recordScrolls();
 		await setup({ composeOpener: 'Write a message' });
 
 		await page.getByRole('button', { name: 'Write a message' }).click();
 
-		await expect.element(page.getByRole('heading', { level: 3, name: 'Write a message' })).toHaveFocus();
+		await expect.element(page.getByLabelText('Message')).toHaveFocus();
 		expect(scrolled.map((element) => element.tagName)).toEqual(['FORM']);
 		vi.restoreAllMocks();
 	});

@@ -156,4 +156,25 @@ describe('PlanInstanceView.svelte', () => {
 		await expect.element(page.getByRole('heading', { name: 'Birth Setting' })).toBeInTheDocument();
 		expect(document.querySelectorAll('dl')).toHaveLength(0);
 	});
+
+	// #2755: the record reads the answered questions, in the template's order,
+	// and a heading only over one that has an answer.
+	it('answeredOnly keeps the questions that have an answer, and a heading only over one', async () => {
+		await render(PlanInstanceView, {
+			fields: [
+				{ id: 'first', type: 'section_header', label: 'Birth Setting', order: 0 },
+				{ id: 'location', type: 'short_text', label: 'Planned birth location', order: 1 },
+				{ id: 'second', type: 'section_header', label: 'Pain Relief', order: 2 },
+				{ id: 'epidural', type: 'short_text', label: 'Epidural', order: 3 }
+			],
+			answers: { location: 'Hospital' },
+			headingLevel: 3,
+			answeredOnly: true
+		});
+
+		await expect.element(page.getByRole('heading', { name: 'Birth Setting' })).toBeVisible();
+		await expect.element(page.getByText('Hospital')).toBeVisible();
+		expect(page.getByRole('heading', { name: 'Pain Relief' }).elements()).toHaveLength(0);
+		expect(page.getByText('Epidural').elements()).toHaveLength(0);
+	});
 });

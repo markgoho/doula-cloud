@@ -100,14 +100,38 @@
 		 * Invoices list's "Totals for Invoices sent in October 2026."
 		 */
 		describedBy?: string;
+		/**
+		 * How far the list runs. `measure`, the default, caps the list at the
+		 * reading width (#2021). `column` lets it take the column it is placed
+		 * in, as Stripe's detail rows and GOV.UK's full-width summary list do,
+		 * with each value's own text still at most the measure: a record's
+		 * rows share the right edge of its tables (ADR-0018, 2026-11-15).
+		 */
+		width?: 'measure' | 'column';
 	}
 
-	let { rows, value, action, detail, isBordered = false, isStacked = false, isCompact = false, describedBy }: Properties = $props();
+	let {
+		rows,
+		value,
+		action,
+		detail,
+		isBordered = false,
+		isStacked = false,
+		isCompact = false,
+		describedBy,
+		width = 'measure'
+	}: Properties = $props();
 
 	const listId = $props.id();
 </script>
 
-<dl class:bordered={isBordered} class:stacked={isStacked} class:compact={isCompact} aria-describedby={describedBy}>
+<dl
+	class:bordered={isBordered}
+	class:stacked={isStacked}
+	class:compact={isCompact}
+	class:column={width === 'column'}
+	aria-describedby={describedBy}
+>
 	<!--
 		Keyed on index, not on the label (#464): a record can show the same
 		label twice -- two phone numbers, two Practice-defined fields a
@@ -165,6 +189,16 @@
 		 * drawing asks for the box here, and the founder's priority for the
 		 * pilot is that the screen matches its drawing.
 		 */
+		/* `width="column"`: the list takes its column; only a value's own text
+		   keeps the measure. */
+		dl.column {
+			max-inline-size: none;
+		}
+
+		.column .value {
+			max-inline-size: var(--measure);
+		}
+
 		dl.bordered {
 			padding-inline: var(--space-4);
 			border: var(--border-thin) solid var(--color-outline-variant);

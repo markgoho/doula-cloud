@@ -25,6 +25,7 @@
 	import Button from '#lib/components/atoms/Button.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import Textarea from '#lib/components/atoms/Textarea.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import DataTable, { type DataTableView } from '#lib/components/organisms/DataTable.svelte';
@@ -250,6 +251,14 @@
 		isFormOpen = false;
 	}
 
+	// #2755: how many Offers are open and when the latest went out.
+	const offerStateLine = $derived.by(() => {
+		const open = offers.filter((offer) => isOpen(offer));
+		if (open.length === 0) return 'No Offer is open.';
+		const latest = open.map((offer) => offer.offeredAt).toSorted((a, b) => b.localeCompare(a))[0];
+		return `${open.length} ${open.length === 1 ? 'Offer' : 'Offers'} open, sent ${formatInstant(latest, timeZone)}.`;
+	});
+
 	const offerColumns = [
 		{ label: 'Doula', accessor: (offer: Offer) => offer.targetName || offer.targetAddress || '' },
 		{ label: 'Offered', accessor: (offer: Offer) => formatInstant(offer.offeredAt, timeZone) },
@@ -262,7 +271,7 @@
 		try {
 			await onWithdraw(offerId);
 		} catch (error_) {
-			withdrawError = error_ instanceof Error ? error_.message : 'Failed to withdraw offer';
+			withdrawError = error_ instanceof Error ? error_.message : 'We could not withdraw the Offer.';
 		}
 	}
 </script>
@@ -297,6 +306,10 @@
 	#2004: one row per Offer, its answer a Badge and its Withdraw the row's
 	own, in place of a list item holding a control (#2017).
 -->
+{#if offers.length > 0}
+	<!-- #2755: the section's first line. -->
+	<Text text={offerStateLine} />
+{/if}
 <DataTable
 	columns={offerColumns}
 	rows={offers}

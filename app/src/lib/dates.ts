@@ -83,6 +83,18 @@ export function formatPostpartum(birthDay: string, timeZone: string, now: Date =
 	return `${Math.floor(days / 7)} weeks postpartum`;
 }
 
+/**
+ * How far along a pregnancy is, in whole weeks, from its due day: 280 days
+ * is 40 weeks, so a birth due in 20 days is 37 weeks along. `dueDay` is a
+ * calendar day, counted against the Practice's calendar day. Nothing before
+ * week 0: a due day more than 280 days away has no weeks yet.
+ */
+export function weeksAlong(dueDay: string, timeZone: string, now: Date = new Date()): number | undefined {
+	const daysToDue = Math.round((utcOfDay(dueDay) - utcOfDay(dayIn(now, timeZone))) / DAY_MS);
+	const weeks = Math.floor((280 - daysToDue) / 7);
+	return weeks < 0 ? undefined : weeks;
+}
+
 function utcOfDay(value: string): number {
 	const [year, month, day] = value.split('-').map(Number);
 	return Date.UTC(year!, month! - 1, day!);

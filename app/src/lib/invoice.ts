@@ -387,13 +387,22 @@ export async function loadInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string
-): Promise<{ invoices: Invoice[]; billing?: ContractBilling }> {
+): Promise<{ invoices: Invoice[]; billing?: ContractBilling; owed?: OwedSummary }> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	const body: { items: Invoice[]; contractBilling?: ContractBilling } = await response.json();
-	return { invoices: body.items, billing: body.contractBilling };
+	const body: { items: Invoice[]; contractBilling?: ContractBilling; owed?: OwedSummary } = await response.json();
+	return { invoices: body.items, billing: body.contractBilling, owed: body.owed };
+}
+
+/** What every open Invoice of the Engagement adds up to (#2755), over all of
+ * them and not the first page. Absent from a contractor's read. */
+export interface OwedSummary {
+	owedCents: number;
+	overdueCents: number;
+	nextDueOn?: string;
+	oldestOverdueOn?: string;
 }
 
 /** How much of the current Contract's price its Invoices have billed

@@ -10,6 +10,7 @@
 		<cluster-l space="var(--space-4)">
 			<Link label="Back to the request you were deciding" href="/style-guide" variant="primary" />
 			<Link label="Back to the request you were deciding" href="/style-guide" variant="secondary" />
+			<Link label="Message the Client" href="/style-guide" variant="outline" />
 		</cluster-l>
 	</section>
 

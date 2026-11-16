@@ -222,7 +222,7 @@
 			isRequestFormShown = false;
 			requestReason = '';
 		} catch (error_) {
-			requestError = error_ instanceof Error ? error_.message : 'Failed to request a void';
+			requestError = error_ instanceof Error ? error_.message : 'We could not send the void request.';
 		} finally {
 			isRequestingVoid = false;
 		}
@@ -266,7 +266,7 @@
 			declineFormRequestId = '';
 			declineReason = '';
 		} catch (error_) {
-			declineError = error_ instanceof Error ? error_.message : 'Failed to decline this request';
+			declineError = error_ instanceof Error ? error_.message : 'We could not decline the request.';
 		} finally {
 			decliningRequestId = '';
 		}
@@ -282,7 +282,7 @@
 		try {
 			await onVoid!();
 		} catch (error_) {
-			voidError = error_ instanceof Error ? error_.message : 'Failed to void contract';
+			voidError = error_ instanceof Error ? error_.message : 'We could not void the Contract.';
 			throw error_;
 		}
 	}
@@ -293,10 +293,12 @@
 	// by whom. A voided Contract keeps its signature as a row of its own,
 	// the same "<day> by <name>" shape as Sent.
 	const isSignedNow = $derived(status === 'signed' && signed !== undefined);
+	// #2755: the section's first line says the Contract's state with the day
+	// and who sent it; a signed or sent Contract's Sent row is folded into it.
+	const WAITING_TO_SIGN = 'waiting for the Client to sign';
+	const isSentLine = $derived(status === 'sent' && sent !== undefined);
+	const isSentFolded = $derived(isSignedNow || isSentLine);
 	const facts = $derived<FactRow[]>([
-		isSignedNow
-			? { label: 'Status', value: `Signed on ${formatInstant(signed!.at, timeZone)}`, instant: signed!.at }
-			: { label: 'Status', value: contractStatusText(status) },
 		...(signed
 			? [
 					isSignedNow
@@ -304,7 +306,7 @@
 						: { label: 'Signed', value: stampText(signed, timeZone), instant: signed.at }
 				]
 			: []),
-		...(sent ? [{ label: 'Sent', value: stampText(sent, timeZone), instant: sent.at }] : []),
+		...(sent && !isSentFolded ? [{ label: 'Sent', value: stampText(sent, timeZone), instant: sent.at }] : []),
 		...(status === 'sent'
 			? [
 					openedAt
@@ -361,7 +363,7 @@
 		try {
 			await onDownloadPdf!();
 		} catch (error_) {
-			error = error_ instanceof Error ? error_.message : 'Failed to download signed Contract';
+			error = error_ instanceof Error ? error_.message : 'We could not download the signed Contract.';
 		} finally {
 			isDownloading = false;
 		}
@@ -373,18 +375,33 @@
 	(govuk-alignment.md, "Sections of a record page"), with the caller's
 	own rows -- a fee -- after the status.
 -->
-<SummaryList rows={facts}>
-	{#snippet value(row)}
-		<!-- #968: the change's instant stays machine-readable. -->
-		{#if row.instant}
-			<time datetime={row.instant}>{row.value}</time>
-		{:else}
-			{row.value}
+<!-- v8 ignore start: Svelte's compiled null-guards on the text nodes below are unreachable -- formatInstant always returns a string and a stamp always names who -->
+<p class="state-line">
+	{#if isSignedNow}
+		Signed on <time datetime={signed!.at}>{formatInstant(signed!.at, timeZone)}</time>.
+		{#if sent}
+			Sent on <time datetime={sent.at}>{formatInstant(sent.at, timeZone)}</time> by {sent.by}.
 		{/if}
-	{/snippet}
-</SummaryList>
+	{:else if isSentLine}
+		Sent on <time datetime={sent!.at}>{formatInstant(sent!.at, timeZone)}</time> by {sent!.by}, {WAITING_TO_SIGN}.
+	{:else}
+		{contractStatusText(status)}.
+	{/if}
+</p>
+<!-- v8 ignore stop -->
 
-{@render children?.()}
+{#if facts.length > 0}
+	<SummaryList rows={facts} width="column">
+		{#snippet value(row)}
+			<!-- #968: the change's instant stays machine-readable. -->
+			{#if row.instant}
+				<time datetime={row.instant}>{row.value}</time>
+			{:else}
+				{row.value}
+			{/if}
+		{/snippet}
+	</SummaryList>
+{/if}
 
 {#if status === 'sent' && onRemind}
 	<div>
@@ -411,6 +428,8 @@
 		loading={isDownloading}
 	/>
 {/if}
+
+{@render children?.()}
 
 <!--
 	#971: a Doula's own path to a void, offered exactly where onVoid is
@@ -548,7 +567,8 @@
 	#2004: Void is destructive and cannot be undone, so it is last, under
 	its own heading, apart from the download and the void requests: the
 	consequence is stated before the button (`WarningText`), the button is
-	the destructive variant and never the primary, and a press asks again
+	the secondary variant (#2755: red is spent on the confirm step only, so a
+	page that holds the opener holds no red fill), and a press asks again
 	in a `ConfirmDialog` before anything is sent (govuk-alignment.md, the
 	Button and Warning text rows).
 -->
@@ -556,7 +576,7 @@
 	<Heading level={3} text="Void this Contract" />
 	<WarningText message={VOID_CONSEQUENCE} />
 	<div>
-		<Button label="Void this Contract" variant="destructive" onClick={() => (isVoidDialogOpen = true)} />
+		<Button label="Void this Contract" variant="secondary" onClick={() => (isVoidDialogOpen = true)} />
 	</div>
 	<ConfirmDialog
 		bind:open={isVoidDialogOpen}
@@ -568,3 +588,15 @@
 		onCancel={() => (voidError = '')}
 	/>
 {/if}
+
+<style>
+	@layer components {
+		/* The section's first line, at the reading measure (design call, S4b). */
+		.state-line {
+			margin: 0;
+			max-inline-size: var(--measure);
+			font-size: var(--text-body-size);
+			line-height: var(--text-body-leading);
+		}
+	}
+</style>

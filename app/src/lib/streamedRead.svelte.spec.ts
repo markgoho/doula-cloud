@@ -194,10 +194,10 @@ describe('Streamed', () => {
 		stop();
 	});
 
-	it('draws a read that never reached the server as a problem', async () => {
+	it('draws a read that never reached the server as unreachable, not a problem on our end (ADR-0059)', async () => {
 		const { streamed, stop } = follow<number>(Promise.resolve({ isLoaded: false }));
 
-		await vi.waitFor(() => expect(streamed.failure).toBe('problem'));
+		await vi.waitFor(() => expect(streamed.failure).toBe('unreachable'));
 		stop();
 	});
 
@@ -207,14 +207,14 @@ describe('Streamed', () => {
 
 		next(Promise.resolve({ isLoaded: false }));
 
-		await vi.waitFor(() => expect(streamed.failure).toBe('problem'));
+		await vi.waitFor(() => expect(streamed.failure).toBe('unreachable'));
 		expect(streamed.value).toBeUndefined();
 		stop();
 	});
 
 	it('clears a failure once a later read lands', async () => {
 		const { streamed, next, stop } = follow<number>(Promise.resolve({ isLoaded: false }));
-		await vi.waitFor(() => expect(streamed.failure).toBe('problem'));
+		await vi.waitFor(() => expect(streamed.failure).toBe('unreachable'));
 
 		next(Promise.resolve({ isLoaded: true, value: 3 }));
 

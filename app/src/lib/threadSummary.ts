@@ -4,7 +4,7 @@
  * (newest last, the order MessageThread draws it in).
  */
 import type { Message } from './components/organisms/MessageThread.svelte';
-import { formatInstant } from './dates.js';
+import { formatActivityTimestamp } from './dates.js';
 
 /**
 How much of the newest message the Latest row quotes before it cuts.
@@ -30,7 +30,7 @@ export function latestMessageText(messages: readonly Message[], timeZone: string
 	// A Message carries words, a file, or both (the BFF refuses neither),
 	// so one with no words has a file.
 	const what = latest.body ? `“${excerpt(latest.body)}”` : latest.attachmentFilename!;
-	return `${what} — ${latest.senderName}, ${formatInstant(latest.createdAt, timeZone)}`;
+	return `${what} — ${latest.senderName}, ${formatActivityTimestamp(latest.createdAt, timeZone)}`;
 }
 
 /**

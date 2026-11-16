@@ -71,6 +71,16 @@ describe('loadEngagementActivityPage', () => {
 		);
 	});
 
+	it('asks the BFF for one kind, beside the cursor (#2755)', async () => {
+		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [], hasMore: false }));
+
+		await loadEngagementActivityPage(fetcher, reference, 'next', 'money');
+
+		expect(fetcher).toHaveBeenCalledWith(
+			'/api/practices/practice-1/engagements/engagement-1/activity?cursor=next&kind=money'
+		);
+	});
+
 	it('throws a refusal, so PaginatedList can catch it', async () => {
 		const fetcher = vi.fn().mockResolvedValue(jsonResponse('nope', 403));
 

@@ -1911,3 +1911,53 @@ describe('DataTable.svelte row link name is the caller’s (#2864)', () => {
 		expect(container.querySelector(':scope .record-view .record dd [aria-hidden="true"]')).toBeNull();
 	});
 });
+
+// #2755: a row's opened detail (the Engagement's Visit forms) is drawn
+// straight under that row, in whichever tree the frame is showing, and
+// never in the hidden one.
+function detailSnippet() {
+	return createRawSnippet<[Row, DataTableView]>((row, view) => ({
+		render: () => `<p>Detail for ${row().name}, ${view()}</p>`
+	}));
+}
+
+async function setupRowDetail() {
+	await page.viewport(...WIDE);
+	await render(DataTable<Row>, {
+		columns,
+		rows,
+		emptyMessage: 'No records yet.',
+		rowDetail: { isOpen: (row: Row) => row.name === 'Ada Lovelace', content: detailSnippet() }
+	});
+}
+
+describe('a row detail (#2755)', () => {
+	it("draws the open row's detail under its row in the table", async () => {
+		await setupRowDetail();
+
+		await expect.element(page.getByText('Detail for Ada Lovelace, table')).toBeVisible();
+		expect(page.getByText('Detail for Ada Lovelace, record').query()).toBeNull();
+		expect(page.getByText(/Detail for Grace Hopper/).query()).toBeNull();
+	});
+
+	it('draws it under the card when the table is hidden from the first paint', async () => {
+		await page.viewport(...NARROW);
+		await render(DataTable<Row>, {
+			columns,
+			rows,
+			emptyMessage: 'No records yet.',
+			rowDetail: { isOpen: (row: Row) => row.name === 'Ada Lovelace', content: detailSnippet() }
+		});
+
+		await expect.element(page.getByText('Detail for Ada Lovelace, record')).toBeVisible();
+		expect(page.getByText('Detail for Ada Lovelace, table').query()).toBeNull();
+	});
+
+	it('draws it under the card in the record view, and only there', async () => {
+		await setupRowDetail();
+		await page.viewport(...NARROW);
+
+		await expect.element(page.getByText('Detail for Ada Lovelace, record')).toBeVisible();
+		await expect.poll(() => page.getByText('Detail for Ada Lovelace, table').query()).toBeNull();
+	});
+});

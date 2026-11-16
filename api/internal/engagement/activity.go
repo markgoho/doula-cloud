@@ -89,7 +89,12 @@ func ListActivityHandler() http.Handler {
 			return
 		}
 
-		page, err := listEngagementActivity(r.Context(), c.Tx, c.PracticeID, c.EngagementID, moneyGate, after)
+		included, ok := parseActivityKind(w, r)
+		if !ok {
+			return
+		}
+
+		page, err := listEngagementActivity(r.Context(), c.Tx, c.PracticeID, c.EngagementID, moneyGate, included, after)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -160,13 +165,18 @@ var activityProjection = activitypage.Projection[ActivityEntry]{
 // constants, are the same filter stated once per audience -- and the
 // contractor's is the heavier plan, which is the one the JIT canary
 // beside this file now explains.
-func activityQuery(practiceID, engagementID string, moneyGate bool, after *pagecursor.Cursor) activitypage.Query {
+//
+// included is the actions of the ?kind= the reader chose (#2755), or nil
+// for every kind. It is ANDed with the money exclusion, so a contractor
+// who asks for "money" reads the Contract entries and nothing priced.
+func activityQuery(practiceID, engagementID string, moneyGate bool, included []string, after *pagecursor.Cursor) activitypage.Query {
 	q := activitypage.Query{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		After:       after,
-		PageSize:    activityPageSize,
+		PracticeID:      practiceID,
+		SubjectKind:     activity.SubjectEngagement,
+		SubjectID:       engagementID,
+		IncludedActions: included,
+		After:           after,
+		PageSize:        activityPageSize,
 	}
 	if !moneyGate {
 		q.ExcludedActions = moneyActions
@@ -180,8 +190,8 @@ func activityQuery(practiceID, engagementID string, moneyGate bool, after *pagec
 // layer's own filter, so a bug in either alone can't leak rows) and
 // subject_kind = 'engagement'. Every row comes back with the actor's
 // name already resolved, never a bare id a reader has to look up itself.
-func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagementID string, moneyGate bool, after *pagecursor.Cursor) (activitypage.Page[ActivityEntry], error) {
-	page, err := activitypage.List(ctx, tx, activityQuery(practiceID, engagementID, moneyGate, after), activityProjection)
+func listEngagementActivity(ctx context.Context, tx *sql.Tx, practiceID, engagementID string, moneyGate bool, included []string, after *pagecursor.Cursor) (activitypage.Page[ActivityEntry], error) {
+	page, err := activitypage.List(ctx, tx, activityQuery(practiceID, engagementID, moneyGate, included, after), activityProjection)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return activitypage.Page[ActivityEntry]{}, fmt.Errorf("engagement: list activity: %w", err)

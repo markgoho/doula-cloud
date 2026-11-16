@@ -302,4 +302,21 @@ describe('SummaryList.svelte, compact (#2746)', () => {
 		expect(owed.top).toBe(key.top);
 		expect(owed.left).toBe(overdue.left);
 	});
+
+	// ADR-0018, 2026-11-15: a record's rows take its column, their values' text
+	// still at the measure.
+	it('takes the whole column with width="column", where the default stops at the measure', async () => {
+		await page.viewport(1440, 900);
+		const frame = document.createElement('div');
+		frame.style.inlineSize = '1000px';
+		document.body.append(frame);
+		const narrow = await render(SummaryList, { props: { rows }, target: frame });
+		const measured = narrow.container.querySelector('dl')!.getBoundingClientRect().width;
+		const wide = await render(SummaryList, { props: { rows, width: 'column' }, target: frame });
+
+		const column = wide.container.querySelectorAll('dl')[1]!.getBoundingClientRect().width;
+		expect(measured).toBeLessThan(column);
+		expect(column).toBe(1000);
+		frame.remove();
+	});
 });

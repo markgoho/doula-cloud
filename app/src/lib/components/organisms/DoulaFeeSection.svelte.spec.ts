@@ -62,6 +62,17 @@ describe('DoulaFeeSection', () => {
 		await expect.element(fact('Since Oct 27, 2026')).toBeVisible();
 	});
 
+	// #2755: the section's first line.
+	it.each([
+		['nothing paid yet', [unpaid], 'Nothing paid yet.'],
+		['some paid', [unpaid, paid], '1 of 2 paid.'],
+		['all paid', [paid], 'All paid.']
+	])('says how many fees are paid: %s', async (_case, fees, line) => {
+		await setup({ fees });
+
+		await expect.element(page.getByText(line)).toBeVisible();
+	});
+
 	it('leaves the Note out when no record carries one', async () => {
 		await setup({ fees: [unpaid, { ...paid, paid: { ...paid.paid!, note: undefined } }] });
 
@@ -163,6 +174,6 @@ describe('DoulaFeeSection', () => {
 		await page.getByRole('button', { name: 'Continue' }).click();
 		await page.getByRole('button', { name: 'Confirm and remove' }).click();
 
-		await expect.element(page.getByRole('alert').filter({ hasText: 'Failed to reverse this payment' })).toBeVisible();
+		await expect.element(page.getByRole('alert').filter({ hasText: 'We could not reverse this payment.' })).toBeVisible();
 	});
 });

@@ -252,7 +252,7 @@ Every step is a fluid `clamp()` on `cqi`: the floor is its size at a 320px colum
 
 Layout is intrinsic (ADR-0024): every component answers the room it is given through container queries, never the window, and every screen is complete from 320px up. `body` is the root containment context, so a `cqi` token anywhere reads the space it sits in; `layout.usage.spec.ts` fails a width media query or a static `vw`. A media query is kept only for a stated input capability (`any-pointer: coarse`) or a preference.
 
-Every Template owns the page frame: one `center-l` with one `--page-gutter` (16px until the column reaches 640px, growing to 48px), so the title, the filter bar, the result line and the table all start at one left edge. There is no page-wide cap; each region caps itself: prose at `--measure` (65ch), a form at `--form-max` (44rem), a fixed-share table at twice the measure. A table stops where its columns are satisfied rather than stretching across the screen.
+Every Template owns the page frame: one `center-l` with one `--page-gutter` (16px until the column reaches 640px, growing to 48px), so the title, the filter bar, the result line and the table all start at one left edge. There is no page-wide cap; each region caps itself: prose at `--measure` (65ch), a record's key/value rows the main column with each value's text at `--measure` (`SummaryList` `width="column"`), a form at `--form-max` (44rem), a fixed-share table at twice the measure. A table stops where its columns are satisfied rather than stretching across the screen.
 
 Spacing is ten fluid steps on a 4px base (growth factor 1.5). Templates and field molecules read the rhythm by name, never a raw step.
 
@@ -285,7 +285,7 @@ The signature component is the activity ledger, on records (see Overview). No li
 - **Shape:** gently curved (8px), 44px minimum in both directions at every width.
 - **Primary:** Ink Blue fill, On Ink words, medium weight, body size; hover lightens to `primary-hover`.
 - **Secondary:** transparent with a Control Edge outline and Ink words; hover fills with the Hairline tint.
-- **Destructive:** Signal Red fill, On Ink words; hover dims to 85%.
+- **Destructive:** Signal Red fill, On Ink words; hover dims to 85%. Red is spent on the confirm step only: the button that opens an irreversible act ("Void this Contract") is Secondary, last in its section under its own heading and after its warning text, and the red fill is the confirm dialog's confirm (#2755). A record page then holds no red fill until a person has asked to go ahead.
 - **Unavailable:** a dashed Control Edge outline with Secondary Ink words and no fill, at full opacity, so it never reads as pressed. A loading Button keeps its fill and shows a small ring that stands still under reduced motion.
 - **Width:** a screen's or section's own action fills a column narrower than 37rem and keeps its own width above it; in a table cell it always keeps its own width.
 - **Focus:** a 2px Ink Blue ring, 2px outside.
@@ -293,7 +293,12 @@ The signature component is the activity ledger, on records (see Overview). No li
 ### Links
 - **Prose and standalone:** Ink Blue, underlined (1px, offset 0.2em), hover to `primary-hover`; a standalone link holds a 44px target. An external link says "(opens in new tab)" in its visible words.
 - **Start link:** GOV.UK's start button, drawn as the primary Button with a trailing arrow, for the one navigation that starts a screen's task. Once per screen at most.
+- **Outline:** a link drawn as the Secondary Button (Control Edge outline, Ink words, 44px target), for a move that goes to a place on the page but reads as an action: the record header's one move, "Message the Client" (#2755; "Add a Visit" is the Visits section's own secondary Button).
 - **Nav:** Secondary Ink at rest; the current section is Ink Blue with a 2px rule on the bar's own bottom edge, and `aria-current` as the signal that is not color.
+
+### Record facts and "Jump to"
+- **Facts column:** on a record the facts a reader wants on arriving sit beside the sections, a 15 to 17rem column from a 73rem container, and under "Jump to" in one column where the record is narrower. Each fact is a muted small label and an ink value that is a link to its section (Phone calls), never a Badge; a rule in `--color-outline` above the facts and above Details, no box (GOV.UK related items); a state is said once, with an amber or red icon in place of a second Badge. Label above value in the narrow column, beside it where the row has room for the label and an 11rem value (flex wrapping, no query). It is content, not a contents rail (ADR-0018, 2026-11-07).
+- **Jump to:** a muted label and one wrapping run of plain links with 24px targets, no box and no chips; it is also the target of "Back to top", which moves focus to it.
 
 ### Chips (filter and contents)
 - **Style:** Card White fill, Control Edge outline, Ink label text, 8px radius.
