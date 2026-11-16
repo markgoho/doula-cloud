@@ -144,13 +144,13 @@ describe('ContractStatus.svelte', () => {
 	])('says nothing about a next reminder on a %s Contract given day %s and onRemind %s (#2978)', async (status, canRemindOn, onRemind) => {
 		await render(ContractStatus, { timeZone: 'UTC', status, hasSignedPdf: false, canRemindOn, onRemind });
 
-		expect(page.getByText('You can remind the Client again', { exact: false }).elements()).toHaveLength(0);
+		expect(page.getByText('You can remind again', { exact: false }).elements()).toHaveLength(0);
 	});
 
 	it('says when the Client can next be reminded while Remind is not offered (#2978)', async () => {
 		await render(ContractStatus, { timeZone: 'UTC', status: 'sent', hasSignedPdf: false, canRemindOn: '2026-11-16' });
 
-		await expect.element(page.getByText('You can remind the Client again on Nov 16, 2026.')).toBeVisible();
+		await expect.element(page.getByText('The Client was emailed a reminder today. You can remind again on Nov 16, 2026.')).toBeVisible();
 		expect(page.getByRole('button', { name: 'Remind the Client' }).elements()).toHaveLength(0);
 	});
 

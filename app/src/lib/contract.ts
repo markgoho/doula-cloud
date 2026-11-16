@@ -361,6 +361,10 @@ export function reminderDeliveryWords(delivery: ReminderDelivery): string {
 	return delivery === 'not_delivered' ? 'did not arrive' : '';
 }
 
+/** The cell word for a Client already emailed a reminder today, which the
+ * day Remind returns (canRemindOn) completes (#2986). */
+export const EMAILED_TODAY_WORDS = { label: 'Emailed', sentence: 'The Client was emailed a reminder today.' };
+
 /** Why Remind is not offered, in a few words for a table cell and as the
  * sentence a record or a card has room for (#2981). A reminder held only
  * for today's mail says the day instead, which the caller knows. */

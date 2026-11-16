@@ -30,6 +30,7 @@
 		isVoidRequestReasonTooLong,
 		type ContractReminder,
 		type RemindWithheld,
+		EMAILED_TODAY_WORDS,
 		REMIND_WITHHELD_WORDS,
 		type VoidRequestSummary
 	} from '#lib/contract.js';
@@ -332,7 +333,7 @@
 	]);
 
 	const nextReminderWords = $derived.by(() => {
-		if (canRemindOn) return `You can remind the Client again on ${formatCalendarDay(canRemindOn)}.`;
+		if (canRemindOn) return `${EMAILED_TODAY_WORDS.sentence} You can remind again on ${formatCalendarDay(canRemindOn)}.`;
 		return remindWithheld && remindWithheld !== 'emailed_today' ? REMIND_WITHHELD_WORDS[remindWithheld].sentence : '';
 	});
 	let isReminding = $state(false);

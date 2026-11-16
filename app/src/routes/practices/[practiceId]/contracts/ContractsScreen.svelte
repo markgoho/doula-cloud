@@ -24,6 +24,7 @@
 		nameWithInitial,
 		EVERY_CONTRACT_ORDER_OPTION,
 		downloadSignedContractPdf,
+		EMAILED_TODAY_WORDS,
 		REMIND_WITHHELD_WORDS,
 		remindContract,
 		signedContractFilename,
@@ -582,7 +583,7 @@
 			contract.remindWithheld && contract.remindWithheld !== 'emailed_today'
 				? REMIND_WITHHELD_WORDS[contract.remindWithheld].label
 				: '';
-		const next = contract.canRemindOn ? `Remind again ${formatDay(contract.canRemindOn)}` : withheld;
+		const next = contract.canRemindOn ? `${EMAILED_TODAY_WORDS.label}, remind again ${formatDay(contract.canRemindOn)}` : withheld;
 		return [remindedText(contract), next].filter(Boolean).join(', ');
 	};
 	const columns = $derived([
@@ -782,10 +783,10 @@
 				{/if}
 			{:else if contract.canRemindOn}
 				{#if tableView === 'table'}
-					<span aria-hidden="true">Tomorrow</span>
-					<span class="visually-hidden">Remind the Client {formatDay(contract.canRemindOn)}</span>
+					<span aria-hidden="true">{EMAILED_TODAY_WORDS.label}</span>
+					<span class="visually-hidden">{EMAILED_TODAY_WORDS.sentence} You can remind again {formatDay(contract.canRemindOn)}.</span>
 				{:else}
-					<span>Remind again {formatDay(contract.canRemindOn)}</span>
+					<span>{EMAILED_TODAY_WORDS.sentence} You can remind again {formatDay(contract.canRemindOn)}.</span>
 				{/if}
 			{:else if contract.remindWithheld && contract.remindWithheld !== 'emailed_today'}
 				{@const words = REMIND_WITHHELD_WORDS[contract.remindWithheld]}
