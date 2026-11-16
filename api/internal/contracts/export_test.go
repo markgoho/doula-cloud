@@ -102,6 +102,20 @@ func TestExportContracts_CellsAreTheListsOwnWords(t *testing.T) {
 	}
 }
 
+// TestExportContracts_AContractVoidedByErasureSaysWhy proves the Who cell
+// names the cause, not a Staff member, for a Contract an erasure voided
+// (#2997).
+func TestExportContracts_AContractVoidedByErasureSaysWhy(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	e.seedContract(statusSent)
+	fixture.EraseClient(t, e.DB, e.Engagement.Client.ID)
+
+	rows := e.exportRows(contracts.ListRequest{View: "voided"})
+	if len(rows) != 2 || rows[1][6] != "Voided because the Client was erased" {
+		t.Fatalf("rows = %v, want one Contract whose Who reads Voided because the Client was erased", rows)
+	}
+}
+
 // TestExportContracts_AVoidRequestedContractSaysSo proves the last column.
 func TestExportContracts_AVoidRequestedContractSaysSo(t *testing.T) {
 	e := newEnv(t, signedInAs(fixture.Owner()))

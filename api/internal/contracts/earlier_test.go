@@ -35,6 +35,24 @@ func TestGetContract_NamesTheCurrentContractAndTheVoidedOnesItReplaced(t *testin
 	}
 }
 
+// TestGetContract_AnEarlierContractVoidedByErasureSaysSo proves history
+// carries the cause, not a Staff member's name, for a Contract an erasure
+// voided (#2997).
+func TestGetContract_AnEarlierContractVoidedByErasureSaysSo(t *testing.T) {
+	e := newEnv(t, signedInAs(fixture.Owner()))
+	earlierID, _ := seedSignedContract(t, e.DB, e.Engagement.ID)
+	if _, err := e.DB.Admin.ExecContext(t.Context(), `UPDATE contracts SET status = 'voided', voided_at = now(), voided_by_erasure = true WHERE id = $1`, earlierID); err != nil {
+		t.Fatalf("void earlier Contract: %v", err)
+	}
+	e.seedContract(statusDraft)
+
+	out := e.contract()
+
+	if len(out.Earlier) != 1 || out.Earlier[0].ID != earlierID || !out.Earlier[0].VoidedByErasure || out.Earlier[0].VoidedBy != "" {
+		t.Fatalf("earlier = %+v, want the one Contract voided by erasure and no name", out.Earlier)
+	}
+}
+
 // TestGetContract_ACurrentVoidedContractIsNotAlsoEarlier proves the
 // Contract the section already draws is not listed again as history.
 func TestGetContract_ACurrentVoidedContractIsNotAlsoEarlier(t *testing.T) {

@@ -57,10 +57,13 @@ type ContractListItem struct {
 	CanRemind   bool   `json:"canRemind,omitempty"`
 	CanRemindOn string `json:"canRemindOn,omitempty"`
 	// RemindWithheld says why a Sent Contract cannot be reminded (#2981).
-	RemindWithheld   string   `json:"remindWithheld,omitempty"`
-	SentByName       string   `json:"sentByName,omitempty"`
-	MadeByName       string   `json:"madeByName,omitempty"`
-	VoidedByName     string   `json:"voidedByName,omitempty"`
+	RemindWithheld string `json:"remindWithheld,omitempty"`
+	SentByName     string `json:"sentByName,omitempty"`
+	MadeByName     string `json:"madeByName,omitempty"`
+	VoidedByName   string `json:"voidedByName,omitempty"`
+	// VoidedByErasure is true for a Contract voided by the erasure of its
+	// Client, which no Staff member voided, so VoidedByName is empty.
+	VoidedByErasure  bool     `json:"voidedByErasure,omitempty"`
 	DoulaIDs         []string `json:"doulaIds,omitempty"`
 	DueDate          string   `json:"dueDate,omitempty"`
 	PregnancyEndedOn string   `json:"pregnancyEndedOn,omitempty"`
@@ -233,7 +236,7 @@ const listColumns = `SELECT c.id, e.id, cl.id, cl.given_name, cl.preferred_name,
 	       (SELECT max(o.created_at) FROM contract_notice_outbox o WHERE o.contract_id = c.id AND o.kind = 'reminder' AND o.status IN ('pending', 'sent')),
 	       (SELECT s.name FROM staff s WHERE s.id = c.sent_by),
 	       (SELECT s.name FROM staff s WHERE s.id = c.created_by),
-	       COALESCE((SELECT s.name FROM staff s WHERE s.id = c.voided_by), CASE WHEN c.voided_by_erasure THEN 'erasure' END),
+	       (SELECT s.name FROM staff s WHERE s.id = c.voided_by), c.voided_by_erasure,
 	       to_char(e.due_date, 'YYYY-MM-DD'), to_char(e.pregnancy_ended_on, 'YYYY-MM-DD'), e.birth_outcome::text,
 	       (SELECT ` + client.DoulaAgg + `
 	          FROM engagement_attachments ea
@@ -326,7 +329,7 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		var sentAt, openedAt, remindedAt sql.NullTime
 		var amount int64
 		if err := rows.Scan(&item.ContractID, &item.EngagementID, &item.ClientID, &givenName, &preferredName, &familyName,
-			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &openedAt, &remindedAt, &sentByName, &madeByName, &voidedByName, &dueDate, &endedOn, &outcome, &doulas,
+			&item.EngagementKind, &item.Status, &item.steppedAt, &sentAt, &openedAt, &remindedAt, &sentByName, &madeByName, &voidedByName, &item.VoidedByErasure, &dueDate, &endedOn, &outcome, &doulas,
 			&amount, &item.HasSignedPDF, &item.VoidRequested, &item.sortName); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return nil, fmt.Errorf("contracts: scan list row: %w", err)

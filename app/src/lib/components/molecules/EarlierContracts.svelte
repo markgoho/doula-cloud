@@ -18,11 +18,16 @@
 
 	let { earlier, timeZone }: Properties = $props();
 
+	function voidedBecause(contract: EarlierContract): string {
+		if (contract.voidedByErasure) return ' because the Client was erased';
+		return contract.voidedBy ? ` by ${contract.voidedBy}` : '';
+	}
+
 	function rowsOf(contract: EarlierContract): SummaryListRow[] {
 		return [
 			{
 				label: 'Voided',
-				value: `${formatInstant(contract.voidedAt, timeZone)}${contract.voidedBy ? ` by ${contract.voidedBy}` : ''}`
+				value: `${formatInstant(contract.voidedAt, timeZone)}${voidedBecause(contract)}`
 			},
 			...(contract.reason ? [{ label: 'Reason', value: `${contract.requestedBy} asked: ${contract.reason}` }] : [])
 		];

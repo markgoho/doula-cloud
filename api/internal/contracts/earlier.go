@@ -11,7 +11,8 @@ import (
 // replaced: the Contract section keeps it as history under its own
 // anchor, so the Contracts list's row for it opens somewhere that shows
 // it. VoidedBy is empty where the row's Activity was gone when the column
-// was backfilled, and reads "erasure" for a Contract an erasure voided. RequestedBy and Reason come from the void request an
+// was backfilled, and for a Contract an erasure voided, which VoidedByErasure
+// says. RequestedBy and Reason come from the void request an
 // Owner or an Admin granted, and are empty where the void was done
 // without one.
 type EarlierContract struct {
@@ -20,6 +21,8 @@ type EarlierContract struct {
 	VoidedBy    string    `json:"voidedBy,omitempty"`
 	RequestedBy string    `json:"requestedBy,omitempty"`
 	Reason      string    `json:"reason,omitempty"`
+	// VoidedByErasure is true where the Client's erasure voided it.
+	VoidedByErasure bool `json:"voidedByErasure,omitempty"`
 }
 
 // contractHistory reads the id of engagementID's current Contract -- the
@@ -36,7 +39,7 @@ func contractHistory(ctx context.Context, tx *sql.Tx, engagementID string) (curr
 	}
 
 	rows, err := tx.QueryContext(ctx,
-		`SELECT c.id, c.voided_at, COALESCE(vs.name, CASE WHEN c.voided_by_erasure THEN 'erasure' END, ''), COALESCE(g.requested_by_name, ''), COALESCE(g.reason, '')
+		`SELECT c.id, c.voided_at, COALESCE(vs.name, ''), COALESCE(g.requested_by_name, ''), COALESCE(g.reason, ''), c.voided_by_erasure
 		   FROM contracts c
 		   LEFT JOIN staff vs ON vs.id = c.voided_by
 		   LEFT JOIN LATERAL (
@@ -59,7 +62,7 @@ func contractHistory(ctx context.Context, tx *sql.Tx, engagementID string) (curr
 
 	for rows.Next() {
 		var item EarlierContract
-		if err := rows.Scan(&item.ID, &item.VoidedAt, &item.VoidedBy, &item.RequestedBy, &item.Reason); err != nil {
+		if err := rows.Scan(&item.ID, &item.VoidedAt, &item.VoidedBy, &item.RequestedBy, &item.Reason, &item.VoidedByErasure); err != nil {
 			// coverage:ignore reason: row scan failure, not exercised by unit tests
 			return "", nil, fmt.Errorf("contracts: scan earlier contract: %w", err)
 		}

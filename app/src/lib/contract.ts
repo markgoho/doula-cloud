@@ -101,6 +101,7 @@ export interface EarlierContract {
 	id: string;
 	voidedAt: string;
 	voidedBy?: string;
+	voidedByErasure?: boolean;
 	requestedBy?: string;
 	reason?: string;
 }
@@ -519,6 +520,10 @@ export interface ContractListItem {
 	sentByName?: string;
 	madeByName?: string;
 	voidedByName?: string;
+	/**
+	True for a Contract voided by its Client's erasure, which no Staff member voided (#2997).
+	*/
+	voidedByErasure?: boolean;
 	dueDate?: string;
 	pregnancyEndedOn?: string;
 	birthOutcome?: string;
@@ -651,6 +656,12 @@ export function contractStepper(
 				: (['Sent', contract.sentByName] as const));
 	return name ? { verb, name } : undefined;
 }
+
+/**
+What the Who cell says of a Contract the Client's erasure voided (#2997): the cause in two words where the cell holds one line, and the sentence a screen reader and the CSV read.
+*/
+export const ERASURE_VOID_SHORT = 'Client erased';
+export const ERASURE_VOID_WORDS = 'Voided because the Client was erased';
 
 /**
 "Renata Alvarez" as "Renata A.", for a cell that holds one line.
