@@ -950,12 +950,14 @@ async function seedContractBook(
 	backdateVoidRequests(asked);
 }
 
-// Five Sent Contracts, each with Remind withheld for a different reason
+// Four Sent Contracts, each with Remind withheld for a different reason
 // (#2985), on Clients new to the book, each with a Doula. The reason is
 // real in every row: the first has a reminder that keeps failing to send,
-// the second Client lost her invite row, the third's invite lapsed, the
-// fourth's access was refused, and the fifth was erased (written to the database: the erasure route needs a second factor the seed does not hold). A merged Client is
-// not here: a merge moves the Contract to the surviving record, so no
+// the second Client lost her invite row, the third's invite lapsed, and
+// the fourth's access was refused. A fifth Client was sent a Contract and
+// then erased (written to the database: the erasure route needs a second
+// factor the seed does not hold), which voided it (#2990). A merged Client
+// is not here: a merge moves the Contract to the surviving record, so no
 // tombstone holds a Sent Contract. "Emailed today" is every Contract Sent
 // today, Grace's among them.
 async function seedWithheldReminders(request: APIRequestContext, roster: Roster, today: string): Promise<void> {

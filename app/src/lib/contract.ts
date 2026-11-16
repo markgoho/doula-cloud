@@ -28,7 +28,6 @@ export type RemindWithheld =
 	| 'not_invited'
 	| 'invite_lost'
 	| 'no_access'
-	| 'erased'
 	| 'merged';
 
 export interface ContractReminder {
@@ -385,7 +384,6 @@ export const REMIND_WITHHELD_WORDS: Record<Exclude<RemindWithheld, 'emailed_toda
 		toEngagement: true,
 		sentence: 'The Client has no portal access, so a reminder has nowhere to go. The Portal invite row on the Engagement says why.'
 	},
-	erased: { label: 'Erased', sentence: 'The Client’s details have been erased, so there is nobody to remind.' },
 	merged: { label: 'Merged', sentence: 'This Client record was merged into another, so there is nobody to remind here.' }
 };
 

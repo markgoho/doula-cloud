@@ -79,6 +79,9 @@ type ErasureResponse struct {
 // describes the act rather than her.
 type erasureScope struct {
 	Contracts int `json:"contracts"`
+	// ContractsVoided counts the unsigned Contracts redact_client_record
+	// voided with her record (#2990).
+	ContractsVoided int `json:"contractsVoided"`
 	// Offers counts the Offers (#2385) whose copy of her initial, area
 	// and due date this erasure emptied.
 	Offers          int `json:"offers"`
@@ -294,6 +297,11 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return ErasureResponse{}, err
 	}
+	contractsVoided, err := countContractsVoidedByErasure(ctx, tx, clientID)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return ErasureResponse{}, err
+	}
 	offers, err := redactOfferClientFields(ctx, tx, clientID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
@@ -340,6 +348,7 @@ func Erase(ctx context.Context, tx *sql.Tx, practiceID, clientID string, actor a
 
 	scope := erasureScope{
 		Contracts:                 contracts,
+		ContractsVoided:           contractsVoided,
 		Offers:                    offers,
 		StripeCustomers:           len(customers) + absorbedCustomers,
 		PortalAccount:             portalQueued,
@@ -568,6 +577,20 @@ func redactRecord(ctx context.Context, tx *sql.Tx, clientID string, actor activi
 		return fmt.Errorf("client: redact record: %d rows redacted, want 1", redacted)
 	}
 	return nil
+}
+
+// countContractsVoidedByErasure counts the Contracts of her own
+// Engagements that redact_client_record (00184) voided in this act.
+func countContractsVoidedByErasure(ctx context.Context, tx *sql.Tx, clientID string) (int, error) {
+	var n int
+	if err := tx.QueryRowContext(ctx,
+		`SELECT count(*) FROM contracts c JOIN engagements e ON e.id = c.engagement_id
+		  WHERE e.client_id = $1 AND c.voided_by_erasure`, clientID,
+	).Scan(&n); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return 0, fmt.Errorf("client: count contracts voided by erasure: %w", err)
+	}
+	return n, nil
 }
 
 // redactContractMergeFields empties the structured values a Contract

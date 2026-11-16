@@ -120,7 +120,6 @@ const (
 	withheldNotInvited   = "not_invited"
 	withheldInviteLost   = "invite_lost"
 	withheldNoAccess     = "no_access"
-	withheldErased       = "erased"
 	withheldMerged       = "merged"
 )
 
@@ -145,7 +144,7 @@ type remindTarget struct{ ContractID, ClientID string }
 // remindRules is the one rule for a reminder, read by the endpoint, the
 // Contracts list and the Engagement alike, so Remind is offered exactly
 // where pressing it will mail. It is keyed by Contract id. A reminder is
-// withheld, in this order, for a Client who is erased or merged away, one
+// withheld, in this order, for a Client merged away, one
 // the portal cannot reach, one already emailed today by a send or a
 // reminder, and a Contract whose earlier reminder is still queued.
 func remindRules(ctx context.Context, tx *sql.Tx, targets []remindTarget, zone *time.Location) (map[string]remindRule, error) {
@@ -228,10 +227,7 @@ func clientsReach(ctx context.Context, tx *sql.Tx, clientIDs []string, now time.
 
 func reachOf(s clientstanding.Standing, access *portalinvite.Access) reach {
 	if ok, refusal := clientstanding.ActRemindContract.Check(s); !ok {
-		if s.IsTombstone() {
-			return reach{withheldMerged, refusal}
-		}
-		return reach{withheldErased, refusal}
+		return reach{withheldMerged, refusal}
 	}
 	if access.CanReachPortal() {
 		return reach{}

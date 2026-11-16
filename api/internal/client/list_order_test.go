@@ -20,6 +20,8 @@ const (
 	orderOwed     = "owed"
 
 	contractSigned = "signed"
+	contractDraft  = "draft"
+	contractSent   = "sent"
 	voidedName     = "Voided"
 )
 

@@ -266,7 +266,7 @@ func TestErasureWorker_ClearsTheRedactionStateOnSuccess(t *testing.T) {
 // redact a non-terminal transaction, and the Practice cannot collect on
 // one whose Customer has been deleted, so the whole act refuses.
 func TestEraseHandler_RefusesWhileAnInvoiceIsUnsettled(t *testing.T) {
-	for _, status := range []string{"draft", "open"} {
+	for _, status := range []string{contractDraft, "open"} {
 		t.Run(status, func(t *testing.T) {
 			e := newEraseEnv(t)
 			seedInvoicedClient(t, e.DB, e.Practice.ID, e.ClientID, "cus_"+status, status, time.Hour)
@@ -362,7 +362,7 @@ func TestErasureWorker_PerformsEveryQueuedAct(t *testing.T) {
 		t.Fatalf("redaction jobs = %v, want one", stripe.redactions)
 	}
 	for act, status := range readOutboxStatus(t, db, clientID) {
-		if status != "sent" {
+		if status != contractSent {
 			t.Errorf("%s = %q, want sent", act, status)
 		}
 	}

@@ -45,8 +45,9 @@ const (
 // that dead-lettered never reached her and does not hold the day. The day
 // is counted across all of her Contracts, and the check and the write sit
 // behind one lock per Client, so two Staff pressing at once cannot both
-// pass. Refused first, before any write: a Contract that is not Sent, a
-// Client erased or merged away, and a Client who cannot reach the portal.
+// pass. Refused first, before any write: a Contract that is not Sent (which
+// an erased Client's never is, #2990), a Client merged away, and a Client who
+// cannot reach the portal.
 // Declared staffauth.AnyStaff at the mount, as send is, and mounted
 // through idempotency.Router.ReplayableGated, since a replay must not mail
 // her again.

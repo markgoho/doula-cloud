@@ -71,6 +71,7 @@ interface Detail {
 	clientPortalInviteDelivery?: PortalInviteDelivery;
 	clientEmailSuppressed?: boolean;
 	clientHasEmail?: boolean;
+	clientStanding?: 'live' | 'erased';
 	doulas: { staffId: string; name: string; openVisits: number }[];
 	canAttachSelf: boolean;
 	yourFee?: { amountCents: number; acceptedOn: string; terms?: string };
@@ -2000,6 +2001,17 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 		await expect.element(contractRegion().getByText(inviteBeforeContract)).toBeVisible();
 		await expect.element(contractRegion().getByRole('button', { name: 'Send portal invite' })).toBeVisible();
 		await expect.element(contractRegion().getByRole('button', { name: 'Create a Draft Contract' })).toBeVisible();
+	});
+
+	it('offers no Contract to create for an erased Client (#2990)', async () => {
+		await setupWithContract(
+			() => mockNoContract(birthRateOnly),
+			{ ...fixtureDetail, clientStanding: 'erased', clientHasEmail: false },
+			ownerSession
+		);
+
+		await expect.element(contractRegion().getByText('No Contract yet.')).toBeVisible();
+		expect(contractRegion().getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
 	});
 
 	it('says why the invite cannot be sent when the Client has no email address', async () => {

@@ -180,13 +180,13 @@ func TestPostRemindContractHandler_AContractorOnAGrantedAttachmentMay(t *testing
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.SignedIn)
 }
 
-func TestPostRemindContractHandler_RefusesAnErasedClient(t *testing.T) {
+func TestPostRemindContractHandler_RefusesAnErasedClientsVoidedContract(t *testing.T) {
 	e := remindable(t)
 	fixture.EraseClient(t, e.DB, e.Engagement.Client.ID)
 
 	got := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 
-	if want := msgRemindErasedWords; got.Message != want {
+	if _, want := contracts.TransitionRemind.Check(contracts.StatusVoided); got.Message != want {
 		t.Errorf("message = %q, want %q", got.Message, want)
 	}
 }
@@ -226,10 +226,7 @@ func TestPostRemindContractHandler_RefusesAClientTheReminderCannotReach(t *testi
 
 const msgRemindNoInviteWords = "This Client has not been invited to the portal yet, so a reminder has nowhere to go."
 
-const (
-	msgRemindErasedWords = "This Client's details have been erased, so you cannot remind this Client about the Contract."
-	msgRemindMergedWords = "This Client record has been merged into another, so you cannot remind this Client about the Contract."
-)
+const msgRemindMergedWords = "This Client record has been merged into another, so you cannot remind this Client about the Contract."
 
 // #2951: a Client is not emailed twice in a day, and the refusal says so
 // and when to come back.
@@ -498,7 +495,6 @@ func TestPostRemindContractHandler_AnEarlierReminderStillQueuedHoldsRemind(t *te
 // #2981: every reason the endpoint refuses a reminder for is the reason the
 // list and the Engagement withhold it for.
 func TestRemindIsWithheldForTheReasonTheEndpointRefusesFor(t *testing.T) {
-	erasedRefusal := msgRemindErasedWords
 	for _, tc := range []struct {
 		name, withheld, message string
 		prepare                 func(t *testing.T, e *env)
@@ -521,9 +517,6 @@ func TestRemindIsWithheldForTheReasonTheEndpointRefusesFor(t *testing.T) {
 			e.Exec(`DELETE FROM client_portal_users WHERE client_id = $1`, e.Engagement.Client.ID)
 			testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
 			e.Exec(`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
-		}},
-		{"erased", "erased", erasedRefusal, func(t *testing.T, e *env) {
-			fixture.EraseClient(t, e.DB, e.Engagement.Client.ID)
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

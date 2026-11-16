@@ -319,6 +319,13 @@ const (
 	ActionContractSigned  EngagementAction = "contract_signed"
 	ActionContractVoided  EngagementAction = "contract_voided"
 
+	// ActionContractVoidedByErasure records a Contract that was not signed
+	// being voided because its Client was erased (#2990), one entry per
+	// Contract, written by redact_client_record with the erasure's own
+	// actor and instant. Its own action, not ActionContractVoided, so it
+	// never reads as a Staff void. In staffingActions below: she is erased.
+	ActionContractVoidedByErasure EngagementAction = "contract_voided_by_erasure"
+
 	// ActionContractEdited records a save that moved a Draft Contract's
 	// merge-field values (#2520); a save that moves none records nothing.
 	// The diff names the changed fields, never their values. In
@@ -745,6 +752,8 @@ var staffingActions = map[EngagementAction]bool{
 	// #2520: a Draft she has not been sent.
 	ActionContractEdited: true,
 	ActionContractOpened: true,
+	// #2990: the Practice's own record of how an erasure closed a Contract.
+	ActionContractVoidedByErasure: true,
 	// #2951: and a Staff member's reminder to her, which is the Practice's act.
 	ActionContractReminded: true,
 	// And an Invoice draft Stripe would not finalize: it never reached her.

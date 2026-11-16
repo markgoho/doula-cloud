@@ -82,6 +82,11 @@ type Detail struct {
 	ClientEmailSuppressed      bool                `json:"clientEmailSuppressed"`
 	ClientHasEmail             bool                `json:"clientHasEmail"`
 
+	// ClientStanding is the Client record's standing (clientstanding),
+	// so the hub can say an erased Client cannot be invited and is
+	// offered no new Contract (#2990).
+	ClientStanding string `json:"clientStanding"`
+
 	// ClientsCanPay (#270) is cardpayments.ClientsCanPay -- one column, no
 	// Stripe round-trip. A standing fact about the Practice's own billing
 	// readiness, not the Owner's Stripe Connect account state
@@ -307,13 +312,13 @@ func DetailHandler() http.Handler {
 		var dueDate sql.NullString
 		err = c.Tx.QueryRowContext(r.Context(),
 			`SELECT e.id, c.id, c.given_name, c.family_name, c.preferred_name, e.status, e.created_at, e.due_date::text,
-			        e.kind::text, e.birth_outcome::text, e.pregnancy_ended_on::text
+			        e.kind::text, e.birth_outcome::text, e.pregnancy_ended_on::text, c.standing::text
 			 FROM engagements e
 			 JOIN clients c ON c.id = e.client_id
 			 WHERE e.id = $1 AND e.practice_id = $2`,
 			c.EngagementID, c.PracticeID,
 		).Scan(&d.EngagementID, &d.ClientID, &givenName, &familyName, &preferredName, &d.Status, &d.CreatedAt, &dueDate,
-			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn)
+			&d.Kind, &d.BirthOutcome, &d.PregnancyEndedOn, &d.ClientStanding)
 		if !engagementRead(w, err) {
 			return
 		}
