@@ -428,8 +428,8 @@
 						     Tab order is the drawn order. -->
 						<aside class="details details-aside" id={shownDetails === 'aside' ? 'details' : undefined} aria-labelledby="details-aside-heading" {@attach trackShownDetails}> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
 							<stack-l space="var(--space-3)">
-								<!-- The region's label, not a heading: the sections' h2s are the page's outline, in drawn order. -->
-								<p class="aside-title" id="details-aside-heading">Details</p>
+								<!-- An h2 drawn as the facts column's label: in one column the aside is display: none, so Details is announced once, as the last section's h2. -->
+								<Heading level={2} variant="card" text="Details" id="details-aside-heading" />
 								{@render details('aside', shownDetails === 'aside')}
 							</stack-l>
 						</aside>
@@ -797,16 +797,6 @@
 		.details-aside {
 			padding-block-start: var(--space-3);
 			border-block-start: var(--border-active) solid var(--color-outline);
-		}
-
-		.aside-title {
-			margin: 0;
-			font-family: var(--font-family-base);
-			color: var(--color-on-surface);
-			font-size: var(--text-subheading-size);
-			font-weight: var(--text-subheading-weight);
-			line-height: var(--text-subheading-leading);
-			letter-spacing: var(--text-subheading-tracking);
 		}
 
 		.back-to-top {

@@ -58,6 +58,11 @@ type ListResponse struct {
 	// "Next Visit" does not wait on paging. Present on the first page only,
 	// and only where such a Visit exists.
 	Next *Visit `json:"next,omitempty"`
+	// Last (#2991) is the newest Visit scheduled before now, over the whole
+	// Engagement, so the Visits state line's "Last Visit" does not depend on
+	// which rows the first page held. Present on the first page only, and
+	// only where such a Visit exists.
+	Last *Visit `json:"last,omitempty"`
 }
 
 // ListHandler lists Visits under an Engagement, most recent first,
@@ -73,7 +78,7 @@ type ListResponse struct {
 // display, the same pattern message.ListHandler already established.
 func ListHandler() http.Handler {
 	return staffauth.Handler(func(w http.ResponseWriter, r *http.Request, c staffauth.Call) {
-		var next *Visit
+		var next, last *Visit
 		page, ok := pagecursor.Fetch(w, r, "invalid cursor", pageSize,
 			func(after *pagecursor.Cursor) ([]Visit, error) {
 				// Read once for the whole page, before the rows: every Visit on
@@ -90,6 +95,10 @@ func ListHandler() http.Handler {
 						// coverage:ignore reason: DB query failure, not exercised by unit tests
 						return nil, err
 					}
+					if last, err = lastVisit(r.Context(), c.Tx, c.EngagementID, zone); err != nil {
+						// coverage:ignore reason: DB query failure, not exercised by unit tests
+						return nil, err
+					}
 				}
 				return listVisits(r.Context(), c.Tx, c.EngagementID, after, zone)
 			},
@@ -98,7 +107,7 @@ func ListHandler() http.Handler {
 			return
 		}
 
-		resp := ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next, Next: next}
+		resp := ListResponse{Items: page.Items, HasMore: page.HasMore, NextCursor: page.Next, Next: next, Last: last}
 		apierr.WriteJSON(w, http.StatusOK, resp)
 	}, staffauth.EngagementReach("engagement not found"))
 }
@@ -160,6 +169,18 @@ func nextVisit(ctx context.Context, tx *sql.Tx, engagementID string, zone *time.
 	list, err := queryVisits(ctx, tx, visitSelect+`
 		 WHERE v.engagement_id = $1 AND v.scheduled_at >= $2
 		 ORDER BY v.scheduled_at, v.id LIMIT 1`, []any{engagementID, clock.Now(ctx)}, zone)
+	if err != nil || len(list) == 0 {
+		return nil, err
+	}
+	return &list[0], nil
+}
+
+// lastVisit is the newest Visit on engagementID scheduled before now
+// (#2991), or nil where none is, read as nextVisit is.
+func lastVisit(ctx context.Context, tx *sql.Tx, engagementID string, zone *time.Location) (*Visit, error) {
+	list, err := queryVisits(ctx, tx, visitSelect+`
+		 WHERE v.engagement_id = $1 AND v.scheduled_at < $2
+		 ORDER BY v.scheduled_at DESC, v.id DESC LIMIT 1`, []any{engagementID, clock.Now(ctx)}, zone)
 	if err != nil || len(list) == 0 {
 		return nil, err
 	}

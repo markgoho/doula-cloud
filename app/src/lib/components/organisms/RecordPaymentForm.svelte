@@ -167,7 +167,7 @@
 </script>
 
 <section aria-label={label}>
-	<Heading level={3} text={heading} />
+	<Heading level={3} text={heading} focusOnAppearing />
 	<!-- Above the step switch: an untargeted refusal leaves the review step
 	     up, and this is still where it shows (#1228). -->
 	{#if errors.length > 0}

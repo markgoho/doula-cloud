@@ -620,7 +620,9 @@ const (
 	// DiffKeyAttachedStaffID is the one key an ActionDoulaAttached diff
 	// carries: the id of the Staff member who was attached. An
 	// ActionContractorFeePaid or ActionContractorFeePaymentReversed diff
-	// carries it too, naming the Doula whose fee it was (#2271). A reader
+	// carries it too, naming the Doula whose fee it was (#2271), and so does
+	// an ActionOnCallNarrowingChanged diff, naming the Doula whose days
+	// changed (#2991). A reader
 	// resolves it to her name on the read, the way
 	// DiffKeyAssignedStaffIDAfter is resolved (#887). Here, and not in
 	// engagementrequest, because the write and the Engagement ledger's

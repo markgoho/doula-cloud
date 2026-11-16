@@ -434,13 +434,33 @@ export async function loadContractorInvoices(
 	fetcher: Fetcher,
 	practiceId: string,
 	engagementId: string
-): Promise<{ invoices: ContractorInvoice[]; hasUnbilled: boolean }> {
+): Promise<{ invoices: ContractorInvoice[]; hasUnbilled: boolean; open: ContractorOpenSummary }> {
 	const response = await fetcher(invoicesPath(practiceId, engagementId));
 	if (!response.ok) {
 		throw new Error(await apiErrorMessage(response));
 	}
-	const body: { items: ContractorInvoice[]; hasUnbilled: boolean } = await response.json();
-	return { invoices: body.items, hasUnbilled: body.hasUnbilled };
+	const body: {
+		items: ContractorInvoice[];
+		hasUnbilled: boolean;
+		openCount: number;
+		overdueCount: number;
+		nextDueOn?: string;
+	} = await response.json();
+	return {
+		invoices: body.items,
+		hasUnbilled: body.hasUnbilled,
+		open: { openCount: body.openCount, overdueCount: body.overdueCount, nextDueOn: body.nextDueOn }
+	};
+}
+
+/** How many Invoices of the Engagement are open and how many of those are
+ * overdue, and the earliest day an open one that is not yet overdue falls due
+ * (#2991): the BFF's, over every Invoice and not the rows loaded. Counts and
+ * a day, never an amount. */
+export interface ContractorOpenSummary {
+	openCount: number;
+	overdueCount: number;
+	nextDueOn?: string;
 }
 
 /** The day an Invoice falls due when it is not the one the Practice's

@@ -76,7 +76,7 @@
 	import CoverageGapWhen from '#lib/components/molecules/CoverageGapWhen.svelte';
 	import { formatActivityTimestamp, formatCalendarDay, formatCalendarDayThisYear, formatCalendarWeekdayDay, formatInstant, weeksAlong, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
 	import { dayIn, instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
-	import { formatPhoneNumber } from '#lib/contactDetails.js';
+	import { formatAddress, formatPhoneNumber } from '#lib/contactDetails.js';
 	import { sectionOrder, type SectionHeading } from './sectionOrder.js';
 	import {
 		ACTIVITY_KINDS,
@@ -137,6 +137,7 @@
 		billingAfterRaising,
 		type ContractBilling,
 		type ContractorInvoice,
+		type ContractorOpenSummary,
 		formatAmount,
 		type OwedSummary,
 		type Invoice,
@@ -622,6 +623,9 @@
 	const visitsLoad = new SectionState<void>(undefined);
 	// The BFF's own "next" (#2755), over every Visit and not the rows loaded.
 	let nextVisit = $state<Visit | undefined>();
+	// The BFF's own "last" (#2991): the newest Visit that has happened, named
+	// in the state line so the notes a Doula wrote last time are one press away.
+	let lastVisit = $state<Visit | undefined>();
 	const visitsCreate = new SectionState<void>(undefined);
 	const isCreatingVisit = $derived(visitsCreate.isBusy);
 	// #250: optional at creation, the same as it is afterward -- a Doula
@@ -859,20 +863,21 @@
 		!isEarlierVisitsShown && (shownVisits.length < sortedVisits.length || visits.hasMore)
 	);
 
-	// The newest Visit that has happened, named in the state line so the notes
-	// a Doula wrote last time are one press away (T3).
-	const lastVisit = $derived(sortedVisits.find((visit) => visitGroup(visit, visitsNow).key === 'earlier'));
-
 	// Brings the row of the last Visit to the top and focuses it, whether or
-	// not the Earlier cap had drawn it; the same landing a `#visit-<id>` link
-	// makes on arrival, but repeatable.
+	// not the Earlier cap had drawn it or its page had loaded; the same
+	// landing a `#visit-<id>` link makes on arrival, but repeatable.
 	async function showLastVisit(event: MouseEvent) {
 		event.preventDefault();
-		if (!lastVisit) return;
-		if (!shownVisits.includes(lastVisit)) isEarlierVisitsShown = true;
+		const target = lastVisit;
+		if (!target) return;
+		if (shownVisits.every((visit) => visit.visitId !== target.visitId)) isEarlierVisitsShown = true;
+		while (visits.hasMore && visits.items.every((visit) => visit.visitId !== target.visitId)) {
+			await visits.loadMore();
+			if (visits.loadMoreError) break;
+		}
 		await tick();
 		const row = (['table', 'record'] as const)
-			.map((view) => document.querySelector<HTMLElement>(`#${CSS.escape(visitRowId(lastVisit, view))}`))
+			.map((view) => document.querySelector<HTMLElement>(`#${CSS.escape(visitRowId(target, view))}`))
 			.find((candidate) => candidate !== null && candidate.getClientRects().length > 0);
 		row?.scrollIntoView({ block: 'start' });
 		row?.focus({ preventScroll: true });
@@ -1020,6 +1025,7 @@
 	// reader gets the figures; a contractor only whether any is left.
 	let contractBilling = $state<ContractBilling | undefined>();
 	let hasUnbilledForContractor = $state(true);
+	let contractorOpen = $state<ContractorOpenSummary>({ openCount: 0, overdueCount: 0 });
 	// What every open Invoice adds up to (#2755), the BFF's sum for a money reader.
 	let owed = $state<OwedSummary | undefined>();
 	const invoicesError = $derived(invoicesState.error || contractorInvoicesState.error);
@@ -1358,6 +1364,8 @@
 		if (clientRecord && !clientRecord.erasedAt && clientRecord.email) {
 			rows.push({ label: 'Email', value: clientRecord.email, contact: 'mailto' });
 		}
+		const homeAddress = clientRecord && !clientRecord.erasedAt ? formatAddress(clientRecord) : '';
+		if (homeAddress) rows.push({ label: 'Home address', value: homeAddress });
 		rows.push(
 			{
 				label: 'Portal invite',
@@ -1403,6 +1411,7 @@
 		detail?: string;
 		href?: string;
 		hiddenWords?: string;
+		linkName?: string;
 		onClick?: (event: MouseEvent) => void;
 		/**
 		A state someone has to act on (warning) or that is late (error): an icon beside the words.
@@ -1437,6 +1446,7 @@
 			);
 			return factLink('On call tonight', 'On call', who.join('; '));
 		}
+		if (detail.doulas.length === 0) return factLink('On call tonight', 'On call', 'No Doula yet');
 		const from = detail.onCallWindow?.from;
 		return factLink(
 			'On call tonight',
@@ -1518,16 +1528,12 @@
 			}
 			return { text: 'Nothing owed.', isOverdue: false };
 		}
-		const open = contractorInvoicesState.value.filter((invoice) => invoice.status === 'open');
-		if (open.length === 0) return { text: 'No Invoice is open.', isOverdue: false };
-		const lateCount = open.filter((invoice) => invoice.daysOverdue > 0).length;
-		const nextDue = open.map((invoice) => invoice.dueOn).toSorted((a, b) => a.localeCompare(b))[0];
-		const noun = open.length === 1 ? 'Invoice' : 'Invoices';
-		const late = lateCount > 0 ? `, ${lateCount} overdue` : '';
-		return {
-			text: `${open.length} ${noun} open${late}, due ${formatCalendarDayThisYear(nextDue, timeZone)}.`,
-			isOverdue: lateCount > 0
-		};
+		const { openCount, overdueCount, nextDueOn } = contractorOpen;
+		if (openCount === 0) return { text: 'No Invoice is open.', isOverdue: false };
+		const noun = openCount === 1 ? 'Invoice' : 'Invoices';
+		const late = overdueCount > 0 ? `, ${overdueCount} overdue` : '';
+		const next = nextDueOn ? `, next due ${formatCalendarDayThisYear(nextDueOn, timeZone)}` : '';
+		return { text: `${openCount} ${noun} open${late}${next}.`, isOverdue: overdueCount > 0 };
 	});
 
 	const contractFact = $derived.by((): FactRow => {
@@ -1561,7 +1567,7 @@
 				label: 'Phone',
 				value: formatPhoneNumber(clientRecord.phone),
 				href: `tel:${clientRecord.phone.replaceAll(/[^\d+]/g, '')}`,
-				hiddenWords: 'Phone, call'
+				linkName: `Call ${detail.clientDisplayName}, ${formatPhoneNumber(clientRecord.phone)}`
 			};
 		}
 		return {
@@ -1641,6 +1647,7 @@
 		await visitsLoad.load(async () => {
 			const first = await loadVisitsPage(apiFetchWithSession, reference, '');
 			nextVisit = first.next;
+			lastVisit = first.last;
 			visits.reset(first);
 		}, 'We could not load the Visits.');
 	}
@@ -2004,6 +2011,7 @@
 					page.params.engagementId!
 				);
 				hasUnbilledForContractor = read.hasUnbilled;
+				contractorOpen = read.open;
 				return read.invoices;
 			}, 'We could not load the Invoices.');
 		}
@@ -3239,7 +3247,7 @@ if (contractBilling) {
 	<span class="fact {row.tone ?? ''}">
 		{#if row.tone}<Icon name={row.tone === 'error' ? 'warning-circle' : 'warning'} size={16} />{/if}
 		{#if row.href}
-			<Link href={row.href} label={row.value} ariaLabel="{row.value}, {row.hiddenWords}" onClick={row.onClick} />
+			<Link href={row.href} label={row.value} ariaLabel={row.linkName ?? `${row.value}, ${row.hiddenWords}`} onClick={row.onClick} />
 		{:else}
 			{row.value}
 		{/if}
@@ -3531,19 +3539,19 @@ if (contractBilling) {
 					? `Next: ${formatScheduledVisit(nextVisit.scheduledAt, timeZone)}, ${nextVisit.staffName}.`
 					: 'No Visit scheduled.'}
 			/>
-			{#if lastVisit?.scheduledAt}
-				<Link
-					href="#visit-{lastVisit.visitId}"
-					label="Last Visit: {formatCalendarWeekdayDay(dayIn(new Date(lastVisit.scheduledAt), timeZone), timeZone)}"
-					onClick={showLastVisit}
-				/>
-			{/if}
 			{#if addOpener}
 				<Button
 					label={addOpener.label}
 					variant="secondary"
 					onClick={addOpener.onClick}
 					focusOnAppearing={addOpener.focusOnAppearing}
+				/>
+			{/if}
+			{#if lastVisit?.scheduledAt}
+				<Link
+					href="#visit-{lastVisit.visitId}"
+					label="Last Visit: {formatCalendarWeekdayDay(dayIn(new Date(lastVisit.scheduledAt), timeZone), timeZone)}"
+					onClick={showLastVisit}
 				/>
 			{/if}
 		</cluster-l>
@@ -4412,7 +4420,8 @@ if (contractBilling) {
 		{@render loadFailure('the Activity', loadActivity)}
 	{:else}
 	<DataTable
-		columns={activityLedgerColumns(timeZone)}
+		columns={activityLedgerColumns(timeZone).map((column) => (column.label === 'What' ? { ...column, grows: true, track: '56rem' } : column))}
+		columnWidths="one-line"
 		rows={shownActivity}
 		hasMore={hasMoreActivity}
 		onLoadMore={showMoreActivity}

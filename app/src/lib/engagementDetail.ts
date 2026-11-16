@@ -521,9 +521,10 @@ export async function loadEngagement(
 	return (await response.json()) as EngagementSummary;
 }
 
-/** A page of Visits; the first also names the Visit that is next (#2755),
- * over every Visit and not only the ones loaded. */
-export type VisitsPage = CursorPage<Visit> & { next?: Visit };
+/** A page of Visits; the first also names the Visit that is next (#2755) and
+ * the one that was last (#2991), over every Visit and not only the ones
+ * loaded. */
+export type VisitsPage = CursorPage<Visit> & { next?: Visit; last?: Visit };
 
 /**
  * One page of Visits, newest first from the BFF (#446).

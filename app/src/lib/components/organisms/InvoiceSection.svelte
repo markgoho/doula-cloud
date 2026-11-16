@@ -503,12 +503,19 @@
 	// one Invoice's form is ever open at a time; the form itself is
 	// RecordPaymentForm, shared with a Doula's fee (#2271).
 	let payingInvoiceId = $state('');
+	let refocusedPayInvoiceId = $state('');
 
 	function startRecordingPayment(invoiceId: string) {
 		paymentRecorded = '';
+		refocusedPayInvoiceId = '';
 		payingInvoiceId = invoiceId;
 		cancelReversingPayment();
 		cancelRefundingPayment();
+	}
+
+	function abandonRecordingPayment() {
+		refocusedPayInvoiceId = payingInvoiceId;
+		cancelRecordingPayment();
 	}
 
 	function cancelRecordingPayment() {
@@ -716,6 +723,7 @@
 				label="Record payment"
 				variant="link"
 				{describedBy}
+				focusOnAppearing={refocusedPayInvoiceId === invoice.id}
 				onClick={() => startRecordingPayment(invoice.id)}
 			/>
 		{:else}
@@ -844,7 +852,7 @@
 				dateMissingMessage="Enter the date the payment was received"
 				{practiceTimezone}
 				onConfirm={confirmPayment}
-				onCancel={cancelRecordingPayment}
+				onCancel={abandonRecordingPayment}
 			/>
 		{/key}
 	{/if}
