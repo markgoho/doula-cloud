@@ -101,6 +101,9 @@ var (
 	ActCreateContract = Act{Does: "create a Contract"}
 	// ActSendContract is contracts.PostSendContractHandler.
 	ActSendContract = Act{Does: "send the Contract"}
+	// ActRemindContract is contracts.PostRemindContractHandler, through
+	// remindRules, which the Contracts list and the Engagement read too.
+	ActRemindContract = Act{Does: "remind this Client about the Contract"}
 	// ActStartPlan is plans.PostInstanceHandler.
 	ActStartPlan = Act{Does: "start a plan"}
 	// ActInviteToPortal is portalinvite.InviteHandler.
@@ -119,7 +122,7 @@ var Acts = []Act{
 	ActEdit, ActErase, ActMerge, ActMergeInto,
 	ActRequestEngagement, ActApproveRequest,
 	ActAddVisit, ActSendMessage,
-	ActCreateContract, ActSendContract,
+	ActCreateContract, ActSendContract, ActRemindContract,
 	ActStartPlan, ActInviteToPortal, ActOfferWork, ActCreateInvoice,
 }
 

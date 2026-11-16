@@ -32,7 +32,7 @@ import { drainOutbox, readMailbox } from '../e2e/outboxMail';
 import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateContracts, backdateInvoice, backdateInvoices, backdateVoidRequests, countPracticesNamed, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
+import { backdateContractNotices, backdateContracts, backdateInvoice, backdateInvoices, backdateVoidRequests, countPracticesNamed, holdQueuedReminders, losePortalAccess, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 import {
@@ -950,6 +950,47 @@ async function seedContractBook(
 	backdateVoidRequests(asked);
 }
 
+// Five Sent Contracts, each with Remind withheld for a different reason
+// (#2985), on Clients new to the book, each with a Doula. The reason is
+// real in every row: the first has a reminder that keeps failing to send,
+// the second Client lost her invite row, the third's invite lapsed, the
+// fourth's access was refused, and the fifth was erased (written to the database: the erasure route needs a second factor the seed does not hold). A merged Client is
+// not here: a merge moves the Contract to the surviving record, so no
+// tombstone holds a Sent Contract. "Emailed today" is every Contract Sent
+// today, Grace's among them.
+async function seedWithheldReminders(request: APIRequestContext, roster: Roster, today: string): Promise<void> {
+	const { staff } = roster;
+	const newClient = (givenName: string, familyName: string, doula: string) =>
+		addClient(request, roster, today, { givenName, familyName, kind: 'postpartum' }, { doulaStaffId: staff[doula].staffId });
+	const contractPath = (engagement: NamedEngagement) =>
+		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/contract`;
+	const sent = async (engagement: NamedEngagement) => {
+		await invitePortal(request, roster, engagement);
+		await contractFor(request, roster, today, engagement, undefined);
+	};
+
+	const ines = await newClient('Ines', 'Valdez', 'marisol');
+	const hollis = await newClient('Hollis', 'Teague', 'bethany');
+	const aubrey = await newClient('Aubrey', 'Lindqvist', 'kimiko');
+	const greta = await newClient('Greta', 'Novak', 'joss');
+	const esperanza = await newClient('Esperanza', 'Cole', 'aditi');
+	const days = [3, 8, 12, 15, 20];
+	const book = [ines, hollis, aubrey, greta, esperanza];
+	for (const engagement of book) await sent(engagement);
+
+	backdateContracts(book.map(({ engagementId }, index) => ({ engagementId, days: days[index] })));
+	backdateContractNotices(book.map(({ engagementId }, index) => ({ engagementId, days: days[index] })));
+	await send(request, 'POST', `${contractPath(ines)}/remind`, roster.owner);
+	backdateContractNotices([{ engagementId: ines.engagementId, days: 1 }]);
+	holdQueuedReminders([ines.engagementId]);
+	losePortalAccess([
+		{ clientId: hollis.clientId, how: 'not_invited' },
+		{ clientId: aubrey.clientId, how: 'invite_lost' },
+		{ clientId: greta.clientId, how: 'no_access' },
+		{ clientId: esperanza.clientId, how: 'erased' }
+	]);
+}
+
 export interface DemoPractice {
 	practiceId: string;
 	// false when this call found the demo Practice already there and wrote
@@ -1018,6 +1059,7 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	await seedScheduleBook(request, roster, today, tail);
 	const unsigned = await seedOnCall(request, roster, today, tail, camille);
 	await seedContractBook(request, roster, today, tail, unsigned, imani);
+	await seedWithheldReminders(request, roster, today);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 

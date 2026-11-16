@@ -811,6 +811,59 @@ export function backdateVoidRequests(moves: readonly { requestId: string; days: 
 }
 
 /**
+ * Moves the mail each Engagement's Contract queued or sent back `days`, so a
+ * Sent Contract was not emailed today and Remind is open to it again.
+ */
+export function backdateContractNotices(moves: readonly { engagementId: string; days: number }[]): void {
+	if (moves.length === 0) return;
+	const rows = moves.map(({ engagementId, days }) => `(${sqlLiteral(engagementId)}::uuid, interval '${days} days')`).join(', ');
+	execSQL(
+		`WITH moved(engagement_id, shift) AS (VALUES ${rows})
+		 UPDATE contract_notice_outbox o SET created_at = o.created_at - moved.shift,
+		   sent_at = o.sent_at - moved.shift, next_attempt_at = o.next_attempt_at - moved.shift
+		 FROM moved, contracts c WHERE c.id = o.contract_id AND c.engagement_id = moved.engagement_id`
+	);
+}
+
+/**
+ * Leaves each Engagement's queued reminder failing its sends: tried twice,
+ * the next try a day off, so the drain leaves it pending and Remind reads
+ * as on its way.
+ */
+export function holdQueuedReminders(engagementIds: readonly string[]): void {
+	if (engagementIds.length === 0) return;
+	const ids = engagementIds.map((id) => `${sqlLiteral(id)}::uuid`).join(', ');
+	execSQL(
+		`UPDATE contract_notice_outbox o SET attempt_count = 2, next_attempt_at = sim.now() + interval '1 day',
+		   last_error = 'mail service did not answer'
+		 FROM contracts c WHERE c.id = o.contract_id AND o.kind = 'reminder' AND o.status = 'pending'
+		   AND c.engagement_id IN (${ids})`
+	);
+}
+
+// How a Client's portal access came to be closed to a reminder.
+export type LostPortalAccess = 'not_invited' | 'invite_lost' | 'no_access' | 'erased';
+
+/**
+ * Closes the portal to each Client after her Contract was sent: her invite
+ * row gone, her invite lapsed, or her access refused because she signs in
+ * through another record. No endpoint does these to a Client who already
+ * holds a Sent Contract, so the rows are written.
+ */
+export function losePortalAccess(moves: readonly { clientId: string; how: LostPortalAccess }[]): void {
+	for (const { clientId, how } of moves) {
+		const client = sqlLiteral(clientId);
+		const change = {
+			not_invited: `DELETE FROM portal_invite_outbox WHERE client_portal_user_id IN (SELECT id FROM client_portal_users WHERE client_id = ${client}::uuid); DELETE FROM client_portal_users WHERE client_id = ${client}::uuid`,
+			invite_lost: `UPDATE client_portal_users SET invite_token_expires_at = sim.now() - interval '1 day' WHERE client_id = ${client}::uuid`,
+			no_access: `UPDATE client_portal_users SET state = 'refused', access_refused_at = sim.now() WHERE client_id = ${client}::uuid`,
+			erased: `SELECT redact_client_record(${client}::uuid, sim.now(), 'system', NULL)`
+		}[how];
+		execSQL(change);
+	}
+}
+
+/**
  * Seeds a Practice that signed up the month before the last closed one
  * and bought 4 Credits in the last closed one, both in New York time,
  * the read ops's monthly Credits page shows (#2476). Returns that month

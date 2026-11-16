@@ -789,9 +789,18 @@
 				{/if}
 			{:else if contract.remindWithheld && contract.remindWithheld !== 'emailed_today'}
 				{@const words = REMIND_WITHHELD_WORDS[contract.remindWithheld]}
-				{#if tableView === 'table'}
+				{#if tableView === 'table' && words.toEngagement}
+					<Link
+						href={engagementHref(contract)}
+						label={words.label}
+						ariaLabel={`${words.label}, ${contract.clientName}. ${words.sentence}`}
+					/>
+				{:else if tableView === 'table'}
 					<span aria-hidden="true">{words.label}</span>
 					<span class="visually-hidden">{words.sentence}</span>
+				{:else if words.toEngagement}
+					<span>{words.sentence}</span>
+					<Link href={engagementHref(contract)} label={words.label} ariaLabel={`${words.label}, ${contract.clientName}`} />
 				{:else}
 					<span>{words.sentence}</span>
 				{/if}

@@ -27,6 +27,7 @@ var gatedRoutes = map[string][]string{
 	"message/create.go":            {"ActSendMessage"},
 	"contracts/contract.go":        {"ActCreateContract"},
 	"contracts/send.go":            {"ActSendContract"},
+	"contracts/remindable.go":      {"ActRemindContract"},
 	"plans/instance.go":            {"ActStartPlan"},
 	"portalinvite/invite.go":       {"ActInviteToPortal"},
 	"offer/create.go":              {"ActOfferWork"},

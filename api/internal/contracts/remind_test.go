@@ -8,7 +8,6 @@ import (
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/apierrtest"
-	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/contracts"
 	"doula-cloud/api/internal/fixture"
 	"doula-cloud/api/internal/reqtest"
@@ -187,7 +186,7 @@ func TestPostRemindContractHandler_RefusesAnErasedClient(t *testing.T) {
 
 	got := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 
-	if _, want := clientstanding.ActSendContract.Check(clientstanding.Erased); got.Message != want {
+	if want := msgRemindErasedWords; got.Message != want {
 		t.Errorf("message = %q, want %q", got.Message, want)
 	}
 }
@@ -226,6 +225,11 @@ func TestPostRemindContractHandler_RefusesAClientTheReminderCannotReach(t *testi
 }
 
 const msgRemindNoInviteWords = "This Client has not been invited to the portal yet, so a reminder has nowhere to go."
+
+const (
+	msgRemindErasedWords = "This Client's details have been erased, so you cannot remind this Client about the Contract."
+	msgRemindMergedWords = "This Client record has been merged into another, so you cannot remind this Client about the Contract."
+)
 
 // #2951: a Client is not emailed twice in a day, and the refusal says so
 // and when to come back.
@@ -494,7 +498,7 @@ func TestPostRemindContractHandler_AnEarlierReminderStillQueuedHoldsRemind(t *te
 // #2981: every reason the endpoint refuses a reminder for is the reason the
 // list and the Engagement withhold it for.
 func TestRemindIsWithheldForTheReasonTheEndpointRefusesFor(t *testing.T) {
-	_, erasedRefusal := clientstanding.ActSendContract.Check(clientstanding.Erased)
+	erasedRefusal := msgRemindErasedWords
 	for _, tc := range []struct {
 		name, withheld, message string
 		prepare                 func(t *testing.T, e *env)
@@ -548,7 +552,7 @@ func TestRemindIsWithheldForAMergedClient(t *testing.T) {
 
 	out := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
 
-	if _, want := clientstanding.ActSendContract.Check(clientstanding.Merged); out.Message != want {
+	if want := msgRemindMergedWords; out.Message != want {
 		t.Fatalf("refusal = %q, want %q", out.Message, want)
 	}
 	if page := e.contract(); page.CanRemind || page.RemindWithheld != "merged" {
