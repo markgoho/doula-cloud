@@ -220,18 +220,18 @@ describe('RecordDetail.svelte', () => {
 				render: () => `<p data-view="${view()}" data-shown="${isShown()}">Phone (585) 555-0100</p>`
 			}));
 
-			it('is drawn twice, the aside after the facts and the last block after the sections, and one of them is displayed', async () => {
+			it('is drawn twice, each copy after the sections so heading navigation reaches the main column first, and one of them is displayed', async () => {
 				// A wide window, so the record body is two columns.
 				await page.viewport(1440, 900);
 				const { container } = await setup({ isContentsShown: true, facts: textSnippet('Contract Signed'), details });
 
 				const copies = [...container.querySelectorAll('[data-view]')];
-				expect(copies.map((copy) => (copy as HTMLElement).dataset.view)).toEqual(['aside', 'section']);
-				const [aside, last] = copies as [HTMLElement, HTMLElement];
+				expect(copies.map((copy) => (copy as HTMLElement).dataset.view)).toEqual(['section', 'aside']);
+				const [last, aside] = copies as [HTMLElement, HTMLElement];
 				const facts = page.getByText('Contract Signed').element();
 				const visits = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
-				expect(facts.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-				expect(aside.compareDocumentPosition(visits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+				expect(facts.compareDocumentPosition(visits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+				expect(visits.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 				expect(visits.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 				// Which copy is displayed is the container query's; the snippet is told the same.
 				const isAsideDisplayed = getComputedStyle(aside.closest('aside')!).display !== 'none';
