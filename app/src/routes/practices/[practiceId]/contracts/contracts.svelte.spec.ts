@@ -7,7 +7,7 @@ import '#lib/styles/app.css';
 import { toPageState } from '../../../routeFixture.js';
 import type { ListReturn } from '#lib/listReturn.js';
 import { contractorItems, data, doulas, fixture, items, queue, voidRequests, withheldItems } from './page.fixture.js';
-import { REMIND_WITHHELD_WORDS } from '#lib/contract.js';
+import { EMAILED_TODAY_WORDS, REMIND_WITHHELD_WORDS } from '#lib/contract.js';
 import { pageState } from '#testing/routePage.js';
 import { beforeNavigate, goto, snapshot } from '$app/navigation';
 import Page from './ContractsScreen.svelte';
@@ -300,13 +300,13 @@ describe('the reminder (#2951)', () => {
 
 		const refused = items.find((item) => item.canRemindOn)!;
 		expect(testPage.getByRole('button', { name: `Remind the Client, ${refused.clientName}` }).elements()).toHaveLength(0);
-		await expect.element(testPage.getByText(`Remind the Client Nov 15`, { exact: false })).toBeInTheDocument();
+		await expect.element(testPage.getByText(EMAILED_TODAY_WORDS.label, { exact: true })).toBeInTheDocument();
 	});
 
 	it('says it in words on the card of a narrow list (#2978)', async () => {
 		await setup({ width: 600 });
 
-		await expect.element(testPage.getByText('Remind again Nov 15')).toBeVisible();
+		await expect.element(testPage.getByText(`${EMAILED_TODAY_WORDS.sentence} You can remind again Nov 15.`).last()).toBeVisible();
 	});
 
 	it('says in words why Remind is withheld, for each reason (#2981)', async () => {
