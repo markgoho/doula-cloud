@@ -857,7 +857,7 @@ export function losePortalAccess(moves: readonly { clientId: string; how: LostPo
 			not_invited: `DELETE FROM portal_invite_outbox WHERE client_portal_user_id IN (SELECT id FROM client_portal_users WHERE client_id = ${client}::uuid); DELETE FROM client_portal_users WHERE client_id = ${client}::uuid`,
 			invite_lost: `UPDATE client_portal_users SET invite_token_expires_at = sim.now() - interval '1 day' WHERE client_id = ${client}::uuid`,
 			no_access: `UPDATE client_portal_users SET state = 'refused', access_refused_at = sim.now() WHERE client_id = ${client}::uuid`,
-			erased: `SELECT redact_client_record(${client}::uuid, sim.now(), 'system', NULL)`
+			erased: `SELECT redact_client_record(${client}::uuid, sim.now(), 'system', NULL); UPDATE client_portal_users SET state = 'revoked', invite_token = NULL, invite_token_expires_at = NULL, access_refused_at = NULL, revoked_at = sim.now(), revoke_reason = 'client_erased' WHERE client_id = ${client}::uuid AND state = 'invited'`
 		}[how];
 		execSQL(change);
 	}
