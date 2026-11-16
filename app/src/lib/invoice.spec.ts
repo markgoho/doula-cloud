@@ -83,12 +83,20 @@ describe('loadInvoices', () => {
 describe('loadContractorInvoices (#2094)', () => {
 	it('reads the same path and returns her money-free rows', async () => {
 		const row = { id: 'inv-1', status: 'open', raisedOn: '2026-10-01', dueOn: '2026-10-31', daysOverdue: 0 };
-		const fetcher = vi.fn().mockResolvedValue(jsonResponse({ items: [row], hasMore: false, hasUnbilled: true }));
+		const fetcher = vi
+			.fn()
+			.mockResolvedValue(
+				jsonResponse({ items: [row], hasMore: false, hasUnbilled: true, openCount: 3, overdueCount: 1, nextDueOn: '2026-12-01' })
+			);
 
 		const result = await loadContractorInvoices(fetcher, 'practice-1', 'eng-1');
 
 		expect(fetcher).toHaveBeenCalledWith('/api/practices/practice-1/engagements/eng-1/contract/invoices');
-		expect(result).toEqual({ invoices: [row], hasUnbilled: true });
+		expect(result).toEqual({
+			invoices: [row],
+			hasUnbilled: true,
+			open: { openCount: 3, overdueCount: 1, nextDueOn: '2026-12-01' }
+		});
 	});
 
 	it('throws with the response body text on a non-ok response', async () => {

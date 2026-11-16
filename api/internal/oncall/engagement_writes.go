@@ -159,7 +159,7 @@ func PutNarrowingHandler() http.Handler {
 		before.From, before.To = nullString(from), nullString(to)
 
 		if !sameString(before.From, req.From) || !sameString(before.To, req.To) {
-			if !updateAndRecord(w, r, c, activity.ActionOnCallNarrowingChanged, map[string]any{"staffId": staffID, diffBefore: before, diffAfter: req},
+			if !updateAndRecord(w, r, c, activity.ActionOnCallNarrowingChanged, map[string]any{activity.DiffKeyAttachedStaffID: staffID, diffBefore: before, diffAfter: req},
 				`UPDATE engagement_attachments SET on_call_from = $3, on_call_to = $4
 				  WHERE engagement_id = $1 AND staff_id = $2 AND state = 'granted'`,
 				c.EngagementID, staffID, req.From, req.To) {

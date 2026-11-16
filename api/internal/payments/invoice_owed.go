@@ -19,6 +19,8 @@ import (
 type OwedSummary struct {
 	OwedCents       int64   `json:"owedCents"`
 	OverdueCents    int64   `json:"overdueCents"`
+	OpenCount       int     `json:"openCount"`
+	OverdueCount    int     `json:"overdueCount"`
 	NextDueOn       *string `json:"nextDueOn,omitempty"`
 	OldestOverdueOn *string `json:"oldestOverdueOn,omitempty"`
 }
@@ -29,6 +31,8 @@ type OwedSummary struct {
 var owedSummaryQuery = `SELECT
 		COALESCE(SUM(i.amount_cents), 0),
 		COALESCE(SUM(i.amount_cents) FILTER (WHERE ` + overdue.Expr("$2") + `), 0),
+		COUNT(*),
+		COUNT(*) FILTER (WHERE ` + overdue.Expr("$2") + `),
 		MIN(i.due_at) FILTER (WHERE NOT ` + overdue.Expr("$2") + `),
 		MIN(i.due_at) FILTER (WHERE ` + overdue.Expr("$2") + `)
 	FROM invoices i
@@ -41,7 +45,7 @@ func readOwedSummary(ctx context.Context, tx *sql.Tx, engagementID string, days 
 	var owed OwedSummary
 	var nextDue, oldestOverdue sql.NullTime
 	if err := tx.QueryRowContext(ctx, owedSummaryQuery, engagementID, overdue.From(days.now, days.zone)).
-		Scan(&owed.OwedCents, &owed.OverdueCents, &nextDue, &oldestOverdue); err != nil {
+		Scan(&owed.OwedCents, &owed.OverdueCents, &owed.OpenCount, &owed.OverdueCount, &nextDue, &oldestOverdue); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, fmt.Errorf("payments: owed summary: %w", err)
 	}

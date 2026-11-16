@@ -162,6 +162,14 @@ type ContractorInvoicesResponse struct {
 	// bill, never how much: she may raise an Invoice and may not read the
 	// price (ADR-0008).
 	HasUnbilled bool `json:"hasUnbilled"`
+	// OpenCount and OverdueCount (#2991) are how many of the Engagement's
+	// Invoices are open and how many of those are overdue, over all of them
+	// rather than this page, and NextDueOn is the earliest due day among the
+	// open ones not yet overdue (YYYY-MM-DD, absent where none). Counts and a
+	// day, never an amount (ADR-0008).
+	OpenCount    int     `json:"openCount"`
+	OverdueCount int     `json:"overdueCount"`
+	NextDueOn    *string `json:"nextDueOn,omitempty"`
 }
 
 // contractorInvoiceRows is items with every money field left behind:
@@ -645,19 +653,22 @@ func GetInvoicesHandler() http.Handler {
 		}
 
 		hasMore := next != nil
-		if c.Reader.IsAmbientContractor() {
-			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
-				Items:       contractorInvoiceRows(items),
-				NextCursor:  next,
-				HasMore:     hasMore,
-				HasUnbilled: billing != nil && billing.UnbilledCents > 0,
-			})
-			return
-		}
 		owed, err := readOwedSummary(r.Context(), c.Tx, c.EngagementID, days)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		if c.Reader.IsAmbientContractor() {
+			apierr.WriteJSON(w, http.StatusOK, ContractorInvoicesResponse{
+				Items:        contractorInvoiceRows(items),
+				NextCursor:   next,
+				HasMore:      hasMore,
+				HasUnbilled:  billing != nil && billing.UnbilledCents > 0,
+				OpenCount:    owed.OpenCount,
+				OverdueCount: owed.OverdueCount,
+				NextDueOn:    owed.NextDueOn,
+			})
 			return
 		}
 		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore, ContractBilling: billing, Owed: owed})

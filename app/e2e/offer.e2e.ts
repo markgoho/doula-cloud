@@ -135,7 +135,7 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
-	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
+	await expect(page.getByRole('definition').filter({ hasText: /^No Doula yet$/ })).toBeVisible();
 	// #2755: behind the Details region's link for the Doulas (drawn twice; the hidden copy is not in the accessibility tree).
 	await page.getByRole('button', { name: /^Put (a Doula|yourself) on$/ }).click();
 	await page.getByRole('button', { name: 'Put me on this work' }).click();
@@ -209,7 +209,7 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	await enterPractice(context, page, headers, practiceId);
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
-	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
+	await expect(page.getByRole('definition').filter({ hasText: /^No Doula yet$/ })).toBeVisible();
 	await expect(page.getByRole('heading', { name: 'Offers' })).toBeVisible();
 	// #2004: the form opens only when asked.
 	await page.getByRole('button', { name: 'Offer this work' }).click();

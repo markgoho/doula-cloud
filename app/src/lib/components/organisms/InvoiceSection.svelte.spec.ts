@@ -250,6 +250,18 @@ describe('InvoiceSection.svelte', () => {
 		await expect.element(page.getByRole('button', { name: 'Record payment' })).toBeVisible();
 	});
 
+	// #2991: the form takes focus when it opens, and Cancel gives it back to the opener.
+	it('moves focus into the Record payment form, and Cancel returns it to Record payment', async () => {
+		await setup({ invoices: [invoiceOpen], isOwnerOrAdmin: true });
+		const opener = page.getByRole('button', { name: 'Record payment' });
+
+		await opener.click();
+		await expect.element(page.getByRole('heading', { name: /^Record a payment of/ })).toHaveFocus();
+		await page.getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(opener).toHaveFocus();
+	});
+
 	// #2017's rule: no list item holds a control.
 	it('puts no Invoice in a list item', async () => {
 		await setup({ invoices: [invoiceOpen, invoicePaid], isOwnerOrAdmin: true });

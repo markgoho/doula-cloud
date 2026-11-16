@@ -2172,7 +2172,7 @@ describe('the note when work started (#2597)', () => {
 });
 
 describe('the order of the sections (#2146)', () => {
-	it('runs a postpartum Engagement by its care phase, the Care Plan not started last of the filled, Activity at the end, Details a label and not a heading (#2755)', async () => {
+	it('runs a postpartum Engagement by its care phase, the Care Plan not started last of the filled, Activity at the end, Details an h2 after the facts (#2991)', async () => {
 		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
 		// Offers and Doula fees are an Owner's or an Admin's, drawn once
 		// each read lands.
@@ -2182,9 +2182,10 @@ describe('the order of the sections (#2146)', () => {
 			.getByRole('heading', { level: 2 })
 			.all()
 			.map((heading) => heading.element().textContent?.trim());
-		// The wide window draws the aside after the facts; its title labels the
-		// region and is not a heading, so the h2s are the sections', in drawn order.
+		// The wide window draws the aside after the facts, its title an h2 reached
+		// in the order it is drawn; the narrow copy is not drawn, so none repeats.
 		expect(headings).toEqual([
+			'Details',
 			'Visits',
 			'Messages',
 			'Invoices',
@@ -4043,7 +4044,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 	it("shows a contractor each Invoice's date and status, and says what she does not see, as information (#2094)", async () => {
 		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
 			path.endsWith('/contract/invoices') && init?.method !== 'POST'
-				? jsonResponse({ items: contractorInvoices, hasMore: false })
+				? jsonResponse({ items: contractorInvoices, hasMore: false, openCount: 5, overdueCount: 2, nextDueOn: '2026-12-01' })
 				: undefined
 		);
 
@@ -4053,8 +4054,9 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect
 			.element(testPage.getByText(/You see when each Invoice was raised and where it stands, not what the Client pays/))
 			.toBeVisible();
-		// The state line says how many are open and when, never an amount (#2755).
-		await expect.element(invoices.getByText(/1 Invoice open, 1 overdue, due Aug 31(, 2026)?\./)).toBeVisible();
+		// The state line says how many are open and when, from the BFF's counts and never
+		// the rows loaded, and never an amount (#2755, #2991).
+		await expect.element(invoices.getByText(/5 Invoices open, 2 overdue, next due Dec 1(, 2026)?\./)).toBeVisible();
 		expect(invoiceListReads()).toHaveLength(1);
 });
 
@@ -5193,7 +5195,7 @@ describe("the Client's phone as a fact (#2755, round 3)", () => {
 	it('calls the number from the facts, and Details holds no Phone row', async () => {
 		await renderWithFixtureResponder(clientRead('585-555-0142'));
 
-		const link = testPage.getByRole('link', { name: '(585) 555-0142, Phone, call' });
+		const link = testPage.getByRole('link', { name: 'Call Anne-Marie Ochieng-Whitfield, (585) 555-0142' });
 		await expect.element(link).toHaveAttribute('href', 'tel:5855550142');
 		expect(summaryCard().getByText('Phone', { exact: true }).elements()).toHaveLength(0);
 	});
@@ -5224,7 +5226,8 @@ const visitsResponder = (path: string, init?: unknown) => {
 				visitRow('v-3', 'Logged Last', '2026-09-01T15:00:00Z'),
 				visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
 			],
-			hasMore: false
+			hasMore: false,
+			last: visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
 		})
 	);
 };
@@ -5276,6 +5279,65 @@ describe('Compose and the payment check step return focus (#2755, round 3)', () 
 		await messagesSection().getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(header).toHaveFocus();
+	});
+});
+
+describe('the record after round 3 (#2991)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('says "No Doula yet" for the on call fact of an Engagement with no Doula', async () => {
+		await renderWithFixtureResponder(undefined, {
+			...beforeTheBirthDetail,
+			doulas: [],
+			tonight: undefined,
+			onCallWindow: { from: '2099-01-01', to: '2099-02-01' }
+		});
+
+		await expect.element(testPage.getByRole('link', { name: /^No Doula yet, On call tonight/ })).toBeVisible();
+	});
+
+	it('draws the Client home address in Details, from her record', async () => {
+		await renderWithFixtureResponder(
+			clientRead('585-555-0142', {
+				addressLine1: '12 Park Avenue',
+				addressLocality: 'Rochester',
+				addressRegion: 'NY',
+				addressPostalCode: '14607'
+			})
+		);
+
+		await expect.element(summaryCard().getByText('12 Park Avenue, Rochester, NY 14607')).toBeVisible();
+	});
+
+	it('puts "Add a Visit" before the Last Visit link', async () => {
+		await renderWithFixtureResponder(visitsResponder);
+
+		const link = testPage.getByRole('link', { name: 'Last Visit: Tue Aug 18' });
+		await expect.element(link).toBeVisible();
+		const add = testPage.getByRole('button', { name: 'Add a Visit' }).first().element();
+		expect(add.compareDocumentPosition(link.element()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+	});
+
+	it('loads the page that holds the last Visit when it is not among the rows loaded', async () => {
+		const older = visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z');
+		await renderWithFixtureResponder((path, init) => {
+			if (init || !path.includes('/visits')) return;
+			if (path.includes('cursor=')) return Promise.resolve(jsonResponse({ items: [older], hasMore: false }));
+			return Promise.resolve(
+				jsonResponse({
+					items: [visitRow('v-3', 'Logged Last', '2026-09-01T15:00:00Z')],
+					hasMore: true,
+					nextCursor: 'page-2',
+					last: older
+				})
+			);
+		});
+
+		await testPage.getByRole('link', { name: 'Last Visit: Tue Aug 18' }).click();
+
+		await expect.element(testPage.getByRole('cell', { name: 'Aug Eighteen', exact: true })).toBeVisible();
 	});
 });
 

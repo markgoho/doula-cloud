@@ -213,6 +213,8 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 		return "Fee paid to " + staffDisplayName(after)
 	case string(activity.ActionContractorFeePaymentReversed):
 		return "Fee payment removed for " + staffDisplayName(after)
+	case string(activity.ActionOnCallNarrowingChanged):
+		return narrowingDetail(diff, after)
 	case string(activity.ActionInvoicePaymentFailed):
 		return paymentMethodDetail("Tried to pay by ", diff)
 	case string(activity.ActionInvoicePaymentProcessing):
@@ -223,6 +225,46 @@ func entryDetail(action string, diff []byte, before, after sql.NullString) strin
 		return voidedDetail(diff)
 	}
 	return reassignmentDetail(action, before, after)
+}
+
+// narrowingDetail says which Doula an on_call_narrowing_changed entry
+// concerns and the days she is on call for now (#2991), so two such entries
+// on one Engagement can be told apart. The days are the ones the diff's
+// "after" holds, both ends inclusive; none at all is the whole window.
+func narrowingDetail(diff []byte, doula sql.NullString) string {
+	var fields struct {
+		After struct {
+			From *string `json:"from"`
+			To   *string `json:"to"`
+		} `json:"after"`
+	}
+	if err := json.Unmarshal(diff, &fields); err != nil {
+		return ""
+	}
+	days := "the whole window"
+	from, to := narrowingDay(fields.After.From), narrowingDay(fields.After.To)
+	switch {
+	case from != "" && to != "":
+		days = from + " to " + to
+	case from != "":
+		days = "from " + from
+	case to != "":
+		days = "through " + to
+	}
+	return "Doulas on call changed: " + staffDisplayName(doula) + ", " + days
+}
+
+// narrowingDay writes a stored calendar day as "Jan 2, 2006", or "" where
+// none is stored or it is not a day.
+func narrowingDay(day *string) string {
+	if day == nil {
+		return ""
+	}
+	parsed, err := time.Parse(time.DateOnly, *day)
+	if err != nil {
+		return ""
+	}
+	return parsed.Format("Jan 2, 2006")
 }
 
 // attachmentDetail says which Doula a doula_attached entry put on the
