@@ -94,6 +94,7 @@
 		billingMode,
 		clientsCanPay,
 		hasClientEmail,
+		createRefusal,
 		isOwner,
 		isOwnerOrAdmin,
 		canReadInvoiceMoney = true,
@@ -122,6 +123,10 @@
 		billingMode: BillingMode | undefined;
 		clientsCanPay: boolean;
 		hasClientEmail: boolean;
+		/** Why no Invoice can be raised for this Client at all, such as an
+		 * erasure (the BFF's `clientstanding` gate). It stands in place of
+		 * the create control and of every other reason it would give. */
+		createRefusal?: string;
 		isOwner: boolean;
 		/** The Practice's own IANA zone (`practices.timezone`, ADR-0036) --
 		 * what RecordPaymentForm reads "today" in, so the payment-date field's
@@ -951,7 +956,9 @@
 	/>
 {/snippet}
 
-{#if !isBillable}
+{#if createRefusal}
+	<Notice variant="info" message={createRefusal} />
+{:else if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if isNothingLeftToBill}
 	<Notice variant="info" message={nothingLeftToBillMessage} />

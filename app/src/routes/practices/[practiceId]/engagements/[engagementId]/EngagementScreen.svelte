@@ -685,6 +685,8 @@
 	// until she has accepted an invite the thread offers no form and says
 	// why, and what opens it. Drawing only: the same words the drawing's
 	// empty Messages section has.
+	const erasedBecause = (consequence: string) => (isClientErased ? `This Client was erased, so ${consequence}.` : undefined);
+	const erasedVisitsNote = $derived(erasedBecause('no Visit can be added'));
 	const messageBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
 		if (isClientErased) return 'This Client was erased, so no message can be sent.';
@@ -2653,7 +2655,9 @@
 		has. Both are secondary, as drawn: the header names what can be
 		done, and the page's one accent is spent lower down.
 	-->
-	<Link href="#messages" label="Message the Client" variant="secondary" />
+	{#if !isClientErased}
+		<Link href="#messages" label="Message the Client" variant="secondary" />
+	{/if}
 	<!--
 		#255: an accepted Client is never offered a second invite -- the
 		"Portal invite" summary row above already says "Accepted", so
@@ -2910,7 +2914,7 @@
 		opener, as the drawing has its actions under the table; the form,
 		and its one primary, only when asked.
 	-->
-	{@const canAddVisit = canAssignVisits || canLogOwnVisit}
+	{@const canAddVisit = (canAssignVisits || canLogOwnVisit) && !isClientErased}
 	{@const addOpener =
 		canAddVisit && openVisitChange !== 'add'
 			? {
@@ -2954,6 +2958,10 @@
 
 	{#if visitsSavedMessage}
 		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
+	{/if}
+
+	{#if erasedVisitsNote}
+		<Notice variant="info" message={erasedVisitsNote} />
 	{/if}
 
 	{#if addOpener && sortedVisits.length > 0}
@@ -3041,8 +3049,8 @@
 				<EmptyState message={displayKind === 'birth' ? NO_BIRTH_PLAN_AFTER_OUTCOME : NO_BIRTH_PLAN_ON_POSTPARTUM} />
 			{:else}
 				<EmptyState
-					message="The {heading} is not started yet."
-					action={{ label: `Start the ${heading}`, onClick: () => handleStartPlan(planType) }}
+					message={erasedBecause(`the ${heading} cannot be started`) ?? `The ${heading} is not started yet.`}
+					action={isClientErased ? undefined : { label: `Start the ${heading}`, onClick: () => handleStartPlan(planType) }}
 				/>
 			{/if}
 		{/if}
@@ -3295,6 +3303,7 @@
 			{billingMode}
 			clientsCanPay={canClientsPay}
 			hasClientEmail={hasClientEmailOnFile}
+			createRefusal={erasedBecause('no Invoice can be created')}
 			isOwner={isPracticeOwner}
 			isOwnerOrAdmin={isPracticeOwnerOrAdmin}
 			canReadInvoiceMoney={canReadContractMoney}
@@ -3359,6 +3368,7 @@
 		dueDate={displayDueDate ?? ''}
 		onCreate={handleCreateOffer}
 		onWithdraw={handleWithdrawOffer}
+		createRefusal={erasedBecause('this work cannot be offered')}
 	/>
 	{/if}
 {/snippet}
