@@ -711,7 +711,7 @@
 			<span>{contractStatusWord(contract.status)}</span>
 			<span class="day"><time datetime={contract.steppedOn}>{formatDay(contract.steppedOn)}</time></span>
 			{#if contract.voidRequested}
-				<span class="wait"><Badge variant="warning" label="Void requested" /></span>
+				<Badge variant="warning" label="Void requested" />
 			{/if}
 		{/if}
 	</span>
