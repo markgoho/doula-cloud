@@ -227,7 +227,7 @@ func clientsReach(ctx context.Context, tx *sql.Tx, clientIDs []string, now time.
 }
 
 func reachOf(s clientstanding.Standing, access *portalinvite.Access) reach {
-	if ok, refusal := clientstanding.ActSendContract.Check(s); !ok {
+	if ok, refusal := clientstanding.ActRemindContract.Check(s); !ok {
 		if s.IsTombstone() {
 			return reach{withheldMerged, refusal}
 		}

@@ -94,6 +94,9 @@ afterEach(() => {
 	pageState.state = {};
 });
 
+// The accessible name of a withheld Remind link: its word, the Client, then the sentence.
+const linkName = (words: { label: string; sentence: string }) => new RegExp(`^${words.label}, Withheld .*${words.sentence.slice(0, 30)}`);
+
 describe('the Practice-wide Contracts list rows', () => {
 	it('says each state with its day, once, and a wait as a count of days', async () => {
 		await setup();
@@ -312,7 +315,13 @@ describe('the reminder (#2951)', () => {
 		for (const [reason, words] of Object.entries(REMIND_WITHHELD_WORDS)) {
 			const row = testPage.getByRole('row', { name: new RegExp(`Withheld ${reason}`) });
 			await expect.element(row.getByText(words.label, { exact: true })).toBeVisible();
-			await expect.element(row.getByText(words.sentence)).toBeInTheDocument();
+			if (words.toEngagement) {
+				await expect
+					.element(row.getByRole('link', { name: linkName(words) }))
+					.toHaveAttribute('href', expect.stringMatching(/\/engagements\/.+#contract-/));
+			} else {
+				await expect.element(row.getByText(words.sentence)).toBeInTheDocument();
+			}
 			expect(row.getByRole('button', { name: /Remind the Client/ }).elements()).toHaveLength(0);
 		}
 	});

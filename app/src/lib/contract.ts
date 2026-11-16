@@ -364,17 +364,23 @@ export function reminderDeliveryWords(delivery: ReminderDelivery): string {
 /** Why Remind is not offered, in a few words for a table cell and as the
  * sentence a record or a card has room for (#2981). A reminder held only
  * for today's mail says the day instead, which the caller knows. */
-export const REMIND_WITHHELD_WORDS: Record<Exclude<RemindWithheld, 'emailed_today'>, { label: string; sentence: string }> = {
+export const REMIND_WITHHELD_WORDS: Record<Exclude<RemindWithheld, 'emailed_today'>, { label: string; sentence: string; toEngagement?: true }> = {
 	on_its_way: { label: 'Sending', sentence: 'A reminder is already on its way to the Client.' },
 	not_invited: {
-		label: 'No invite',
-		sentence: 'The Client has not been invited to the portal yet, so a reminder has nowhere to go.'
+		label: 'Invite',
+		toEngagement: true,
+		sentence: 'The Client has not been invited to the portal yet, so a reminder has nowhere to go. Send a portal invite first.'
 	},
 	invite_lost: {
 		label: 'Re-invite',
+		toEngagement: true,
 		sentence: 'The Client’s portal invite is no longer open, so a reminder has nowhere to go. Send a new portal invite first.'
 	},
-	no_access: { label: 'No access', sentence: 'The Client has no portal access, so a reminder has nowhere to go.' },
+	no_access: {
+		label: 'No access',
+		toEngagement: true,
+		sentence: 'The Client has no portal access, so a reminder has nowhere to go. The Portal invite row on the Engagement says why.'
+	},
 	erased: { label: 'Erased', sentence: 'The Client’s details have been erased, so there is nobody to remind.' },
 	merged: { label: 'Merged', sentence: 'This Client record was merged into another, so there is nobody to remind here.' }
 };
