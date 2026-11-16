@@ -1,3 +1,5 @@
+import { CONNECTION_PROBLEM } from './formErrors.js';
+
 /**
  * A cursor-paginated list that owns its own cursor, in-flight guard and
  * error text.
@@ -203,8 +205,14 @@ export class PaginatedList<Item> {
 			this.#landed = true;
 		} catch (error_) {
 			if (generation !== this.#generation) return;
-			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
+			this.loadMoreError = this.#messageOf(error_);
 		}
+	}
+
+	// A request that never reached the service is a fetch `TypeError`, whose own words ("Failed to fetch") say nothing a person can use; ADR-0059's sentence does.
+	#messageOf(error_: unknown): string {
+		if (error_ instanceof TypeError) return CONNECTION_PROBLEM;
+		return error_ instanceof Error ? error_.message : this.#failureMessage;
 	}
 
 	async #loadNext(): Promise<void> {
@@ -222,7 +230,7 @@ export class PaginatedList<Item> {
 			this.items = [...this.items, ...next.items];
 		} catch (error_) {
 			if (generation !== this.#generation) return;
-			this.loadMoreError = error_ instanceof Error ? error_.message : this.#failureMessage;
+			this.loadMoreError = this.#messageOf(error_);
 		} finally {
 			if (generation === this.#generation) this.isLoadingMore = false;
 		}

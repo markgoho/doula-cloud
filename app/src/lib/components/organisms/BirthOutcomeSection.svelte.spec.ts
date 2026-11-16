@@ -77,7 +77,7 @@ describe('BirthOutcomeSection', () => {
 	it('says nothing is recorded, and does not ask the question unprompted', async () => {
 		await setup();
 
-		await expect.element(page.getByText('Nothing recorded yet.', { exact: false })).toBeVisible();
+		await expect.element(page.getByText('Recorded after the birth.')).toBeVisible();
 		await expect
 			.element(page.getByText('What happened to the pregnancy?'))
 			.not.toBeInTheDocument();
@@ -87,7 +87,7 @@ describe('BirthOutcomeSection', () => {
 	it('offers a contractor Doula no control at all', async () => {
 		await setup({ canRecord: false, canCorrect: false });
 
-		await expect.element(page.getByText('Nothing recorded yet.', { exact: false })).toBeVisible();
+		await expect.element(page.getByText('Recorded after the birth.')).toBeVisible();
 		await expect
 			.element(page.getByRole('button', { name: 'Record what happened' }))
 			.not.toBeInTheDocument();

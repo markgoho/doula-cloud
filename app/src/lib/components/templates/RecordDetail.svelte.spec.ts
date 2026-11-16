@@ -184,6 +184,123 @@ describe('RecordDetail.svelte', () => {
 		expect(strip.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 	});
 
+	// #2755: "Jump to" is the label and one list of plain links, and the list
+	// is where "Back to top" lands.
+	it('draws "Jump to" as a named list of links that takes focus, with no box of chips', async () => {
+		await setup({ isContentsShown: true });
+
+		const list = page.getByRole('list', { name: 'Jump to' });
+		await expect.element(list).toHaveAttribute('id', 'jump-to');
+		await expect.element(list).toHaveAttribute('tabindex', '-1');
+		expect(list.getByRole('link').all()).toHaveLength(2);
+	});
+
+	describe('with a facts region (#2755)', () => {
+		it('reads the title, the status line, "Jump to", the facts, then the sections', async () => {
+			await setup({
+				isContentsShown: true,
+				statusLine: textSnippet('Care phase Active'),
+				facts: textSnippet('Contract Signed')
+			});
+
+			const title = page.getByRole('heading', { level: 1, name: 'Ada Lovelace' }).element();
+			const status = page.getByText('Care phase Active').element();
+			const jump = page.getByText('Jump to').element();
+			const facts = page.getByText('Contract Signed').element();
+			const section = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
+			const inOrder = [title, status, jump, facts, section];
+			for (const [index, element] of inOrder.entries()) {
+				const next = inOrder[index + 1];
+				if (next) expect(element.compareDocumentPosition(next) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+			}
+		});
+
+		describe('the details region', () => {
+			const details = createRawSnippet<[string, boolean]>((view, isShown) => ({
+				render: () => `<p data-view="${view()}" data-shown="${isShown()}">Phone (585) 555-0100</p>`
+			}));
+
+			it('is drawn twice, the aside after the facts and the last block after the sections, and one of them is displayed', async () => {
+				// A wide window, so the record body is two columns.
+				await page.viewport(1440, 900);
+				const { container } = await setup({ isContentsShown: true, facts: textSnippet('Contract Signed'), details });
+
+				const copies = [...container.querySelectorAll('[data-view]')];
+				expect(copies.map((copy) => (copy as HTMLElement).dataset.view)).toEqual(['aside', 'section']);
+				const [aside, last] = copies as [HTMLElement, HTMLElement];
+				const facts = page.getByText('Contract Signed').element();
+				const visits = page.getByRole('heading', { level: 2, name: 'Visits' }).element();
+				expect(facts.compareDocumentPosition(aside) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+				expect(aside.compareDocumentPosition(visits) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+				expect(visits.compareDocumentPosition(last) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+				// Which copy is displayed is the container query's; the snippet is told the same.
+				const isAsideDisplayed = getComputedStyle(aside.closest('aside')!).display !== 'none';
+				await expect.poll(() => aside.dataset.shown).toBe(String(isAsideDisplayed));
+				expect(last.dataset.shown).toBe(String(!isAsideDisplayed));
+				// Case 3 (a fact about the document): exactly one `details` id, on the displayed copy.
+				expect(container.querySelectorAll('[id="details"]')).toHaveLength(1);
+				expect(container.querySelector('#details')?.contains(isAsideDisplayed ? aside : last)).toBe(true);
+				await expect.element(page.getByRole('link', { name: 'Details' })).toHaveAttribute('href', '#details');
+			});
+
+			it('shows the last block, and not the aside, where the record is one column', async () => {
+				await page.viewport(600, 900);
+				const { container } = await setup({ isContentsShown: true, facts: textSnippet('Contract Signed'), details });
+
+				const last = container.querySelector<HTMLElement>('[data-view="section"]')!;
+				await expect.poll(() => last.dataset.shown).toBe('true');
+				expect(container.querySelector('#details')?.contains(last)).toBe(true);
+			});
+		});
+
+		it('puts the summary after the sections, so the first screen holds the facts', async () => {
+			await setup({
+				isContentsShown: true,
+				summary: textSnippet('Due Mar 4'),
+				facts: textSnippet('Contract Signed')
+			});
+
+			const summary = page.getByText('Due Mar 4').element();
+			const lastSection = page.getByRole('heading', { level: 2, name: 'Invoices' }).element();
+			expect(lastSection.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+		});
+
+		it('holds the status line, the facts and the sections while loading', async () => {
+			const { container } = await setup({
+				isContentsShown: true,
+				isStatusLinePending: true,
+				factsRows: [{ label: 'Contract', value: 'Signed' }],
+				read: { status: 'loading', label: 'Loading the record' }
+			});
+
+			// Bars with no role and no words: nothing for an accessible query to find (case 2).
+			expect(container.querySelector('.status-line')).not.toBeNull();
+			expect(container.querySelector('.facts')).not.toBeNull();
+			await expect.element(page.getByRole('heading', { level: 2, name: 'Visits' })).toBeVisible();
+		});
+
+		it('draws no facts column for a record that names their shape but gives none once loaded', async () => {
+			const { container } = await setup({ factsRows: [{ label: 'Contract', value: 'Signed' }] });
+
+			expect(container.querySelector('.record-body')).not.toBeNull();
+			expect(container.querySelector('.facts')).toBeNull();
+		});
+
+		it('draws no facts bars while loading when the route names no shape for them', async () => {
+			const { container } = await setup({ facts: textSnippet('Contract Signed'), read: { status: 'loading', label: 'Loading' } });
+
+			expect(container.querySelector('.record-body')).not.toBeNull();
+			expect(container.querySelector('.facts')).toBeNull();
+		});
+
+		it('draws no facts column while loading a record that names none', async () => {
+			const { container } = await setup({ isContentsShown: true, read: { status: 'loading', label: 'Loading' } });
+
+			expect(container.querySelector('.facts')).toBeNull();
+			expect(container.querySelector('.record-body')).toBeNull();
+		});
+	});
+
 	it('draws the back link, the title and a skeleton while loading, instead of the record (#480, #2248)', async () => {
 		const { container } = await setup({
 			read: { status: 'loading', label: 'Loading the work' },

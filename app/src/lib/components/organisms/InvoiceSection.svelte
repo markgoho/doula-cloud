@@ -79,6 +79,7 @@
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
 	import Notice from '#lib/components/atoms/Notice.svelte';
+	import Text from '#lib/components/atoms/Text.svelte';
 	import TextInput from '#lib/components/atoms/TextInput.svelte';
 	import ErrorSummary from '#lib/components/molecules/ErrorSummary.svelte';
 	import LabeledField from '#lib/components/molecules/LabeledField.svelte';
@@ -433,7 +434,7 @@
 			}
 			return;
 		}
-		createError = { message: error_ instanceof Error ? error_.message : 'Failed to create invoice' };
+		createError = { message: error_ instanceof Error ? error_.message : 'We could not create the Invoice.' };
 	}
 
 	// #2200: what an Owner, an Admin and anyone else can do about it.
@@ -597,30 +598,43 @@
 	 * Refunded is where that money is said at all. A blank cell is left
 	 * out of a card.
 	 */
-	const invoiceColumns = [
+	/*
+	 * #2755: four columns and the row's actions, so the table fits the
+	 * record's main column. When it was paid, how, and what was refunded are
+	 * a muted second line in the Status cell, not three mostly empty columns
+	 * of their own; the Note column is drawn only when a row has one.
+	 */
+	function invoiceStatusDetail(invoice: Invoice): string {
+		const parts: string[] = [];
+		if (invoice.paidOn) {
+			const by = invoice.activePaymentMethod ? ` by ${paymentMethodLabels[invoice.activePaymentMethod].toLowerCase()}` : '';
+			parts.push(`Paid ${formatCalendarDay(invoice.paidOn)}${by}`);
+		}
+		if (invoice.refundedCents > 0) parts.push(`${formatAmount(invoice.refundedCents)} refunded`);
+		return parts.join('. ');
+	}
+
+	const invoiceColumns = $derived([
 		{ label: 'Invoice', accessor: (invoice: Invoice) => invoice.reference },
 		{ label: 'Sent', accessor: (invoice: Invoice) => formatCalendarDay(invoice.raisedOn) },
 		{ label: 'Amount', accessor: (invoice: Invoice) => formatAmount(invoice.amountCents), numeric: true },
-		{ label: 'Status', accessor: (invoice: Invoice) => invoiceRowStatusLabel(invoice), content: invoiceStatus },
-		{ label: 'Paid', accessor: (invoice: Invoice) => (invoice.paidOn ? formatCalendarDay(invoice.paidOn) : '') },
-		// #2241: how a by-hand Payment was made, and its recorder's note.
 		{
-			label: 'Paid by',
-			accessor: (invoice: Invoice) =>
-				invoice.activePaymentMethod ? paymentMethodLabels[invoice.activePaymentMethod] : ''
+			label: 'Status',
+			accessor: (invoice: Invoice) => [invoiceRowStatusLabel(invoice), invoiceStatusDetail(invoice)].filter(Boolean).join('. '),
+			content: invoiceStatusWithDetail
 		},
-		{
-			label: 'Refunded',
-			accessor: (invoice: Invoice) => (invoice.refundedCents > 0 ? formatAmount(invoice.refundedCents) : ''),
-			numeric: true
-		},
-		{
-			label: 'Note',
-			accessor: (invoice: Invoice) => invoice.activePaymentNote ?? '',
-			variant: 'muted' as const,
-			wraps: true
-		}
-	];
+		// #2241: the recorder's note on a by-hand Payment.
+		...(invoices.some((invoice) => invoice.activePaymentNote)
+			? [
+					{
+						label: 'Note',
+						accessor: (invoice: Invoice) => invoice.activePaymentNote ?? '',
+						variant: 'muted' as const,
+						wraps: true
+					}
+				]
+			: [])
+	]);
 
 	/*
 	 * A contractor's Invoices (#2094): the day each was raised first, since
@@ -654,7 +668,7 @@
 		try {
 			await onVoidInvoice(invoiceId);
 		} catch (error_) {
-			transitionError = error_ instanceof Error ? error_.message : 'Failed to void this Invoice';
+			transitionError = error_ instanceof Error ? error_.message : 'We could not void this Invoice.';
 		} finally {
 			transitioningInvoiceId = '';
 		}
@@ -666,7 +680,7 @@
 		try {
 			await onWriteOffInvoice(invoiceId);
 		} catch (error_) {
-			transitionError = error_ instanceof Error ? error_.message : 'Failed to write off this Invoice';
+			transitionError = error_ instanceof Error ? error_.message : 'We could not write off this Invoice.';
 		} finally {
 			transitioningInvoiceId = '';
 		}
@@ -682,6 +696,13 @@
 	<Badge label={invoiceRowStatusLabel(invoice)} variant={invoiceRowStatusVariant(invoice)} icon={invoiceRowStatusIcon(invoice)} />
 {/snippet}
 
+<!-- #2755: the Badge, and under it when it was paid, how and what came back. -->
+{#snippet invoiceStatusWithDetail(invoice: Invoice)}
+	{@const detail = invoiceStatusDetail(invoice)}
+	{@render invoiceStatus(invoice)}
+	{#if detail}<span class="status-detail">{detail}</span>{/if}
+{/snippet}
+
 <!--
 	An Invoice's actions (#2059): the row's own, never a field inside a list
 	item. DataTable draws this into both of its trees, so the name span's id
@@ -693,8 +714,7 @@
 		{#if !invoice.paymentProcessing}
 			<Button
 				label="Record payment"
-				variant="secondary"
-				size="sm"
+				variant="link"
 				{describedBy}
 				onClick={() => startRecordingPayment(invoice.id)}
 			/>
@@ -704,16 +724,14 @@
 		{#if invoice.billingMode === 'by_hand'}
 			<Button
 				label="Void"
-				variant="secondary"
-				size="sm"
+				variant="link"
 				{describedBy}
 				loading={transitioningInvoiceId === invoice.id}
 				onClick={() => handleVoid(invoice.id)}
 			/>
 			<Button
 				label="Write off"
-				variant="secondary"
-				size="sm"
+				variant="link"
 				{describedBy}
 				loading={transitioningInvoiceId === invoice.id}
 				onClick={() => handleWriteOff(invoice.id)}
@@ -729,8 +747,7 @@
 		{#if invoice.refundableCents > 0}
 			<Button
 				label="Refund payment"
-				variant="secondary"
-				size="sm"
+				variant="link"
 				{describedBy}
 				onClick={() => startRefundingPayment(invoice.id, activePaymentId)}
 			/>
@@ -738,8 +755,7 @@
 		{#if invoice.reversible}
 			<Button
 				label="Reverse payment"
-				variant="secondary"
-				size="sm"
+				variant="link"
 				{describedBy}
 				onClick={() => startReversingPayment(invoice.id, activePaymentId)}
 			/>
@@ -755,7 +771,7 @@
 	<!-- The record view already sets a card's actions in a cluster; the
 	     table's cell is the one that needs its own. -->
 	{#if view === 'table'}
-		<cluster-l space="var(--space-related)">
+		<cluster-l class="invoice-actions" space="var(--space-related)">
 			{@render invoiceActionButtons(invoice, nameId)}
 		</cluster-l>
 	{:else}
@@ -792,23 +808,19 @@
 		draws each Invoice as a card with its actions at the foot.
 	-->
 	{#if billing}
-		<SummaryList
-			rows={[
-				{ label: 'Contract price', value: formatAmount(billing.priceCents) },
-				{ label: 'Billed', value: formatAmount(billing.billedCents) },
-				{ label: 'Not yet billed', value: formatAmount(billing.unbilledCents) }
-			]}
+		<Text
+			text={isNothingLeftToBill
+				? `Of the ${formatAmount(billing.priceCents)} Contract price, all is billed, so there is nothing left to invoice.`
+				: `Of the ${formatAmount(billing.priceCents)} Contract price, ${formatAmount(billing.billedCents)} is billed and ${formatAmount(billing.unbilledCents)} is not billed yet.`}
 		/>
 	{/if}
-	<div class="invoice-table">
-		<DataTable
-			columns={invoiceColumns}
-			rows={invoices}
-			rowId={invoiceRowId}
-			rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
-			emptyMessage="No Invoices yet."
-		/>
-	</div>
+	<DataTable
+		columns={invoiceColumns}
+		rows={invoices}
+		rowId={invoiceRowId}
+		rowActions={isOwnerOrAdmin ? { label: 'Actions', content: invoiceActions } : undefined}
+		emptyMessage="No Invoices yet."
+	/>
 {/if}
 
 {#if transitionError}
@@ -961,7 +973,8 @@
 {:else if !isBillable}
 	<Notice variant="info" message={unbillableContractMessage(contractStatus)} />
 {:else if isNothingLeftToBill}
-	<Notice variant="info" message={nothingLeftToBillMessage} />
+	<!-- A reader who reads the figures has it in the sentence above the table (#2755); the Notice is for one who does not. -->
+	{#if !canReadInvoiceMoney}<Notice variant="info" message={nothingLeftToBillMessage} />{/if}
 {:else if billingMode === undefined && !isAskingBillingMode}
 	<!-- #2106: the first raise is where the billing mode is asked (#271), so
 	     the question waits for this press rather than standing on the page. -->
@@ -1005,27 +1018,20 @@
 
 <style>
 	@layer components {
-		/* The table's own floor (#2241, #2376), as the Practice landing's
-		   tables set theirs. Measured 2026-10-31 by floor.svelte.spec.ts
-		   in Chromium: the style guide's Invoices, the Note column at its
-		   longest word, need about 1160px, so the table fits from 74rem.
-		   Below it, each Invoice is a card, where DataTable's default
-		   55rem drew a table that broke words in its headers. */
-		.invoice-table {
-			container: invoice-table / inline-size;
+		/* #2755: "Record payment", "Void" and "Write off" stay on one line, so
+		   the Note column is what wraps. */
+		.invoice-actions {
+			flex-wrap: nowrap;
+			white-space: nowrap;
 		}
 
-		.invoice-table > :global(*) {
-			font-size: var(--text-body-size);
-			--data-table-table-display: none;
-			--data-table-records-display: grid;
-		}
-
-		@container invoice-table (min-width: 74rem) {
-			.invoice-table > :global(*) {
-				--data-table-table-display: table;
-				--data-table-records-display: none;
-			}
+		/* #2755: a muted second line in the Status cell. */
+		.status-detail {
+			display: block;
+			margin-block-start: var(--space-1);
+			font-size: var(--text-meta-size);
+			line-height: var(--text-meta-leading);
+			color: var(--color-on-surface-muted);
 		}
 	}
 </style>

@@ -68,4 +68,20 @@
 		<h2>Unanswered &mdash; every value falls back to an em dash</h2>
 		<PlanInstanceView {fields} answers={{}} headingLevel={3} />
 	</section>
+
+	<section>
+		<h2>On a record &mdash; answers only, taking the column</h2>
+		<PlanInstanceView
+			{fields}
+			headingLevel={3}
+			answeredOnly
+			width="column"
+			answers={{
+				pain: 'Epidural, as early as it can be given',
+				people: ['My partner, for the whole labor', 'My Doula from Highland Midwifery'],
+				notes:
+					'Lights low, and the playlist is at https://portal.highland-midwifery-group.example.org/referrals/2027/persephone?source=intake'
+			}}
+		/>
+	</section>
 </stack-l>

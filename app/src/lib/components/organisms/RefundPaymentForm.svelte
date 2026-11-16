@@ -164,7 +164,7 @@
 				return;
 			}
 		}
-		error = error_ instanceof Error ? error_.message : 'Failed to refund this payment';
+		error = error_ instanceof Error ? error_.message : 'We could not refund this payment.';
 	}
 
 	async function confirm() {

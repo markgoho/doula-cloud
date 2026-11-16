@@ -6,7 +6,7 @@
 	import { Streamed } from '#lib/streamedRead.svelte.js';
 	import RecordDetail from '#lib/components/templates/RecordDetail.svelte';
 	import Link from '#lib/components/atoms/Link.svelte';
-	import { isOwnerOrAdmin } from '#lib/roles.js';
+	import { isAmbientContractor, isOwnerOrAdmin } from '#lib/roles.js';
 	import FailedRead from '../../FailedRead.svelte';
 	import EngagementScreen from './EngagementScreen.svelte';
 	import WorkEnded from './WorkEnded.svelte';
@@ -31,40 +31,45 @@
 		() => page.url.pathname
 	);
 
-	// EngagementScreen's sections, in its order. Offers is an Owner's or
-	// an Admin's (#2258); Doula fees stands once the Engagement read says
-	// there is a fee (#2492), which this frame drawn before it cannot know.
+	// EngagementScreen's sections, while the Engagement loads. Its real order
+	// follows the care phase and waits on that read, so the frame holds the
+	// usual run of headings: the first section's top is where it will be, and
+	// Activity closes it. Offers is an Owner's or an Admin's
+	// (#2258); Doula fees stands once the Engagement read says there is a fee
+	// (#2492), which this frame drawn before it cannot know.
 	const sectionHeadings = $derived([
 		'On call',
-		'Birth outcome',
-		'Contract',
-		'Visits',
-		'Care Plan',
 		'Birth Plan',
+		'Visits',
+		'Messages',
+		'Care Plan',
+		'Contract',
 		'Invoices',
 		...(isOwnerOrAdmin(data.session) ? ['Offers'] : []),
-		'Messages',
+		'Birth outcome',
 		'Activity'
 	]);
 
-	// The summary card's usual rows (#2251): Care, Due and Care phase with
-	// a Change, the Doula with one for an Owner or Admin, then Portal
-	// invite and Created. An Engagement with no due date has one row fewer.
-	const summaryRows = $derived([
-		{ label: 'Care', value: 'Birth', action: 'Change' },
-		{ label: 'Due', value: 'Nov 20, 2026', action: 'Change' },
-		{ label: 'Care phase', value: 'Care in progress', action: 'Change' },
-		{ label: 'Doula', value: 'Given Family-name', action: isOwnerOrAdmin(data.session) ? 'Change' : undefined },
-		{ label: 'Portal invite', value: 'Accepted' },
-		{ label: 'Created', value: 'Oct 27, 2026, 9:00 am' }
+	// The facts' shape before their data (#2755): six rows, as a reader who
+	// reads money has them.
+	const factsRows = $derived([
+		{ label: 'On call tonight', value: 'Priya Raman' },
+		{ label: 'Next Visit', value: 'Thu Nov 19, 10:00am, Priya Raman' },
+		{ label: 'Contract', value: 'Sent, waiting for the Client to sign' },
+		...(isAmbientContractor(data.session) ? [] : [{ label: 'Owed', value: '$1,200.00, due Dec 1' }]),
+		{ label: 'Messages', value: 'Unanswered since 9:22am' },
+		{ label: 'Phone', value: '(585) 555-0142' }
 	]);
 </script>
 
 {#snippet nothing()}{/snippet}
 
-<!-- The header's one action that waits on nothing (#2258). -->
-{#snippet messageTheClient()}
-	<Link href="#messages" label="Message the Client" variant="secondary" />
+<!-- The header's one move while the record loads (#2258, #2755): a link that
+     waits on nothing. -->
+{#snippet moves()}
+	<ul class="moves">
+		<li><Link href="#messages" label="Message the Client" variant="outline" /></li>
+	</ul>
 {/snippet}
 
 {#if engagement.refusal?.code === 'ATTACHMENT_ENDED' && engagement.refusal.message}
@@ -80,10 +85,22 @@
 		backLabel={back.label('Clients')}
 		onBack={back.go}
 		isContentsShown
-		{summaryRows}
-		summaryLinks={['View Client']}
-		loadingActions={messageTheClient}
+		isStatusLinePending
+		hasDetails
+		{factsRows}
+		loadingActions={moves}
 		sections={sectionHeadings.map((heading) => ({ heading, content: nothing }))}
 		read={{ status: 'loading', label: 'Loading the work' }}
 	/>
 {/if}
+
+<style>
+	.moves {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+</style>

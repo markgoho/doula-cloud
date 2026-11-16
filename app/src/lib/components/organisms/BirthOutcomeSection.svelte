@@ -258,7 +258,7 @@
 			// eslint-disable-next-line unicorn/no-null
 			const errors = await send({ birthOutcome: null, correction: true });
 			if (errors.length > 0) throw new Error(errors.map((entry) => entry.message).join(' '));
-		}, 'Failed to remove the recorded outcome');
+		}, 'We could not remove the recorded outcome.');
 	}
 
 	function recordedItems(recorded: string, date: string | undefined): { label: string; value: string }[] {
@@ -282,9 +282,7 @@
 	{/if}
 
 	{#if outcome === undefined}
-		<Text
-			text="Nothing recorded yet. Record this once the Practice knows what happened — it does not wait for the care to end."
-		/>
+		<Text text="Recorded after the birth." />
 	{:else}
 		<SummaryList rows={recordedItems(outcome, endedOn)} />
 	{/if}

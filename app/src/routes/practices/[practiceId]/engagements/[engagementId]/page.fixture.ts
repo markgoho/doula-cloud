@@ -229,6 +229,12 @@ export const detail = {
 	hasCarePlan: false,
 	hasBirthPlan: true,
 	hasContract: true,
+	// #2755: Visits, Messages, Invoices and Offers all exist, as the base's
+	// `respond` answers them, so the order is the busiest one.
+	hasVisits: true,
+	hasMessages: true,
+	hasInvoices: true,
+	hasOffers: true,
 	// #2597: the Note typed on the Request that started this Engagement,
 	// long and in two lines, as the Owner (its reader) would have written it.
 	startNote: {
@@ -586,6 +592,25 @@ export const withNoRate: RouteVariant<RouteParameters> = {
 };
 
 /*
+ * #2755: the birth before its outcome, the other tree the record draws. The
+ * base's outcome is recorded, so its On call section is one line; here the
+ * section holds the days and the gaps, and the facts carry the On call
+ * tonight row. Every read is the base's answer.
+ */
+export const beforeTheBirth: RouteVariant<RouteParameters> = {
+	name: 'The Staff-side Engagement detail hub, before the birth outcome is recorded',
+	props: {
+		data: {
+			...detail,
+			birthOutcome: undefined,
+			pregnancyEndedOn: undefined,
+			tonight: { holders: [], isNobody: true },
+			session
+		}
+	}
+};
+
+/*
  * Typical pilot data (#1981), the screen this route's two table floors are
  * measured on (`typicalPilot.ts` says where each value comes from). Camille
  * Boyd's birth Engagement at a 14-doula agency, with one Doula on it:
@@ -900,5 +925,5 @@ export const fixture: RouteFixture<RouteParameters> = {
 		throw new Error(`engagements/[engagementId] fixture: unmatched fetch path ${path}`);
 	},
 	readyText: clientName,
-	variants: [asDoula, asContractor, withNoRate, typical]
+	variants: [asDoula, asContractor, withNoRate, beforeTheBirth, typical]
 };

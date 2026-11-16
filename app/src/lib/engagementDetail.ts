@@ -28,6 +28,7 @@
 
 import type { Fetcher } from './fetcher.js';
 import type { ClientStanding } from './clientStanding.js';
+import type { Tonight } from './onCall.js';
 import type { PortalAccessState, PortalInviteDelivery } from './portalInvite.js';
 
 import { apiErrorMessage } from './apiErrorMessage.js';
@@ -90,6 +91,20 @@ export interface EngagementSummary {
 	hasCarePlan: boolean;
 	hasBirthPlan: boolean;
 	hasContract: boolean;
+	/** Whether each of these exists on the Engagement (#2755), so the sections'
+	 * order is settled on first paint, empty ones last, before their own reads
+	 * land. `hasOffers` is answered only for an Owner or an Admin. */
+	hasVisits: boolean;
+	hasMessages: boolean;
+	hasInvoices: boolean;
+	hasOffers: boolean;
+	/** The on-call days as two calendar days in the Practice's zone, both
+	 * inclusive; absent where the Engagement has none. */
+	onCallWindow?: { from: string; to: string };
+	/** Who holds the birth for the rest of the Practice's today (#2755), so the
+	 * header says "Nobody on call tonight" on first paint. Absent where today
+	 * is outside the birth's days. */
+	tonight?: Tonight;
 	/** The Note typed on the Request that started this Engagement (#2597):
 	 * what was written, by whom, and when. Answered only for an Owner or
 	 * an Admin, and absent when no note was written. */
@@ -372,9 +387,10 @@ export function visitTypeLabel(type: string): string {
 }
 
 /**
- * The Visits in the order the Engagement page lists them (#1999): the
- * scheduled ones by their date, newest first as the drawing lists them,
- * then the ones not yet scheduled, newest logged first. The BFF pages
+ * The Visits in the order the Engagement page lists them (#1999, #2755):
+ * those still to come, soonest first, then the earlier ones, newest first,
+ * then the ones not yet scheduled, newest logged first: what is next, what
+ * happened, what has no day. The BFF pages
  * by when a Visit was logged (`(created_at, id)`, #446), which is not
  * the date the table shows, so the page sorts what it has loaded.
  */
@@ -382,13 +398,30 @@ function newestFirst(a: string, b: string): number {
 	return b.localeCompare(a);
 }
 
-export function sortVisits(visits: readonly Visit[]): Visit[] {
+export function sortVisits(visits: readonly Visit[], now: Date): Visit[] {
+	const rank = { 'coming-up': 0, earlier: 1, 'not-scheduled': 2 } as const;
 	return visits.toSorted((a, b) => {
-		if (a.scheduledAt && b.scheduledAt) return newestFirst(a.scheduledAt, b.scheduledAt);
-		if (a.scheduledAt) return -1;
-		if (b.scheduledAt) return 1;
+		const ga = visitGroup(a, now).key;
+		const gb = visitGroup(b, now).key;
+		if (ga !== gb) return rank[ga] - rank[gb];
+		if (ga === 'coming-up') return newestFirst(b.scheduledAt!, a.scheduledAt!);
+		if (ga === 'earlier') return newestFirst(a.scheduledAt!, b.scheduledAt!);
 		return newestFirst(a.createdAt, b.createdAt);
 	});
+}
+
+/**
+ * The run a Visit sits in on the Engagement page (#2755): "Coming up"
+ * (soonest first), "Earlier" (newest first), then "Not scheduled yet".
+ */
+export function visitGroup(
+	visit: Visit,
+	now: Date
+): { key: 'coming-up' | 'not-scheduled' | 'earlier'; label: string } {
+	if (!visit.scheduledAt) return { key: 'not-scheduled', label: 'Not scheduled yet' };
+	return new Date(visit.scheduledAt) >= now
+		? { key: 'coming-up', label: 'Coming up' }
+		: { key: 'earlier', label: 'Earlier' };
 }
 
 /**
@@ -488,6 +521,10 @@ export async function loadEngagement(
 	return (await response.json()) as EngagementSummary;
 }
 
+/** A page of Visits; the first also names the Visit that is next (#2755),
+ * over every Visit and not only the ones loaded. */
+export type VisitsPage = CursorPage<Visit> & { next?: Visit };
+
 /**
  * One page of Visits, newest first from the BFF (#446).
  *
@@ -498,11 +535,11 @@ export async function loadVisitsPage(
 	fetcher: Fetcher,
 	reference: EngagementReference,
 	cursor: string
-): Promise<CursorPage<Visit>> {
+): Promise<VisitsPage> {
 	const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
 	const response = await fetcher(`${visitsURL(reference)}${query}`);
 	if (!response.ok) throw new Error(await apiErrorMessage(response));
-	return (await response.json()) as CursorPage<Visit>;
+	return (await response.json()) as VisitsPage;
 }
 
 /**

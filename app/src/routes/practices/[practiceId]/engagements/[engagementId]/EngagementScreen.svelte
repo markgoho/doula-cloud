@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onDestroy, onMount, tick } from 'svelte';
+	import { onDestroy, onMount, tick, untrack, type Snippet } from 'svelte';
 	import type { ListBack } from '#lib/listOrigin.svelte.js';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetchWithSession } from '#lib/api.js';
@@ -38,6 +38,7 @@
 		sendMessage,
 		sendPortalInvite,
 		sortVisits,
+		visitGroup,
 		visitTypeLabel,
 		engagementStatusText,
 		engagementURL,
@@ -70,16 +71,19 @@
 	import type { PageData } from './$types';
 	import { stampText } from '#lib/stamp.js';
 	import { landOnRow, landOnSection } from '#lib/landOnRow.js';
-	import { latestMessageText, unansweredSince } from '#lib/threadSummary.js';
+	import { unansweredSince } from '#lib/threadSummary.js';
 	import { formatGapTimes } from '#lib/coverageGap.js';
 	import CoverageGapWhen from '#lib/components/molecules/CoverageGapWhen.svelte';
-	import { formatCalendarDay, formatCalendarWeekdayDay, formatInstant, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
-	import { instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
+	import { formatActivityTimestamp, formatCalendarDay, formatCalendarDayThisYear, formatCalendarWeekdayDay, formatInstant, weeksAlong, formatInstantWithClock, formatScheduledVisit, toDatetimeLocalValue } from '#lib/dates.js';
+	import { dayIn, instantFromWall, readerTimeZone, zoneNote } from '#lib/zonedTime.js';
+	import { formatPhoneNumber } from '#lib/contactDetails.js';
+	import { sectionOrder, type SectionHeading } from './sectionOrder.js';
 	import {
+		ACTIVITY_KINDS,
 		activityLedgerColumns,
 		loadEngagementActivityPage,
-		RECENT_ACTIVITY_ROWS,
-		type ActivityEntry
+		type ActivityEntry,
+		type ActivityKind
 	} from '#lib/activityLedger.js';
 	import { subscribeToThreadPushMessages } from '#lib/pushRefresh.js';
 	import PlanInstanceForm from '#lib/components/organisms/PlanInstanceForm.svelte';
@@ -109,6 +113,7 @@
 		downloadSignedContractPdf,
 		setMergeFieldValue,
 		mergeFieldLabel,
+		contractStatusText,
 		missingMergeFieldKeys,
 		editableMergeFields,
 		editableValues,
@@ -132,6 +137,8 @@
 		billingAfterRaising,
 		type ContractBilling,
 		type ContractorInvoice,
+		formatAmount,
+		type OwedSummary,
 		type Invoice,
 		type InvoiceDueChoice,
 		type PaymentMethod,
@@ -143,6 +150,7 @@
 	import DoulaFeeSection from '#lib/components/organisms/DoulaFeeSection.svelte';
 	import { loadDoulaFees, recordDoulaFeePaid, removeDoulaFeePaid, type DoulaFee } from '#lib/doulaFee.js';
 	import { createOffer, loadEngagementOffers, withdrawOffer, type NewOffer, type Offer } from '#lib/offer.js';
+	import { goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import MessageThread, { type Message } from '#lib/components/organisms/MessageThread.svelte';
 	import Text from '#lib/components/atoms/Text.svelte';
@@ -174,6 +182,8 @@
 	import StackedForm from '#lib/components/molecules/StackedForm.svelte';
 	import Select from '#lib/components/atoms/Select.svelte';
 	import Badge from '#lib/components/atoms/Badge.svelte';
+	import Icon from '#lib/components/atoms/Icon.svelte';
+	import EngagementStatusLine from './EngagementStatusLine.svelte';
 	import Heading from '#lib/components/atoms/Heading.svelte';
 	import Skeleton from '#lib/components/atoms/Skeleton.svelte';
 	import EmptyState from '#lib/components/molecules/EmptyState.svelte';
@@ -273,7 +283,17 @@
 	// that takes focus, because the control she pressed goes with the
 	// form; a refusal leaves it open, beside the refusal.
 	type SummaryChange = 'care' | 'due' | 'carePhase' | 'doula';
-	type EngagementSummaryRow = SummaryListRow & { change?: SummaryChange };
+	// `isInvite` is the Portal invite row, whose action sends the invite; `contact`
+	// makes the Client's phone or email the link that calls or writes her.
+	type EngagementSummaryRow = SummaryListRow & {
+		change?: SummaryChange;
+		isInvite?: boolean;
+		contact?: 'tel' | 'mailto';
+		/**
+		What follows `tel:` or `mailto:`, where it is not the words shown.
+		*/
+		href?: string;
+	};
 	const changeWords: Record<SummaryChange, string> = {
 		care: 'care',
 		due: 'due date',
@@ -283,7 +303,16 @@
 	let openChange = $state<SummaryChange | undefined>();
 	let statusChangedMessage = $state('');
 
+	// Cancel hands focus back to the link that opened the form (#2103).
+	let refocusedChange = $state<SummaryChange | undefined>();
+
+	function cancelChange(change: SummaryChange) {
+		openChange = undefined;
+		refocusedChange = change;
+	}
+
 	function toggleChange(change: SummaryChange) {
+		refocusedChange = undefined;
 		openChange = openChange === change ? undefined : change;
 		statusChangedMessage = '';
 		kindChangedMessage = '';
@@ -306,7 +335,7 @@
 		isCompleteFormShown = false;
 		const hasMoved = await directMove.mutate(async () => {
 			statusOverride = await changeEngagementStatus(apiFetchWithSession, reference, move);
-		}, 'Failed to change status');
+		}, 'We could not change the status.');
 		if (!hasMoved) return;
 		closeChange(`The care phase is now ${engagementStatusText(displayStatus)}.`);
 		await refreshWhoIsOn();
@@ -461,7 +490,7 @@
 			void refreshBirthPlanOffer();
 			openChange = undefined;
 			kindChangedMessage = `Now set to ${kindLabel(result.kind)}.`;
-		}, 'Failed to change what the Practice sold');
+		}, 'We could not change what the Practice sold.');
 		if (isChanged) await loadActivity();
 	}
 
@@ -588,9 +617,11 @@
 	const visits = new PaginatedList<Visit>({
 		first: { items: [], hasMore: false },
 		loadPage: (cursor) => loadVisitsPage(apiFetchWithSession, reference, cursor),
-		failureMessage: 'Failed to load more Visits'
+		failureMessage: 'We could not load more Visits.'
 	});
 	const visitsLoad = new SectionState<void>(undefined);
+	// The BFF's own "next" (#2755), over every Visit and not the rows loaded.
+	let nextVisit = $state<Visit | undefined>();
 	const visitsCreate = new SectionState<void>(undefined);
 	const isCreatingVisit = $derived(visitsCreate.isBusy);
 	// #250: optional at creation, the same as it is afterward -- a Doula
@@ -611,10 +642,19 @@
 	// through engagement.ListActivityHandler (unchanged by #486) --
 	// ADR-0008's money tier already applies there, per that handler's own
 	// doc comment.
+	// #2755: the kind the BFF narrows the ledger to; never a filter over the
+	// rows already loaded.
+	// The kind is in the address (`?activity=`, #2755), so Back and a shared link
+	// keep it; the Engagement's own read never takes the query, so a change of
+	// kind re-reads only the Activity.
+	const kindOfAddress = (): ActivityKind =>
+		ACTIVITY_KINDS.find((option) => option.kind !== '' && option.kind === page.url.searchParams.get('activity'))
+			?.kind ?? '';
+	let activityKind = $state<ActivityKind>(kindOfAddress());
 	const activity = new PaginatedList<ActivityEntry>({
 		first: { items: [], hasMore: false },
-		loadPage: (cursor) => loadEngagementActivityPage(apiFetchWithSession, reference, cursor),
-		failureMessage: 'Failed to load more activity'
+		loadPage: (cursor) => loadEngagementActivityPage(apiFetchWithSession, reference, cursor, activityKind),
+		failureMessage: 'We could not load more Activity.'
 	});
 	const activityLoad = new SectionState<void>(undefined);
 	const activityError = $derived(activityLoad.error);
@@ -626,9 +666,12 @@
 	// ledger, and the Practice's Activity screen cannot narrow to one. The
 	// first press shows the entries already read, and the next press reads
 	// the next page, as it did before.
+	// The Overview keeps its eight; the record, which has nine sections to
+	// get through, draws five.
+	const FIRST_ACTIVITY_ROWS = 5;
 	let isWholeLedgerShown = $state(false);
 	const shownActivity = $derived(
-		isWholeLedgerShown ? activity.items : activity.items.slice(0, RECENT_ACTIVITY_ROWS)
+		isWholeLedgerShown ? activity.items : activity.items.slice(0, FIRST_ACTIVITY_ROWS)
 	);
 	const hasMoreActivity = $derived(activity.hasMore || shownActivity.length < activity.items.length);
 
@@ -790,12 +833,65 @@
 		refocusedVisitOpener = visit.visitId;
 	}
 
-	// The scheduled Visits by date, then the rest (#1999).
-	const sortedVisits = $derived(sortVisits(visits.items));
+	// Coming up, soonest first; not scheduled yet; earlier, newest first (#2755).
+	// Read once as the Visits arrive: a Visit that passes while the page is
+	// open moves down on the next read.
+	const visitsView = $derived.by(() => {
+		const now = new Date();
+		return { now, rows: sortVisits(visits.items, now) };
+	});
+	const sortedVisits = $derived(visitsView.rows);
+	const visitsNow = $derived(visitsView.now);
+
+	// #2755: the newest earlier Visit is drawn; the rest open in place on
+	// request, or when the page lands on one of them.
+	let isEarlierVisitsShown = $state(false);
+	const shownVisits = $derived.by(() => {
+		if (isEarlierVisitsShown) return sortedVisits;
+		let earlier = 0;
+		return sortedVisits.filter((visit) => {
+			if (visitGroup(visit, visitsNow).key !== 'earlier') return true;
+			earlier += 1;
+			return earlier <= 1;
+		});
+	});
+	const hasEarlierVisits = $derived(
+		!isEarlierVisitsShown && (shownVisits.length < sortedVisits.length || visits.hasMore)
+	);
+
+	// The newest Visit that has happened, named in the state line so the notes
+	// a Doula wrote last time are one press away (T3).
+	const lastVisit = $derived(sortedVisits.find((visit) => visitGroup(visit, visitsNow).key === 'earlier'));
+
+	// Brings the row of the last Visit to the top and focuses it, whether or
+	// not the Earlier cap had drawn it; the same landing a `#visit-<id>` link
+	// makes on arrival, but repeatable.
+	async function showLastVisit(event: MouseEvent) {
+		event.preventDefault();
+		if (!lastVisit) return;
+		if (!shownVisits.includes(lastVisit)) isEarlierVisitsShown = true;
+		await tick();
+		const row = (['table', 'record'] as const)
+			.map((view) => document.querySelector<HTMLElement>(`#${CSS.escape(visitRowId(lastVisit, view))}`))
+			.find((candidate) => candidate !== null && candidate.getClientRects().length > 0);
+		row?.scrollIntoView({ block: 'start' });
+		row?.focus({ preventScroll: true });
+	}
+
+	// Into Notes with the caret at the end, so a Doula writes on from what
+	// she wrote; a copy of the form that is not drawn is left alone.
+	function focusNotesAtEnd(wrapper: HTMLElement) {
+		const field = wrapper.querySelector('textarea');
+		if (!field || field.getClientRects().length === 0) return;
+		field.focus();
+		field.setSelectionRange(field.value.length, field.value.length);
+	}
 
 	// #2747: a Schedule row links here with `#visit-<id>`; its row takes
 	// focus, once, when the Visits arrive.
 	const landOnVisitId = $derived(/^#visit-(.+)$/.exec(page.url.hash)?.[1]);
+	const isVisitFormOpen = (visit: Visit) =>
+		changingVisit?.visitId === visit.visitId || (canAssignVisits && reassigningVisit?.visitId === visit.visitId);
 	const visitRowId = (visit: Visit, view: DataTableView) => `visit-row-${view}-${visit.visitId}`;
 	const MAX_ARRIVAL_PAGES = 20;
 	let arrivalPagesRead = 0;
@@ -817,21 +913,18 @@
 		}
 		hasLandedOnVisit = true;
 		const views: DataTableView[] = ['table', 'record'];
-		landOnRow(views.map((view) => visitRowId(visit, view)));
+		if (!shownVisits.includes(visit)) isEarlierVisitsShown = true;
+		void tick().then(() => landOnRow(views.map((view) => visitRowId(visit, view))));
 	});
 
 	let messages = $state<Message[]>([]);
 	let messagesCursor = $state('');
 	let isMessagesHasMore = $state(false);
-	const messageThreadRows = $derived.by<SummaryListRow[]>(() => {
-		const latest = latestMessageText(messages, timeZone);
-		if (latest === undefined) return [];
-		const since = unansweredSince(messages);
-		return [
-			{ label: 'Latest', value: latest },
-			...(since ? [{ label: 'Unanswered', value: `Since ${formatInstant(since, timeZone)}` }] : [])
-		];
-	});
+	// #2755: the newest two are drawn, the rest in place on request.
+	const SHOWN_MESSAGES = 2;
+	let isEarlierMessagesShown = $state(false);
+	const shownMessages = $derived(isEarlierMessagesShown ? messages : messages.slice(-SHOWN_MESSAGES));
+	const hasEarlierMessages = $derived(!isEarlierMessagesShown && (messages.length > SHOWN_MESSAGES || isMessagesHasMore));
 	// Load (including "load older") and download are separate SectionState
 	// instances so downloading an attachment never lights up the "Load
 	// older" spinner. Both write the one Notice the thread renders. A
@@ -839,8 +932,11 @@
 	// its busy state, against the field each names (#1952).
 	const messagesLoad = new SectionState<void>(undefined);
 	const messagesDownload = new SectionState<void>(undefined);
-	const messagesError = $derived(messagesLoad.error || messagesDownload.error);
-	const isLoadingOlderMessages = $derived(messagesLoad.isBusy);
+	// "Show earlier" reads older Messages: its failure stays beside its
+	// button and never takes the thread's rows away.
+	const messagesOlder = new SectionState<void>(undefined);
+	const messagesError = $derived(messagesOlder.error || messagesDownload.error);
+	const isLoadingOlderMessages = $derived(messagesOlder.isBusy);
 	// Object URLs for image attachments, keyed by messageId, so images
 	// render inline in the thread (not just downloadable) -- fetched via
 	// apiFetchWithSession since the attachment endpoint requires the
@@ -868,6 +964,8 @@
 	// first load has settled, success or failure -- same as isContractLoaded
 	// below.
 	let planLoaded = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+	// A plan that exists and could not be read says so, never "not started".
+	let planLoadFailed = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
 
 	// Named contractState, not contractSection: that name is already the
 	// RecordDetail section snippet below (content: contractSection), and a
@@ -922,6 +1020,8 @@
 	// reader gets the figures; a contractor only whether any is left.
 	let contractBilling = $state<ContractBilling | undefined>();
 	let hasUnbilledForContractor = $state(true);
+	// What every open Invoice adds up to (#2755), the BFF's sum for a money reader.
+	let owed = $state<OwedSummary | undefined>();
 	const invoicesError = $derived(invoicesState.error || contractorInvoicesState.error);
 
 	// #271: undefined until this Practice has chosen a billing rail --
@@ -1000,6 +1100,30 @@
 	// absent assignee means "me". An Owner or Admin who is not a Doula has
 	// no self to log, so for her the picker is the only way in.
 	const canLogOwnVisit = $derived(isDoula(data.session));
+	const canAddVisit = $derived((canAssignVisits || canLogOwnVisit) && !isClientErased);
+
+	// #2755: an address ending in `#add-visit` opens the form the way
+	// `#visit-<id>` opens a Visit. The hash is what is tracked, so a Cancel
+	// does not open the form again.
+	const isAddVisitAsked = $derived(page.url.hash === '#add-visit');
+	$effect(() => {
+		if (isAddVisitAsked && canAddVisit) {
+			untrack(() => {
+				if (openVisitChange !== 'add') openVisitForm('add');
+			});
+		}
+	});
+
+	// Raised by the header's "Message the Client": each rise opens the compose
+	// in Messages and puts focus in the Message field.
+	let composeRequest = $state(0);
+
+	function handleMessageTheClient(event: MouseEvent) {
+		if (messageBlock || !messagesLoad.hasSettled || messagesLoad.error) return;
+		event.preventDefault();
+		composeRequest += 1;
+	}
+
 	// #909: which roster entry is the reader herself. Off the practice
 	// session `practices/[practiceId]/+layout.ts` already resolved before
 	// first paint -- not a second fetch of `/api/staff/session`, which
@@ -1228,27 +1352,240 @@
 			// gives it.
 			{ label: 'Care', value: kindLabel(displayKind), ...changeable('care', canChangeKind) }
 		];
-		if (displayDueDate) {
-			rows.push({ label: 'Due', value: formatCalendarDay(displayDueDate), ...changeable('due', canWriteFact) });
-		} else if (displayKind === 'birth' && birthOutcome.birthOutcome === undefined) {
-			rows.push({ label: 'Due', value: 'Not given', ...changeable('due', canWriteFact) });
+		// Her email, from the read of her record this page already makes (her
+		// phone is the facts' sixth); left out where that read was refused or
+		// her record is erased.
+		if (clientRecord && !clientRecord.erasedAt && clientRecord.email) {
+			rows.push({ label: 'Email', value: clientRecord.email, contact: 'mailto' });
 		}
-		rows.push({
-			label: 'Care phase',
-			value: engagementStatusText(displayStatus),
-			...changeable('carePhase', displayStatusMoves.length > 0)
-		});
-		// #1598: who is on it. No row for a completed Engagement nobody is
-		// on (doulaSummaryItem).
-		const doulaItem = doulaSummaryItem(attachedDoulas, displayStatus);
-		if (doulaItem) rows.push({ ...doulaItem, ...changeable('doula', canChangeDoula) });
 		rows.push(
-			{ label: 'Portal invite', value: portalInviteSummaryText(clientPortalState, hasClientEmailOnFile) },
+			{
+				label: 'Portal invite',
+				value: portalInviteSummaryText(clientPortalState, hasClientEmailOnFile),
+				...(!hasAcceptedPortalAccess && hasClientEmailOnFile && { isInvite: true, changes: 'portal invite' })
+			},
 			// createdAt is an instant (engagement/detail.go).
 			{ label: 'Created', value: formatInstant(detail.createdAt, timeZone) }
 		);
 		return rows;
 	});
+
+	/*
+	 * #2755: the due date, the care phase and the Doulas are the header's own
+	 * words, so Details holds no row for them, only the act that changes each,
+	 * for the reader the BFF lets act (the same flags that drew the old rows'
+	 * Change). With no date the act gives the first one (#2118); with no Doula
+	 * it puts one on.
+	 */
+	const detailActs = $derived.by((): { change: SummaryChange; label: string }[] => {
+		const acts: { change: SummaryChange; label: string }[] = [];
+		if (canWriteFact && (displayDueDate || (displayKind === 'birth' && birthOutcome.birthOutcome === undefined))) {
+			acts.push({ change: 'due', label: displayDueDate ? 'Change the due date' : 'Give the due date' });
+		}
+		if (displayStatusMoves.length > 0) acts.push({ change: 'carePhase', label: 'Change the care phase' });
+		if (canChangeDoula) {
+			acts.push({
+				change: 'doula',
+				label: attachedDoulas.length > 0 ? 'Put on or take off a Doula' : (isAttachQuestion ? 'Put a Doula on' : 'Put yourself on')
+			});
+		}
+		return acts;
+	});
+
+	// The form that is open, if its act is still the reader's to take: a Doula
+	// who is put on while it is open takes the "Put me on" form's reason with it.
+	const openAct = $derived(detailActs.find((act) => act.change === openChange)?.change);
+
+	interface FactRow extends SummaryListRow {
+		/**
+		A muted second line under the value: who the Next Visit is with.
+		*/
+		detail?: string;
+		href?: string;
+		hiddenWords?: string;
+		onClick?: (event: MouseEvent) => void;
+		/**
+		A state someone has to act on (warning) or that is late (error): an icon beside the words.
+		*/
+		tone?: 'warning' | 'error';
+	}
+
+	/*
+	 * #2755: the facts a reader wants on arriving, each from the read that
+	 * owns it. A read that failed says so, with no link, never a state it did
+	 * not read; one still on its way says nothing it does not know. Each
+	 * derives from the state its section writes after a save, so a payment, a
+	 * Visit or a Message re-reads its fact in place.
+	 */
+	const isOnCallEnded = $derived(
+		displayStatus === 'completed' || birthOutcome.birthOutcome !== undefined || detail.kind === 'postpartum'
+	);
+	const todayInZone = $derived(dayIn(new Date(), timeZone));
+
+	function factLink(label: string, section: string, value: string, tone?: FactRow['tone']): FactRow {
+		return { label, value, href: `#${section.toLowerCase().replaceAll(' ', '-')}`, hiddenWords: `${label}, in ${section}`, tone };
+	}
+
+	const onCallFact = $derived.by((): FactRow | undefined => {
+		if (isOnCallEnded) return undefined;
+		const tonight = onCall ? onCall.tonight : detail.tonight;
+		if (!tonight && onCallError) return { label: 'On call tonight', value: 'Could not be read' };
+		if (tonight?.isNobody) return factLink('On call tonight', 'On call', 'Nobody');
+		if (tonight) {
+			const who = tonight.holders.map((holder) =>
+				holder.coveringFor ? `${holder.name}, covering for ${holder.coveringFor}` : holder.name
+			);
+			return factLink('On call tonight', 'On call', who.join('; '));
+		}
+		const from = detail.onCallWindow?.from;
+		return factLink(
+			'On call tonight',
+			'On call',
+			from && todayInZone < from ? `Starts ${formatCalendarDayThisYear(from, timeZone)}` : 'No on-call days'
+		);
+	});
+
+	// The On call section's first line (#2755): who is on call tonight, from
+	// the on-call read; nothing before the window or after an outcome.
+	const tonightLine = $derived.by((): { text: string; isNobody: boolean } | undefined => {
+		if (isOnCallEnded || !onCall?.tonight) return undefined;
+		if (onCall.tonight.isNobody) {
+			// Whose gap it is, and until when, so the line answers "why" too.
+			const out = onCall.gaps.filter(
+				(gap) =>
+					!gap.coveringStaffName &&
+					gapNow < new Date(gap.endsAt) &&
+					dayIn(new Date(gap.startsAt), timeZone) <= todayInZone
+			);
+			const names = [...new Set(out.map((gap) => gap.staffName))];
+			if (names.length === 0) return { text: 'Nobody on call tonight.', isNobody: true };
+			const who = names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+			const until =
+				names.length === 1 && out.length === 1 ? ` until ${formatScheduledVisit(out[0]!.endsAt, timeZone)}` : '';
+			return { text: `Nobody on call tonight: ${who} cannot be reached${until}.`, isNobody: true };
+		}
+		const names = onCall.tonight.holders.map((holder) => holder.name);
+		return { text: `${names.join(' and ')} ${names.length === 1 ? 'is' : 'are'} on call tonight.`, isNobody: false };
+	});
+
+	const nextVisitFact = $derived.by((): FactRow => {
+		if (visitsLoad.error) return { label: 'Next Visit', value: 'Could not be read' };
+		if (!visitsLoad.hasSettled) {
+			return detail.hasVisits
+				? { label: 'Next Visit', value: 'Reading the Visits' }
+				: factLink('Next Visit', 'Visits', 'None scheduled');
+		}
+		if (!nextVisit?.scheduledAt) return factLink('Next Visit', 'Visits', 'None scheduled');
+		return {
+			...factLink('Next Visit', 'Visits', formatScheduledVisit(nextVisit.scheduledAt, timeZone)),
+			detail: nextVisit.staffName
+		};
+	});
+
+	// Absent for a reader the BFF serves no money (ADR-0008).
+	const owedFact = $derived.by((): FactRow | undefined => {
+		if (!canReadContractMoney) return undefined;
+		if (invoicesState.error) return { label: 'Owed', value: 'Could not be read' };
+		if (!invoicesState.hasSettled) {
+			return detail.hasInvoices ? { label: 'Owed', value: 'Reading the Invoices' } : factLink('Owed', 'Invoices', 'Nothing owed');
+		}
+		if (!owed) return { label: 'Owed', value: 'Could not be read' };
+		if (owed.overdueCents > 0) {
+			const since = owed.oldestOverdueOn ? ` since ${formatCalendarDayThisYear(owed.oldestOverdueOn, timeZone)}` : '';
+			return factLink('Owed', 'Invoices', `${formatAmount(owed.overdueCents)} overdue${since}`, 'error');
+		}
+		if (owed.owedCents > 0) {
+			const due = owed.nextDueOn ? `, due ${formatCalendarDayThisYear(owed.nextDueOn, timeZone)}` : '';
+			return factLink('Owed', 'Invoices', `${formatAmount(owed.owedCents)}${due}`);
+		}
+		return factLink('Owed', 'Invoices', 'Nothing owed');
+	});
+
+	// The Invoices section's first line (#2755): what is owed, in the BFF's
+	// sum; a reader served no money is told how many Invoices are open and
+	// when the next is due, never an amount (ADR-0008).
+	const invoiceStateLine = $derived.by((): { text: string; isOverdue: boolean } | undefined => {
+		if (invoicesError || !isInvoicesSettled) return undefined;
+		if (canReadContractMoney) {
+			if (!owed) return undefined;
+			if (owed.overdueCents > 0) {
+				const since = owed.oldestOverdueOn ? ` since ${formatCalendarDayThisYear(owed.oldestOverdueOn, timeZone)}` : '';
+				return { text: `${formatAmount(owed.overdueCents)} overdue${since}.`, isOverdue: true };
+			}
+			if (owed.owedCents > 0) {
+				const due = owed.nextDueOn ? `, due ${formatCalendarDayThisYear(owed.nextDueOn, timeZone)}` : '';
+				return { text: `${formatAmount(owed.owedCents)} owed${due}.`, isOverdue: false };
+			}
+			return { text: 'Nothing owed.', isOverdue: false };
+		}
+		const open = contractorInvoicesState.value.filter((invoice) => invoice.status === 'open');
+		if (open.length === 0) return { text: 'No Invoice is open.', isOverdue: false };
+		const lateCount = open.filter((invoice) => invoice.daysOverdue > 0).length;
+		const nextDue = open.map((invoice) => invoice.dueOn).toSorted((a, b) => a.localeCompare(b))[0];
+		const noun = open.length === 1 ? 'Invoice' : 'Invoices';
+		const late = lateCount > 0 ? `, ${lateCount} overdue` : '';
+		return {
+			text: `${open.length} ${noun} open${late}, due ${formatCalendarDayThisYear(nextDue, timeZone)}.`,
+			isOverdue: lateCount > 0
+		};
+	});
+
+	const contractFact = $derived.by((): FactRow => {
+		if (contractState.error) return { label: 'Contract', value: 'Could not be read' };
+		if (contract) return factLink('Contract', 'Contract', contractStatusText(contract.status));
+		if (detail.hasContract && !contractState.hasSettled) return { label: 'Contract', value: 'Reading the Contract' };
+		return factLink('Contract', 'Contract', 'No Contract yet');
+	});
+
+	const messagesFact = $derived.by((): FactRow => {
+		if (messagesLoad.error) return { label: 'Messages', value: 'Could not be read' };
+		if (!messagesLoad.hasSettled) return { label: 'Messages', value: 'Reading the Messages' };
+		if (messages.length === 0) return factLink('Messages', 'Messages', 'No Messages yet');
+		const since = unansweredSince(messages);
+		if (since) {
+			return factLink('Messages', 'Messages', `Unanswered since ${formatActivityTimestamp(since, timeZone)}`, 'warning');
+		}
+		return factLink('Messages', 'Messages', 'Answered');
+	});
+
+	// The sixth fact, after Messages (the two ways to reach her together):
+	// the number calls; none on file is "Not given", a link to Details' add;
+	// a read that was refused says so (T10's words) with no link. The row is
+	// always drawn, so nothing moves when her record lands.
+	const phoneFact = $derived.by((): FactRow => {
+		if (!isClientRecordSettled) return { label: 'Phone', value: 'Reading the Client' };
+		if (!clientRecord) return { label: 'Phone', value: 'Could not be read' };
+		if (clientRecord.erasedAt) return { label: 'Phone', value: 'Not given' };
+		if (clientRecord.phone) { // contact:ignore -- tested for presence, drawn by formatPhoneNumber below
+			return {
+				label: 'Phone',
+				value: formatPhoneNumber(clientRecord.phone),
+				href: `tel:${clientRecord.phone.replaceAll(/[^\d+]/g, '')}`,
+				hiddenWords: 'Phone, call'
+			};
+		}
+		return {
+			label: 'Phone',
+			value: 'Not given',
+			href: '#details',
+			hiddenWords: 'Phone, in Details',
+			onClick: focusAddDetails
+		};
+	});
+
+	async function focusAddDetails(event: MouseEvent) {
+		event.preventDefault();
+		const region = document.querySelector<HTMLElement>('#details');
+		region?.scrollIntoView();
+		await tick();
+		region?.querySelector<HTMLElement>(':scope [data-add-details] a')?.focus();
+	}
+
+	const factRows = $derived(
+		[onCallFact, nextVisitFact, contractFact, owedFact, messagesFact, phoneFact].filter(
+			(row): row is FactRow => row !== undefined
+		)
+	);
 
 	/** The fields that give a row its Change, and open its in-place form
 	 * while it is the open one. The visually-hidden words are the row's own
@@ -1302,14 +1639,36 @@
 
 	async function loadVisits() {
 		await visitsLoad.load(async () => {
-			visits.reset(await loadVisitsPage(apiFetchWithSession, reference, ''));
-		}, 'Failed to load Visits');
+			const first = await loadVisitsPage(apiFetchWithSession, reference, '');
+			nextVisit = first.next;
+			visits.reset(first);
+		}, 'We could not load the Visits.');
 	}
 
+	// A kind chosen quickly twice sends two reads; only the latest one's
+	// reply is drawn.
+	let activityRead = 0;
 	async function loadActivity() {
+		const read = ++activityRead;
+		const kind = activityKind;
 		await activityLoad.load(async () => {
-			activity.reset(await loadEngagementActivityPage(apiFetchWithSession, reference, ''));
-		}, 'Failed to load activity');
+			const loaded = await loadEngagementActivityPage(apiFetchWithSession, reference, '', kind);
+			if (read === activityRead) activity.reset(loaded);
+		}, 'We could not load the Activity.');
+	}
+
+	$effect(() => {
+		const kind = kindOfAddress();
+		untrack(() => {
+			if (kind === activityKind) return;
+			activityKind = kind;
+			isWholeLedgerShown = false;
+			void loadActivity();
+		});
+	});
+
+	function activityKindHref(kind: ActivityKind): string {
+		return `${page.url.pathname}${kind === '' ? '' : `?activity=${kind}`}#activity`;
 	}
 
 	async function loadMessages() {
@@ -1319,7 +1678,7 @@
 			messagesCursor = loaded.nextCursor ?? '';
 			isMessagesHasMore = loaded.hasMore;
 			await refreshAttachmentPreviews(messages);
-		}, 'Failed to load Messages');
+		}, 'We could not load the Messages.');
 	}
 
 	/** #301's Staff visibility (AC4), as the Birth Plan's read view says it
@@ -1329,8 +1688,8 @@
 	function birthPlanReadText(instance: Instance): string {
 		if (!birthPlanOffer.offersBirthPlan) return `Not shown to ${detail.clientName}`;
 		return instance.clientAcknowledgedAt
-			? `${detail.clientName} read this on ${formatInstant(instance.clientAcknowledgedAt, timeZone)}`
-			: `${detail.clientName} has not read this yet`;
+			? `${detail.clientName} read it on ${formatInstant(instance.clientAcknowledgedAt, timeZone)}`
+			: `${detail.clientName} has not read it yet`;
 	}
 
 	// The Engagement read says whether each record exists (#2591), so a
@@ -1340,10 +1699,11 @@
 		if (isStarted) {
 			await planState[planType].load(
 				() => loadInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
-				'Failed to load plan'
+				'We could not load the plan.'
 			);
 		}
 		planLoaded[planType] = true;
+		planLoadFailed[planType] = isStarted && planState[planType].error !== '';
 	}
 
 	/*
@@ -1375,12 +1735,37 @@
 		refocusedPlanOpener = planType;
 	}
 
-	// A Plan's one audit row (#2104, #2133): the last save once there is
-	// one, which also says the Plan was started; until then, the start.
-	function planTrailRows(instance: Instance): SummaryListRow[] {
-		if (instance.lastEdited) return [{ label: 'Last edited', value: stampText(instance.lastEdited, timeZone) }];
-		if (instance.started) return [{ label: 'Started', value: stampText(instance.started, timeZone) }];
-		return [];
+	// A Plan's one line (#2755): how far it is answered, its audit trail
+	// (#2104, #2133: the last save once there is one, which also says the
+	// Plan was started; until then, the start) and, for the Birth Plan,
+	// whether the Client has read it.
+	function planStateLine(instance: Instance, planType: PlanType): string {
+		const parts = [planProgress(instance.fields, instance.answers)];
+		if (instance.lastEdited) parts.push(`last changed ${stampText(instance.lastEdited, timeZone)}`);
+		else if (instance.started) parts.push(`started ${stampText(instance.started, timeZone)}`);
+		if (planType === 'birth_plan') parts.push(birthPlanReadText(instance));
+		else parts.push(`${detail.clientName} never sees the Care Plan`);
+		return parts.join(' · ');
+	}
+
+	// The answers are capped in height where the plan is read on the record.
+	// Whether the cap hides any is measured, so a short plan has neither a
+	// fade nor a "Show the whole" and a long one has both.
+	let expandedPlans = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+	let clippedPlans = $state<Record<PlanType, boolean>>({ care_plan: false, birth_plan: false });
+
+	function watchPlanClip(planType: PlanType) {
+		return (element: HTMLElement) => {
+			const observer = new ResizeObserver(() => {
+				if (!expandedPlans[planType]) clippedPlans[planType] = element.scrollHeight > element.clientHeight + 1;
+			});
+			observer.observe(element);
+			return () => observer.disconnect();
+		};
+	}
+
+	function hasPlanAnswers(instance: Instance): boolean {
+		return Object.keys(instance.answers).length > 0;
 	}
 
 	// A new Plan has nothing to read yet, so starting one opens its
@@ -1388,7 +1773,7 @@
 	async function handleStartPlan(planType: PlanType) {
 		const isStarted = await planState[planType].mutate(
 			() => createInstance(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!, planType),
-			'Failed to create plan'
+			'We could not start the plan.'
 		);
 		if (!isStarted) return;
 		openPlanForm(planType);
@@ -1416,7 +1801,7 @@
 					planType,
 					planDraft[planType]
 				),
-			'Failed to save plan'
+			'We could not save the plan.'
 		);
 		if (!isSaved) return;
 		shownPlanForms[planType] = false;
@@ -1428,7 +1813,7 @@
 		if (detail.hasContract) {
 			await contractState.load(
 				() => loadContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-				'Failed to load contract'
+				'We could not load the Contract.'
 			);
 		}
 		isContractLoaded = true;
@@ -1446,7 +1831,7 @@
 				const { rates } = await loadRates(apiFetchWithSession, page.params.practiceId!);
 				return rates;
 			},
-			'Failed to load rates'
+			'We could not load the rates.'
 		);
 	}
 
@@ -1483,7 +1868,7 @@
 	async function handleCreateContract() {
 		const isCreated = await contractState.mutate(
 			() => createContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-			'Failed to create contract'
+			'We could not create the Contract.'
 		);
 		if (!isCreated) return;
 		if (contractEditableFields.length > 0) openContractForm();
@@ -1505,7 +1890,7 @@
 					page.params.engagementId!,
 					editableValues(contractDraft)
 				),
-			'Failed to save contract'
+			'We could not save the Contract.'
 		);
 		if (!isSaved) return;
 		isContractFormOpen = false;
@@ -1517,7 +1902,7 @@
 		contractSavedMessage = '';
 		const isSent = await contractState.mutate(
 			() => sendContract(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!),
-			'Failed to send contract'
+			'We could not send the Contract.'
 		);
 		if (!isSent) return;
 		contractSavedMessage = 'Contract sent.';
@@ -1608,8 +1993,9 @@
 			await invoicesState.load(async () => {
 				const read = await loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
 				contractBilling = read.billing;
+				owed = read.owed;
 				return read.invoices;
-			}, 'Failed to load invoices');
+			}, 'We could not load the Invoices.');
 		} else {
 			await contractorInvoicesState.load(async () => {
 				const read = await loadContractorInvoices(
@@ -1619,22 +2005,34 @@
 				);
 				hasUnbilledForContractor = read.hasUnbilled;
 				return read.invoices;
-			}, 'Failed to load invoices');
+			}, 'We could not load the Invoices.');
 		}
 		// #271: read alongside the Invoice list itself -- InvoiceSection
 		// needs to know the current mode (or its absence) before it can
 		// decide whether to show the "ask once" form.
 		await billingModeState.load(
 			() => loadBillingMode(apiFetchWithSession, page.params.practiceId!),
-			'Failed to load billing mode'
+			'We could not load how this Practice bills.'
 		);
+	}
+
+	// A new Invoice splices into the list, but what is owed is the BFF's sum
+	// over every open Invoice, so the fact reads it again; a read that fails
+	// says so rather than keep a figure the Invoice has made wrong.
+	async function refreshOwed() {
+		try {
+			const read = await loadInvoices(apiFetchWithSession, page.params.practiceId!, page.params.engagementId!);
+			owed = read.owed;
+		} catch {
+			owed = undefined;
+		}
 	}
 
 	async function loadPaymentTermsSection() {
 		await paymentTermsState.load(async () => {
 			const terms = await loadPaymentTerms(apiFetchWithSession, page.params.practiceId!);
 			return terms.netDays;
-		}, 'Failed to load payment terms');
+		}, 'We could not load the payment terms.');
 	}
 
 	// Reported by InvoiceSection's onCreate prop. No catch here, same as
@@ -1660,7 +2058,8 @@
 		void loadActivity();
 		if (canReadContractMoney) {
 			invoicesState.value = [invoice, ...invoicesState.value];
-			if (contractBilling) {
+			void refreshOwed();
+if (contractBilling) {
 				contractBilling = billingAfterRaising(contractBilling, invoice.amountCents);
 			}
 		} else {
@@ -1765,6 +2164,63 @@
 	 */
 	let onCall = $state<EngagementOnCall | undefined>();
 	let onCallError = $state('');
+	// The panel's own read once it has landed, so a saved gap moves the
+	// header; the Engagement's before it. Nothing after a loss or completion.
+	const isNobodyTonight = $derived(
+		displayStatus !== 'completed' &&
+			birthOutcome.birthOutcome === undefined &&
+			(onCall ? onCall.tonight : detail.tonight)?.isNobody === true
+	);
+
+	// #2755: the sections' order, settled from the Engagement read alone so
+	// nothing moves when a later read lands; "Jump to" follows it.
+	const isOnCallLineOnly = $derived(
+		displayStatus === 'completed' || birthOutcome.birthOutcome !== undefined || detail.kind === 'postpartum'
+	);
+	const onCallEndedLine = $derived.by((): string => {
+		if (detail.kind === 'postpartum') return 'Postpartum care has no on-call days.';
+		return detail.pregnancyEndedOn
+			? `On call ended on ${formatCalendarDay(detail.pregnancyEndedOn)}.`
+			: 'On call has ended.';
+	});
+	const orderedHeadings = $derived(
+		sectionOrder({
+			status: detail.status,
+			kind: detail.kind,
+			birthOutcome: detail.birthOutcome,
+			today: todayInZone,
+			dueDate: detail.dueDate,
+			onCallWindow: detail.onCallWindow,
+			hasDoula: detail.doulas.length > 0,
+			hasVisits: detail.hasVisits,
+			hasMessages: detail.hasMessages,
+			hasInvoices: detail.hasInvoices,
+			hasOffers: detail.hasOffers,
+			hasContract: detail.hasContract,
+			hasCarePlan: detail.hasCarePlan,
+			hasBirthPlan: detail.hasBirthPlan,
+			isOffersVisible,
+			isDoulaFeesVisible,
+			hasStartNote: Boolean(detail.startNote)
+		})
+	);
+	const sectionContent = {
+		'On call': () => (isOnCallLineOnly ? onCallEndedSection : onCallSection),
+		'Birth outcome': () => birthOutcomeSection,
+		Contract: () => contractSection,
+		Visits: () => visitsSection,
+		'Care Plan': () => carePlanSection,
+		'Birth Plan': () => birthPlanSection,
+		Invoices: () => invoicesSection,
+		Offers: () => offersSection,
+		'Doula fees': () => doulaFeesSection,
+		'Note when work started': () => startNoteSection,
+		Messages: () => messagesSection,
+		Activity: () => activitySection
+	} satisfies Record<SectionHeading, () => Snippet>;
+	const orderedSections = $derived(
+		orderedHeadings.map((heading) => ({ heading, content: sectionContent[heading]() }))
+	);
 	// Nothing is chosen when the form opens (#1916, ADR-0055): which Doula
 	// cannot be reached is a fact about someone else, and every Owner and
 	// Admin is told of the gap, so a report sent without reading the
@@ -2046,7 +2502,7 @@
 			.filter((doula) => doula.staffId !== gapStaffId)
 			.map((doula) => ({ value: doula.staffId, label: doula.name }))
 	);
-	const isGapCoverFirst = $derived((onCall?.gaps ?? []).some((gap) => !gap.coveringStaffName));
+	const hasUncoveredGap = $derived((onCall?.gaps ?? []).some((gap) => !gap.coveringStaffName));
 
 	async function loadRoster() {
 		if (!isPracticeOwnerOrAdmin) return;
@@ -2091,13 +2547,16 @@
 	 * through "View Client".
 	 */
 	let clientRecord = $state<ClientDetail | undefined>();
+	// Her phone is a fact, so a read that was lost is said there (#2755).
+	let isClientRecordSettled = $state(false);
 
 	async function loadClientRecord() {
 		try {
 			clientRecord = await loadClientDetail(apiFetchWithSession, page.params.practiceId!, detail.clientId);
 		} catch {
-			// The link stays off; see above.
+			// The link stays off; the Phone fact says it could not be read.
 		}
+		isClientRecordSettled = true;
 	}
 
 	async function loadRosterThenOffers() {
@@ -2149,7 +2608,7 @@
 			// own visibility question ("never invited") right away.
 			clientPortalOverride = { portalInviteStatus: 'invited', portalInviteDelivery: 'pending', emailSuppressed: false };
 			return `${location.origin}/portal/accept-invite?token=${created.inviteToken}`;
-		}, 'Failed to send portal invite');
+		}, 'We could not send the portal invite.');
 		if (isSent) await loadActivity();
 	}
 
@@ -2181,6 +2640,8 @@
 
 	function cancelAddVisit() {
 		closeAddVisit();
+		// The opener is the Visits section's own button, beside its state line
+		// or, with no Visit, in the empty line.
 		refocusedVisitOpener = 'add';
 	}
 
@@ -2200,7 +2661,7 @@
 		if (
 			await visitsCreate.mutate(async () => {
 				emailed = await createVisit(apiFetchWithSession, reference, scheduledAt, staffId);
-			}, 'Failed to add Visit')
+			}, 'We could not add the Visit.')
 		) {
 			closeAddVisit();
 			await loadVisits();
@@ -2242,7 +2703,7 @@
 				await saveVisitNotes(apiFetchWithSession, reference, visit.visitId, changeNotes);
 				hasWritten = true;
 			}
-		}, 'Failed to save the Visit');
+		}, 'We could not save the Visit.');
 		if (wasSaved) openVisitForm();
 		if (!hasWritten) return;
 		await loadVisits();
@@ -2259,7 +2720,7 @@
 		let emailed: string[] = [];
 		const wasSaved = await visitReassign.mutate(async () => {
 			emailed = await reassignVisit(apiFetchWithSession, reference, visit.visitId, newStaffId);
-		}, 'Failed to reassign the Visit');
+		}, 'We could not reassign the Visit.');
 		if (!wasSaved) return;
 		openVisitForm();
 		await loadVisits();
@@ -2280,13 +2741,13 @@
 	// string and the newest-first-to-oldest-first reversal are exactly the
 	// same read, just prepended instead of replacing.
 	async function handleLoadOlderMessages() {
-		await messagesLoad.mutate(async () => {
+		await messagesOlder.mutate(async () => {
 			const older = await loadMessagesPage<Message>(apiFetchWithSession, reference, messagesCursor);
 			messages = [...older.items, ...messages];
 			messagesCursor = older.nextCursor ?? '';
 			isMessagesHasMore = older.hasMore;
 			await refreshAttachmentPreviews(messages);
-		}, 'Failed to load older messages');
+		}, 'We could not load the earlier Messages.');
 	}
 
 	// Throws on a refusal; MessageThread shows it against its field.
@@ -2305,57 +2766,151 @@
 			link.download = filename;
 			link.click();
 			URL.revokeObjectURL(url);
-		}, 'Failed to download attachment');
+		}, 'We could not download the attachment.');
 	}
 </script>
 
-{#snippet summary()}
-	<!-- #2308: the Birth outcome section links here to reopen a completed
-	     Engagement before its outcome can be removed. -->
-	<stack-l id="engagement-summary" space="var(--space-4)">
-		<!--
-			#1998: GOV.UK's Summary list with row actions, as the drawing
-			has it -- one bordered card, a Change at the end of each row
-			this reader may change. Change is a button, not a link, because
-			it opens a form in place rather than going anywhere; it says
-			whether that form is open (aria-expanded), and the visually-
-			hidden words SummaryList draws name the row it changes.
-		-->
-		<SummaryList rows={summaryRows} isBordered>
-			{#snippet action(row, describedBy)}
-				<Button
-					label="Change"
-					variant="link"
-					expanded={openChange === row.change}
-					{describedBy}
-					focusOnAppearing={row.change === 'doula' && isDoulaChangeFocused}
-					onClick={() => toggleChange(row.change!)}
+{#snippet takeOffControl()}
+	<!--
+		#2596: apart from the Doula row's add, so a destructive button never
+		sits beside a benign one. The link opens a small form; its one
+		button opens the confirm dialog, which names the act. It is behind
+		the Doulas row's Change with the add, and under the list for a reader
+		whose row has no Change.
+	-->
+	<stack-l space="var(--space-3)">
+		<Button label="Take a Doula off" variant="link" expanded={isTakeOffShown} onClick={toggleTakeOff} />
+		{#if isTakeOffShown}
+			<StackedForm onSubmit={handleTakeOffSubmit}>
+				{#if takeOffSubmission.errors.length > 0}
+					<ErrorSummary errors={takeOffSubmission.errors} />
+				{/if}
+				<RadioGroup
+					legend="Who comes off?"
+					name={TAKE_OFF_GROUP}
+					options={takeOffOptions}
+					value={takeOffDoulaChosen?.staffId}
+					onChange={(value) => (takeOffChoice = value)}
+					error={takeOffSubmission.errorFor(radioFieldId(TAKE_OFF_GROUP, takeOffOptions[0]!.value))}
 				/>
-			{/snippet}
-			{#snippet detail(row)}
-				{#if row.change === 'care'}
-					<!--
-						#874: there is only ever one other kind to offer, so this
-						is a single named button, not a question. canChangeKind
-						is canWriteFact narrowed by ADR-0015's own upgrade caveat
-						(see its declaration); the endpoint refuses her whether
-						or not the control is drawn.
-					-->
-					<stack-l space="var(--space-3)">
-						<cluster-l space="var(--space-3)">
-							<Button
-								label={`Change to ${kindLabel(otherKind)}`}
-								size="sm"
-								variant="secondary"
-								loading={kindChange.isBusy}
-								onClick={handleChangeKind}
-							/>
-						</cluster-l>
-						{#if kindChange.error}
-							<Notice variant="error" message={kindChange.error} />
+				<cluster-l space="var(--space-3)">
+					<Button label="Take off" type="submit" size="sm" variant="destructive" loading={takeOffSubmission.isSubmitting} />
+				</cluster-l>
+			</StackedForm>
+		{/if}
+	</stack-l>
+{/snippet}
+
+{#snippet detailsRowValue(row: EngagementSummaryRow)}
+	{#if row.contact}
+		<Link href="{row.contact}:{row.href ?? row.value}" label={row.value} />
+	{:else}
+		{row.value}
+	{/if}
+{/snippet}
+
+{#snippet detailsRowAction(row: EngagementSummaryRow, describedBy: string, isShown: boolean)}
+	{#if row.isInvite}
+		<Button
+			label="Send portal invite"
+			variant="link"
+			{describedBy}
+			onClick={handleSendPortalInvite}
+			loading={isSendingPortalInvite}
+		/>
+	{:else}
+		<Button
+			label="Change"
+			variant="link"
+			expanded={isShown && openChange === row.change}
+			{describedBy}
+			onClick={() => toggleChange(row.change!)}
+		/>
+	{/if}
+{/snippet}
+
+{#snippet detailsRowForm(row: EngagementSummaryRow, isShown: boolean)}
+	{#if isShown && row.change === 'care'}
+		<!--
+			#874: there is only ever one other kind to offer, so this
+			is a single named button, not a question. canChangeKind
+			is canWriteFact narrowed by ADR-0015's own upgrade caveat
+			(see its declaration); the endpoint refuses her whether
+			or not the control is drawn.
+		-->
+		<stack-l space="var(--space-3)">
+			<cluster-l space="var(--space-3)">
+				<Button
+					label={`Change to ${kindLabel(otherKind)}`}
+					size="sm"
+					variant="secondary"
+					loading={kindChange.isBusy}
+					onClick={handleChangeKind}
+				/>
+			</cluster-l>
+			{#if kindChange.error}
+				<Notice variant="error" message={kindChange.error} />
+			{/if}
+		</stack-l>
+	{/if}
+{/snippet}
+
+{#snippet details(view: 'aside' | 'section', isShown: boolean)}
+	<!-- #2308: the Birth outcome section links here to reopen a completed
+	     Engagement before its outcome can be removed. #2755: the region is drawn
+	     twice (RecordDetail), so anything with an id, a dialog or a focus
+	     behavior is drawn in the displayed copy only. -->
+	<stack-l class="details-body" space="var(--space-4)">
+		{#if view === 'aside'}
+			<!--
+				The facts' own shape (#2755): the label above, the value and its
+				action on the value's line. In the 15 to 17rem column a
+				`SummaryList` stacks its key and drops "Change" alone to the far edge.
+			-->
+			<dl class="aside-rows">
+				{#each summaryRows as row, index (index)}
+					<div>
+						<dt>{row.label}</dt>
+						<dd>
+							<cluster-l space="var(--space-3)" align="baseline">
+								<span class="aside-value">{@render detailsRowValue(row)}</span>
+								{#if row.changes}
+									{@render detailsRowAction(row, `details-${view}-${index}-changes`, isShown)}
+									<span class="visually-hidden" id="details-{view}-{index}-changes">{row.changes}</span>
+								{/if}
+							</cluster-l>
+						</dd>
+						{#if isShown && row.isDetailShown}
+							<dd class="aside-form">{@render detailsRowForm(row, isShown)}</dd>
 						{/if}
-					</stack-l>
-				{:else if row.change === 'due'}
+					</div>
+				{/each}
+			</dl>
+		{:else}
+			<SummaryList rows={isShown ? summaryRows : summaryRows.map((row) => ({ ...row, isDetailShown: false }))}>
+				{#snippet value(row)}{@render detailsRowValue(row)}{/snippet}
+				{#snippet action(row, describedBy)}{@render detailsRowAction(row, describedBy, isShown)}{/snippet}
+				{#snippet detail(row)}{@render detailsRowForm(row, isShown)}{/snippet}
+			</SummaryList>
+		{/if}
+
+		{#if detailActs.length > 0}
+			<ul class="acts">
+				{#each detailActs as act (act.change)}
+					<li>
+						<Button
+							label={act.label}
+							variant="link"
+							expanded={isShown ? openChange === act.change : false}
+							focusOnAppearing={isShown && (refocusedChange === act.change || (act.change === 'doula' && isDoulaChangeFocused))}
+							onClick={() => toggleChange(act.change)}
+						/>
+					</li>
+				{/each}
+			</ul>
+		{/if}
+		{#if isShown && openAct === 'due'}
+			<Heading level={3} text={displayDueDate ? 'Change the due date' : 'Give the due date'} focusOnAppearing />
 					<!--
 						#2013: GOV.UK's date input, the boxes starting on the date
 						held now. A refused date is a refused form, so the summary
@@ -2386,11 +2941,12 @@
 								type="button"
 								size="sm"
 								variant="secondary"
-								onClick={() => (openChange = undefined)}
+								onClick={() => cancelChange('due')}
 							/>
 						</cluster-l>
 					</StackedForm>
-				{:else if row.change === 'carePhase'}
+		{:else if isShown && openAct === 'carePhase'}
+			<Heading level={3} text="Change the care phase" focusOnAppearing />
 					<!--
 						#253: exactly the moves ADR-0015's role table admits from
 						the current status for this caller -- the API decides the
@@ -2462,7 +3018,10 @@
 							</StackedForm>
 						{/if}
 					</stack-l>
-				{:else if isAttachQuestion}
+			<div><Button label="Cancel" variant="secondary" size="sm" onClick={() => cancelChange('carePhase')} /></div>
+		{:else if isShown && openAct === 'doula'}
+			<Heading level={3} text={detailActs.find((act) => act.change === 'doula')?.label ?? 'Doulas'} focusOnAppearing />
+			{#if isAttachQuestion}
 					<!--
 						#2230: which Doula, and the save. No Cancel: the row's
 						Change closes it, as it closes the care change above.
@@ -2514,7 +3073,10 @@
 							/>
 						</cluster-l>
 					</StackedForm>
-				{:else}
+					{#if canTakeOff}
+						{@render takeOffControl()}
+					{/if}
+			{:else}
 					<!--
 						#1598: "Put me on this work", behind the Doula row's
 						Change. The row has a Change only where the BFF says the
@@ -2537,40 +3099,18 @@
 						{#if selfAttach.error}
 							<Notice variant="error" message={selfAttach.error} />
 						{/if}
-					</stack-l>
-				{/if}
-			{/snippet}
-		</SummaryList>
-
-		{#if canTakeOff}
-			<!--
-				#2596: apart from the Doula row's add, so a destructive button never
-				sits beside a benign one. The link opens a small form; its one
-				button opens the confirm dialog, which names the act.
-			-->
-			<stack-l space="var(--space-3)">
-				<Button label="Take a Doula off" variant="link" expanded={isTakeOffShown} onClick={toggleTakeOff} />
-				{#if isTakeOffShown}
-					<StackedForm onSubmit={handleTakeOffSubmit}>
-						{#if takeOffSubmission.errors.length > 0}
-							<ErrorSummary errors={takeOffSubmission.errors} />
+						{#if canTakeOff}
+							{@render takeOffControl()}
 						{/if}
-						<RadioGroup
-							legend="Who comes off?"
-							name={TAKE_OFF_GROUP}
-							options={takeOffOptions}
-							value={takeOffDoulaChosen?.staffId}
-							onChange={(value) => (takeOffChoice = value)}
-							error={takeOffSubmission.errorFor(radioFieldId(TAKE_OFF_GROUP, takeOffOptions[0]!.value))}
-						/>
-						<cluster-l space="var(--space-3)">
-							<Button label="Take off" type="submit" size="sm" variant="destructive" loading={takeOffSubmission.isSubmitting} />
-						</cluster-l>
-					</StackedForm>
-				{/if}
-			</stack-l>
+					</stack-l>
+			{/if}
+			<div><Button label="Cancel" variant="secondary" size="sm" onClick={() => cancelChange('doula')} /></div>
 		{/if}
-		{#if takeOffDialog}
+
+		{#if isShown && canTakeOff && !canChangeDoula}
+			{@render takeOffControl()}
+		{/if}
+		{#if isShown && takeOffDialog}
 			<ConfirmDialog
 				bind:open={isTakeOffConfirmShown}
 				title={takeOffDialog.title}
@@ -2587,7 +3127,9 @@
 			the document (seen on #1598's 320px walk). The row above already
 			shows the new value.
 		-->
-		{#if selfAttachedMessage}
+		{#if !isShown}
+			<!-- The other copy says nothing a status would need to focus. -->
+		{:else if selfAttachedMessage}
 			<Notice variant="status" message={selfAttachedMessage} isFocusedOnAppear />
 		{:else if kindChangedMessage}
 			<Notice variant="status" message={kindChangedMessage} isFocusedOnAppear />
@@ -2613,9 +3155,9 @@
 			Engagement, and reading this Engagement at all already passed
 			ADR-0008's gate.
 		-->
-		<span class="visually-hidden" id="engagement-client-name">{detail!.clientName}</span>
+		<span class="visually-hidden" id="engagement-client-name-{view}">{detail!.clientName}</span>
 		<cluster-l space="var(--space-4)" align="center">
-			<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name" />
+			<Link href={clientDetailHref()} label="View Client" describedBy="engagement-client-name-{view}" />
 			<!--
 				Her other details, added from here as well as from her record
 				(#1610). The journey's first Back and its save return to this
@@ -2623,10 +3165,12 @@
 				whose edit `edit.go` refuses.
 			-->
 			{#if clientRecord && canAddDetails(clientRecord)}
-				<Link
-					href={detailsHref(page.params.practiceId!, detail!.clientId, page.params.engagementId!)}
-					label={detailsLinkLabel(clientRecord)}
-				/>
+				<span data-add-details>
+					<Link
+						href={detailsHref(page.params.practiceId!, detail!.clientId, page.params.engagementId!)}
+						label={detailsLinkLabel(clientRecord)}
+					/>
+				</span>
 			{/if}
 		</cluster-l>
 
@@ -2637,53 +3181,92 @@
 			into the Template's existing regions rather than taken through one
 			of ADR-0018's exits.
 		-->
-		{#if portalInviteError}
+		<!--
+			#255: an accepted Client is never offered a second invite -- the
+			"Portal invite" row above already says "Accepted". It sends from
+			that row's own action. A Client with no email gets a Notice naming
+			the missing thing in place of the action (#270).
+		-->
+		{#if isShown && !hasAcceptedPortalAccess && !hasClientEmailOnFile}
+			<Notice variant="info" message={noEmailForInviteMessage} />
+		{/if}
+
+		{#if isShown && portalInviteError}
 			<Notice variant="error" message={portalInviteError} />
 		{/if}
 
-		{#if portalInviteLink}
+		{#if isShown && portalInviteLink}
 			<Text text={`Invited. ${detail!.clientName} has an email with the link. To share the link yourself, here it is:`} />
 			<div><code>{portalInviteLink}</code></div>
 		{/if}
 	</stack-l>
 {/snippet}
-
 {#snippet actions()}
 	<!--
-		#1998: the drawing's header actions. "Message the Client" goes to
-		this page's own Messages section, which every reader of the page
-		has. Both are secondary, as drawn: the header names what can be
-		done, and the page's one accent is spent lower down.
+		#1998, #2755: the header holds one move, a link styled as a secondary
+		button (one decision on a phone's first screen). "Message the Client"
+		opens the compose in this page's own Messages section, which every
+		reader of the page has, and puts focus in the Message field; with no
+		compose to open (a Client who cannot read one) it goes to the section.
+		"Add a Visit" is the Visits section's own first control. Nothing here
+		is destructive.
 	-->
 	{#if !isClientErased}
-		<Link href="#messages" label="Message the Client" variant="secondary" />
-	{/if}
-	<!--
-		#255: an accepted Client is never offered a second invite -- the
-		"Portal invite" summary row above already says "Accepted", so
-		hiding this action here states the same fact rather than a second,
-		clickable copy of it. A Client with no email gets a Notice naming
-		the missing thing in place of the control (#270 converted this from
-		a disabled button with a visually-hidden hint -- the same pattern
-		#275 used at InvoiceSection.svelte:109 -- block over warn, never a
-		control silently withheld with only a hidden explanation).
-	-->
-	{#if !hasAcceptedPortalAccess}
-		{#if hasClientEmailOnFile}
-			<Button
-				label="Send portal invite"
-				variant="secondary"
-				onClick={handleSendPortalInvite}
-				loading={isSendingPortalInvite}
-			/>
-		{:else}
-			<Notice variant="info" message={noEmailForInviteMessage} />
-		{/if}
+		<ul class="moves">
+			<li><Link href="#messages" label="Message the Client" variant="outline" onClick={handleMessageTheClient} /></li>
+		</ul>
 	{/if}
 {/snippet}
 
-{#snippet visitWhenCell(visit: Visit, view: DataTableView)}
-	<VisitWhen at={visit.scheduledAt} {timeZone} isTracked={view === 'table'} />
+{#snippet statusLine()}
+	<EngagementStatusLine
+		carePhase={engagementStatusText(displayStatus)}
+		dueDay={displayDueDate && birthOutcome.birthOutcome === undefined ? displayDueDate : undefined}
+		weeks={displayDueDate && birthOutcome.birthOutcome === undefined ? weeksAlong(displayDueDate, timeZone) : undefined}
+		doulaLabel={doulaSummaryItem(attachedDoulas, displayStatus)?.label}
+		doulas={doulaSummaryItem(attachedDoulas, displayStatus)?.value}
+		isNobodyOnCallTonight={isNobodyTonight}
+	/>
+{/snippet}
+
+{#snippet loadFailure(what: string, retry: () => void)}
+	<!-- #2755: a section that could not be read says so, and reads again on request; the other sections stand. -->
+	<Notice variant="error" message="We could not load {what}." />
+	<div><Button label="Try again" variant="secondary" onClick={retry} /></div>
+{/snippet}
+
+{#snippet factValue(row: FactRow)}
+	<span class="fact {row.tone ?? ''}">
+		{#if row.tone}<Icon name={row.tone === 'error' ? 'warning-circle' : 'warning'} size={16} />{/if}
+		{#if row.href}
+			<Link href={row.href} label={row.value} ariaLabel="{row.value}, {row.hiddenWords}" onClick={row.onClick} />
+		{:else}
+			{row.value}
+		{/if}
+	</span>
+{/snippet}
+
+<!--
+	#2755: the facts a reader wants on arriving. Each value is the link to
+	its section, with the words that name the fact in its accessible name.
+	A read that failed says so, never a state it did not read.
+-->
+{#snippet facts()}
+	<dl>
+		{#each factRows as row (row.label)}
+			<div>
+				<dt>{row.label}</dt>
+				<dd>
+					{@render factValue(row)}
+					{#if row.detail}<span class="fact-detail">{row.detail}</span>{/if}
+				</dd>
+			</div>
+		{/each}
+	</dl>
+{/snippet}
+
+{#snippet visitWhenCell(visit: Visit)}
+	<VisitWhen at={visit.scheduledAt} {timeZone} />
 {/snippet}
 
 {#snippet visitDoulaCell(visit: Visit, view: DataTableView)}
@@ -2700,7 +3283,7 @@
 	<span class="visually-hidden" id="{view}-visit-{visit.visitId}-name"
 		>{visit.staffName}, {formatScheduledVisit(visit.scheduledAt, timeZone)}</span
 	>
-	<cluster-l space="var(--space-3)">
+	<cluster-l class="visit-actions" space="var(--space-3)">
 		<Button
 			label="Change"
 			variant="link"
@@ -2724,7 +3307,7 @@
 
 {#snippet addVisitForm()}
 	<StackedForm onSubmit={handleCreateVisit}>
-		<Heading level={3} text="Add a Visit" focusOnAppearing />
+		<Heading level={3} text="Add a Visit" id="add-visit" focusOnAppearing />
 		<!--
 			Gated on hasAttemptedCreateVisit, not on newVisitBlock alone:
 			#911's own live block (an ineligible pick) fires the instant
@@ -2794,20 +3377,20 @@
 	</StackedForm>
 {/snippet}
 
-{#snippet visitHeading(act: string, visit: Visit)}
+{#snippet visitHeading(act: string, visit: Visit, isFocused = true)}
 	{#key visit.visitId}
 		<Heading
 			level={3}
 			text={visit.scheduledAt
 				? `${act} the Visit for ${visit.staffName} on ${formatScheduledVisit(visit.scheduledAt, timeZone)}`
 				: `${act} the Visit for ${visit.staffName}, not yet scheduled`}
-			focusOnAppearing
+			focusOnAppearing={isFocused}
 		/>
 	{/key}
 {/snippet}
 
-{#snippet reassignVisitForm(visit: Visit)}
-	{@const reassignFieldId = `reassign-visit-staff-${visit.visitId}`}
+{#snippet reassignVisitForm(visit: Visit, view: DataTableView)}
+	{@const reassignFieldId = `reassign-visit-staff-${view}-${visit.visitId}`}
 	{@const options = reassignOptionsFor(visit)}
 	<!--
 		#2231: who takes it instead, and the save. #268/#274: asked only of a
@@ -2851,16 +3434,20 @@
 	</StackedForm>
 {/snippet}
 
-{#snippet changeVisitForm(visit: Visit)}
+{#snippet changeVisitForm(visit: Visit, view: DataTableView)}
 	<StackedForm onSubmit={(event) => handleChangeVisit(event, visit)}>
-		{@render visitHeading('Change', visit)}
+		<!-- A Visit that has happened is changed to write its notes, so focus
+		     goes into Notes, the caret at the end; a Visit still to come is
+		     changed to move its day, so focus stays on the heading (T3). -->
+		{@const isNotesFirst = visitGroup(visit, visitsNow).key === 'earlier'}
+		{@render visitHeading('Change', visit, !isNotesFirst)}
 		{#if visitChange.error}
 			<Notice variant="error" message={visitChange.error} />
 		{/if}
 		<!-- #250: an empty value clears the schedule; emptying the control
 		     is the plainer way to ask for that than a separate Clear. -->
 		<LabeledField
-			id="change-visit-scheduled-at-{visit.visitId}"
+			id="change-visit-scheduled-at-{view}-{visit.visitId}"
 			label="Scheduled date and time"
 			hint="Leave it empty if the Visit is not scheduled."
 		>
@@ -2877,17 +3464,19 @@
 		</LabeledField>
 		<!-- #251: any Staff member who may read this Visit may also write its
 		     notes, so this question is asked of every reader. -->
-		<LabeledField id="change-visit-notes-{visit.visitId}" label="Notes">
-			{#snippet children({ id, describedBy, invalid })}
-				<Textarea
-					{id}
-					{describedBy}
-					{invalid}
-					value={changeNotes}
-					onInput={(value) => (changeNotes = value)}
-				/>
-			{/snippet}
-		</LabeledField>
+		<div {@attach isNotesFirst ? focusNotesAtEnd : undefined}>
+			<LabeledField id="change-visit-notes-{view}-{visit.visitId}" label="Notes">
+				{#snippet children({ id, describedBy, invalid })}
+					<Textarea
+						{id}
+						{describedBy}
+						{invalid}
+						value={changeNotes}
+						onInput={(value) => (changeNotes = value)}
+					/>
+				{/snippet}
+			</LabeledField>
+		</div>
 		<cluster-l space="var(--space-3)">
 			<Button label="Save changes" type="submit" loading={visitChange.isBusy} />
 			<Button label="Cancel" variant="secondary" onClick={() => cancelVisitChange(visit)} />
@@ -2895,14 +3484,20 @@
 	</StackedForm>
 {/snippet}
 
+{#snippet visitForm(visit: Visit, view: DataTableView)}
+	{#if changingVisit?.visitId === visit.visitId}
+		{@render changeVisitForm(visit, view)}
+	{:else if reassigningVisit?.visitId === visit.visitId && canAssignVisits}
+		{@render reassignVisitForm(visit, view)}
+	{/if}
+{/snippet}
+
 {#snippet visitsSection()}
 	{#if rosterState.error}
 		<Notice variant="error" message={rosterState.error} />
 	{/if}
 
-	{#if visitsLoad.error}
-		<Notice variant="error" message={visitsLoad.error} />
-	{:else if visitsZoneNote}
+	{#if !visitsLoad.error && visitsZoneNote}
 		<Text text={visitsZoneNote} tone="muted" />
 	{/if}
 
@@ -2914,7 +3509,6 @@
 		opener, as the drawing has its actions under the table; the form,
 		and its one primary, only when asked.
 	-->
-	{@const canAddVisit = (canAssignVisits || canLogOwnVisit) && !isClientErased}
 	{@const addOpener =
 		canAddVisit && openVisitChange !== 'add'
 			? {
@@ -2927,7 +3521,42 @@
 		<!-- #2258: until the read lands the section says it is loading,
 		     never "No Visits yet.". -->
 		<Skeleton label="Loading the Visits" />
+	{:else if visitsLoad.error}
+		{@render loadFailure('the Visits', loadVisits)}
 	{:else}
+	{#if visits.items.length > 0}
+		<cluster-l space="var(--space-4)" align="center">
+			<Text
+				text={nextVisit?.scheduledAt
+					? `Next: ${formatScheduledVisit(nextVisit.scheduledAt, timeZone)}, ${nextVisit.staffName}.`
+					: 'No Visit scheduled.'}
+			/>
+			{#if lastVisit?.scheduledAt}
+				<Link
+					href="#visit-{lastVisit.visitId}"
+					label="Last Visit: {formatCalendarWeekdayDay(dayIn(new Date(lastVisit.scheduledAt), timeZone), timeZone)}"
+					onClick={showLastVisit}
+				/>
+			{/if}
+			{#if addOpener}
+				<Button
+					label={addOpener.label}
+					variant="secondary"
+					onClick={addOpener.onClick}
+					focusOnAppearing={addOpener.focusOnAppearing}
+				/>
+			{/if}
+		</cluster-l>
+	{/if}
+	{#if visitsSavedMessage}
+		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
+	{/if}
+	{#if erasedVisitsNote}
+		<Notice variant="info" message={erasedVisitsNote} />
+	{/if}
+	{#if openVisitChange === 'add' && canAddVisit}
+		{@render addVisitForm()}
+	{/if}
 	<DataTable
 		columns={[
 			{ label: 'When', accessor: (visit: Visit) => formatScheduledVisit(visit.scheduledAt, timeZone), content: visitWhenCell },
@@ -2937,50 +3566,30 @@
 				accessor: (visit: Visit) => visitDoulaText(visit.staffName, visit.isOffEngagement),
 				content: visitDoulaCell
 			},
-			// #2091: a note is a Doula's prose beside four facts, so it takes
-			// the room they leave and wraps there. The table's floor is then the
-			// facts beside the note's longest word, 615px on the typical screen in
-			// macOS/Chromium, under DataTable's own 55rem, so this route sets no
-			// floor of its own.
-			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.', wraps: true }
+			// #2091: a note is a Doula's prose beside three facts, so it takes
+			// the room they leave and wraps there, and the facts (a Doula's
+			// "Priya Raman" included) keep one line each (#2755). The table's
+			// floor is then the facts beside the note's longest word, under
+			// DataTable's own 55rem, so this route sets no floor of its own.
+			{ label: 'Notes', accessor: (visit: Visit) => visit.notes || 'No notes yet.', grows: true }
 		]}
-		rows={sortedVisits}
+		columnWidths="one-line"
+		rows={shownVisits}
+		rowGroup={(visit: Visit) => visitGroup(visit, visitsNow)}
+		groupHeadingLevel={3}
 		rowId={visitRowId}
 		rowActions={{ label: 'Actions', content: visitActions }}
-		hasMore={visits.hasMore}
+		rowDetail={{ isOpen: isVisitFormOpen, content: visitForm }}
+		hasMore={isEarlierVisitsShown && visits.hasMore}
 		onLoadMore={() => visits.loadMore()}
 		isLoadingMore={visits.isLoadingMore}
 		loadMoreError={visits.loadMoreError}
 		emptyMessage="No Visits yet."
 		emptyAction={addOpener}
 	/>
+	{#if hasEarlierVisits}
+		<div><Button label="Show earlier Visits" variant="secondary" onClick={() => (isEarlierVisitsShown = true)} /></div>
 	{/if}
-
-	{#if visitsSavedMessage}
-		<Notice variant="status" message={visitsSavedMessage} isFocusedOnAppear />
-	{/if}
-
-	{#if erasedVisitsNote}
-		<Notice variant="info" message={erasedVisitsNote} />
-	{/if}
-
-	{#if addOpener && sortedVisits.length > 0}
-		<div>
-			<Button
-				label={addOpener.label}
-				variant="secondary"
-				onClick={addOpener.onClick}
-				focusOnAppearing={addOpener.focusOnAppearing}
-			/>
-		</div>
-	{/if}
-
-	{#if openVisitChange === 'add' && canAddVisit}
-		{@render addVisitForm()}
-	{:else if changingVisit}
-		{@render changeVisitForm(changingVisit)}
-	{:else if reassigningVisit && canAssignVisits}
-		{@render reassignVisitForm(reassigningVisit)}
 	{/if}
 {/snippet}
 
@@ -2993,7 +3602,9 @@
 {#snippet planSectionBody(planType: PlanType, heading: string)}
 	{@const instance = planState[planType].value}
 	{#if planLoaded[planType]}
-		{#if instance && shownPlanForms[planType]}
+		{#if planLoadFailed[planType] && !instance}
+			{@render loadFailure(`the ${heading}`, () => loadPlan(planType))}
+		{:else if instance && shownPlanForms[planType]}
 			<StackedForm onSubmit={(event) => handleSavePlan(event, planType, heading)}>
 				<Heading level={3} text="Change the {heading}" focusOnAppearing />
 				{#if planState[planType].error}
@@ -3016,35 +3627,48 @@
 				<Notice variant="error" message={planState[planType].error} />
 			{/if}
 			{#if instance}
-				<SummaryList
-					rows={[
-						{ label: 'Progress', value: planProgress(instance.fields, instance.answers) },
-						// One audit row per Plan, as drawn: who last saved it (#2104), or,
-						// until a first save, who started it (#2133).
-						...planTrailRows(instance),
-						...(planType === 'birth_plan' ? [{ label: 'Client', value: birthPlanReadText(instance) }] : [])
-					]}
-				/>
+				<Text text={planStateLine(instance, planType)} />
 				{#if planSavedMessage[planType]}
 					<Notice variant="status" message={planSavedMessage[planType]} isFocusedOnAppear />
 				{/if}
+				<!--
+					#2243, #2755: the answered questions read here, at a capped
+					height; the whole text stays in the accessibility tree.
+					Changing them stays its own act.
+				-->
+				{#if hasPlanAnswers(instance)}
+					<div
+						class="plan-answers column"
+						class:capped={!expandedPlans[planType]}
+						class:care={planType === 'care_plan'}
+						class:clipped={clippedPlans[planType] && !expandedPlans[planType]}
+						{@attach watchPlanClip(planType)}
+					>
+						<PlanInstanceView fields={instance.fields} answers={instance.answers} headingLevel={3} answeredOnly width="column" />
+					</div>
+				{/if}
 				<cluster-l space="var(--space-3)">
+					<!--
+						#280: the reading and taking-away surface -- its own
+						address. Editing stays here.
+					-->
+					{#if planType === 'birth_plan' && birthPlanOffer.offersBirthPlan}
+						<Link href={birthPlanHref} label="Read or print the whole Birth Plan" icon="file-text" variant="secondary" />
+					{:else if clippedPlans[planType]}
+						<Button
+							label="Show the whole {heading}"
+							variant="secondary"
+							expanded={expandedPlans[planType]}
+							onClick={() => (expandedPlans[planType] = !expandedPlans[planType])}
+						/>
+					{/if}
 					<Button
 						label="Change the {heading}"
 						variant="secondary"
 						onClick={() => openPlanForm(planType)}
 						focusOnAppearing={refocusedPlanOpener === planType}
 					/>
-					<!--
-						#280: the reading and taking-away surface -- its own
-						address. Editing stays here.
-					-->
-					{#if planType === 'birth_plan' && birthPlanOffer.offersBirthPlan}
-						<Link href={birthPlanHref} label="Print for the hospital" icon="file-text" variant="secondary" />
-					{/if}
 				</cluster-l>
-				<!-- #2243: the answers read here; changing them stays its own act. -->
-				<PlanInstanceView fields={instance.fields} answers={instance.answers} headingLevel={3} />
 			{:else if planType === 'birth_plan' && !birthPlanOffer.offersBirthPlanToStart}
 				<EmptyState message={displayKind === 'birth' ? NO_BIRTH_PLAN_AFTER_OUTCOME : NO_BIRTH_PLAN_ON_POSTPARTUM} />
 			{:else}
@@ -3089,7 +3713,9 @@
 
 {#snippet contractSection()}
 	{#if isContractLoaded}
-		{#if contract && isContractFormOpen}
+		{#if detail.hasContract && !contract && contractError}
+			{@render loadFailure('the Contract', loadContractSection)}
+		{:else if contract && isContractFormOpen}
 			<!-- #2004: a Draft's merge fields, only when asked. -->
 			<StackedForm onSubmit={handleSaveContract}>
 				<Heading level={3} text="Change the Draft Contract" focusOnAppearing />
@@ -3218,7 +3844,7 @@
 				person whose fee it is.
 			-->
 			{#if data.yourFee}
-				<SummaryList rows={yourFeeRows(data.yourFee)} />
+				<SummaryList rows={yourFeeRows(data.yourFee)} width="column" />
 			{/if}
 			{#if contractError}
 				<Notice variant="error" message={contractError} />
@@ -3272,16 +3898,16 @@
 	-->
 	{#if !isContractLoaded}
 		<Skeleton label="Loading the Invoices" />
-	{:else if contract}
+	{:else if contract && contract.status !== 'draft' && contract.status !== 'sent'}
 		{@render invoicesBody(contract.status)}
 	{:else}
-		<EmptyState message="An Invoice is raised against a signed Contract." />
+		<Text text="Invoices start once {detail.clientName} signs the Contract." />
 	{/if}
 {/snippet}
 
 {#snippet invoicesBody(contractStatus: string)}
 	{#if invoicesError}
-		<Notice variant="error" message={invoicesError} />
+		{@render loadFailure('the Invoices', loadInvoicesSection)}
 	{/if}
 	{#if billingModeState.error}
 		<Notice variant="error" message={billingModeState.error} />
@@ -3296,7 +3922,13 @@
 	     rather than mounting with '' and throwing on its own first date
 	     computation. A still-loading or failed read leaves this gap
 	     blank; the Notice above already says why. -->
-	{#if paymentTermsDays > 0 && isInvoicesSettled}
+	{#if invoiceStateLine}
+		<p class="state-line" class:overdue={invoiceStateLine.isOverdue}>
+			{#if invoiceStateLine.isOverdue}<Icon name="warning-circle" size={16} />{/if}
+			{invoiceStateLine.text}
+		</p>
+	{/if}
+	{#if paymentTermsDays > 0 && isInvoicesSettled && !invoicesError}
 		<InvoiceSection
 			{invoices}
 			{contractStatus}
@@ -3323,7 +3955,7 @@
 			onVoidInvoice={handleVoidInvoice}
 			onWriteOffInvoice={handleWriteOffInvoice}
 		/>
-	{:else if !paymentTermsState.error}
+	{:else if !paymentTermsState.error && !invoicesError}
 		<Skeleton label="Loading the Invoices" />
 	{/if}
 {/snippet}
@@ -3358,7 +3990,7 @@
 		<!-- The section stands before its read lands for an Owner or an
 		     Admin (#2258), whom the read never refuses, so nothing back is
 		     a failure, said as Doula fees says one. -->
-		<Notice variant="error" message="We could not load the Offers." />
+		{@render loadFailure('the Offers', loadOffersSection)}
 	{:else}
 	<OfferSection
 		{timeZone}
@@ -3374,13 +4006,12 @@
 {/snippet}
 
 {#snippet doulaFeesSection()}
-	{#if doulaFeesState.error}
-		<Notice variant="error" message={doulaFeesState.error} />
-	{/if}
 	<!-- The date paid reads "today" in the Practice's zone, so the section
 	     waits for it, as InvoiceSection does. -->
 	{#if !doulaFeesState.hasSettled}
 		<Skeleton label="Loading the Doula fees" />
+	{:else if doulaFeesState.error}
+		{@render loadFailure('the Doula fees', loadDoulaFeesSection)}
 	{:else}
 		<DoulaFeeSection
 			fees={doulaFeesState.value ?? []}
@@ -3399,23 +4030,42 @@
 	-->
 	{#if !messagesLoad.hasSettled}
 		<Skeleton label="Loading the Messages" />
-	{:else if messageThreadRows.length > 0}
-		<SummaryList rows={messageThreadRows} />
+	{:else if messagesLoad.error}
+		{@render loadFailure('the Messages', loadMessages)}
+	{:else if messages.length > 0}
+		{@const since = unansweredSince(messages)}
+		<!-- "Show earlier Messages" shares the state line's line (#2755), as Add a Visit does. -->
+		<cluster-l space="var(--space-4)" align="center">
+			<p class="state-line" class:warning={!!since}>
+				{#if since}
+					<Icon name="warning" size={16} />Unanswered since {formatActivityTimestamp(since, timeZone)}.
+				{:else}
+					Answered.
+				{/if}
+			</p>
+			{#if hasEarlierMessages}
+				<Button label="Show earlier Messages" variant="secondary" onClick={() => (isEarlierMessagesShown = true)} />
+			{/if}
+		</cluster-l>
 	{/if}
-	{#if messagesLoad.hasSettled}
+	{#if messagesLoad.hasSettled && !messagesLoad.error}
+	<div class="thread">
 	<MessageThread
 		{timeZone}
-		{messages}
+		messages={shownMessages}
 		error={messagesError}
-		hasMore={isMessagesHasMore}
+		hasMore={isMessagesHasMore && isEarlierMessagesShown}
 		isLoadingOlder={isLoadingOlderMessages}
 		onLoadOlder={handleLoadOlderMessages}
 		onSend={sendThreadMessage}
 		onDownloadAttachment={handleDownloadAttachment}
 		{attachmentPreviewURLs}
 		composeOpener="Write a message"
+		emptyMessage="No Messages yet."
+		{composeRequest}
 		cannotSendReason={messageBlock}
 	/>
+	</div>
 	{/if}
 	<!-- The way out the block names, beside it (#2004). -->
 	{#if messageBlock && hasNeverInvitedClient && hasClientEmailOnFile}
@@ -3444,7 +4094,7 @@
 		belong together on one form.
 	-->
 	{#if onCallDoulaRows.length > 0}
-		<SummaryList rows={onCallDoulaRows}>
+		<SummaryList rows={onCallDoulaRows} width="column">
 			{#snippet value(row)}
 				{#if row.from && row.to}
 					On call <time datetime={row.from}>{sayDay(row.from)}</time> to <time datetime={row.to}>{sayDay(row.to)}</time>
@@ -3504,7 +4154,7 @@
 {#snippet putAnotherDoulaOn()}
 	{#if isAttachQuestion}
 		<div>
-			<Link href="#engagement-summary" label="Put another Doula on this birth" onClick={focusDoulaChange} />
+			<Link href="#details" label="Put another Doula on this birth" onClick={focusDoulaChange} />
 		</div>
 	{:else if !isPracticeOwnerOrAdmin}
 		<Text text="Only an Owner or Admin can put another Doula on this birth." tone="variant" />
@@ -3530,18 +4180,18 @@
 				: undefined}
 		/>
 	{:else}
-		<SummaryList rows={gapRows}>
+		<SummaryList rows={gapRows} width="column">
 			{#snippet value(row)}
-				<stack-l space="var(--space-2)">
-					<span>
-						<CoverageGapWhen startsAt={row.gap.startsAt} endsAt={row.gap.endsAt} {timeZone} now={gapNow} />
-					</span>
-					<div>
+				<stack-l space="var(--space-1)">
+					<cluster-l space="var(--space-3)" align="baseline">
+						<span>
+							<CoverageGapWhen startsAt={row.gap.startsAt} endsAt={row.gap.endsAt} {timeZone} now={gapNow} />
+						</span>
 						<Badge
 							label={row.gap.coveringStaffName ? `${row.gap.coveringStaffName} covering` : 'Nobody covering'}
 							variant={row.gap.coveringStaffName ? 'success' : 'warning'}
 						/>
-					</div>
+					</cluster-l>
 					{#if row.gap.reason}
 						<Text text={row.gap.reason} step="body-sm" tone="variant" />
 					{/if}
@@ -3558,26 +4208,27 @@
 					/>
 					<Button
 						label="Clear"
-						variant="secondary"
-						size="sm"
+						variant="link"
 						{describedBy}
 						onClick={() => clearCoverageGap(row.gap)}
 					/>
 				</cluster-l>
 			{/snippet}
 		</SummaryList>
-		{#if isGapCoverFirst && !isGapFormOpen}
-			{@render putAnotherDoulaOn()}
-		{/if}
-		{#if canRecordGap && !isGapFormOpen}
-			<div>
-				<Button
-					label="Record a time a Doula cannot be reached"
-					variant="secondary"
-					onClick={() => openOnCall('gap')}
-					focusOnAppearing={isGapOpenerRefocused}
-				/>
-			</div>
+		{#if !isGapFormOpen && (hasUncoveredGap || canRecordGap)}
+			<cluster-l space="var(--space-4)" align="center">
+				{#if hasUncoveredGap}
+					{@render putAnotherDoulaOn()}
+				{/if}
+				{#if canRecordGap}
+					<Button
+						label="Record a time a Doula cannot be reached"
+						variant="secondary"
+						onClick={() => openOnCall('gap')}
+						focusOnAppearing={isGapOpenerRefocused}
+					/>
+				{/if}
+			</cluster-l>
 		{/if}
 	{/if}
 
@@ -3695,17 +4346,20 @@
 
 {#snippet onCallSection()}
 	{#if onCallError}
-		<Notice variant="error" message={onCallError} />
+		{@render loadFailure('who is on call', loadOnCall)}
 	{:else if onCall}
+		{#if tonightLine}
+			<p class="state-line">{tonightLine.text}</p>
+		{/if}
 		{#if onCall.window}
 			<p>
-				On call from <time datetime={onCall.window.start}>{sayDay(onCall.window.start)}</time> to <time datetime={onCall.window.end}>{sayDay(onCall.window.end)}</time>.
+				On call from <time datetime={onCall.window.start}>{sayDay(onCall.window.start)}</time> to <time datetime={onCall.window.end}>{sayDay(onCall.window.end)}</time>{#if onCall.rule.startRule === 'gestational_week'}, from {onCall.rule.startWeek} weeks{/if}.
 			</p>
 		{:else}
 			<Text text={describeNoWindow(onCall.noWindowReason ?? '')} tone="muted" />
 			{#if putDoulaOnWords}
 				<div>
-					<Link href="#engagement-summary" label={putDoulaOnWords} onClick={focusDoulaChange} />
+					<Link href="#details" label={putDoulaOnWords} onClick={focusDoulaChange} />
 				</div>
 			{/if}
 		{/if}
@@ -3714,13 +4368,8 @@
 			<Notice variant="status" message={onCallSavedMessage} isFocusedOnAppear />
 		{/if}
 
-		{#if isGapCoverFirst}
-			{@render onCallGaps(onCall)}
-			{@render onCallDays()}
-		{:else}
-			{@render onCallDays()}
-			{@render onCallGaps(onCall)}
-		{/if}
+		{@render onCallDays()}
+		{@render onCallGaps(onCall)}
 	{:else}
 		<Skeleton label="Loading who is on call" />
 	{/if}
@@ -3732,17 +4381,35 @@
 		endedOn={birthOutcome.pregnancyEndedOn}
 		canRecord={canWriteFact}
 		canCorrect={isPracticeOwner}
-		reopenHref={displayStatus === 'completed' ? '#engagement-summary' : undefined}
+		reopenHref={displayStatus === 'completed' ? '#details' : undefined}
 		onRecord={handleRecordBirthOutcome}
 	/>
 {/snippet}
 
 {#snippet activitySection()}
-	{#if activityError}
-		<Notice variant="error" message={activityError} />
-	{/if}
-	{#if !activityLoad.hasSettled}
+	<!-- #2755: the kinds are the BFF's (?kind=), each re-reading the first page. -->
+	<cluster-l space="var(--space-3)" align="baseline">
+		<span class="filter-label" id="activity-filter-label">Show:</span>
+		<ul class="activity-kinds" aria-labelledby="activity-filter-label"> <!-- spelling:ignore: aria-labelledby is an ARIA attribute name -->
+			{#each ACTIVITY_KINDS as option (option.kind)}
+				<li>
+					<Link
+						href={activityKindHref(option.kind)}
+						label={option.label}
+						current={option.kind === activityKind}
+						onClick={(event) => {
+							event.preventDefault();
+							void goto(activityKindHref(option.kind), { reset: false });
+						}}
+					/>
+				</li>
+			{/each}
+		</ul>
+	</cluster-l>
+	{#if !activityLoad.hasSettled || activityLoad.isBusy}
 		<Skeleton label="Loading the Activity" />
+	{:else if activityError}
+		{@render loadFailure('the Activity', loadActivity)}
 	{:else}
 	<DataTable
 		columns={activityLedgerColumns(timeZone)}
@@ -3751,27 +4418,23 @@
 		onLoadMore={showMoreActivity}
 		isLoadingMore={activity.isLoadingMore}
 		loadMoreError={activity.loadMoreError}
-		emptyMessage="Nothing has happened yet."
+		emptyMessage={activityKind === '' ? 'Nothing has happened yet.' : 'Nothing of this kind yet.'}
 	/>
 	{/if}
+{/snippet}
+
+{#snippet onCallEndedSection()}
+	<Text text={onCallEndedLine} />
 {/snippet}
 
 <!--
 	Archetype D, ADR-0018. Offers is Owner/Admin-only, which is why
 	`sections` is a typed array and not a run of named regions.
 
-	The order (#2146) is the order a Doula works in on an open Engagement:
-	who is on call and how the birth went first, because during a birth
-	those are what she opens the page for (#1093, #943). Then the
-	Contract, before the Visits, because a new Engagement waits on the
-	signed agreement and the money that follows it -- the drawing's reason
-	for putting Contract first. Then the care she gives in the order she
-	gives it (Visits, Care Plan, Birth Plan), the money raised against the
-	Contract (Invoices), who else was offered the work (Offers), and the
-	conversation and the record of what happened last. The "On this page"
-	rail and the "Jump to" strip are derived from this array, so they
-	follow it. Every section shows even when empty (#2015): Invoices
-	before a Contract says what it waits for.
+	The order (#2146, #2755) follows the care phase and is settled from the
+	Engagement read alone (sectionOrder.ts), so it is right on first paint
+	and nothing moves when a later read lands. Every section shows even when
+	empty (#2015): Invoices before a Contract says what it waits for.
 -->
 <!-- #1611, #1710: a save that leads here says what it did, such as
      "Work with Pat started." at the end of a new Client's flow. -->
@@ -3781,26 +4444,157 @@
 	backHref={back?.href(clientsHref) ?? clientsHref}
 	backLabel={back?.label('Clients') ?? 'Clients'}
 	onBack={back?.go}
-	{summary}
+	{statusLine}
+	{facts}
+	{details}
 	{actions}
 	isContentsShown
-	sections={[
-		{ heading: 'On call', content: onCallSection },
-		{ heading: 'Birth outcome', content: birthOutcomeSection },
-		{ heading: 'Contract', content: contractSection },
-		{ heading: 'Visits', content: visitsSection },
-		{ heading: 'Care Plan', content: carePlanSection },
-		{ heading: 'Birth Plan', content: birthPlanSection },
-		{ heading: 'Invoices', content: invoicesSection },
-		...(detail.startNote ? [{ heading: 'Note when work started', content: startNoteSection }] : []),
-		...(isOffersVisible ? [{ heading: 'Offers', content: offersSection }] : []),
-		...(isDoulaFeesVisible ? [{ heading: 'Doula fees', content: doulaFeesSection }] : []),
-		{ heading: 'Messages', content: messagesSection },
-		{ heading: 'Activity', content: activitySection }
-	]}
+	sections={orderedSections}
 />
 
 <style>
+	/* A Visit's Change and Reassign stay on one line, so Notes is what wraps. */
+	.visit-actions {
+		flex-wrap: nowrap;
+		white-space: nowrap;
+	}
+
+	.moves {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-2);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.acts {
+		display: grid;
+		gap: var(--space-1);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	/* Details beside the sections: the facts' own shape, the label above and
+	   the value with its action on the value's line. */
+	.aside-rows {
+		display: grid;
+		row-gap: var(--space-2);
+		margin: 0;
+	}
+
+	.aside-rows dt {
+		margin: 0;
+		font-size: var(--text-meta-size);
+		line-height: var(--text-meta-leading);
+		color: var(--color-on-surface-muted);
+	}
+
+	.aside-rows dd {
+		margin: 0;
+		min-inline-size: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.aside-form {
+		padding-block-start: var(--space-2);
+	}
+
+	.fact {
+		display: flex;
+		align-items: baseline;
+		gap: var(--space-1);
+	}
+
+	/* Each fact's value is a 24px target, as "Jump to"'s links are, so five rows
+	   hold the first screen on a phone. */
+	.fact :global(a) {
+		min-block-size: var(--target-min-aa);
+	}
+
+	/* A section's first line where its state needs a tone beside the words
+	   (the Invoices'; red is for overdue, DESIGN.md's One Meaning Per Hue). */
+	.state-line {
+		margin: 0;
+		max-inline-size: var(--measure);
+		font-size: var(--text-body-size);
+		line-height: var(--text-body-leading);
+	}
+
+	.state-line.overdue {
+		color: var(--color-error);
+	}
+
+	.state-line.warning {
+		color: var(--color-warning);
+	}
+
+	.filter-label {
+		color: var(--color-on-surface-muted);
+	}
+
+	.activity-kinds {
+		display: flex;
+		flex-wrap: wrap;
+		gap: var(--space-1) var(--space-4);
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	/* The width rule (design call, section 1): the thread, prose and the
+	   record's plain blocks stop at the reading measure. */
+	.thread {
+		max-inline-size: var(--measure);
+	}
+
+	.state-line > :global(svg) {
+		vertical-align: text-bottom;
+		margin-inline-end: var(--space-1);
+	}
+
+	/* The plan's answers take the column (`column`, ADR-0018 2026-11-15), their
+	   values at the reading width, at a capped height; the text beyond the cap
+	   stays in the document, clipped and faded. */
+	.plan-answers.capped {
+		/* tokens:ignore -- the cap is a height chosen against the first screen of a phone (design call, S4a): 32rem holds the Birth Plan's pain-relief answer on 375x740, and no spacing token is that tall. */
+		max-block-size: 32rem;
+		overflow: hidden;
+	}
+
+	/* The Care Plan is internal notes read in passing, so its cap is shorter than the Birth Plan's (a phone's one-answer corridor). */
+	.plan-answers.capped.care {
+		/* tokens:ignore -- a height chosen against the record's length (design call r2, D10); no spacing token is that tall. */
+		max-block-size: 12rem;
+	}
+
+	.plan-answers.clipped {
+		mask-image: linear-gradient(to bottom, black calc(100% - var(--space-8)), transparent);
+	}
+
+	.fact-detail {
+		display: block;
+		font-size: var(--text-meta-size);
+		line-height: var(--text-meta-leading);
+		color: var(--color-on-surface-muted);
+	}
+
+	.fact > :global(svg) {
+		flex: none;
+		align-self: flex-start;
+		margin-block-start: var(--space-1);
+	}
+
+	.fact.warning {
+		color: var(--color-warning);
+	}
+
+	.fact.error,
+	.fact.error :global(a) {
+		color: var(--color-error);
+	}
+
 	.start-note {
 		margin: 0;
 		max-inline-size: var(--measure);

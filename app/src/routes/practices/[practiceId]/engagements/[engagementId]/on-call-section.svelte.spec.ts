@@ -65,17 +65,23 @@ async function setupOnCall(
 		const answer = extra(path, init);
 		return answer ? Promise.resolve(answer) : respond(path);
 	});
-	await render(Page, { data: data ?? { ...fixtureDetail, session } });
+	// The fixture's Engagement has its birth outcome recorded, and the section
+	// is one line after an outcome (#2755): the birth these tests change days
+	// and gaps on is before it.
+	await render(Page, {
+		data: { ...(data ?? { ...fixtureDetail, session }), birthOutcome: undefined, pregnancyEndedOn: undefined }
+	});
 }
 
-// The summary card above has Changes of its own, so the section's are
-// asked for inside its region.
+// Details holds Changes of its own, so the section's are asked for inside
+// its region.
 const onCallChanges = () =>
 	testPage.getByRole('region', { name: 'On call' }).getByRole('button', { name: 'Change', exact: true });
-// The fixture's gap nobody covers puts the gap list above the Doulas' days
-// (two gaps, so two Changes), then one Change for each Doula's days.
-const GAP_CHANGES = 2;
-const daysChange = (index: number) => onCallChanges().nth(GAP_CHANGES + index);
+// The Doulas' days come before the gaps (#2755): one Change for each of the
+// fixture's two Doulas, then one for each gap.
+const DOULA_ROWS = 2;
+const daysChange = (index: number) => onCallChanges().nth(index);
+const gapChange = (index: number) => onCallChanges().nth(DOULA_ROWS + index);
 const recordGapOpener = () => testPage.getByRole('button', { name: 'Record a time a Doula cannot be reached' });
 
 /**
@@ -216,7 +222,7 @@ describe('the on-call section on a birth (#1093)', () => {
 			return;
 		});
 
-		await onCallChanges().first().click();
+		await gapChange(0).click();
 
 		await expect.element(gapStaffField()).toHaveValue('staff-1');
 		await expect.element(testPage.getByLabelText('From', { exact: true })).toHaveValue('2026-10-17T18:00');
@@ -327,7 +333,7 @@ describe('the on-call section on a birth (#1093)', () => {
 
 			await testPage.getByRole('link', { name: 'Put another Doula on this birth' }).click();
 
-			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Change');
+			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Put on or take off a Doula');
 		});
 
 		it('tells a Doula who can put another Doula on the birth', async () => {
@@ -656,14 +662,12 @@ describe('the on-call section on a birth (#1093)', () => {
 	});
 
 	describe('a birth with no Doula on it', () => {
-		it('offers a Doula who may put herself on a link that focuses the Doula row’s Change', async () => {
+		it('offers a Doula who may put herself on a link that focuses the Doulas link in Details', async () => {
 			await setupOnCall(nobodyOn, asDoula.props!.data as ComponentProps<typeof Page>['data']);
 
 			await testPage.getByRole('link', { name: 'Put yourself on this birth' }).click();
 
-			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Change');
-			const describer = document.querySelector(`#${CSS.escape(document.activeElement!.getAttribute('aria-describedby')!)}`);
-			expect(describer?.textContent).toBe('Doula');
+			await expect.poll(() => document.activeElement?.textContent?.trim()).toBe('Put yourself on');
 		});
 
 		it('offers a reader who cannot put a Doula on the birth no link', async () => {
@@ -680,6 +684,6 @@ describe('the on-call section on a birth (#1093)', () => {
 			path.endsWith('/on-call') ? jsonResponse('engagement not found', 404) : undefined
 		);
 
-		await expect.element(testPage.getByText('engagement not found')).toBeVisible();
+		await expect.element(testPage.getByText('We could not load who is on call.')).toBeVisible();
 	});
 });

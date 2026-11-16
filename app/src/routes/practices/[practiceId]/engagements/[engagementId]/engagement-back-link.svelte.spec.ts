@@ -7,6 +7,7 @@ import '#lib/styles/app.css';
 import { toPageState } from '../../../../routeFixture.js';
 import { detail as fixtureDetail, fixture, session } from './page.fixture.js';
 import { holdListSearch, ListBack, originFrom } from '#lib/listOrigin.svelte.js';
+import { recordOrigin } from '#lib/recordOrigin.svelte.js';
 import { pageState } from '#testing/routePage.js';
 import Page from './EngagementScreen.svelte';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -42,7 +43,8 @@ async function setup() {
 	await render(Page, { data: { ...fixtureDetail, session }, back });
 }
 
-const back = (name: string) => testPage.getByRole('link', { name, exact: true });
+// The back link is the first link on the page, ahead of "Jump to"'s "Invoices".
+const back = (name: string) => testPage.getByRole('link', { name, exact: true }).first();
 
 describe('the Engagement page back link (#2864)', () => {
 	let historyBack: ReturnType<typeof vi.spyOn>;
@@ -78,15 +80,24 @@ describe('the Engagement page back link (#2864)', () => {
 		navigation.afterNavigate?.(arrivedFrom('/schedule?window=next30&mine=true'));
 
 		await expect
-			.element(back('Back to the Schedule'))
+			.element(back('Schedule'))
 			.toHaveAttribute('href', `${practice}/schedule?window=next30&mine=true`);
+	});
+
+	it('tells the top bar which list the record was reached from, and none after a cold load', async () => {
+		await setup();
+		navigation.afterNavigate?.(arrivedFrom('/schedule?window=next30'));
+		expect(recordOrigin.list).toBe('schedule');
+
+		navigation.afterNavigate?.(arrivedFrom('/clients/client-1'));
+		expect(recordOrigin.list).toBeUndefined();
 	});
 
 	it('names Invoices when opened from the Invoices list', async () => {
 		await setup();
 		navigation.afterNavigate?.(arrivedFrom('/invoices?view=unpaid'));
 
-		await expect.element(back('Back to Invoices')).toHaveAttribute('href', `${practice}/invoices?view=unpaid`);
+		await expect.element(back('Invoices')).toHaveAttribute('href', `${practice}/invoices?view=unpaid`);
 	});
 
 	it('names the Clients list when opened from anywhere else', async () => {
@@ -101,7 +112,7 @@ describe('the Engagement page back link (#2864)', () => {
 		await setup();
 		navigation.afterNavigate?.(arrivedFrom('/schedule?window=next30'));
 
-		await back('Back to the Schedule').click();
+		await back('Schedule').click();
 
 		expect(historyBack).toHaveBeenCalledOnce();
 		expect(navigation.goto).not.toHaveBeenCalled();
@@ -113,7 +124,7 @@ describe('the Engagement page back link (#2864)', () => {
 		navigation.afterNavigate?.(arrivedFrom('/schedule?window=next30'));
 		history.replaceState(undefined, '', '#messages');
 
-		await back('Back to the Schedule').click();
+		await back('Schedule').click();
 
 		expect(historyBack).not.toHaveBeenCalled();
 		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/schedule?window=next30`, {
@@ -128,7 +139,7 @@ describe('the Engagement page back link (#2864)', () => {
 		navigation.afterNavigate?.(arrivedFrom('/invoices'));
 		history.replaceState(undefined, '', '#messages');
 
-		await back('Back to Invoices').click();
+		await back('Invoices').click();
 
 		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/invoices`, { state: { invoicesSearch: 'INV-0019' } });
 	});
@@ -153,7 +164,7 @@ describe('the Engagement page back link from Contracts', () => {
 		navigation.afterNavigate?.(arrivedFrom('/contracts?show=sent'));
 		history.replaceState(undefined, '', '#messages');
 
-		await back('Back to Contracts').click();
+		await back('Contracts').click();
 
 		expect(navigation.goto).toHaveBeenCalledWith(`${practice}/contracts?show=sent`, {
 			state: { contractsSearch: 'Quinn' }
@@ -198,7 +209,7 @@ describe('ListBack', () => {
 		arrive('/p/schedule?mine=true');
 		arrive(engagementPath);
 
-		expect(back.label('Clients')).toBe('Back to the Schedule');
+		expect(back.label('Clients')).toBe('Schedule');
 		expect(back.href('/p/clients')).toBe('/p/schedule?mine=true');
 	});
 

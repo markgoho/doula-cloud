@@ -12,6 +12,7 @@
 </script>
 
 <script lang="ts">
+	import { tick, untrack } from 'svelte';
 	import { formatInstantWithClock } from '../../dates.js';
 	import type { FormError } from '../../formErrors.js';
 	import { FormSubmission, orThrownErrors } from '../../formSubmission.svelte.js';
@@ -85,6 +86,17 @@
 		 * portal queues nothing).
 		 */
 		sentConfirmation?: string;
+		/**
+		 * What the thread says when it holds no Message. The Staff record passes
+		 * GLOSSARY's capital ('No Messages yet.'); the portal keeps its own.
+		 */
+		emptyMessage?: string;
+		/**
+		 * A count a caller raises to ask for the compose form (#2755): each
+		 * rise opens it and puts focus in the Message field, as the Engagement
+		 * record's "Message the Client" does. Needs `composeOpener`.
+		 */
+		composeRequest?: number;
 	}
 
 	let {
@@ -100,7 +112,9 @@
 		readerSenderType,
 		composeOpener,
 		cannotSendReason,
-		sentConfirmation = 'Message sent.'
+		sentConfirmation = 'Message sent.',
+		emptyMessage = 'No messages yet.',
+		composeRequest = 0
 	}: Properties = $props();
 
 	let isComposeOpen = $state(false);
@@ -111,16 +125,55 @@
 	// form has gone. Only Cancel sets it: a send's status takes focus.
 	let isOpenerRefocused = $state(false);
 
+	// The control outside this thread that asked for the form (the record's
+	// "Message the Client"), so Cancel can hand focus back to it; unset when
+	// the thread's own opener did.
+	let outsideOpener: HTMLElement | undefined;
+
+	function focusBody() {
+		void tick().then(() => {
+			// Drawn by the time the tick resolves: the form is what was just opened.
+			const field = document.querySelector<HTMLElement>(`#${CSS.escape(fieldIds.body)}`)!;
+			field.closest('form')!.scrollIntoView({ block: 'nearest' });
+			field.focus({ preventScroll: true });
+		});
+	}
+
 	function openCompose() {
 		sentMessage = '';
 		isOpenerRefocused = false;
 		isComposeOpen = true;
+		focusBody();
 	}
+
+	function openFromButton() {
+		outsideOpener = undefined;
+		openCompose();
+	}
+
+	function openFromOutside(opener: Element | null) {
+		outsideOpener = opener instanceof HTMLElement && opener !== document.body ? opener : undefined;
+		openCompose();
+	}
+
+	let handledRequest = untrack(() => composeRequest);
+	$effect(() => {
+		if (composeRequest === handledRequest) return;
+		handledRequest = composeRequest;
+		if (cannotSendReason) return;
+		openFromOutside(document.activeElement);
+	});
 
 	function cancelCompose() {
 		submission.errors = [];
-		isOpenerRefocused = true;
 		isComposeOpen = false;
+		if (outsideOpener?.isConnected) {
+			const opener = outsideOpener;
+			outsideOpener = undefined;
+			void tick().then(() => opener.focus());
+			return;
+		}
+		isOpenerRefocused = true;
 	}
 
 	// The style guide mounts this organism several times on one page, so
@@ -180,7 +233,7 @@
 	{/if}
 
 	{#if messages.length === 0}
-		<EmptyState message="No messages yet." />
+		<EmptyState message={emptyMessage} />
 	{:else}
 		<ul>
 			{#each messages as message (message.messageId)}
@@ -253,7 +306,7 @@
 
 	{#if composeOpener !== undefined && !isComposeOpen && !cannotSendReason}
 		<div>
-			<Button label={composeOpener} variant="secondary" onClick={openCompose} focusOnAppearing={isOpenerRefocused} />
+			<Button label={composeOpener} variant="secondary" onClick={openFromButton} focusOnAppearing={isOpenerRefocused} />
 		</div>
 	{/if}
 
@@ -261,7 +314,7 @@
 		<ErrorSummary errors={submission.errors} />
 		<StackedForm onSubmit={handleSubmit}>
 			{#if composeOpener !== undefined}
-				<Heading level={3} text={composeOpener} focusOnAppearing />
+				<Heading level={3} text={composeOpener} />
 			{/if}
 			<LabeledField id={fieldIds.body} label="Message" error={submission.errorFor(fieldIds.body)}>
 				{#snippet children({ id, describedBy, invalid })}

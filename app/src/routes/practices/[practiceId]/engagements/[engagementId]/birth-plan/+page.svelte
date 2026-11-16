@@ -22,11 +22,12 @@
 	const instance = $derived(instanceRead.value);
 	const pdf = new BlobDownload();
 
+	// The record's own Birth Plan section, where the reader came from (#2755).
 	const engagementHref = $derived(
-		resolve('/practices/[practiceId]/engagements/[engagementId]', {
+		`${resolve('/practices/[practiceId]/engagements/[engagementId]', {
 			practiceId: page.params.practiceId!,
 			engagementId: page.params.engagementId!
-		})
+		})}#birth-plan`
 	);
 
 	// #280: names the Client this address opened cold cannot otherwise
@@ -56,7 +57,7 @@
 <DocumentPage
 	title={heading}
 	backHref={engagementHref}
-	backLabel="Back to {data.clientName}"
+	backLabel={data.clientName}
 	read={instanceRead.frame('Loading Birth Plan')}
 	empty={instance === undefined ? 'No Birth Plan has been created for this work yet.' : undefined}
 >

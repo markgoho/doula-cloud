@@ -260,6 +260,10 @@ type ListInvoicesResponse struct {
 	// its Invoices have billed and what is left (#2829); absent while the
 	// Engagement has no Contract.
 	ContractBilling *ContractBilling `json:"contractBilling,omitempty"`
+	// Owed (#2755) is what every open Invoice of the Engagement adds up to
+	// and what part of it is overdue. The contractor's response has none:
+	// she reads no money (ADR-0008).
+	Owed *OwedSummary `json:"owed,omitempty"`
 }
 
 // PostInvoiceHandler creates an Invoice against :engagementId's current
@@ -650,7 +654,13 @@ func GetInvoicesHandler() http.Handler {
 			})
 			return
 		}
-		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore, ContractBilling: billing})
+		owed, err := readOwedSummary(r.Context(), c.Tx, c.EngagementID, days)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		apierr.WriteJSON(w, http.StatusOK, ListInvoicesResponse{Items: items, NextCursor: next, HasMore: hasMore, ContractBilling: billing, Owed: owed})
 	}, staffauth.EngagementReach("Engagement not found"))
 }
 

@@ -864,6 +864,96 @@ export function losePortalAccess(moves: readonly { clientId: string; how: LostPo
 }
 
 /**
+ * A moment in the past (or, with a negative `daysAgo`, ahead) as a Practice
+ * reads it: the day counted back from the stack's today, the time on that
+ * day's clock in the Practice's zone.
+ */
+export interface ThenInPracticeZone {
+	daysAgo: number;
+	time: `${number}:${number}` | `${number}:${number}:${number}`;
+}
+
+/**
+ * One Engagement's history, as the Engagement record reads it. Every list is
+ * in the order the seed made its rows, which is how each row finds its
+ * moment: the nth row of an Activity action, the nth Message, the nth Visit,
+ * the nth Invoice.
+ */
+export interface EngagementHistory {
+	engagementId: string;
+	startedAt: ThenInPracticeZone;
+	firstDoulaAttachedAt: ThenInPracticeZone;
+	portalInvitedAt: ThenInPracticeZone;
+	contract: { createdAt: ThenInPracticeZone; sentAt: ThenInPracticeZone; signedAt: ThenInPracticeZone };
+	// An Activity row not listed keeps the moment it was made.
+	activity: readonly { action: string; nth: number; at: ThenInPracticeZone }[];
+	messages: readonly ThenInPracticeZone[];
+	// Only the Visits listed move; a Visit with no `scheduledAt` keeps its day.
+	visits: readonly { loggedAt: ThenInPracticeZone; scheduledAt?: ThenInPracticeZone }[];
+	plans: Readonly<Record<'birth_plan' | 'care_plan', { startedAt: ThenInPracticeZone; changedAt: ThenInPracticeZone }>>;
+	invoices: readonly { raisedAt: ThenInPracticeZone; dueAt: ThenInPracticeZone; paidAt?: ThenInPracticeZone }[];
+}
+
+function values(rows: readonly string[]): string {
+	return rows.join(', ');
+}
+
+function sqlInstant({ daysAgo, time }: ThenInPracticeZone): string {
+	if (!Number.isSafeInteger(daysAgo) || !/^\d{1,2}:\d{2}(:\d{2})?$/.test(time)) {
+		throw new Error(`stack: invalid moment ${daysAgo} days ago at ${time}`);
+	}
+	return `((date_trunc('day', sim.now() AT TIME ZONE 'America/New_York') - make_interval(days => ${daysAgo}) + time '${time}') AT TIME ZONE 'America/New_York')`;
+}
+
+/**
+ * Gives one Engagement a history longer than the seed's own instant: its
+ * start, Portal invitation, Contract, Activity, Messages, Visits, Plans,
+ * Invoices and payments each moved to the moment `history` names. No endpoint
+ * writes in the past (backdateInvoice says why), so the Engagement record of
+ * a seeded Client otherwise reads "just now" on every row. Activity rows the
+ * history does not list, such as an on-call narrowing made after it, keep
+ * their own moment.
+ */
+export function backdateEngagementHistory(history: EngagementHistory): void {
+	const engagement = sqlLiteral(history.engagementId);
+	const statements = [
+		`UPDATE engagements SET created_at = ${sqlInstant(history.startedAt)} WHERE id = ${engagement}`,
+		`UPDATE engagement_attachments SET attached_at = ${sqlInstant(history.firstDoulaAttachedAt)}
+		 WHERE id = (SELECT id FROM engagement_attachments WHERE engagement_id = ${engagement} ORDER BY attached_at, id LIMIT 1)`,
+		`UPDATE client_portal_users SET created_at = ${sqlInstant(history.portalInvitedAt)}
+		 WHERE client_id = (SELECT client_id FROM engagements WHERE id = ${engagement})`,
+		`UPDATE contracts SET created_at = ${sqlInstant(history.contract.createdAt)}, sent_at = ${sqlInstant(history.contract.sentAt)}, signed_at = ${sqlInstant(history.contract.signedAt)}
+		 WHERE engagement_id = ${engagement} AND status = 'signed'`,
+		`WITH numbered AS (
+		   SELECT id, action, row_number() OVER (PARTITION BY action ORDER BY created_at, id) AS nth
+		   FROM activity WHERE subject_kind = 'engagement' AND subject_id = ${engagement}
+		 ), moved(action, nth, at) AS (VALUES ${values(history.activity.map(({ action, nth, at }) => `(${sqlLiteral(action)}, ${nth}, ${sqlInstant(at)})`))})
+		 UPDATE activity SET created_at = moved.at FROM numbered JOIN moved ON moved.action = numbered.action AND moved.nth = numbered.nth WHERE activity.id = numbered.id`,
+		`WITH numbered AS (SELECT id, row_number() OVER (ORDER BY created_at, id) AS nth FROM messages WHERE engagement_id = ${engagement}),
+		 moved(nth, at) AS (VALUES ${values(history.messages.map((at, index) => `(${index + 1}, ${sqlInstant(at)})`))})
+		 UPDATE messages SET created_at = moved.at FROM numbered JOIN moved ON moved.nth = numbered.nth WHERE messages.id = numbered.id`,
+		`WITH numbered AS (SELECT id, row_number() OVER (ORDER BY created_at, id) AS nth FROM visits WHERE engagement_id = ${engagement}),
+		 moved(nth, logged_at, scheduled_at) AS (VALUES ${values(history.visits.map(({ loggedAt, scheduledAt }, index) => `(${index + 1}, ${sqlInstant(loggedAt)}, ${scheduledAt ? sqlInstant(scheduledAt) : 'NULL::timestamptz'})`))})
+		 UPDATE visits SET created_at = moved.logged_at, scheduled_at = COALESCE(moved.scheduled_at, visits.scheduled_at)
+		 FROM numbered JOIN moved ON moved.nth = numbered.nth WHERE visits.id = numbered.id`,
+		`WITH moved(plan_type, started_at, changed_at) AS (VALUES ${values(Object.entries(history.plans).map(([plan, { startedAt, changedAt }]) => `(${sqlLiteral(plan)}::plan_type, ${sqlInstant(startedAt)}, ${sqlInstant(changedAt)})`))})
+		 UPDATE plan_instances SET created_at = moved.started_at, changed_at = moved.changed_at FROM moved
+		 WHERE plan_instances.engagement_id = ${engagement} AND plan_instances.plan_type = moved.plan_type`,
+		`WITH numbered AS (
+		   SELECT i.id, row_number() OVER (ORDER BY i.created_at, i.id) AS nth
+		   FROM invoices i JOIN contracts c ON c.id = i.contract_id WHERE c.engagement_id = ${engagement}
+		 ), moved(nth, raised_at, due_at, paid_at) AS (VALUES ${values(history.invoices.map(({ raisedAt, dueAt, paidAt }, index) => `(${index + 1}, ${sqlInstant(raisedAt)}, ${sqlInstant(dueAt)}, ${paidAt ? sqlInstant(paidAt) : 'NULL::timestamptz'})`))}),
+		 paid AS (
+		   UPDATE payments SET paid_at = moved.paid_at, created_at = moved.paid_at
+		   FROM numbered JOIN moved ON moved.nth = numbered.nth WHERE payments.invoice_id = numbered.id AND moved.paid_at IS NOT NULL
+		 )
+		 UPDATE invoices SET created_at = moved.raised_at, due_at = moved.due_at, paid_at = CASE WHEN invoices.status = 'paid' THEN moved.paid_at END
+		 FROM numbered JOIN moved ON moved.nth = numbered.nth WHERE invoices.id = numbered.id`
+	];
+	execSQL(statements.join(';\n'));
+}
+
+/**
  * Seeds a Practice that signed up the month before the last closed one
  * and bought 4 Credits in the last closed one, both in New York time,
  * the read ops's monthly Credits page shows (#2476). Returns that month

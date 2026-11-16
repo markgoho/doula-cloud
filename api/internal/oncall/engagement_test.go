@@ -95,8 +95,8 @@ func TestPanel_StatesWhyThereIsNoWindow(t *testing.T) {
 	}
 
 	e.Exec(`UPDATE engagement_attachments SET ended_at = now(), ended_by = staff_id, ended_reason = 'taken_off' WHERE engagement_id = $1`, e.Birth.ID)
-	if panel := e.panel(); panel.NoWindowReason != oncall.NoWindowNobodyAttached {
-		t.Fatalf("panel = %+v, want no window because nobody is on it", panel)
+	if panel := e.panel(); panel.NoWindowReason != oncall.NoWindowNoDueDateNoDoula {
+		t.Fatalf("panel = %+v, want no window for want of a due date and a Doula, as the roster says", panel)
 	}
 
 	unknown := e.PracticeURL("/engagements/00000000-0000-0000-0000-000000000000/on-call")

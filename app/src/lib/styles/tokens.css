@@ -239,6 +239,9 @@
 	   cannot be a minimum. WCAG 2.5.5 states 44px as a floor, so this one
 	   is fixed at every width. */
 	--hit-target-min: 2.75rem;
+	/* WCAG 2.2's 2.5.8 floor, 24px, for a target that stands among others
+	   with room between them: "Jump to"'s links (#2755). */
+	--target-min-aa: 1.5rem;
 	/* The start button's whole box: one line of body text, its block
 	   padding and its border. The Link reads it as the button's floor and a
 	   list's title row reserves it, so the title sits at one place whether

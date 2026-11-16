@@ -29,6 +29,7 @@ import {
 	sendMessage,
 	sendPortalInvite,
 	sortVisits,
+	visitGroup,
 	takenOffMessage,
 	takeOffDoula,
 	takeOffWords,
@@ -831,21 +832,40 @@ function visit(visitId: string, createdAt: string, scheduledAt?: string): Visit 
 }
 
 describe('sortVisits (#1999)', () => {
-	it('lists the scheduled Visits newest first, then the unscheduled ones newest logged first', () => {
-		const sorted = sortVisits([
-			visit('logged-early', '2026-07-01T15:00:00Z'),
-			visit('nov-5', '2026-08-01T15:00:00Z', '2026-11-05T15:00:00Z'),
-			visit('aug-4', '2026-08-02T15:00:00Z', '2026-08-04T15:00:00Z'),
-			visit('logged-late', '2026-09-01T15:00:00Z'),
-			visit('aug-18', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
-		]);
+	const now = new Date('2026-11-01T12:00:00Z');
 
-		expect(sorted.map((entry) => entry.visitId)).toEqual(['nov-5', 'aug-18', 'aug-4', 'logged-late', 'logged-early']);
+	it('lists those coming up soonest first, the earlier ones newest first, then the unscheduled ones newest logged first (#2755)', () => {
+		const sorted = sortVisits(
+			[
+				visit('logged-early', '2026-07-01T15:00:00Z'),
+				visit('nov-5', '2026-08-01T15:00:00Z', '2026-11-05T15:00:00Z'),
+				visit('aug-4', '2026-08-02T15:00:00Z', '2026-08-04T15:00:00Z'),
+				visit('nov-20', '2026-08-02T15:00:00Z', '2026-11-20T15:00:00Z'),
+				visit('logged-late', '2026-09-01T15:00:00Z'),
+				visit('aug-18', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
+			],
+			now
+		);
+
+		expect(sorted.map((entry) => entry.visitId)).toEqual([
+			'nov-5',
+			'nov-20',
+			'aug-18',
+			'aug-4',
+			'logged-late',
+			'logged-early'
+		]);
+	});
+
+	it('names the run each Visit sits in', () => {
+		expect(visitGroup(visit('a', '2026-07-01T15:00:00Z', '2026-11-05T15:00:00Z'), now).label).toBe('Coming up');
+		expect(visitGroup(visit('b', '2026-07-01T15:00:00Z'), now).label).toBe('Not scheduled yet');
+		expect(visitGroup(visit('c', '2026-07-01T15:00:00Z', '2026-08-05T15:00:00Z'), now).label).toBe('Earlier');
 	});
 
 	it('leaves the list it was given as it was', () => {
 		const given = [visit('a', '2026-07-01T15:00:00Z'), visit('b', '2026-07-02T15:00:00Z')];
-		sortVisits(given);
+		sortVisits(given, now);
 		expect(given.map((entry) => entry.visitId)).toEqual(['a', 'b']);
 	});
 });

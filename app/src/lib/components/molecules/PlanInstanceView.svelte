@@ -20,9 +20,17 @@
 		The level of each section_header's heading: one under the heading the view sits under.
 		*/
 		headingLevel: 2 | 3 | 4 | 5 | 6;
+		/**
+		Only the questions that have an answer, in the template's order, and a heading only over one that does. The record page reads a plan this way; the plan's own page and its PDF keep every question.
+		*/
+		answeredOnly?: boolean;
+		/**
+		The record page takes its column (`SummaryList`'s `width="column"`): its rows run to the column's edge, and where the column is wide enough for a 16rem key (53rem) each question sits beside its answer instead of above it.
+		*/
+		width?: 'measure' | 'column';
 	}
 
-	let { fields, answers, masthead, headingLevel }: Properties = $props();
+	let { fields, answers, masthead, headingLevel, answeredOnly = false, width = 'measure' }: Properties = $props();
 
 	/*
 	 * #2209, #2355: what names the plan wherever it is printed -- whose it
@@ -68,11 +76,13 @@
 		for (const field of fields) {
 			if (field.type === 'section_header') {
 				grouped.push({ key: field.id, heading: field.label, fields: [] });
-			} else {
+			} else if (!answeredOnly || answers[field.id] !== undefined) {
 				grouped.at(-1)!.fields.push(field);
 			}
 		}
-		return grouped.filter((section) => section.heading !== undefined || section.fields.length > 0);
+		return grouped.filter((section) =>
+			answeredOnly ? section.fields.length > 0 : section.heading !== undefined || section.fields.length > 0
+		);
 	});
 
 	function textValue(field: Field): string {
@@ -108,13 +118,42 @@
 </script>
 
 {#if masthead}
-	<SummaryList rows={mastheadRows(masthead)} />
+	<SummaryList rows={mastheadRows(masthead)} {width} />
 {/if}
 {#each sections as section (section.key)}
 	{#if section.heading !== undefined}
 		<Heading level={headingLevel} text={section.heading} />
 	{/if}
 	{#if section.fields.length > 0}
-		<SummaryList rows={rowsFor(section)} isStacked />
+		{#if width === 'column'}
+			<div class="column-rows"><div class="column-size"><SummaryList rows={rowsFor(section)} isStacked {width} /></div></div>
+		{:else}
+			<SummaryList rows={rowsFor(section)} isStacked />
+		{/if}
 	{/if}
 {/each}
+
+<style>
+	@layer components {
+		/*
+		 * A question is a sentence, so the rows stack it above its answer
+		 * (#2021) until the row can give the question 16rem beside an answer
+		 * of 20rem: then each sits beside its answer, and a plan of four
+		 * answers loses four lines. Intrinsically, by flex wrapping, never by
+		 * a query (ADR-0024).
+		 */
+		.column-size {
+			font-size: var(--text-body-size);
+		}
+
+		/* tokens:ignore -- the question's and the answer's own widths, stated above */
+		.column-rows :global(dl.stacked .key) {
+			min-inline-size: 16rem;
+		}
+
+		/* tokens:ignore -- the question's and the answer's own widths, stated above */
+		.column-rows :global(dl.stacked .value) {
+			flex-basis: 20rem;
+		}
+	}
+</style>

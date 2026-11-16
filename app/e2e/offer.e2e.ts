@@ -136,8 +136,8 @@ test('A solo Owner who is a contractor Doula is named on the Start work form, an
 	await page.goto(`/practices/${practiceId}/engagements/${engagementId}`);
 
 	await expect(page.getByText('No Doula yet', { exact: true })).toBeVisible();
-	// #1998: behind the Doula row's Change in the summary card.
-	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
+	// #2755: behind the Details region's link for the Doulas (drawn twice; the hidden copy is not in the accessibility tree).
+	await page.getByRole('button', { name: /^Put (a Doula|yourself) on$/ }).click();
 	await page.getByRole('button', { name: 'Put me on this work' }).click();
 
 	await expect(page.getByText('You are on this work.')).toBeVisible();
@@ -216,8 +216,8 @@ test('A solo Owner puts herself on an Engagement that started with no Doula', as
 	await expect(page.getByText(/^There is no one at this Practice to offer this work to/)).toBeVisible();
 	await expect(page.getByLabel('Jamie Owner')).toHaveCount(0);
 
-	// #1998: behind the Doula row's Change in the summary card.
-	await page.locator('dt', { hasText: /^Doulas?$/ }).locator('..').getByRole('button', { name: 'Change', exact: true }).click();
+	// #2755: behind the Details region's link for the Doulas (drawn twice; the hidden copy is not in the accessibility tree).
+	await page.getByRole('button', { name: /^Put (a Doula|yourself) on$/ }).click();
 	await page.getByRole('button', { name: 'Put me on this work' }).click();
 
 	await expect(page.getByText('You are on this work.')).toBeVisible();

@@ -569,8 +569,8 @@
 	);
 </script>
 
-{#snippet whenCell(visit: ScheduledVisit, tableView: DataTableView)}
-	<VisitWhen at={visit.scheduledAt} {timeZone} isTracked={tableView === 'table'} />
+{#snippet whenCell(visit: ScheduledVisit)}
+	<VisitWhen at={visit.scheduledAt} {timeZone} />
 {/snippet}
 
 {#snippet doulaCell(visit: ScheduledVisit, tableView: DataTableView)}

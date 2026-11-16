@@ -27,6 +27,7 @@ import type { Rate } from '#lib/rates.js';
 import { CONTRACTOR_WITHOUT_ACCEPTED_OFFER, type VisitAssignee } from '#lib/staff.js';
 import type { PortalAccessState, PortalInviteDelivery } from '#lib/portalInvite.js';
 import { PREVIOUS_CONTRACT_PDF_NOTICE } from '#lib/components/molecules/ContractStatus.svelte';
+import { goto } from '$app/navigation';
 import { pageState } from '#testing/routePage.js';
 import { inReaderZone } from '#lib/testZone.js';
 if (!customElements.get('center-l')) registerLayoutPrimitives();
@@ -42,6 +43,7 @@ vi.mock('$app/state', () => import('#testing/routePage.js'));
 Object.assign(pageState, toPageState(fixture));
 
 vi.mock('$app/navigation', () => ({ goto: vi.fn(), afterNavigate: vi.fn() }));
+
 
 const apiFetchWithSession = vi.hoisted(() => vi.fn());
 vi.mock('#lib/api.js', () => ({
@@ -79,6 +81,12 @@ interface Detail {
 	hasCarePlan: boolean;
 	hasBirthPlan: boolean;
 	hasContract: boolean;
+	hasVisits: boolean;
+	hasMessages: boolean;
+	hasInvoices: boolean;
+	hasOffers: boolean;
+	onCallWindow?: { from: string; to: string };
+	tonight?: { holders: { staffId: string; name: string; coveringFor?: string }[]; isNobody: boolean };
 	startNote?: { text: string; writtenBy: string; writtenAt: string };
 }
 
@@ -214,12 +222,12 @@ function visitsTable() {
  * unscheduled one (Jordan Reyes).
  */
 async function changeVisit(row: number) {
-	await visitsTable().getByRole('button', { name: 'Change' }).nth(row).click();
+	await visitsTable().getByRole('button', { name: 'Change', exact: true }).nth(row).click();
 }
 
 // #2231: a Visit row's Reassign, an Owner's or an Admin's.
 async function reassignVisit(row: number) {
-	await visitsTable().getByRole('button', { name: 'Reassign' }).nth(row).click();
+	await visitsTable().getByRole('button', { name: 'Reassign', exact: true }).nth(row).click();
 }
 
 const reassignPicker = () => testPage.getByLabelText('Who takes this Visit instead?');
@@ -235,27 +243,51 @@ async function openAddVisit() {
 }
 
 /*
- * #1998: the summary card's "Change" for one row. Every row's button reads
- * "Change", and the visually-hidden words it is described by name the row
- * (SummaryList), so that is how a test tells them apart, the same way a
- * screen reader does.
+ * #2755: the Details region holds the rows that stay (Care, with its Change;
+ * contact; Portal invite; Created) and one link for each change the header's
+ * own words no longer carry as a row (the due date, the care phase, the
+ * Doulas). The region is drawn twice and one copy is displayed; `#details` is
+ * the displayed one's id. `changes` is still the words a row's Change is
+ * described by, or the link's own name for the three that became links.
  */
+const DETAILS_LINKS: Record<string, RegExp> = {
+	'due date': /^(Change the due date|Give the due date)$/,
+	'care phase': /^Change the care phase$/,
+	Doula: /^(Put on or take off a Doula|Put a Doula on|Put yourself on)$/
+};
+
 function changeButton(changes: string): HTMLButtonElement | undefined {
-	return [...document.querySelectorAll('button')].find(
-		(button) =>
-			button.textContent?.trim() === 'Change' &&
-			document.querySelector(`#${CSS.escape(button.getAttribute('aria-describedby') ?? '')}`)?.textContent ===
-				changes
-	);
+	const details = document.querySelector('#details');
+	const link = DETAILS_LINKS[changes];
+	return [...(details?.querySelectorAll('button') ?? [])].find((button) => {
+		// The copy the container query hides is not the one to press (its id is
+		// handed over a frame after the first paint).
+		if (button.getClientRects().length === 0) return false;
+		const label = button.textContent?.trim() ?? '';
+		if (link) return link.test(label);
+		return (
+			label === 'Change' &&
+			document.querySelector(`#${CSS.escape(button.getAttribute('aria-describedby') ?? '')}`)?.textContent === changes
+		);
+	});
 }
+
+// The Details region, for a word the header's status line says too (#2755).
+function summaryCard() {
+	return testPage.elementLocator(document.querySelector<HTMLElement>('#details')!);
+}
+
+// The header's status line: care phase, due day and the Doulas (#2755). Not
+// the Details region, which only says them as the links that change them.
+function statusLine() {
+	return testPage.elementLocator(document.querySelector<HTMLElement>('.status-line')!);
+}
+
+const beforeTheBirthDetail: Detail = { ...fixtureDetail, birthOutcome: undefined, pregnancyEndedOn: undefined };
 
 async function openChange(changes: string) {
 	await vi.waitFor(() => expect(changeButton(changes)).toBeDefined());
-	// By position among the page's Change buttons: each row's carries the
-	// same name, and an element's own locator can resolve to two (#2230
-	// gave the Doula row a Change beside the care phase's).
-	const everyChange = [...document.querySelectorAll('button')].filter((button) => button.textContent?.trim() === 'Change');
-	await testPage.getByRole('button', { name: 'Change', exact: true }).nth(everyChange.indexOf(changeButton(changes)!)).click();
+	await testPage.elementLocator(changeButton(changes)!).click();
 }
 
 // #2118: a birth Engagement with no due date and no birth outcome yet --
@@ -282,19 +314,15 @@ describe('Staff Engagement detail summary', () => {
 			.toBeVisible();
 	});
 
-	// #1998: the drawing's summary card -- Care, Due, Care phase, Doula --
-	// with the two rows the drawing does not have after them. The Client's
-	// name is the h1, so it is no longer a row.
-	it('lists the rows in the drawn order, in one bordered card', async () => {
+	// #2755: the due date, the care phase and the Doulas are the header's own
+	// words, so Details keeps Care, the Client's contact, the invite and Created.
+	it('lists the rows Details keeps, in the drawn order', async () => {
 		await setup(fixtureDetail);
 
-		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
-		const list = document.querySelector('dl.bordered')!;
+		await expect.element(summaryCard().getByText('Created', { exact: true })).toBeVisible();
+		const list = document.querySelector('#details dl')!;
 		expect([...list.querySelectorAll(':scope dt')].map((node) => node.textContent)).toEqual([
 			'Care',
-			'Due',
-			'Care phase',
-			'Doulas',
 			'Portal invite',
 			'Created'
 		]);
@@ -325,8 +353,9 @@ describe('Staff Engagement detail summary', () => {
 			}
 		});
 
-		await expect.element(testPage.getByText('Care phase', { exact: true })).toBeVisible();
-		expect(document.querySelectorAll('dl.bordered button')).toHaveLength(0);
+		await expect.element(summaryCard().getByText('Created', { exact: true })).toBeVisible();
+		expect(testPage.getByRole('button', { name: /^Change/ }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: /^(Put|Give)/ }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByRole('link', { name: 'Message the Client' })).toBeVisible();
 	});
 
@@ -349,13 +378,13 @@ describe('Staff Engagement detail summary', () => {
 			.toHaveAttribute('href', '/practices/practice-1/clients?mine=true');
 	});
 
-	it('shows the due date under its own label, alongside Created (#538)', async () => {
+	it('shows the due date under its own label in the header, and Created in Details (#538)', async () => {
 		// The fixture's own Engagement (#596) already carries a due date.
-		await setup(fixtureDetail);
+		await setup(beforeTheBirthDetail);
 
-		await expect.element(testPage.getByText('Due', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
-		await expect.element(testPage.getByText('Created')).toBeVisible();
+		await expect.element(statusLine().getByText('Due', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Mar 1, 2027')).toBeVisible();
+		await expect.element(summaryCard().getByText('Created')).toBeVisible();
 	});
 
 	// ADR-0017: a postpartum-only Engagement has no due date. #538 asks for
@@ -366,7 +395,7 @@ describe('Staff Engagement detail summary', () => {
 	it('shows nothing for a postpartum Engagement with no due date -- no blank label, no placeholder', async () => {
 		await setup({ ...fixtureDetail, kind: 'postpartum', dueDate: undefined });
 
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
 	});
 
@@ -379,12 +408,13 @@ describe('Staff Engagement detail summary', () => {
 	it.each(['live_birth', 'loss', 'unknown'])('shows no Due row on a birth Engagement with no due date after %s', async (outcome) => {
 		await setup({ ...fixtureDetail, dueDate: undefined, birthOutcome: outcome });
 
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Active', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByText('Due', { exact: true })).not.toBeInTheDocument();
+		expect(testPage.getByRole('button', { name: /^Give the due date/ }).elements()).toHaveLength(0);
 	});
 
-	// A contractor Doula reads the gap, and has no Change to fill it.
-	it('shows a contractor Doula the missing due date as not given, with no Change', async () => {
+	// A contractor Doula has no due line to read and no link to give one.
+	it('gives a contractor Doula no due line and no way to give one', async () => {
 		await testPage.viewport(3200, 900);
 		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
 		await render(Page, {
@@ -396,8 +426,9 @@ describe('Staff Engagement detail summary', () => {
 			}
 		});
 
-		await expect.element(testPage.getByText('Not given', { exact: true })).toBeVisible();
-		expect(document.querySelectorAll('dl.bordered button')).toHaveLength(0);
+		await expect.element(statusLine().getByText('Active', { exact: true })).toBeVisible();
+		expect(testPage.getByText('Not given', { exact: true }).elements()).toHaveLength(0);
+		expect(testPage.getByRole('button', { name: /^(Change|Give)/ }).elements()).toHaveLength(0);
 	});
 });
 
@@ -406,16 +437,12 @@ describe('a birth Engagement with no due date (#2118)', () => {
 		apiFetchWithSession.mockReset();
 	});
 
-	it('shows the Due row as not given, in its drawn place', async () => {
+	it('offers to give the first date where the header has no due line', async () => {
 		await setupDueDate(['owner'], undefined, noDueDateDetail);
 
-		await expect.element(testPage.getByText('Not given', { exact: true })).toBeVisible();
-		const list = document.querySelector('dl.bordered')!;
-		expect([...list.querySelectorAll(':scope dt')].map((node) => node.textContent).slice(0, 3)).toEqual([
-			'Care',
-			'Due',
-			'Care phase'
-		]);
+		await expect.element(testPage.getByRole('button', { name: 'Give the due date' })).toBeVisible();
+		expect(summaryCard().getByText('Not given', { exact: true }).elements()).toHaveLength(0);
+		expect(statusLine().getByText('Due', { exact: true }).elements()).toHaveLength(0);
 	});
 
 	it('opens the date form with three empty boxes', async () => {
@@ -437,8 +464,8 @@ describe('a birth Engagement with no due date (#2118)', () => {
 		await testPage.getByRole('button', { name: 'Save the due date' }).click();
 
 		await expect.element(testPage.getByText('The due date is now Mar 15, 2027.')).toBeVisible();
-		await expect.element(testPage.getByText('Mar 15, 2027', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText('Not given', { exact: true })).not.toBeInTheDocument();
+		await expect.element(statusLine().getByText('Mar 15, 2027', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Change the due date' })).toBeVisible();
 		expect(callsTo('/due-date').at(-1)?.[1]).toEqual({
 			method: 'PUT',
 			headers: { 'Content-Type': 'application/json' },
@@ -452,7 +479,7 @@ describe('a birth Engagement with no due date (#2118)', () => {
 async function setupDueDate(
 	roles: string[],
 	dueResponse: Response = jsonResponse({ engagementId: 'x', dueDate: '2027-03-15' }),
-	detail: Detail = fixtureDetail
+	detail: Detail = beforeTheBirthDetail
 ) {
 	await testPage.viewport(3200, 900);
 	const respond = toApiResponder(fixture);
@@ -502,7 +529,7 @@ describe("the due date's Change (#2013)", () => {
 		await testPage.getByRole('button', { name: 'Save the due date' }).click();
 
 		await expect.element(testPage.getByText('The due date is now Mar 15, 2027.')).toBeVisible();
-		await expect.element(testPage.getByText('Mar 15, 2027', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Mar 15, 2027', { exact: true })).toBeVisible();
 		await expect.element(dueDateGroup()).not.toBeInTheDocument();
 		expect(callsTo('/due-date').at(-1)?.[1]).toEqual({
 			method: 'PUT',
@@ -569,7 +596,9 @@ describe("the due date's Change (#2013)", () => {
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
 		await expect.element(dueDateGroup()).not.toBeInTheDocument();
-		await expect.element(testPage.getByText('Mar 1, 2027')).toBeVisible();
+		await expect.element(statusLine().getByText('Mar 1, 2027')).toBeVisible();
+		// Cancel hands focus back to the link that opened the form.
+		await expect.element(testPage.getByRole('button', { name: 'Change the due date' })).toHaveFocus();
 	});
 });
 
@@ -630,7 +659,7 @@ describe('the status-move controls (#253)', () => {
 
 		await expect.poll(() => requests).toHaveLength(1);
 		expect(requests[0]!.body).toEqual({ status: 'active' });
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Active', { exact: true })).toBeVisible();
 		// #1998: the save closes the row's form and says what changed, in
 		// the focus the pressed button had.
 		await expect.element(testPage.getByText('The care phase is now Active.')).toHaveFocus();
@@ -656,11 +685,11 @@ describe('the status-move controls (#253)', () => {
 
 		await expect.element(testPage.getByText(OUTCOME_KEPT_ON_COMPLETED)).toHaveFocus();
 		const link = testPage.getByRole('link', { name: 'Change the care phase' });
-		await expect.element(link).toHaveAttribute('href', '#engagement-summary');
+		await expect.element(link).toHaveAttribute('href', '#details');
 		// The target is the summary that holds the care phase's Change. An
 		// id is a fact about the document, not an accessible signal (the
 		// querySelector exception's third case).
-		expect(document.querySelector('#engagement-summary')?.textContent).toContain('Care phase');
+		expect(document.querySelector('#details')?.textContent).toContain('Change the care phase');
 		expect(requests).toEqual([]);
 	});
 
@@ -712,7 +741,7 @@ describe('the status-move controls (#253)', () => {
 			endingReason: 'care_complete',
 			endingNote: 'Baby arrived safely.'
 		});
-		await expect.element(testPage.getByText('Completed', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Completed', { exact: true })).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Confirm completion' })).not.toBeInTheDocument();
 		await expect.element(testPage.getByText('The care phase is now Completed.')).toHaveFocus();
 	});
@@ -871,16 +900,16 @@ describe('the Activity ledger section (#486)', () => {
 	it('says so when the ledger cannot be read', async () => {
 		await setup(fixtureDetail, jsonResponse('nope', 403));
 
-		await expect.element(testPage.getByText('nope')).toBeVisible();
+		await expect.element(testPage.getByText('We could not load the Activity.')).toBeVisible();
 	});
 
 	// #2105: the newest eight, as the Overview's Recent activity shows, and
 	// "Load more" for the rest in place.
-	it('shows the newest eight entries, and the rest after "Load more"', async () => {
+	it('shows the newest five entries, and the rest after "Load more"', async () => {
 		await setup(fixtureDetail, jsonResponse({ items: ledgerEntries(9), hasMore: false }));
 
-		await expect.element(testPage.getByRole('cell', { name: 'Doula 8', exact: true })).toBeVisible();
-		await expect.element(testPage.getByRole('cell', { name: 'Doula 9', exact: true })).not.toBeInTheDocument();
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 5', exact: true })).toBeVisible();
+		await expect.element(testPage.getByRole('cell', { name: 'Doula 6', exact: true })).not.toBeInTheDocument();
 
 		await testPage.getByRole('button', { name: 'Load more' }).click();
 
@@ -1037,6 +1066,21 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		expect(document.activeElement?.id).not.toBe('contract-heading');
 	});
 
+	it('draws the form under the Visit it changes, not after the last one', async () => {
+		await renderWithFixtureResponder();
+
+		await changeVisit(0);
+		const heading = testPage.getByRole('heading', { name: /^Change the Visit for Anne-Marie Ochieng-Whitfield on / });
+		await expect.element(heading).toBeVisible();
+
+		const headingElement = heading.element();
+		// Case 3 of svelte-tests.md: where the form sits among its siblings has no accessible signal.
+		const detail = headingElement.closest('.row-detail, .record-detail')!;
+		const row = detail.previousElementSibling!;
+		expect(row.textContent).toContain('Anne-Marie Ochieng-Whitfield');
+		expect(row.textContent).not.toContain('Jordan Reyes');
+	});
+
 	it("sets an unscheduled Visit's schedule from its Change, and sends nothing for the fields left alone", async () => {
 		const requests: { path: string; method?: string; body: unknown }[] = [];
 		await renderWithFixtureResponder((path, init) => {
@@ -1096,7 +1140,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		await renderWithFixtureResponder();
 
 		await changeVisit(0);
-		await expect.element(visitsTable().getByRole('button', { name: 'Change' }).nth(0)).toHaveAttribute('aria-expanded', 'true');
+		await expect.element(visitsTable().getByRole('button', { name: 'Change', exact: true }).nth(0)).toHaveAttribute('aria-expanded', 'true');
 		await changeVisit(1);
 		await expect
 			.element(testPage.getByRole('heading', { name: 'Change the Visit for Jordan Reyes, not yet scheduled' }))
@@ -1114,7 +1158,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 
 		await expect.element(testPage.getByRole('button', { name: 'Save changes' })).not.toBeInTheDocument();
 		// #2103: back on the row's Change that opened it, not on the page.
-		await expect.element(visitsTable().getByRole('button', { name: 'Change' }).nth(0)).toHaveFocus();
+		await expect.element(visitsTable().getByRole('button', { name: 'Change', exact: true }).nth(0)).toHaveFocus();
 	});
 
 	it('says what was refused, keeps the form open, and reads the rows again for what was already written', async () => {
@@ -1161,13 +1205,13 @@ describe('the Visits section When column and schedule control (#250)', () => {
 			{ ...fixtureDetail, status: 'intake', statusMoves: ['active', 'completed'] }
 		);
 
-		await expect.element(testPage.getByText('Intake', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Intake', { exact: true })).toBeVisible();
 
 		await changeVisit(1);
 		await testPage.getByLabelText('Scheduled date and time', { exact: true }).fill('2027-04-01T09:00');
 		await testPage.getByRole('button', { name: 'Save changes' }).click();
 
-		await expect.element(testPage.getByText('Active', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Active', { exact: true })).toBeVisible();
 	});
 
 	it('creates a Visit already scheduled from the Add a Visit form', async () => {
@@ -1180,8 +1224,8 @@ describe('the Visits section When column and schedule control (#250)', () => {
 
 		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
 		await expect.element(testPage.getByRole('heading', { name: 'Add a Visit' })).toHaveFocus();
-		// #1999: the opener goes while its form is open, so the section
-		// offers the form's one primary and nothing that opens it again.
+		// #2755: the opener gives way to the form, whose one primary is the
+		// only button that saves.
 		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).not.toBeInTheDocument();
 		await testPage.getByLabelText('Who is this Visit for?').selectOptions('Jordan Reyes');
 		await testPage.getByLabelText('Scheduled date and time (optional)').fill('2027-05-20T10:15');
@@ -1232,7 +1276,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 		await expect.element(testPage.getByRole('button', { name: 'Add a Visit' })).toHaveFocus();
 	});
 
-	it('lists the scheduled Visits by date, newest first, then the unscheduled ones (#1999)', async () => {
+	it('lists those coming up, then the earlier ones, then the unscheduled ones, each under its heading (#1999, #2755)', async () => {
 		await renderWithFixtureResponder((path, init) => {
 			if (init || !path.includes('/visits')) return;
 			// Newest logged first, the order the BFF pages in (#446).
@@ -1241,7 +1285,7 @@ describe('the Visits section When column and schedule control (#250)', () => {
 					items: [
 						visitRow('v-3', 'Logged Last', '2026-09-01T15:00:00Z'),
 						visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z'),
-						visitRow('v-1', 'Nov Fifth', '2026-08-01T15:00:00Z', '2026-11-05T15:00:00Z')
+						visitRow('v-1', 'Nov Fifth', '2026-08-01T15:00:00Z', '2099-11-05T15:00:00Z')
 					],
 					hasMore: false
 				})
@@ -1253,8 +1297,12 @@ describe('the Visits section When column and schedule control (#250)', () => {
 			.getByRole('row')
 			.elements()
 			.slice(1)
-			.map((row) => ['Nov Fifth', 'Aug Eighteen', 'Logged Last'].find((name) => row.textContent?.includes(name)));
-		expect(rows).toEqual(['Nov Fifth', 'Aug Eighteen', 'Logged Last']);
+			.map((row) =>
+				['Coming up', 'Not scheduled yet', 'Earlier', 'Nov Fifth', 'Aug Eighteen', 'Logged Last'].find((name) =>
+					row.textContent?.includes(name)
+				)
+			);
+		expect(rows).toEqual(['Coming up', 'Nov Fifth', 'Earlier', 'Aug Eighteen', 'Not scheduled yet', 'Logged Last']);
 	});
 });
 
@@ -1332,7 +1380,7 @@ describe('a section fails on its own, independent of the others (#841)', () => {
 			data: { ...fixtureDetail, session: sessionFor() }
 		});
 
-		await expect.element(testPage.getByText('contract is down')).toBeVisible();
+		await expect.element(testPage.getByText('We could not load the Contract.')).toBeVisible();
 		// Scoped to the Visits section by its own label: the fixture's
 		// Visit's staffName also appears in the reassign row's
 		// visually-hidden name and, once Activity's own fixture entry
@@ -1450,14 +1498,14 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 	it('reads "Never invited" on the summary when the Client has never been invited', async () => {
 		await setup(fixtureDetail);
 
-		await expect.element(testPage.getByText('Portal invite', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText('Never invited')).toBeVisible();
+		await expect.element(summaryCard().getByText('Portal invite', { exact: true })).toBeVisible();
+		await expect.element(summaryCard().getByText('Never invited')).toBeVisible();
 	});
 
 	it('reads the pending word once the fixture reports a pending invite', async () => {
 		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'invited', clientPortalInviteDelivery: 'pending' });
 
-		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+		await expect.element(summaryCard().getByText('Invite pending')).toBeVisible();
 	});
 
 	it('says an erased Client was erased, not that her invite needs re-sending (#2989)', async () => {
@@ -1467,7 +1515,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 			clientPortalInviteStatus: 'revoked'
 		});
 
-		await expect.element(testPage.getByText('Client erased, so nobody can be invited')).toBeVisible();
+		await expect.element(summaryCard().getByText('Client erased, so nobody can be invited')).toBeVisible();
 		expect(testPage.getByText('Invite withdrawn — needs re-invite').elements()).toHaveLength(0);
 	});
 
@@ -1485,12 +1533,12 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 
 		await expect
 			.element(
-				testPage.getByText(
+				summaryCard().getByText(
 					"Invite refused: signs in through another record. Combine the two records: save this Client's details, and you will be asked whether the other record is the same person."
 				)
 			)
 			.toBeVisible();
-		expect(testPage.getByText('Invite pending').elements()).toHaveLength(0);
+		expect(summaryCard().getByText('Invite pending').elements()).toHaveLength(0);
 	});
 
 	it('withholds Send Contract while the invite is refused, as never invited does', async () => {
@@ -1513,7 +1561,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 			{ ...fixtureDetail, clientPortalInviteStatus: 'expired' }
 		);
 
-		await expect.element(testPage.getByText('Invite expired — needs re-invite')).toBeVisible();
+		await expect.element(summaryCard().getByText('Invite expired — needs re-invite')).toBeVisible();
 		await expect.element(testPage.getByText(/Send this Client a new portal invite before sending the Contract/)).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Send Contract' }).elements()).toHaveLength(0);
 		await expect.element(testPage.getByRole('button', { name: 'Send portal invite' }).first()).toBeVisible();
@@ -1569,7 +1617,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 			.element(testPage.getByText('This Client has no email address on file. Add one before sending a portal invite.').first())
 			.toBeVisible();
 		await expect
-			.element(testPage.getByText(/no email on file, so the client cannot be invited yet/i))
+			.element(summaryCard().getByText(/no email on file, so the client cannot be invited yet/i))
 			.toBeVisible();
 	});
 
@@ -1591,7 +1639,7 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await testPage.getByRole('button', { name: 'Send portal invite' }).first().click();
 
 		await expect.element(testPage.getByRole('button', { name: 'Send Contract' })).toBeEnabled();
-		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
+		await expect.element(summaryCard().getByText('Invite pending')).toBeVisible();
 		// #2198: the confirmation names her, never "them".
 		await expect
 			.element(
@@ -1835,7 +1883,7 @@ describe('the Contract read first, and its change only when asked (#2004)', () =
 		await testPage.getByRole('button', { name: 'Send Contract' }).click();
 
 		await expect.element(testPage.getByRole('status').filter({ hasText: 'Contract sent.' })).toHaveFocus();
-		await expect.element(testPage.getByText('Sent, waiting for the Client to sign')).toBeVisible();
+		await expect.element(contractRegion().getByText(/waiting for the Client to sign/)).toBeVisible();
 	});
 
 	it('reminds the Client of a sent Contract and shows who reminded her and when (#2951)', async () => {
@@ -2009,7 +2057,9 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 		await setupWithContract(() => mockNoContract(birthRateOnly), fixtureDetail, ownerSession);
 
 		const invoices = testPage.getByRole('region', { name: 'Invoices', exact: true });
-		await expect.element(invoices.getByText('An Invoice is raised against a signed Contract.')).toBeVisible();
+		await expect
+			.element(invoices.getByText(`Invoices start once ${fixtureDetail.clientName} signs the Contract.`))
+			.toBeVisible();
 		expect(invoices.getByRole('button').elements()).toHaveLength(0);
 		await expect.element(testPage.getByRole('link', { name: 'Invoices' }).first()).toHaveAttribute('href', '#invoices');
 	});
@@ -2122,7 +2172,7 @@ describe('the note when work started (#2597)', () => {
 });
 
 describe('the order of the sections (#2146)', () => {
-	it('runs On call, Birth outcome, Contract, Visits, Care Plan, Birth Plan, Invoices, Note when work started, Offers, Doula fees, Messages, Activity', async () => {
+	it('runs a postpartum Engagement by its care phase, the Care Plan not started last of the filled, Activity at the end, Details a label and not a heading (#2755)', async () => {
 		await setupWithContract(() => respondFromFixture(), fixtureDetail, ownerSession);
 		// Offers and Doula fees are an Owner's or an Admin's, drawn once
 		// each read lands.
@@ -2132,18 +2182,20 @@ describe('the order of the sections (#2146)', () => {
 			.getByRole('heading', { level: 2 })
 			.all()
 			.map((heading) => heading.element().textContent?.trim());
+		// The wide window draws the aside after the facts; its title labels the
+		// region and is not a heading, so the h2s are the sections', in drawn order.
 		expect(headings).toEqual([
-			'On call',
+			'Visits',
+			'Messages',
+			'Invoices',
 			'Birth outcome',
 			'Contract',
-			'Visits',
-			'Care Plan',
 			'Birth Plan',
-			'Invoices',
-			'Note when work started',
 			'Offers',
 			'Doula fees',
-			'Messages',
+			'Care Plan',
+			'On call',
+			'Note when work started',
 			'Activity'
 		]);
 	});
@@ -2221,7 +2273,7 @@ describe('the Contract PDF download is gated on the page (#302, amended by #969)
 	it('does not render the download for a contractor Doula, the role the endpoint still refuses', async () => {
 		await setupWithRoles(['doula'], pdfBlobResponse(), true);
 
-		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(/Signed on Aug 14, 2026/)).toBeVisible();
 		expect(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' }).elements()).toHaveLength(0);
 	});
 
@@ -2371,14 +2423,14 @@ describe('a voided Contract offers the next one (#2260)', () => {
 
 		await testPage.getByRole('button', { name: 'Void this Contract' }).click();
 		await testPage.getByRole('dialog').getByRole('button', { name: 'Void this Contract' }).click();
-		await expect.element(testPage.getByText('Voided, no longer active')).toBeVisible();
+		await expect.element(contractRegion().getByText('Voided, no longer active')).toBeVisible();
 
 		await testPage.getByRole('button', { name: 'Create a Draft Contract' }).click();
 		// A new Draft opens at its merge fields, as the first one does.
 		await expect.element(testPage.getByRole('heading', { level: 3, name: 'Change the Draft Contract' })).toHaveFocus();
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
-		await expect.element(testPage.getByText('Draft, not sent yet')).toBeVisible();
+		await expect.element(contractRegion().getByText('Draft, not sent yet')).toBeVisible();
 		await expect.element(testPage.getByText(PREVIOUS_CONTRACT_PDF_NOTICE)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Download signed Contract (PDF)' })).toBeVisible();
 		expect(testPage.getByText('Voided, no longer active').elements()).toHaveLength(0);
@@ -2484,17 +2536,18 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 	});
 
 	// #2243: reading an answer is not changing one.
+	// #2755: the questions that have an answer, and no others.
 	it.each([
 		['Care Plan', 'care_plan'],
 		['Birth Plan', 'birth_plan']
-	] as const)('reads every answer in the %s with no editor open', async (heading, planType) => {
+	] as const)('reads every answered question in the %s with no editor open', async (heading, planType) => {
 		await setupPlans({ [planType]: planOf(planType) });
 
 		const section = planSection(heading);
 		await expect.element(section.getByRole('heading', { level: 3, name: 'Labor' })).toBeVisible();
 		await expect.element(section.getByText('Music', { exact: true })).toBeVisible();
 		await expect.element(section.getByText('Quiet', { exact: true })).toBeVisible();
-		await expect.element(section.getByText('Lighting', { exact: true })).toBeVisible();
+		expect(section.getByText('Lighting', { exact: true }).elements()).toHaveLength(0);
 		expect(section.getByRole('textbox').elements()).toHaveLength(0);
 		expect(testPage.getByRole('button', { name: `Save ${heading}` }).elements()).toHaveLength(0);
 	});
@@ -2506,16 +2559,16 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		});
 
 		await expect
-			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read this yet`))
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read it yet`))
 			.toBeVisible();
-		expect(planSection('Care Plan').getByText(/has not read this yet/).elements()).toHaveLength(0);
+		expect(planSection('Care Plan').getByText(/has not read it yet/).elements()).toHaveLength(0);
 	});
 
 	it('says when the Client read the Birth Plan', async () => {
 		await setupPlans({ birth_plan: planOf('birth_plan', { clientAcknowledgedAt: '2026-10-03T15:00:00Z' }) });
 
 		await expect
-			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} read this on Oct 3, 2026`))
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} read it on Oct 3, 2026`))
 			.toBeVisible();
 	});
 
@@ -2523,7 +2576,7 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await setupPlans({ birth_plan: planOf('birth_plan') });
 
 		await expect
-			.element(testPage.getByRole('link', { name: 'Print for the hospital' }))
+			.element(testPage.getByRole('link', { name: 'Read or print the whole Birth Plan' }))
 			.toHaveAttribute(
 				'href',
 				`/practices/${fixture.params.practiceId}/engagements/${fixture.params.engagementId}/birth-plan`
@@ -2576,8 +2629,8 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await expect
 			.element(planSection('Birth Plan').getByText(`Not shown to ${fixtureDetail.clientName}`))
 			.toBeVisible();
-		expect(planSection('Birth Plan').getByText(/has not read this yet/).elements()).toHaveLength(0);
-		expect(testPage.getByRole('link', { name: 'Print for the hospital' }).elements()).toHaveLength(0);
+		expect(planSection('Birth Plan').getByText(/has not read it yet/).elements()).toHaveLength(0);
+		expect(testPage.getByRole('link', { name: 'Read or print the whole Birth Plan' }).elements()).toHaveLength(0);
 		await expect.element(planSection('Birth Plan').getByText('Quiet', { exact: true })).toBeVisible();
 	});
 
@@ -2615,9 +2668,8 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await planSection('Care Plan').getByRole('button', { name: 'Start the Care Plan' }).click();
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 
-		await expect.element(planSection('Care Plan').getByText('Started', { exact: true })).toBeVisible();
-		await expect.element(planSection('Care Plan').getByText('Oct 26, 2026 by Renata Alvarez')).toBeVisible();
-		expect(planSection('Care Plan').getByText('Last edited').elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByText(/started Oct 26, 2026 by Renata Alvarez/)).toBeVisible();
+		expect(planSection('Care Plan').getByText(/last changed/).elements()).toHaveLength(0);
 	});
 
 	it('names the last save, not the start, once a Plan is saved', async () => {
@@ -2628,8 +2680,8 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 			})
 		});
 
-		await expect.element(planSection('Care Plan').getByText('Oct 24, 2026 by Priya Raman')).toBeVisible();
-		expect(planSection('Care Plan').getByText('Started', { exact: true }).elements()).toHaveLength(0);
+		await expect.element(planSection('Care Plan').getByText(/last changed Oct 24, 2026 by Priya Raman/)).toBeVisible();
+		expect(planSection('Care Plan').getByText(/started/).elements()).toHaveLength(0);
 	});
 
 	it('saves what was typed, returns to the facts, and says so, focused', async () => {
@@ -2649,7 +2701,7 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await expect.element(planSection('Birth Plan').getByText('Low', { exact: true })).toBeVisible();
 		// The save's answer carries no acknowledgment: a Staff edit clears it.
 		await expect
-			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read this yet`))
+			.element(planSection('Birth Plan').getByText(`${fixtureDetail.clientName} has not read it yet`))
 			.toBeVisible();
 	});
 
@@ -2665,6 +2717,33 @@ describe('the Care Plan and Birth Plan sections (#2004)', () => {
 		await expect.element(planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' })).toHaveFocus();
 		await planSection('Care Plan').getByRole('button', { name: 'Change the Care Plan' }).click();
 		await expect.element(testPage.getByLabelText('Lighting')).toHaveValue('');
+	});
+
+	// #2755: a long plan is capped in height with all its text in the page,
+	// and the cap comes off in place; a short one has nothing to show.
+	it('caps a long Care Plan and shows the whole of it on request', async () => {
+		const fields = Array.from({ length: 30 }, (_, index) => ({
+			id: `q${index}`,
+			type: 'short_text' as const,
+			label: `Question ${index}`,
+			order: index
+		}));
+		const answers = Object.fromEntries(fields.map((field) => [field.id, `Answer ${field.id}`]));
+		await setupPlans({ care_plan: planOf('care_plan', { fields, answers }) });
+
+		const show = planSection('Care Plan').getByRole('button', { name: 'Show the whole Care Plan' });
+		await expect.element(show).toHaveAttribute('aria-expanded', 'false');
+		expect(planSection('Care Plan').getByText('Answer q29', { exact: true }).elements()).toHaveLength(1);
+		await show.click();
+
+		await expect.element(show).toHaveAttribute('aria-expanded', 'true');
+	});
+
+	it('offers no "Show the whole" for a plan the cap does not hide', async () => {
+		await setupPlans({ care_plan: planOf('care_plan') });
+
+		await expect.element(planSection('Care Plan').getByText('1 of 2 questions answered')).toBeVisible();
+		expect(planSection('Care Plan').getByRole('button', { name: 'Show the whole Care Plan' }).elements()).toHaveLength(0);
 	});
 
 	it('keeps the form open beside the refusal when a save is refused', async () => {
@@ -2787,7 +2866,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 		await expect
 			.element(testPage.getByRole('heading', { name: /^Reassign the Visit for Anne-Marie Ochieng-Whitfield on / }))
 			.toHaveFocus();
-		await expect.element(visitsTable().getByRole('button', { name: 'Reassign' }).nth(0)).toHaveAttribute('aria-expanded', 'true');
+		await expect.element(visitsTable().getByRole('button', { name: 'Reassign', exact: true }).nth(0)).toHaveAttribute('aria-expanded', 'true');
 		expect(testPage.getByRole('button', { name: 'Cancel' }).elements()).toHaveLength(0);
 
 		await changeVisit(0);
@@ -3011,7 +3090,7 @@ describe('choosing who a Visit is for (#268, #274)', () => {
 
 			// visit-2 is Jordan Reyes's, and she is not on this roster, so
 			// only its row offers the sole Doula.
-			await expect.poll(() => visitsTable().getByRole('button', { name: 'Reassign' }).elements()).toHaveLength(1);
+			await expect.poll(() => visitsTable().getByRole('button', { name: 'Reassign', exact: true }).elements()).toHaveLength(1);
 			await reassignVisit(0);
 			await expect
 				.element(testPage.getByRole('heading', { name: 'Reassign the Visit for Jordan Reyes, not yet scheduled' }))
@@ -3200,9 +3279,9 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	it('names each Doula on the Engagement in the summary, and offers no control to a reader the BFF does not offer it to', async () => {
 		await setupWhoIsOn(fixtureDetail);
 
-		await expect.element(testPage.getByText('Doulas', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Doulas', { exact: true })).toBeVisible();
 		await expect
-			.element(testPage.getByText('Persephone Vandermeulen-Achterberg, CD(DONA), Bo Ng', { exact: true }))
+			.element(statusLine().getByText('Persephone Vandermeulen-Achterberg, CD(DONA), Bo Ng', { exact: true }))
 			.toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
 		expect(changeButton('Doula')).toBeUndefined();
@@ -3211,7 +3290,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	it('says "No Doula yet" and offers the control where the BFF says the press would be accepted', async () => {
 		await setupWhoIsOn(nobodyOnIt);
 
-		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('No Doula yet', { exact: true })).toBeVisible();
 		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 	});
@@ -3225,7 +3304,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 		expect(session).toMatchObject({ roles: ['owner', 'doula'], isContractor: true });
 		await render(Page, { data: { ...nobodyOnIt, session } });
 
-		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('No Doula yet', { exact: true })).toBeVisible();
 		await openChange('Doula');
 		await expect.element(putMeOnIt()).toBeVisible();
 	});
@@ -3237,7 +3316,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 	it('offers no control with nobody on the Engagement, where the BFF says the reader may not attach herself', async () => {
 		await setupWhoIsOn({ ...nobodyOnIt, canAttachSelf: false });
 
-		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('No Doula yet', { exact: true })).toBeVisible();
 		expect(putMeOnIt().elements()).toHaveLength(0);
 		expect(changeButton('Doula')).toBeUndefined();
 	});
@@ -3281,7 +3360,7 @@ describe('who is on the Engagement, and putting yourself on it (#1598)', () => {
 
 		await expect.element(testPage.getByText('This work has completed, so nobody can be put on it.')).toBeVisible();
 		await expect.element(putMeOnIt()).toBeVisible();
-		await expect.element(testPage.getByText('No Doula yet', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('No Doula yet', { exact: true })).toBeVisible();
 	});
 
 	// A Visit that names an employee grants her an Attachment, so the
@@ -3486,7 +3565,7 @@ describe('putting a Doula on the Engagement (#2230)', () => {
 			{ method: 'PUT' }
 		);
 		await expect.element(testPage.getByText('Priya Raman is on this work.')).toHaveFocus();
-		await expect.element(testPage.getByText('Priya Raman', { exact: true })).toBeVisible();
+		await expect.element(statusLine().getByText('Priya Raman', { exact: true })).toBeVisible();
 		await vi.waitFor(() => {
 			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/on-call');
 			expect(apiFetchWithSession).toHaveBeenCalledWith('/api/practices/practice-1/engagements/engagement-1/activity');
@@ -3752,8 +3831,8 @@ describe('the Kind section (#874)', () => {
 	it("reads what the Practice sold off the Engagement's own read, and offers the other kind", async () => {
 		await setupKind();
 
-		await expect.element(testPage.getByText('Care', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText('Birth', { exact: true })).toBeVisible();
+		await expect.element(summaryCard().getByText('Care', { exact: true })).toBeVisible();
+		await expect.element(summaryCard().getByText('Birth', { exact: true })).toBeVisible();
 		// #1998: behind the Care row's Change, not in a loose stack.
 		expect(testPage.getByRole('button', { name: 'Change to Postpartum' }).elements()).toHaveLength(0);
 		await openChange('care');
@@ -3778,7 +3857,7 @@ describe('the Kind section (#874)', () => {
 	it("does not offer the upgrade once a birth outcome is recorded, matching the BFF's own refusal", async () => {
 		await setupKind({ detail: { ...fixtureDetail, kind: 'postpartum' } });
 
-		await expect.element(testPage.getByText('Postpartum', { exact: true })).toBeVisible();
+		await expect.element(summaryCard().getByText('Postpartum', { exact: true })).toBeVisible();
 		expect(changeButton('care')).toBeUndefined();
 	});
 
@@ -3817,7 +3896,7 @@ describe('the Kind section (#874)', () => {
 			'/api/practices/practice-1/engagements/engagement-1/kind',
 			expect.objectContaining({ method: 'PUT', body: JSON.stringify({ kind: 'postpartum' }) })
 		);
-		await expect.element(testPage.getByText('Postpartum', { exact: true })).toBeVisible();
+		await expect.element(summaryCard().getByText('Postpartum', { exact: true })).toBeVisible();
 		// The upgrade back to 'birth' is not offered: the fixture's own
 		// birth outcome ('live_birth') rides along unchanged -- a kind
 		// change moves nothing else -- so this Engagement is now exactly
@@ -3957,7 +4036,7 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 	it('draws no fee row for a reader the BFF sends no fee', async () => {
 		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, yourFee: undefined });
 
-		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(/Signed on Aug 14, 2026/)).toBeVisible();
 		await expect.element(testPage.getByText('Your fee')).not.toBeInTheDocument();
 	});
 
@@ -3974,8 +4053,10 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect
 			.element(testPage.getByText(/You see when each Invoice was raised and where it stands, not what the Client pays/))
 			.toBeVisible();
+		// The state line says how many are open and when, never an amount (#2755).
+		await expect.element(invoices.getByText(/1 Invoice open, 1 overdue, due Aug 31(, 2026)?\./)).toBeVisible();
 		expect(invoiceListReads()).toHaveLength(1);
-	});
+});
 
 	it('lets a contractor raise an Invoice, tells her it worked, and reads her rows again', async () => {
 		await setupMoney(contractorReader, fixtureDetail, (path, init) =>
@@ -4019,8 +4100,9 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 				: undefined;
 		});
 
-		await expect.element(testPage.getByText('Not yet billed')).toBeVisible();
-		await expect.element(testPage.getByText('$2,750.00', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText('Of the $4,500.00 Contract price, $1,750.00 is billed and $2,750.00 is not billed yet.'))
+			.toBeVisible();
 		await testPage.getByRole('region', { name: 'Invoices', exact: true }).getByRole('button', { name: 'Change' }).click();
 		const amount = testPage.getByLabelText('Amount to bill (USD)');
 		await expect.element(amount).toHaveValue(2750);
@@ -4030,8 +4112,50 @@ describe('what a reader sees about money (#2002, #2003)', () => {
 		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
 		const post = apiFetchWithSession.mock.calls.find(([, init]) => (init as RequestInit | undefined)?.method === 'POST');
 		expect(JSON.parse(String((post![1] as RequestInit).body))).toMatchObject({ amountCents: 123_456 });
-		await expect.element(testPage.getByText('$2,984.56', { exact: true })).toBeVisible();
-		await expect.element(testPage.getByText('$1,515.44', { exact: true })).toBeVisible();
+		await expect
+			.element(testPage.getByText('Of the $4,500.00 Contract price, $2,984.56 is billed and $1,515.44 is not billed yet.'))
+			.toBeVisible();
+	});
+
+	it('says what is owed could not be read when the re-read after a new Invoice fails, never the figure it had', async () => {
+		const contractBilling = { priceCents: 450_000, billedCents: 175_000, unbilledCents: 275_000 };
+		let reads = 0;
+		await setupMoney(sessionFor(['owner']), fixtureDetail, (path, init) => {
+			if (!path.endsWith('/contract/invoices')) return;
+			if (init?.method !== 'POST') {
+				reads += 1;
+				return reads === 1
+					? jsonResponse({ items: [], hasMore: false, contractBilling, owed: { owedCents: 5000, overdueCents: 0 } })
+					: jsonResponse('down', 500);
+			}
+			return jsonResponse(
+				{
+					id: 'invoice-new',
+					contractId: 'contract-1',
+					status: 'open',
+					amountCents: 123_456,
+					currency: 'usd',
+					createdAt: '2026-11-10T15:00:00Z',
+					raisedOn: '2026-11-10',
+					dueOn: '2026-12-10',
+					reference: 'INV-0004',
+					billingMode: 'stripe',
+					refundedCents: 0,
+					refundableCents: 0,
+					reversible: false,
+					daysOverdue: 0
+				},
+				201
+			);
+		});
+
+		await expect.element(testPage.getByRole('link', { name: /^\$50\.00, Owed, in Invoices$/ })).toBeVisible();
+		await testPage.getByRole('region', { name: 'Invoices', exact: true }).getByRole('button', { name: 'Change' }).click();
+		await testPage.getByRole('button', { name: 'Create Invoice' }).click();
+
+		await expect.element(testPage.getByText('Invoice created.')).toBeVisible();
+		await expect.element(testPage.getByText('Could not be read').first()).toBeVisible();
+		expect(testPage.getByRole('link', { name: /, Owed, in Invoices$/ }).elements()).toHaveLength(0);
 	});
 
 	it('reads and lists the Invoices for an Owner, with no contractor line', async () => {
@@ -4160,7 +4284,7 @@ describe('the Doula fees section (#2271)', () => {
 			path.endsWith('/doula-fees') ? jsonResponse({ message: 'Something went wrong' }, 500) : undefined
 		);
 
-		await expect.element(doulaFeesSection().getByText('Something went wrong')).toBeVisible();
+		await expect.element(doulaFeesSection().getByText('We could not load the Doula fees.')).toBeVisible();
 	});
 });
 
@@ -4263,9 +4387,9 @@ describe('the Messages section (#2004)', () => {
 			path.includes('/messages') ? jsonResponse({ items: [fromClient, fromStaff], hasMore: false }) : undefined
 		);
 
-		const latest = messagesSection().getByText('“Thursday works. See you at 2.” — Camille, Oct 24, 2026');
-		await expect.element(latest).toBeVisible();
-		await expect.element(messagesSection().getByText('Since Oct 24, 2026')).toBeVisible();
+		// The newest Message is the thread's own bubble, under the state line (#2755).
+		await expect.element(messagesSection().getByText('Thursday works. See you at 2.')).toBeVisible();
+		await expect.element(messagesSection().getByText(/^Unanswered since/)).toBeVisible();
 	});
 
 	it('draws no Unanswered row once Staff has answered (#2104)', async () => {
@@ -4287,7 +4411,7 @@ describe('the Messages section (#2004)', () => {
 				: undefined
 		);
 
-		await expect.element(messagesSection().getByText('“Thursday at 2?” — Priya Raman, Oct 23, 2026')).toBeVisible();
+		await expect.element(messagesSection().getByText('Thursday at 2?')).toBeVisible();
 		expect(messagesSection().getByText('Unanswered').elements()).toHaveLength(0);
 	});
 });
@@ -4300,7 +4424,7 @@ describe('how the Contract and the Plans came to be (#2104)', () => {
 	it('says when the Contract was signed and sent, and by whom, and when the Birth Plan was last edited', async () => {
 		await setupMoney(sessionFor(['owner']));
 
-		await expect.element(testPage.getByText('Signed on Aug 14, 2026', { exact: true })).toBeVisible();
+		await expect.element(testPage.getByText(/Signed on Aug 14, 2026/)).toBeVisible();
 		await expect.element(testPage.getByText('Oluwaseun Adebayo-Montgomery Fitzwilliam')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 12, 2026 by Anne-Marie Ochieng-Whitfield')).toBeVisible();
 		await expect.element(testPage.getByText('Aug 26, 2026 by Priyanka Venkataraman-Solberg')).toBeVisible();
@@ -4534,6 +4658,624 @@ describe('taking a Doula off the Engagement (#2596)', () => {
 		await expect.element(testPage.getByText('Only an Owner or an Admin can do that.')).toBeVisible();
 		await testPage.getByRole('button', { name: 'Cancel' }).click();
 		await expect.element(takeOffLink()).toBeVisible();
+	});
+
+	it("sits behind the Doulas row's Change, with the add, where the row has one", async () => {
+		await testPage.viewport(3200, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: { ...fixtureDetail, doulas: [lena], canAttachSelf: true, session: sessionFor(['owner', 'doula'], 'staff-1') }
+		});
+
+		await expect.element(testPage.getByRole('button', { name: 'Put me on this work' })).not.toBeInTheDocument();
+		expect(takeOffLink().elements()).toHaveLength(0);
+		await openChange('Doula');
+		await expect.element(testPage.getByRole('button', { name: 'Put me on this work' })).toBeVisible();
+		await expect.element(takeOffLink()).toBeVisible();
+	});
+});
+
+/*
+ * The header's status line and the facts at a glance (#2755). The status
+ * line's words are one `<dl>` of labeled items; a spec reads its text as a
+ * whole because a fact about the line's order and its omissions has no
+ * accessible query of its own (the `.status-line` is the header's one line).
+ */
+const beforeTheBirth: Detail = { ...fixtureDetail, birthOutcome: undefined, pregnancyEndedOn: undefined };
+const statusLineText = () => document.querySelector('.status-line')?.textContent?.replaceAll(/\s+/g, ' ').trim();
+
+describe('the header status line, and the facts at a glance (#2755)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('says the care phase, the due day with how far along, and the Doulas', async () => {
+		await renderWithFixtureResponder(undefined, beforeTheBirth);
+
+		await expect.poll(statusLineText).toMatch(/^Care phase Active Due Mar 1, 2027, \d+ weeks Doulas /);
+	});
+
+	it('says no weeks for a due day more than 40 weeks away', async () => {
+		await renderWithFixtureResponder(undefined, { ...beforeTheBirth, dueDate: '2099-01-01' });
+
+		await expect.poll(statusLineText).toMatch(/Due Jan 1, 2099 Doulas /);
+	});
+
+	it('says no due day once an outcome is recorded', async () => {
+		await renderWithFixtureResponder();
+
+		await expect.poll(statusLineText).toMatch(/^Care phase Active/);
+		expect(statusLineText()).not.toContain('Due');
+	});
+
+	it('says "Nobody on call tonight" from the Engagement read, until the on-call read lands', async () => {
+		await renderWithFixtureResponder(
+			(path) => (path.endsWith('/on-call') ? Promise.resolve(jsonResponse('down', 500)) : undefined),
+			{ ...beforeTheBirth, tonight: { holders: [], isNobody: true } }
+		);
+
+		await expect.element(testPage.getByText('Nobody on call tonight', { exact: true })).toBeVisible();
+	});
+
+	it('follows the on-call read once it has landed', async () => {
+		await renderWithFixtureResponder(undefined, { ...beforeTheBirth, tonight: { holders: [], isNobody: true } });
+
+		await expect.element(testPage.getByRole('region', { name: 'On call' })).toBeVisible();
+		await expect.poll(() => testPage.getByText('Nobody on call tonight', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('says nothing about tonight once an outcome is recorded', async () => {
+		await renderWithFixtureResponder(undefined, { ...fixtureDetail, tonight: { holders: [], isNobody: true } });
+
+		await expect.element(testPage.getByRole('region', { name: 'On call' })).toBeVisible();
+		expect(testPage.getByText('Nobody on call tonight', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('opens the Add a Visit form from the address, as it did when the header held the link', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/#add-visit');
+			await renderWithFixtureResponder();
+
+			await expect.element(testPage.getByRole('heading', { name: 'Add a Visit' })).toBeVisible();
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('puts "Add a Visit" in the Visits section, beside its state line, and moves focus to the form', async () => {
+		await renderWithFixtureResponder();
+
+		await testPage.getByRole('button', { name: 'Add a Visit' }).click();
+		await expect.element(testPage.getByRole('heading', { name: 'Add a Visit' })).toHaveFocus();
+		expect(testPage.getByRole('link', { name: 'Add a Visit' }).elements()).toHaveLength(0);
+	});
+
+	it('draws no "Add a Visit" for a reader who can neither pick a colleague nor log her own', async () => {
+		await setupWithRoster(jsonResponse('not permitted to read this', 403), ['admin']);
+
+		await expect.element(testPage.getByRole('link', { name: 'Message the Client' })).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Add a Visit' }).elements()).toHaveLength(0);
+	});
+
+	it('links the Contract fact to its section, in words that name it', async () => {
+		await renderWithFixtureResponder();
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Signed, Contract, in Contract' }))
+			.toHaveAttribute('href', '#contract');
+	});
+
+	it('says the Contract could not be read, never a state it did not read', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract') ? Promise.resolve(jsonResponse('down', 500)) : undefined
+		);
+
+		await expect.element(testPage.getByText('Could not be read').first()).toBeVisible();
+		await expect.element(testPage.getByRole('link', { name: /, Contract, in Contract$/ })).not.toBeInTheDocument();
+	});
+
+	it('says there is no Contract yet', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract') ? Promise.resolve(jsonResponse('none', 404)) : undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'No Contract yet, Contract, in Contract' })).toBeVisible();
+	});
+
+	it('says the thread is unanswered, since when, and links it', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/messages')
+				? Promise.resolve(
+						jsonResponse({
+							items: [
+								{
+									messageId: 'message-1',
+									senderType: 'client',
+									senderId: 'client-1',
+									senderName: 'Camille',
+									body: 'Thursday works.',
+									createdAt: '2026-10-24T15:00:00Z'
+								}
+							],
+							hasMore: false
+						})
+					)
+				: undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: /^Unanswered since .*, Messages, in Messages$/ })).toBeVisible();
+	});
+
+	it('says there are no Messages yet', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/messages') ? Promise.resolve(jsonResponse({ items: [], hasMore: false })) : undefined
+		);
+		await expect.element(testPage.getByRole('link', { name: 'No Messages yet, Messages, in Messages' })).toBeVisible();
+	});
+
+	it('says the thread was answered', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/messages')
+				? Promise.resolve(
+						jsonResponse({
+							items: [
+								{
+									messageId: 'message-1',
+									senderType: 'staff',
+									senderId: 'staff-1',
+									senderName: 'Priya Raman',
+									body: 'Thursday at 2?',
+									createdAt: '2026-10-23T15:00:00Z'
+								}
+							],
+							hasMore: false
+						})
+					)
+				: undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'Answered, Messages, in Messages' })).toBeVisible();
+	});
+
+	it('says the thread could not be read', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/messages') ? Promise.resolve(jsonResponse('down', 500)) : undefined
+		);
+
+		await expect.element(testPage.getByText('Could not be read')).toBeVisible();
+	});
+
+	it('says who is on call tonight, and who they are covering for', async () => {
+		await renderWithFixtureResponder(
+			(path) => (path.endsWith('/on-call') ? Promise.resolve(jsonResponse('down', 500)) : undefined),
+			{
+				...beforeTheBirth,
+				tonight: {
+					holders: [{ staffId: 'staff-2', name: 'Priya Raman', coveringFor: 'Bethany Kroll' }],
+					isNobody: false
+				}
+			}
+		);
+
+		await expect
+			.element(testPage.getByRole('link', { name: 'Priya Raman, covering for Bethany Kroll, On call tonight, in On call' }))
+			.toHaveAttribute('href', '#on-call');
+	});
+
+	it('says nobody is on call tonight with the fact link, and the days begin when tonight is outside them', async () => {
+		await renderWithFixtureResponder(
+			(path) => (path.endsWith('/on-call') ? Promise.resolve(jsonResponse('down', 500)) : undefined),
+			{
+				...beforeTheBirth,
+				tonight: { holders: [], isNobody: true },
+				onCallWindow: { from: '2099-01-01', to: '2099-02-01' }
+			}
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'Nobody, On call tonight, in On call' })).toBeVisible();
+	});
+
+	it('says when the days begin before they have', async () => {
+		await renderWithFixtureResponder(undefined, {
+			...beforeTheBirth,
+			onCallWindow: { from: '2099-01-01', to: '2099-02-01' }
+		});
+
+		await expect.element(testPage.getByRole('link', { name: /^Starts Jan 1, 2099, On call tonight/ })).toBeVisible();
+	});
+
+	it('draws no On call tonight fact once an outcome is recorded', async () => {
+		await renderWithFixtureResponder();
+
+		await expect.element(testPage.getByRole('link', { name: /, Contract, in Contract$/ })).toBeVisible();
+		expect(testPage.getByText('On call tonight', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it("says the next Visit from the Visits read's own next, with who it is with", async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/visits')
+				? Promise.resolve(
+						jsonResponse({
+							items: [],
+							hasMore: false,
+							next: {
+								visitId: 'visit-9',
+								staffId: 'staff-2',
+								staffName: 'Priya Raman',
+								createdAt: '2026-10-01T15:00:00Z',
+								scheduledAt: '2099-11-19T15:00:00Z',
+								type: 'prenatal',
+								isOffEngagement: false
+							}
+						})
+					)
+				: undefined
+		);
+
+		await expect
+			.element(testPage.getByRole('link', { name: /^\w{3} Nov 19, 2099, .+, Next Visit, in Visits$/ }))
+			.toHaveAttribute('href', '#visits');
+		// The Doula is the muted second line under the day and time.
+		await expect.element(testPage.getByText('Priya Raman', { exact: true }).first()).toBeVisible();
+	});
+
+	it('says no Visit is scheduled when the read names none', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/visits') ? Promise.resolve(jsonResponse({ items: [], hasMore: false })) : undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'None scheduled, Next Visit, in Visits' })).toBeVisible();
+	});
+
+	it('says the next Visit once the read finds one, though the Engagement had none when it loaded', async () => {
+		await renderWithFixtureResponder(
+			(path) =>
+				path.includes('/visits')
+					? Promise.resolve(
+							jsonResponse({
+								items: [],
+								hasMore: false,
+								next: {
+									visitId: 'visit-9',
+									staffId: 'staff-2',
+									staffName: 'Priya Raman',
+									createdAt: '2026-10-01T15:00:00Z',
+									scheduledAt: '2099-11-19T15:00:00Z',
+									type: 'prenatal',
+									isOffEngagement: false
+								}
+							})
+						)
+					: undefined,
+			{ ...fixtureDetail, hasVisits: false }
+		);
+
+		await expect.element(testPage.getByRole('link', { name: /, Next Visit, in Visits$/ })).toBeVisible();
+		await expect.element(testPage.getByText('Priya Raman', { exact: true }).first()).toBeVisible();
+	});
+
+	it('says the Visits could not be read, with no link', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.includes('/visits') ? Promise.resolve(jsonResponse('down', 500)) : undefined
+		);
+
+		await expect.element(testPage.getByText('Could not be read')).toBeVisible();
+		expect(testPage.getByRole('link', { name: /, Next Visit, in Visits$/ }).elements()).toHaveLength(0);
+	});
+
+	it('says what is owed and when it is due, in the neutral way', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract/invoices')
+				? Promise.resolve(
+						jsonResponse({ items: [], hasMore: false, owed: { owedCents: 120_000, overdueCents: 0, nextDueOn: '2099-12-01' } })
+					)
+				: undefined
+		);
+
+		await expect
+			.element(testPage.getByRole('link', { name: '$1,200.00, due Dec 1, 2099, Owed, in Invoices' }))
+			.toHaveAttribute('href', '#invoices');
+		// #2755: the Invoices section says it first.
+		await expect.element(testPage.getByText('$1,200.00 owed, due Dec 1, 2099.')).toBeVisible();
+	});
+
+	it('says what is overdue and since when', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract/invoices')
+				? Promise.resolve(
+						jsonResponse({
+							items: [],
+							hasMore: false,
+							owed: { owedCents: 40_000, overdueCents: 40_000, oldestOverdueOn: '2020-11-01' }
+						})
+					)
+				: undefined
+		);
+
+		await expect
+			.element(testPage.getByRole('link', { name: '$400.00 overdue since Nov 1, 2020, Owed, in Invoices' }))
+			.toBeVisible();
+		await expect.element(testPage.getByText('$400.00 overdue since Nov 1, 2020.')).toBeVisible();
+	});
+
+	it('says nothing is owed', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract/invoices')
+				? Promise.resolve(jsonResponse({ items: [], hasMore: false, owed: { owedCents: 0, overdueCents: 0 } }))
+				: undefined
+		);
+
+		await expect.element(testPage.getByRole('link', { name: 'Nothing owed, Owed, in Invoices' })).toBeVisible();
+		await expect.element(testPage.getByText('Nothing owed.')).toBeVisible();
+	});
+
+	it('says what is owed could not be read, never nothing owed', async () => {
+		await renderWithFixtureResponder((path) =>
+			path.endsWith('/contract/invoices') ? Promise.resolve(jsonResponse('down', 500)) : undefined
+		);
+
+		await expect.element(testPage.getByText('Could not be read').first()).toBeVisible();
+		expect(testPage.getByRole('link', { name: /, Owed, in Invoices$/ }).elements()).toHaveLength(0);
+	});
+
+	it('draws no Owed fact for a contractor, whose Invoices carry no money', async () => {
+		await testPage.viewport(3200, 900);
+		apiFetchWithSession.mockResolvedValue(jsonResponse('not available', 403));
+		await render(Page, {
+			data: { ...fixtureDetail, session: { ...sessionFor(['doula']), isContractor: true } }
+		});
+
+		await expect.element(testPage.getByText('Next Visit', { exact: true })).toBeVisible();
+		expect(testPage.getByText('Owed', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it("draws the Client's phone and email in Details as links, and Send portal invite in the Portal invite row", async () => {
+		await renderWithFixtureResponder(
+			(path) =>
+				/\/clients\/[^/]+$/.test(path)
+					? Promise.resolve(
+							jsonResponse({
+								id: 'client-1',
+								phone: '585-555-0100',
+								email: 'client@example.test',
+								resolvedFields: [],
+								engagements: [],
+								history: [],
+								standing: 'active'
+							})
+						)
+					: undefined,
+			{ ...fixtureDetail, clientPortalInviteStatus: undefined, clientHasEmail: true }
+		);
+
+		await expect.element(testPage.getByRole('link', { name: '(585) 555-0100' })).toHaveAttribute('href', 'tel:5855550100');
+		await expect
+			.element(testPage.getByRole('link', { name: 'client@example.test' }))
+			.toHaveAttribute('href', 'mailto:client@example.test');
+		await expect
+			.element(summaryCard().getByRole('button', { name: 'Send portal invite' }))
+			.toBeVisible();
+	});
+});
+
+// #2755: the Messages, Activity and failure states the record's sections open with.
+function threadOf(count: number, newestSender: 'client' | 'staff') {
+	return Array.from({ length: count }, (_, index) => {
+		const number = count - index;
+		const isNewest = index === 0;
+		const senderType = isNewest ? newestSender : (number % 2 === 0 ? 'staff' : 'client');
+		return {
+			messageId: `message-${number}`,
+			senderType,
+			senderId: `${senderType}-1`,
+			senderName: senderType === 'client' ? 'Pat Client' : 'Priya Raman',
+			body: `Thread message ${number}`,
+			createdAt: `2026-10-${String(10 + number).padStart(2, '0')}T15:00:00Z`
+		};
+	});
+}
+
+describe("the record's section states and failures (#2755)", () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('says a thread is unanswered since when, and shows the newest two with the rest on request', async () => {
+		await renderWithFixtureResponder((path, init) =>
+			!init && path.includes('/messages')
+				? Promise.resolve(jsonResponse({ items: threadOf(7, 'client'), hasMore: false }))
+				: undefined
+		);
+
+		const messages = testPage.getByRole('region', { name: 'Messages', exact: true });
+		await expect.element(messages.getByText(/^Unanswered since/)).toBeVisible();
+		expect(messages.getByText(/^Latest: /).elements()).toHaveLength(0);
+		expect(messages.getByText(/^Thread message \d$/).elements()).toHaveLength(2);
+
+		await messages.getByRole('button', { name: 'Show earlier Messages' }).click();
+
+		expect(messages.getByText(/^Thread message \d$/).elements()).toHaveLength(7);
+		expect(messages.getByRole('button', { name: 'Show earlier Messages' }).elements()).toHaveLength(0);
+	});
+
+	it('says a thread is answered when the newest Message is the Practice’s', async () => {
+		await renderWithFixtureResponder((path, init) =>
+			!init && path.includes('/messages')
+				? Promise.resolve(jsonResponse({ items: threadOf(2, 'staff'), hasMore: false }))
+				: undefined
+		);
+
+		await expect
+			.element(testPage.getByRole('region', { name: 'Messages', exact: true }).getByText('Answered.'))
+			.toBeVisible();
+	});
+
+	it('makes each Activity kind a real link in the address, and follows it with a navigation that keeps scroll and focus', async () => {
+		await renderWithFixtureResponder();
+		const activity = testPage.getByRole('region', { name: 'Activity', exact: true });
+
+		await expect.element(activity.getByRole('link', { name: 'All', exact: true })).toHaveAttribute('aria-current', 'page');
+		const money = activity.getByRole('link', { name: 'Contract and money' });
+		await expect.element(money).toHaveAttribute('href', '/practices/practice-1/engagements/engagement-1?activity=money#activity');
+		await money.click();
+
+		expect(goto).toHaveBeenCalledWith('/practices/practice-1/engagements/engagement-1?activity=money#activity', { reset: false });
+	});
+
+	it('reads the kind from the address: only the Activity is read again, marked current, and says when it holds nothing', async () => {
+		const original = pageState.url;
+		try {
+			pageState.url = new URL('https://example.test/?activity=money#activity');
+			await renderWithFixtureResponder((path) =>
+				path.includes('/activity?kind=money') ? Promise.resolve(jsonResponse({ items: [], hasMore: false })) : undefined
+			);
+			const activity = testPage.getByRole('region', { name: 'Activity', exact: true });
+
+			await expect.element(activity.getByRole('link', { name: 'Contract and money' })).toHaveAttribute('aria-current', 'page');
+			await expect.element(activity.getByText('Nothing of this kind yet.')).toBeVisible();
+			expect(askedPaths().some((path) => path.includes('/activity?kind=money'))).toBe(true);
+		} finally {
+			pageState.url = original;
+		}
+	});
+
+	it('says the Visits could not be loaded, with Try again that reads them once more', async () => {
+		let isFailing = true;
+		await renderWithFixtureResponder((path, init) =>
+			!init && isFailing && path.includes('/visits') ? Promise.resolve(jsonResponse('down', 500)) : undefined
+		);
+		const visits = testPage.getByRole('region', { name: 'Visits', exact: true });
+
+		await expect.element(visits.getByText('We could not load the Visits.')).toBeVisible();
+		isFailing = false;
+		await visits.getByRole('button', { name: 'Try again' }).click();
+
+		await expect.element(visits.getByRole('table')).toBeVisible();
+		expect(visits.getByText('We could not load the Visits.').elements()).toHaveLength(0);
+	});
+
+	it('draws Back to top at the page’s end, and it moves focus to Jump to', async () => {
+		await renderWithFixtureResponder();
+
+		const link = testPage.getByRole('link', { name: 'Back to top' }).last();
+		await link.click();
+
+		await expect.element(testPage.getByRole('list', { name: 'Jump to' })).toHaveFocus();
+	});
+});
+
+// #2755, round 3: the Client's phone is the facts' sixth, the last Visit is one
+// link from the Visits' state line, and a Visit that happened is changed in Notes.
+function clientRead(phone: string | undefined, extra: Record<string, unknown> = {}) {
+	return (path: string) =>
+		/\/clients\/[^/]+$/.test(path)
+			? Promise.resolve(
+					jsonResponse({
+						id: 'client-1',
+						...(phone && { phone }),
+						email: 'client@example.test',
+						resolvedFields: [],
+						engagements: [],
+						history: [],
+						standing: 'active',
+						...extra
+					})
+				)
+			: undefined;
+}
+
+describe("the Client's phone as a fact (#2755, round 3)", () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('calls the number from the facts, and Details holds no Phone row', async () => {
+		await renderWithFixtureResponder(clientRead('585-555-0142'));
+
+		const link = testPage.getByRole('link', { name: '(585) 555-0142, Phone, call' });
+		await expect.element(link).toHaveAttribute('href', 'tel:5855550142');
+		expect(summaryCard().getByText('Phone', { exact: true }).elements()).toHaveLength(0);
+	});
+
+	it('says "Not given" with a link to Details when no number is on file', async () => {
+		await renderWithFixtureResponder(clientRead(undefined));
+
+		const link = testPage.getByRole('link', { name: 'Not given, Phone, in Details' });
+		await expect.element(link).toHaveAttribute('href', '#details');
+	});
+
+	it('says it could not be read, with no link, when the Client read is refused', async () => {
+		await renderWithFixtureResponder((path) =>
+			/\/clients\/[^/]+$/.test(path) ? Promise.resolve(jsonResponse('not available', 403)) : undefined
+		);
+
+		const facts = testPage.elementLocator(document.querySelector<HTMLElement>('.facts')!);
+		await expect.poll(() => facts.element().textContent).toMatch(/Phone\s*Could not be read/);
+		expect(facts.getByRole('link', { name: /Phone/ }).elements()).toHaveLength(0);
+	});
+});
+
+const visitsResponder = (path: string, init?: unknown) => {
+	if (init || !path.includes('/visits')) return;
+	return Promise.resolve(
+		jsonResponse({
+			items: [
+				visitRow('v-3', 'Logged Last', '2026-09-01T15:00:00Z'),
+				visitRow('v-2', 'Aug Eighteen', '2026-08-03T15:00:00Z', '2026-08-18T15:00:00Z')
+			],
+			hasMore: false
+		})
+	);
+};
+
+describe('the last Visit and Change into Notes (#2755, round 3)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('names the last Visit in the state line as a link to its row', async () => {
+		await renderWithFixtureResponder(visitsResponder);
+
+		const link = testPage.getByRole('link', { name: 'Last Visit: Tue Aug 18' });
+		await expect.element(link).toHaveAttribute('href', '#visit-v-2');
+	});
+
+	it('puts focus in Notes, the caret at its end, when an Earlier Visit is changed', async () => {
+		await renderWithFixtureResponder(visitsResponder);
+		await expect.element(testPage.getByRole('cell', { name: 'Aug Eighteen', exact: true })).toBeVisible();
+
+		await changeVisit(0);
+
+		await expect.element(testPage.getByLabelText('Notes').first()).toHaveFocus();
+	});
+});
+
+describe('Compose and the payment check step return focus (#2755, round 3)', () => {
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('focuses the Message field from "Write a message", and Cancel returns to the opener', async () => {
+		await renderWithFixtureResponder(undefined, { ...fixtureDetail, clientPortalInviteStatus: 'accepted' });
+		const opener = messagesSection().getByRole('button', { name: 'Write a message' });
+
+		await opener.click();
+		await expect.element(messagesSection().getByLabelText('Message')).toHaveFocus();
+		await messagesSection().getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(opener).toHaveFocus();
+	});
+
+	it('returns focus to "Message the Client" when Cancel closes the form it opened', async () => {
+		await renderWithFixtureResponder(undefined, { ...fixtureDetail, clientPortalInviteStatus: 'accepted' });
+		const header = testPage.getByRole('link', { name: 'Message the Client' });
+
+		await header.click();
+		await expect.element(messagesSection().getByLabelText('Message')).toHaveFocus();
+		await messagesSection().getByRole('button', { name: 'Cancel' }).click();
+
+		await expect.element(header).toHaveFocus();
 	});
 });
 

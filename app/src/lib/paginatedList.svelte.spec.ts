@@ -123,6 +123,17 @@ describe('PaginatedList', () => {
 		expect(list.loadMoreError).toBe('Failed to load more');
 	});
 
+	// A fetch that never reached the service throws a TypeError whose words
+	// ("Failed to fetch") mean nothing to a person; ADR-0059 has the sentence.
+	it('says the connection sentence when the request never reached the service', async () => {
+		const list = listOf(page(['a'], 'cursor-1'), vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+		await list.loadMore();
+
+		expect(list.loadMoreError).toBe('We could not reach the service. Check your connection and try again.');
+		expect(list.items).toEqual(['a']);
+	});
+
 	it('clears a previous error when the next load starts', async () => {
 		const loadPage = vi
 			.fn()

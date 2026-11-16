@@ -60,29 +60,36 @@ func TestListEngagementActivityQuery_StaysOffTheJITCliff(t *testing.T) {
 	// moneyGate false is deliberate -- that is the contractor's read,
 	// the only one that carries the action-exclusion predicate, and so
 	// the heavier of the two plans this reader issues.
-	query, args := activitypage.Statement(activityQuery(practiceID, engagementID, false, nil), activityProjection)
+	// #2755: the same read with each kind's IN list ANDed onto the money
+	// exclusion, the heaviest plan this reader can be asked for.
+	for _, kind := range []string{"", kindCare, kindMoney, kindDoulas} {
+		included, _ := activityKindActions(kind)
+		t.Run("kind="+kind, func(t *testing.T) {
+			query, args := activitypage.Statement(activityQuery(practiceID, engagementID, false, included, nil), activityProjection)
 
-	var raw []byte
-	if err := tx.QueryRowContext(t.Context(), "EXPLAIN (FORMAT JSON) "+query, args...).Scan(&raw); err != nil {
-		t.Fatalf("explain activity query: %v", err)
-	}
+			var raw []byte
+			if err := tx.QueryRowContext(t.Context(), "EXPLAIN (FORMAT JSON) "+query, args...).Scan(&raw); err != nil {
+				t.Fatalf("explain activity query: %v", err)
+			}
 
-	var explained []struct {
-		Plan struct {
-			TotalCost float64 `json:"Total Cost"`
-		} `json:"Plan"`
-	}
-	if err := json.Unmarshal(raw, &explained); err != nil {
-		t.Fatalf("decode plan: %v", err)
-	}
-	if len(explained) != 1 {
-		t.Fatalf("plans = %d, want 1", len(explained))
-	}
+			var explained []struct {
+				Plan struct {
+					TotalCost float64 `json:"Total Cost"`
+				} `json:"Plan"`
+			}
+			if err := json.Unmarshal(raw, &explained); err != nil {
+				t.Fatalf("decode plan: %v", err)
+			}
+			if len(explained) != 1 {
+				t.Fatalf("plans = %d, want 1", len(explained))
+			}
 
-	if cost := explained[0].Plan.TotalCost; cost >= limit {
-		t.Fatalf("the Engagement Activity query's estimated cost is %.0f, at or above jit_above_cost (%.0f), "+
-			"so Postgres will LLVM-compile it on every call. Something has been added to the RLS policies on a table "+
-			"this query reads -- see 00111_staff_name_survives_a_departure.sql for what that costs and how to reach "+
-			"a Staff row from a policy without paying it.", cost, limit)
+			if cost := explained[0].Plan.TotalCost; cost >= limit {
+				t.Fatalf("the Engagement Activity query's estimated cost is %.0f, at or above jit_above_cost (%.0f), "+
+					"so Postgres will LLVM-compile it on every call. Something has been added to the RLS policies on a table "+
+					"this query reads -- see 00111_staff_name_survives_a_departure.sql for what that costs and how to reach "+
+					"a Staff row from a policy without paying it.", cost, limit)
+			}
+		})
 	}
 }

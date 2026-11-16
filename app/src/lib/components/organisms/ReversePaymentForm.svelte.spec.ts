@@ -113,6 +113,6 @@ describe('ReversePaymentForm', () => {
 
 		await page.getByRole('button', { name: 'Confirm and reverse' }).click();
 
-		await expect.element(page.getByRole('alert')).toHaveTextContent('Failed to reverse this payment');
+		await expect.element(page.getByRole('alert')).toHaveTextContent('We could not reverse this payment.');
 	});
 });

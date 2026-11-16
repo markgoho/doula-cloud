@@ -56,7 +56,7 @@
 			step = 'form';
 			return;
 		}
-		formError = error_ instanceof Error ? error_.message : 'Failed to reverse this payment';
+		formError = error_ instanceof Error ? error_.message : 'We could not reverse this payment.';
 	}
 
 	function review(event: SubmitEvent) {

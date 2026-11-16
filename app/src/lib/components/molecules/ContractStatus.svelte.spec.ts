@@ -71,8 +71,8 @@ describe('ContractStatus.svelte', () => {
 	it('renders the status as a row, in the Staff words (#2004)', async () => {
 		await setup({ status: 'sent' });
 
-		await expect.element(page.getByRole('term').first()).toHaveTextContent('Status');
-		await expect.element(page.getByRole('definition').first()).toHaveTextContent('Sent, waiting for the Client to sign');
+		// #2755: the state is the section's first line, not a row.
+		await expect.element(page.getByText('Sent, waiting for the Client to sign.')).toBeVisible();
 	});
 
 	it('says a sent Contract has not been opened yet (#2952)', async () => {
@@ -182,6 +182,31 @@ describe('ContractStatus.svelte', () => {
 		expect(page.getByRole('button', { name: 'Remind the Client' }).elements()).toHaveLength(0);
 	});
 
+	it('says the day a sent Contract went and who sent it, in its first line (#2755)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'America/New_York',
+			status: 'sent',
+			hasSignedPdf: false,
+			sent: { at: '2026-08-12T15:00:00Z', by: 'Renata Alvarez' }
+		});
+
+		await expect
+			.element(page.getByText('Sent on Aug 12, 2026 by Renata Alvarez, waiting for the Client to sign.'))
+			.toBeVisible();
+	});
+
+	it('says only the day it was signed when nobody is recorded as sending it (#2755)', async () => {
+		await render(ContractStatus, {
+			timeZone: 'America/New_York',
+			status: 'signed',
+			hasSignedPdf: false,
+			signed: { at: '2026-08-14T15:00:00Z', by: 'Camille Boyd' }
+		});
+
+		await expect.element(page.getByText('Signed on Aug 14, 2026.')).toBeVisible();
+		expect(page.getByText(/Sent on/).elements()).toHaveLength(0);
+	});
+
 	it('says a voided Contract is no longer active', async () => {
 		await setup({ status: 'voided' });
 
@@ -223,7 +248,7 @@ describe('ContractStatus.svelte', () => {
 			rows: [{ label: 'Fee', value: '$1,850.00' }]
 		});
 
-		expect(page.getByRole('term').elements().map((term) => term.textContent)).toEqual(['Status', 'Fee']);
+		expect(page.getByRole('term').elements().map((term) => term.textContent)).toEqual(['Fee']);
 	});
 
 	it('shows no price-changed row when amountChangedAt is absent', async () => {
@@ -286,7 +311,7 @@ describe('ContractStatus.svelte', () => {
 
 	it.each([
 		['an Error', new Error('contract is not signed'), 'contract is not signed'],
-		['a non-Error value', 'boom', 'Failed to void contract']
+		['a non-Error value', 'boom', 'We could not void the Contract.']
 	])('shows the refusal in the confirmation if onVoid rejects with %s', async (_kind, rejection, shown) => {
 		const onVoid = vi.fn().mockRejectedValue(rejection);
 		await setup({ status: 'signed', onVoid });
@@ -381,7 +406,7 @@ describe('ContractStatus.svelte', () => {
 
 	it.each([
 		['an Error', new Error('signed PDF not found'), 'signed PDF not found'],
-		['a non-Error value', 'boom', 'Failed to download signed Contract']
+		['a non-Error value', 'boom', 'We could not download the signed Contract.']
 	])('shows an error message if onDownloadPdf rejects with %s', async (_kind, rejection, shown) => {
 		const onDownloadPdf = vi.fn().mockRejectedValue(rejection);
 		await setup({ status: 'signed', hasSignedPdf: true, onDownloadPdf });
@@ -477,7 +502,7 @@ describe('ContractStatus.svelte', () => {
 				new Error('a void may only be requested for a signed contract'),
 				'a void may only be requested for a signed contract'
 			],
-			['a non-Error value', 'boom', 'Failed to request a void']
+			['a non-Error value', 'boom', 'We could not send the void request.']
 		])('shows an error message if onRequestVoid rejects with %s', async (_kind, rejection, shown) => {
 			const onRequestVoid = vi.fn().mockRejectedValue(rejection);
 			await setup({ status: 'signed', onRequestVoid });
@@ -614,7 +639,7 @@ describe('ContractStatus.svelte', () => {
 				new Error('no open void request found with this id for this contract'),
 				'no open void request found with this id for this contract'
 			],
-			['a non-Error value', 'boom', 'Failed to decline this request']
+			['a non-Error value', 'boom', 'We could not decline the request.']
 		])('shows an error message if onDeclineVoidRequest rejects with %s', async (_kind, rejection, shown) => {
 			const onDeclineVoidRequest = vi.fn().mockRejectedValue(rejection);
 			await setup({

@@ -822,18 +822,16 @@ describe('coming back from an Engagement', () => {
 	});
 });
 
-const clockEdges = (isYearDay: boolean) =>
-	whenTimes()
-		.filter((when) => /\d{4},/.test(when.textContent!) === isYearDay)
-		.map((when) => Math.round(when.querySelector('.clock')!.getBoundingClientRect().right));
-
 describe('the Visits’ days and clocks', () => {
-	it('sets the day and the clock in tracks of their own, so every clock ends on one edge', async () => {
+	it('says each one as a single time, the day and the clock with a plain space between them', async () => {
 		await setup();
 
-		expect(new Set(clockEdges(false)).size).toBe(1);
-		// A day that carries a year runs past the day's track, the one exception.
-		expect(clockEdges(true).length).toBeGreaterThan(0);
+		const times = whenTimes();
+		expect(times.length).toBeGreaterThan(0);
+		for (const when of times) {
+			expect(when.children).toHaveLength(0);
+			expect(when.textContent).toMatch(/^\w{3} \w{3} \d{1,2}, (\d{4}, )?\d{1,2}:\d{2}[ap]m$/);
+		}
 	});
 });
 

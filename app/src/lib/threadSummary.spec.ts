@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { Message } from './components/organisms/MessageThread.svelte';
+import { formatActivityTimestamp } from './dates.js';
 import { latestMessageText, unansweredSince } from './threadSummary.js';
+
+const WHEN = formatActivityTimestamp('2026-10-24T15:00:00Z', 'America/New_York');
 
 function message(senderType: Message['senderType'], createdAt: string, body = 'Hello'): Message {
 	return {
@@ -16,23 +19,23 @@ function message(senderType: Message['senderType'], createdAt: string, body = 'H
 describe('latestMessageText', () => {
 	it('quotes the newest message, its sender and its day', () => {
 		const thread = [message('staff', '2026-10-20T15:00:00Z'), message('client', '2026-10-24T15:00:00Z', 'Thursday works.')];
-		expect(latestMessageText(thread, 'America/New_York')).toBe('“Thursday works.” — Camille Boyd, Oct 24, 2026');
+		expect(latestMessageText(thread, 'America/New_York')).toBe('“Thursday works.” — Camille Boyd, ' + WHEN);
 	});
 
 	it('cuts a long message at a word, with an ellipsis', () => {
 		const long = `${'word '.repeat(30)}end`;
 		const text = latestMessageText([message('staff', '2026-10-24T15:00:00Z', long)], 'America/New_York')!;
-		expect(text).toMatch(/^“(word ){15}word…” — Priya Raman, Oct 24, 2026$/);
+		expect(text).toBe(`“${'word '.repeat(15)}word…” — Priya Raman, ${WHEN}`);
 	});
 
 	it('cuts a long message with no space where it must', () => {
 		const text = latestMessageText([message('staff', '2026-10-24T15:00:00Z', 'x'.repeat(100))], 'America/New_York')!;
-		expect(text).toBe(`“${'x'.repeat(80)}…” — Priya Raman, Oct 24, 2026`);
+		expect(text).toBe(`“${'x'.repeat(80)}…” — Priya Raman, ${WHEN}`);
 	});
 
 	it('names a file sent with no words', () => {
 		const file = { ...message('client', '2026-10-24T15:00:00Z', ''), attachmentFilename: 'scan.pdf' };
-		expect(latestMessageText([file], 'America/New_York')).toBe('scan.pdf — Camille Boyd, Oct 24, 2026');
+		expect(latestMessageText([file], 'America/New_York')).toBe('scan.pdf — Camille Boyd, ' + WHEN);
 	});
 
 	it('reads nothing for an empty thread', () => {

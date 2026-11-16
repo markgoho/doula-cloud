@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { afterNavigate, goto } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '#lib/appState.svelte.js';
 	import { apiFetch, apiFetchWithSession } from '#lib/api.js';
@@ -8,6 +8,7 @@
 		practicePushSubscriptionsPath,
 		unregisterPushSubscription
 	} from '#lib/pushRegistration.js';
+	import { recordOrigin } from '#lib/recordOrigin.svelte.js';
 	import { signOutOfSession, type SignOutOutcome } from '#lib/signOut.js';
 	import { isAmbientContractor, isOwnerOrAdmin, listEntryHref } from '#lib/roles.js';
 	import { sendStaffFeedback } from '#lib/feedback.js';
@@ -32,6 +33,12 @@
 	// one agency and a contractor Doula at the next, which is why this is
 	// separate from the who-am-I session below.
 	const practiceSession = $derived((page.data as { session?: PracticeSession }).session);
+
+	// The list a record was reached from is forgotten once the reader leaves
+	// the record, so a later record reached another way marks Clients.
+	afterNavigate(({ to }) => {
+		if (!to?.url.pathname.includes('/engagements/')) recordOrigin.list = undefined;
+	});
 
 	onMount(async () => {
 		// Who am I: the name and email the avatar menu shows, and the
@@ -118,9 +125,15 @@
 		];
 		// Overview is an exact match and every other section is a prefix, so
 		// a Client's own screen still marks Clients as the current section.
+		// An Engagement record, its Birth Plan page included, marks the list it
+		// was reached from, Clients by default (#2755).
+		const isRecord = path.includes('/engagements/');
+		const originLabels = { schedule: 'Schedule', invoices: 'Invoices', 'on-call': 'On call', contracts: 'Contracts' };
+		const originLabel = recordOrigin.list ? originLabels[recordOrigin.list] : 'Clients';
+		const recordList = items.some((item) => item.label === originLabel) ? originLabel : 'Clients';
 		const marked = items.map((item) => ({
 			...item,
-			current: item.current ?? path.startsWith(item.href.split('?', 1)[0])
+			current: isRecord ? item.label === recordList : (item.current ?? path.startsWith(item.href.split('?', 1)[0]))
 		}));
 		/*
 		 * #2183 (TB-G10): a Practice with no Client yet is offered only the

@@ -142,6 +142,8 @@ export interface NamedClient {
 	kind: 'birth' | 'postpartum';
 	// Days from today, for a birth; undefined for postpartum care.
 	dueInDays?: number;
+	// A phone number on her record, for a Client the Engagement record's Phone fact should show.
+	phone?: string;
 }
 
 export interface NamedEngagement {
@@ -169,6 +171,7 @@ export async function addClient(
 		givenName: client.givenName,
 		familyName: client.familyName,
 		email,
+		...(client.phone !== undefined && { phone: client.phone }),
 		override: options.override ?? false
 	});
 	const { engagementId } = await send<{ engagementId: string }>(

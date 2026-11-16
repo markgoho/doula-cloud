@@ -19,6 +19,7 @@ import (
 	"doula-cloud/api/internal/apierr"
 	"doula-cloud/api/internal/cardpayments"
 	"doula-cloud/api/internal/client"
+	"doula-cloud/api/internal/oncall"
 	"doula-cloud/api/internal/personname"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/staffauth"
@@ -137,11 +138,38 @@ type Detail struct {
 	HasBirthPlan bool `json:"hasBirthPlan"`
 	HasContract  bool `json:"hasContract"`
 
+	// HasVisits, HasMessages, HasInvoices and HasOffers (#2755) say whether
+	// each of those exists on this Engagement, so the hub settles the order
+	// of its sections on first paint, empty ones last, before their own
+	// reads land. HasOffers is answered only for an Owner or Admin, the
+	// readers of Offers (ADR-0008); false for anyone else.
+	HasVisits   bool `json:"hasVisits"`
+	HasMessages bool `json:"hasMessages"`
+	HasInvoices bool `json:"hasInvoices"`
+	HasOffers   bool `json:"hasOffers"`
+
+	// OnCallWindow (#2755) is the Engagement's on-call days, the same two
+	// calendar days oncall.DeriveWindow gives the on-call panel, so the hub
+	// can tell whether on-call has begun. Absent where the Engagement has no
+	// window (postpartum, completed, no due date).
+	OnCallWindow *OnCallWindow `json:"onCallWindow,omitempty"`
+	// Tonight (#2755) is who holds the birth for the rest of the Practice's
+	// today, oncall's own tonightOf, so the hub names it on first paint.
+	// Absent where today is outside the birth's days.
+	Tonight *oncall.Tonight `json:"tonight,omitempty"`
+
 	// StartNote (#2597) is the Note typed on the Engagement Request that
 	// started this Engagement, who wrote it and when. Answered only for
 	// an Owner or an Admin, the readers of a Request's note (ADR-0017);
 	// absent when no note was written.
 	StartNote *StartNote `json:"startNote,omitempty"`
+}
+
+// OnCallWindow is an on-call window as the Engagement read carries it: two
+// calendar days in the Practice's zone, both inclusive (YYYY-MM-DD).
+type OnCallWindow struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // StartNote is the Note on the Engagement Request an Engagement came from.
@@ -176,14 +204,20 @@ func readStartNote(ctx context.Context, tx *sql.Tx, engagementID string) (*Start
 	return &note, nil
 }
 
-// readRecordFlags answers Detail.HasCarePlan, HasBirthPlan and HasContract.
-func readRecordFlags(ctx context.Context, tx *sql.Tx, d *Detail) error {
+// readRecordFlags answers Detail.HasCarePlan, HasBirthPlan, HasContract,
+// HasVisits, HasMessages, HasInvoices and HasOffers. offersReadable is
+// whether the caller may read Offers; HasOffers is false when not.
+func readRecordFlags(ctx context.Context, tx *sql.Tx, d *Detail, offersReadable bool) error {
 	if err := tx.QueryRowContext(ctx,
 		`SELECT EXISTS (SELECT 1 FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'care_plan'),
 		        EXISTS (SELECT 1 FROM plan_instances WHERE engagement_id = $1 AND plan_type = 'birth_plan'),
-		        EXISTS (SELECT 1 FROM contracts WHERE engagement_id = $1)`,
-		d.EngagementID,
-	).Scan(&d.HasCarePlan, &d.HasBirthPlan, &d.HasContract); err != nil {
+		        EXISTS (SELECT 1 FROM contracts WHERE engagement_id = $1),
+		        EXISTS (SELECT 1 FROM visits WHERE engagement_id = $1),
+		        EXISTS (SELECT 1 FROM messages WHERE engagement_id = $1),
+		        EXISTS (SELECT 1 FROM invoices i JOIN contracts c ON c.id = i.contract_id WHERE c.engagement_id = $1),
+		        $2::boolean AND EXISTS (SELECT 1 FROM engagement_offers WHERE engagement_id = $1)`,
+		d.EngagementID, offersReadable,
+	).Scan(&d.HasCarePlan, &d.HasBirthPlan, &d.HasContract, &d.HasVisits, &d.HasMessages, &d.HasInvoices, &d.HasOffers); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return fmt.Errorf("engagement: read record flags: %w", err)
 	}
@@ -362,10 +396,20 @@ func DetailHandler() http.Handler {
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if err := readRecordFlags(r.Context(), c.Tx, &d); err != nil {
+		if err := readRecordFlags(r.Context(), c.Tx, &d, c.Reader.IsOwnerOrAdmin()); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
+		}
+		window, tonight, err := oncall.EngagementGlance(r.Context(), c.Tx, c.PracticeID, c.EngagementID)
+		if err != nil {
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+			return
+		}
+		d.Tonight = tonight
+		if window != nil {
+			d.OnCallWindow = &OnCallWindow{From: window.Start, To: window.End}
 		}
 		if c.Reader.IsOwnerOrAdmin() {
 			d.HasDoulaFees, err = hasDoulaFees(r.Context(), c.Tx, c.EngagementID)

@@ -163,6 +163,10 @@ export interface EngagementOnCall {
 	rule: OnCallSettings & { overridden: boolean };
 	doulas: EngagementDoula[];
 	gaps: CoverageGap[];
+	/**
+	 * Who holds the birth tonight, read again after a gap is saved (#2755).
+	 */
+	tonight?: Tonight;
 }
 
 /** One Doula on a birth, with her narrowing and the days it leaves her

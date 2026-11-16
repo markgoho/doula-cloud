@@ -71,6 +71,20 @@
 	<SummaryList rows={summaryItems} isBordered />
 {/snippet}
 
+{#snippet statusLine()}
+	<Text text="Care phase Active · Due Apr 2, 2027, 31 weeks · Doula Persephone Adeyemi-Wollstonecraft" step="body-sm" />
+{/snippet}
+
+{#snippet facts()}
+	<SummaryList
+		rows={[
+			{ label: 'Contract', value: 'Signed' },
+			{ label: 'Messages', value: 'Unanswered since Thursday, 9:22am' }
+		]}
+		isCompact
+	/>
+{/snippet}
+
 {#snippet actions()}
 	<Badge label="Engagement active since Jan 12, 2027" variant="success" />
 	<Button label="Message" variant="secondary" size="sm" onClick={noop} />
@@ -122,6 +136,13 @@
 	read={isLoading ? { status: 'loading', label: 'Loading the Client' } : undefined}
 	{summary}
 	summaryRows={summaryItems}
+	{statusLine}
+	isStatusLinePending={isLoading}
+	{facts}
+	factsRows={[
+		{ label: 'Contract', value: 'Signed' },
+		{ label: 'Messages', value: 'Unanswered since Thursday, 9:22am' }
+	]}
 	{actions}
 	isContentsShown
 	sections={[

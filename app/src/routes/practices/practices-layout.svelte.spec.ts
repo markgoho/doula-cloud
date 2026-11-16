@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { render } from 'vitest-browser-svelte';
 import type { SignOutOutcome } from '#lib/signOut.js';
 import { jsonResponse } from '#lib/testResponse.js';
+import { recordOrigin } from '#lib/recordOrigin.svelte.js';
 import Layout from './+layout.svelte';
 
 // Mutable rather than a fixed literal: the layout skips the push
@@ -23,7 +24,15 @@ const pageState = vi.hoisted(() => ({
 vi.mock('$app/state', () => ({ page: pageState }));
 
 const goto = vi.hoisted(() => vi.fn());
-vi.mock('$app/navigation', () => ({ goto }));
+// #2755: the layout forgets a record's origin list after a navigation away
+// from a record; the mock keeps the callback for a test to call.
+const afterNavigateCallbacks = vi.hoisted(() => [] as ((navigation: { to: { url: URL } }) => void)[]);
+vi.mock('$app/navigation', () => ({
+	goto,
+	afterNavigate: (callback: (navigation: { to: { url: URL } }) => void) => {
+		afterNavigateCallbacks.push(callback);
+	}
+}));
 
 const signOutOfSession = vi.hoisted(() => vi.fn<() => Promise<SignOutOutcome>>());
 vi.mock('#lib/signOut.js', () => ({ signOutOfSession }));
@@ -305,6 +314,38 @@ describe('the nav', () => {
 		await expect
 			.element(page.getByRole('link', { name: 'Schedule', exact: true }).first())
 			.toHaveAttribute('aria-current', 'page');
+	});
+
+	it('marks Clients on an Engagement record reached from no list, its Birth Plan page included', async () => {
+		recordOrigin.list = undefined;
+		await setup({ pathname: '/practices/practice-1/engagements/e1/birth-plan' });
+
+		await expect
+			.element(page.getByRole('link', { name: 'Clients', exact: true }).first())
+			.toHaveAttribute('aria-current', 'page');
+	});
+
+	it('marks the list an Engagement record was reached from', async () => {
+		recordOrigin.list = 'on-call';
+		await setup({ pathname: '/practices/practice-1/engagements/e1' });
+
+		await expect
+			.element(page.getByRole('link', { name: 'On call', exact: true }).first())
+			.toHaveAttribute('aria-current', 'page');
+		await expect
+			.element(page.getByRole('link', { name: 'Clients', exact: true }).first())
+			.not.toHaveAttribute('aria-current');
+		recordOrigin.list = undefined;
+	});
+
+	it('forgets the list a record came from once the reader leaves the record', async () => {
+		recordOrigin.list = 'on-call';
+		await setup({ pathname: '/practices/practice-1/engagements/e1' });
+
+		afterNavigateCallbacks.at(-1)!({ to: { url: new URL('https://example.test/practices/practice-1/engagements/e1/birth-plan') } });
+		expect(recordOrigin.list).toBe('on-call');
+		afterNavigateCallbacks.at(-1)!({ to: { url: new URL('https://example.test/practices/practice-1/clients') } });
+		expect(recordOrigin.list).toBeUndefined();
 	});
 
 	it('does not mark Overview current on a screen below it', async () => {

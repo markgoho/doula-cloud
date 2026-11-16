@@ -10,19 +10,10 @@ describe('VisitWhen', () => {
 	it('says the day and the time with the comma, in a time that carries the instant', async () => {
 		await render(VisitWhen, { at: AT, timeZone: ZONE });
 
-		const time = page.getByText('Fri Nov 13,').element().parentElement!;
+		const time = page.getByText('Fri Nov 13,').element();
 		expect(time.tagName).toBe('TIME');
 		expect(time.getAttribute('datetime')).toBe(AT);
 		expect(time.textContent).toMatch(/^\w{3} \w{3} \d{1,2}, \d{1,2}:\d{2}[ap]m$/);
-	});
-
-	it('says the same words in the table form and on a card', async () => {
-		await render(VisitWhen, { at: AT, timeZone: ZONE, isTracked: true });
-		const tracked = page.getByText('Fri Nov 13,').element().parentElement!.textContent;
-		await render(VisitWhen, { at: AT, timeZone: ZONE });
-		const plain = page.getByText('Fri Nov 13,').last().element().parentElement!.textContent;
-
-		expect(tracked).toBe(plain);
 	});
 
 	it('says "Not yet scheduled" in plain text when the Visit has no instant', async () => {

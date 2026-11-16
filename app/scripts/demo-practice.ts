@@ -32,7 +32,7 @@ import { drainOutbox, readMailbox } from '../e2e/outboxMail';
 import { API_URL, DEV_SERVER_ORIGIN } from '../e2e/ports';
 import { provisionTail, type DoulaSession, type ProvisionedClient } from '../e2e/simulation/provision';
 import { describeWorld, type SeededClient } from '../e2e/simulation/world';
-import { backdateContractNotices, backdateContracts, backdateInvoice, backdateInvoices, backdateVoidRequests, countPracticesNamed, holdQueuedReminders, losePortalAccess, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter } from '../e2e/stack';
+import { backdateContractNotices, backdateContracts, backdateEngagementHistory, backdateInvoice, backdateInvoices, backdateVoidRequests, countPracticesNamed, holdQueuedReminders, losePortalAccess, MAILBOX_URL, readStaffInviteToken, seedFoundingGrant, seedStripeRail, simulatedDateAfter, type EngagementHistory, type ThenInPracticeZone } from '../e2e/stack';
 import { acceptStaffInvite } from '../e2e/staffSignup';
 import { TYPICAL_PRACTICE_NAME, TYPICAL_STAFF, type TypicalStaff } from '../src/routes/typicalPilot';
 import {
@@ -81,7 +81,7 @@ const INVITED = TYPICAL_STAFF.slice(1);
 
 // Priya's book: the World gives her four Clients. Camille Boyd is Rooted's
 // Client Persona and the demo's portal account.
-const CAMILLE: NamedClient = { givenName: 'Camille', familyName: 'Boyd', kind: 'birth', dueInDays: 20 };
+const CAMILLE: NamedClient = { givenName: 'Camille', familyName: 'Boyd', kind: 'birth', dueInDays: 20, phone: '(585) 555-0142' };
 const PRIYA_CLIENTS: readonly NamedClient[] = [
 	CAMILLE,
 	{ givenName: 'Tessa', familyName: 'Moreau', kind: 'birth', dueInDays: 45 },
@@ -98,6 +98,9 @@ const AFTER_A_LOSS: NamedClient = { givenName: 'Mira', familyName: 'Castellanos'
 const PREGNANCY_ENDED_DAYS_AGO = 6;
 
 const RATE_CENTS = { birth: 150_000, postpartum: 95_000 } as const;
+
+// Camille signed 56 days ago and paid her deposit the day after.
+const CAMILLE_DEPOSIT_PAID_DAYS_AGO = 55;
 
 /**
 A fixed sign-in account, as the summary prints it.
@@ -261,13 +264,18 @@ async function addPriyaClient(
 	return engagement;
 }
 
-async function raiseInvoice(request: APIRequestContext, roster: Roster, engagement: NamedEngagement): Promise<string> {
+async function raiseInvoice(
+	request: APIRequestContext,
+	roster: Roster,
+	engagement: NamedEngagement,
+	terms: { amountCents?: number; dueOn?: string } = {}
+): Promise<string> {
 	const { id } = await send<{ id: string }>(
 		request,
 		'POST',
 		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/contract/invoices`,
 		roster.owner,
-		{ billingMode: 'by_hand' }
+		{ billingMode: 'by_hand', ...terms }
 	);
 	return id;
 }
@@ -278,11 +286,15 @@ async function scheduleVisit(
 	engagement: NamedEngagement,
 	staffId: string,
 	scheduledAt: string
-): Promise<void> {
-	await send(request, 'POST', `/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/visits`, roster.owner, {
-		staffId,
-		scheduledAt
-	});
+): Promise<string> {
+	const { visitId } = await send<{ visitId: string }>(
+		request,
+		'POST',
+		`/api/practices/${roster.practiceId}/engagements/${engagement.engagementId}/visits`,
+		roster.owner,
+		{ staffId, scheduledAt }
+	);
+	return visitId;
 }
 
 // Priya's four. Camille Boyd is the demo's portal Client: her Contract is
@@ -306,7 +318,15 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 
 	const camillePortal = await portalSessionFor(request, roster, camille);
 	await contractFor(request, roster, today, camille, camillePortal);
-	await raiseInvoice(request, roster, camille);
+	// Half the price as a deposit, paid by bank transfer the day after she
+	// signed; seedCamilleHistory raises the balance last, so the Invoice
+	// numbers of the rest of the book stay as they are.
+	const deposit = await raiseInvoice(request, roster, camille, { amountCents: RATE_CENTS.birth / 2 });
+	await send(request, 'POST', `/api/practices/${roster.practiceId}/invoices/${deposit}/payments`, roster.owner, {
+		method: 'bank_transfer',
+		note: 'Deposit, bank transfer',
+		paidOn: dayAfter(today, -CAMILLE_DEPOSIT_PAID_DAYS_AGO)
+	});
 	// Her Birth Plan, from the Practice's own template, so the portal's
 	// Birth plan screen has one to show -- and both Plans saved once, by
 	// two different people, so the Engagement page's "Last edited" rows
@@ -319,12 +339,23 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 			'Lights down low, my own playlist on quietly, and Marcus right beside me the whole time.',
 		'Preferred pain relief': 'Open to options in the moment',
 		'Anything else about pain relief': 'No epidural unless I ask twice.'
-	});
+	}, [
+		{ 'Anything else about pain relief': 'No epidural unless I ask twice. Nitrous if it is offered.' },
+		{
+			'Preferences for atmosphere (music, lighting, etc.)':
+				'Lights down low, my own playlist on quietly, Marcus right beside me, and nobody talking to me during a contraction.'
+		}
+	]);
 	await startAndSavePlan(request, roster, camille, 'care_plan', roster.owner, {
 		'Who will be present for support?': 'Marcus, her partner, all the way through. Her sister Dana until it is time to push.',
 		'Special requests or concerns':
 			'Iron was low at 28 weeks, so she is on supplements. Wants to labor at home for as long as it feels safe.'
-	});
+	}, [
+		{
+			'Special requests or concerns':
+				'Iron was low at 28 weeks, so she is on supplements; back in range at her 34 week check. Wants to labor at home for as long as it feels safe.'
+		}
+	]);
 	const { visitId } = await send<{ visitId: string }>(
 		request,
 		'POST',
@@ -339,16 +370,30 @@ async function seedPriyaBook(request: APIRequestContext, roster: Roster, today: 
 		priya.headers,
 		{ notes: 'First prenatal visit at home. Went through her birth preferences and the hospital bag list.' }
 	);
+	// Two more Visits that have happened, each booked a week ahead; the first
+	// moves her Engagement from intake to active (ADR-0015). seedCamilleHistory
+	// puts them, and everything above, in the weeks they belong to.
+	const visitPath = (id: string) => `/api/practices/${roster.practiceId}/engagements/${camille.engagementId}/visits/${id}/notes`;
+	const secondVisit = await scheduleVisit(request, roster, camille, priya.staffId, instantAfter(today, -28, 19));
+	await send(request, 'PATCH', visitPath(secondVisit), priya.headers, {
+		notes: 'Second prenatal visit. Talked through the signs of labor and when to call me, and her worry about a long first stage. Marcus practiced counter-pressure on her lower back.'
+	});
+	const thirdVisit = await scheduleVisit(request, roster, camille, priya.staffId, instantAfter(today, -14, 20));
+	const thirdNotes = 'Third prenatal visit. Walked the way to the hospital entrance and went back over the Birth Plan. Her sister Dana joined for the last half hour.';
+	await send(request, 'PATCH', visitPath(thirdVisit), priya.headers, { notes: thirdNotes });
+	await send(request, 'PATCH', visitPath(thirdVisit), priya.headers, {
+		notes: `${thirdNotes} Her iron is back in range.`
+	});
 	await scheduleVisit(request, roster, camille, priya.staffId, instantAfter(today, 3, 16));
-	await send(request, 'POST', messagesPath(camille), priya.headers, {
-		body: 'Hi Camille, it was lovely to meet you. I am on call for you from 37 weeks. Text or message me here any time.'
-	});
-	await send(request, 'POST', `/api/portal/engagements/${camille.engagementId}/messages`, camillePortal, {
-		body: 'Thank you! Is it normal to feel more tired again this week?'
-	});
-	await send(request, 'POST', messagesPath(camille), priya.headers, {
-		body: 'Very normal at this stage. Rest when you can, and we can talk it through at your next visit.'
-	});
+	const camilleSays = (body: string) => send(request, 'POST', `/api/portal/engagements/${camille.engagementId}/messages`, camillePortal, { body });
+	const priyaSays = (body: string) => send(request, 'POST', messagesPath(camille), priya.headers, { body });
+	await priyaSays('Hi Camille, I am on call for you from 37 weeks, three weeks from now. Text or message me here any time.');
+	await camilleSays('Thank you! Is it normal to feel more tired again this week?');
+	await priyaSays('Very normal at this stage. Rest when you can, and we can talk it through at your next visit.');
+	await camilleSays('Thank you for today. Marcus and I were talking after you left. Should we pack the hospital bag now, or wait until 37 weeks?');
+	await priyaSays('Pack it now. Babies come early, and it is one less thing to think about. Put your copy of the Birth Plan and your insurance card on top.');
+	await camilleSays('Done! My sister Dana wants to know if she should meet us at the hospital or at home when labor starts.');
+	await priyaSays('At home. I will come to you first, and we labor there as long as it feels safe. Dana can follow when we leave for the hospital.');
 	// Her question with no reply yet, so the Messages section's
 	// Unanswered row has something to say (#2104).
 	await send(request, 'POST', `/api/portal/engagements/${camille.engagementId}/messages`, camillePortal, {
@@ -993,6 +1038,89 @@ async function seedWithheldReminders(request: APIRequestContext, roster: Roster,
 	]);
 }
 
+const at = (daysAgo: number, time: ThenInPracticeZone['time']): ThenInPracticeZone => ({ daysAgo, time });
+
+// Camille Boyd's Engagement as the Engagement record should read it: started
+// ten weeks ago, signed eight, paid a deposit, three Visits behind her and a
+// thread of Messages over the last three weeks. The Activity rows a later
+// step made (Bethany from the due date, the narrowing, tonight's gap) are not
+// listed, so they stay at the moment they were made.
+function camilleHistory(engagementId: string): EngagementHistory {
+	return {
+		engagementId,
+		startedAt: at(70, '11:05'),
+		firstDoulaAttachedAt: at(70, '11:20'),
+		portalInvitedAt: at(66, '14:10'),
+		contract: { createdAt: at(65, '15:00'), sentAt: at(63, '10:30'), signedAt: at(56, '19:48') },
+		activity: [
+			{ action: 'engagement_created', nth: 1, at: at(70, '11:05') },
+			{ action: 'visit_logged', nth: 1, at: at(70, '11:20') },
+			{ action: 'doula_attached', nth: 1, at: at(70, '11:20:30') },
+			{ action: 'portal_invite_sent', nth: 1, at: at(66, '14:10') },
+			{ action: 'contract_created', nth: 1, at: at(65, '15:00') },
+			{ action: 'contract_priced', nth: 1, at: at(65, '15:00:30') },
+			{ action: 'contract_edited', nth: 1, at: at(65, '15:12') },
+			{ action: 'contract_sent', nth: 1, at: at(63, '10:30') },
+			{ action: 'portal_account_provisioned', nth: 1, at: at(63, '20:35') },
+			{ action: 'contract_signed', nth: 1, at: at(56, '19:48') },
+			{ action: 'invoice_raised', nth: 1, at: at(56, '20:05') },
+			{ action: 'payment_recorded', nth: 1, at: at(CAMILLE_DEPOSIT_PAID_DAYS_AGO, '12:00') },
+			{ action: 'invoice_paid', nth: 1, at: at(CAMILLE_DEPOSIT_PAID_DAYS_AGO, '12:00:30') },
+			{ action: 'birth_plan_started', nth: 1, at: at(49, '14:00') },
+			{ action: 'birth_plan_edited', nth: 1, at: at(49, '14:40') },
+			{ action: 'visit_logged', nth: 2, at: at(49, '13:00') },
+			{ action: 'visit_notes_edited', nth: 1, at: at(49, '15:10') },
+			{ action: 'care_plan_started', nth: 1, at: at(42, '10:00') },
+			{ action: 'care_plan_edited', nth: 1, at: at(42, '10:25') },
+			{ action: 'visit_logged', nth: 3, at: at(35, '10:00') },
+			{ action: 'care_phase_changed', nth: 1, at: at(35, '10:00:30') },
+			{ action: 'birth_plan_edited', nth: 2, at: at(28, '11:30') },
+			{ action: 'visit_notes_edited', nth: 2, at: at(28, '16:20') },
+			{ action: 'visit_logged', nth: 4, at: at(21, '09:15') },
+			{ action: 'care_plan_edited', nth: 2, at: at(21, '15:10') },
+			{ action: 'invoice_raised', nth: 2, at: at(21, '10:30') },
+			{ action: 'birth_plan_edited', nth: 3, at: at(14, '16:45') },
+			{ action: 'visit_notes_edited', nth: 3, at: at(14, '17:05') },
+			{ action: 'visit_notes_edited', nth: 4, at: at(14, '20:30') },
+			{ action: 'visit_logged', nth: 5, at: at(5, '08:30') }
+		],
+		messages: [
+			at(21, '10:12'),
+			at(20, '19:48'),
+			at(19, '08:30'),
+			at(14, '21:15'),
+			at(13, '07:55'),
+			at(13, '12:40'),
+			at(12, '18:05'),
+			at(3, '09:22')
+		],
+		visits: [
+			{ loggedAt: at(70, '11:20') },
+			{ loggedAt: at(49, '13:00'), scheduledAt: at(49, '13:00') },
+			{ loggedAt: at(35, '10:00'), scheduledAt: at(28, '14:00') },
+			{ loggedAt: at(21, '09:15'), scheduledAt: at(14, '15:00') }
+		],
+		plans: {
+			birth_plan: { startedAt: at(49, '14:00'), changedAt: at(14, '16:45') },
+			care_plan: { startedAt: at(42, '10:00'), changedAt: at(21, '15:10') }
+		},
+		invoices: [
+			{ raisedAt: at(56, '20:05'), dueAt: at(42, '20:05'), paidAt: at(CAMILLE_DEPOSIT_PAID_DAYS_AGO, '12:00') },
+			{ raisedAt: at(21, '10:30'), dueAt: at(-14, '17:00') }
+		]
+	};
+}
+
+// Raised last, so the Invoice numbers of the rest of the book stay as they
+// are: Camille's balance, due in two weeks, then her whole history moved back
+// to the weeks it belongs to (backdateEngagementHistory), then one Client
+// with no Contract yet, which the record page reads differently.
+async function seedCamilleHistory(request: APIRequestContext, roster: Roster, today: string, camille: NamedEngagement): Promise<void> {
+	await raiseInvoice(request, roster, camille, { dueOn: dayAfter(today, 14) });
+	backdateEngagementHistory(camilleHistory(camille.engagementId));
+	await addClient(request, roster, today, { givenName: 'Ingrid', familyName: 'Larsen', kind: 'postpartum' }, { doulaStaffId: roster.staff.joss.staffId });
+}
+
 export interface DemoPractice {
 	practiceId: string;
 	// false when this call found the demo Practice already there and wrote
@@ -1062,6 +1190,7 @@ export async function seedDemoPractice(request: APIRequestContext): Promise<Demo
 	const unsigned = await seedOnCall(request, roster, today, tail, camille);
 	await seedContractBook(request, roster, today, tail, unsigned, imani);
 	await seedWithheldReminders(request, roster, today);
+	await seedCamilleHistory(request, roster, today, camille);
 	return { practiceId: roster.practiceId, seeded: true };
 }
 
