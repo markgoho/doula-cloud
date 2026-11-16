@@ -8,8 +8,6 @@ import (
 
 	"doula-cloud/api/internal/activity"
 	"doula-cloud/api/internal/apierr"
-	"doula-cloud/api/internal/clientstanding"
-	"doula-cloud/api/internal/clock"
 	"doula-cloud/api/internal/contractnotice"
 	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicetimezone"
@@ -58,27 +56,18 @@ func PostRemindContractHandler(pusher push.Pusher) http.Handler {
 			apierr.WriteError(w, refusal, http.StatusConflict)
 			return
 		}
-		if !clientstanding.ActSendContract.RequireForEngagement(w, r, c.Tx, c.EngagementID) {
-			return
-		}
-
-		if !requirePortalAccess(w, r, c, remindRefusal) {
-			return
-		}
-
-		ctx := r.Context()
-
-		emailed, err := emailedToday(ctx, c)
+		rule, err := remindRuleFor(r.Context(), c)
 		if err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
-		if emailed {
-			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, msgRemindedToday, nil)
+		if !rule.Can {
+			apierr.Write(w, http.StatusConflict, apierr.CodeFailedPrecondition, rule.Refusal, nil)
 			return
 		}
 
+		ctx := r.Context()
 		if err := recordEngagementActivity(ctx, c, activity.ActionContractReminded, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -126,31 +115,29 @@ func remindRefusal(access *portalinvite.Access) string {
 	return msgRemindNotDelivered
 }
 
-// emailedToday reports whether the Engagement's Client has been emailed
-// about any Contract since the start of today in the Practice's zone, by a
-// send or a reminder. It first takes a transaction-scoped advisory lock
-// keyed on her, so a second request for her waits for this one to commit
-// and then sees its queued mail.
-func emailedToday(ctx context.Context, c staffauth.Call) (bool, error) {
+// remindRuleFor is the rule for this Contract's reminder. It first takes a
+// transaction-scoped advisory lock keyed on the Client, so a second request
+// for her waits for this one to commit and then sees its queued mail.
+func remindRuleFor(ctx context.Context, c staffauth.Call) (remindRule, error) {
 	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
 	if err != nil {
-		return false, fmt.Errorf("contracts: load practice zone: %w", err)
+		return remindRule{}, fmt.Errorf("contracts: load practice zone: %w", err)
 	}
-	var clientID string
-	if err := c.Tx.QueryRowContext(ctx, `SELECT client_id FROM engagements WHERE id = $1`, c.EngagementID).Scan(&clientID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- staffauth.Engagement already proved the Engagement exists
-		return false, fmt.Errorf("contracts: resolve engagement client: %w", err)
-	}
-	if _, err := c.Tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "contract-remind:"+clientID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("contracts: lock client for reminder: %w", err)
-	}
-	emailed, err := clientsEmailedSince(ctx, c.Tx, []string{clientID}, startOfDay(clock.Now(ctx), zone))
+	t, err := sentTarget(ctx, c.Tx, c.EngagementID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, err
+		return remindRule{}, err
 	}
-	return emailed[clientID], nil
+	if _, err := c.Tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "contract-remind:"+t.ClientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return remindRule{}, fmt.Errorf("contracts: lock client for reminder: %w", err)
+	}
+	rules, err := remindRules(ctx, c.Tx, []remindTarget{t}, zone)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return remindRule{}, err
+	}
+	return rules[t.ContractID], nil
 }
 
 // startOfDay is midnight of now's calendar day in zone.

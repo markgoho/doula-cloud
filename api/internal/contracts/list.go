@@ -54,8 +54,10 @@ type ContractListItem struct {
 	// CanRemind is set on a Sent Contract whose Client the reminder
 	// endpoint would email now (#2978). On a Sent Contract that is false,
 	// CanRemindOn is the Practice-zone day it will.
-	CanRemind        bool     `json:"canRemind,omitempty"`
-	CanRemindOn      string   `json:"canRemindOn,omitempty"`
+	CanRemind   bool   `json:"canRemind,omitempty"`
+	CanRemindOn string `json:"canRemindOn,omitempty"`
+	// RemindWithheld says why a Sent Contract cannot be reminded (#2981).
+	RemindWithheld   string   `json:"remindWithheld,omitempty"`
 	SentByName       string   `json:"sentByName,omitempty"`
 	MadeByName       string   `json:"madeByName,omitempty"`
 	VoidedByName     string   `json:"voidedByName,omitempty"`
@@ -364,31 +366,32 @@ func (q listQuery) readRows(ctx context.Context, tx *sql.Tx, practiceID string, 
 		// coverage:ignore reason: row iteration failure, not exercised by unit tests
 		return nil, fmt.Errorf("contracts: iterate list rows: %w", err)
 	}
-	if err := setRemindability(ctx, tx, items, zone, now); err != nil {
+	if err := setRemindability(ctx, tx, items, zone); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return nil, err
 	}
 	return items, nil
 }
 
-// setRemindability fills CanRemind and CanRemindOn on the Sent rows from
-// remindability, the rule the reminder endpoint enforces, for every Client
+// setRemindability fills the reminder fields on the Sent rows from
+// remindRules, the rule the reminder endpoint enforces, for every Contract
 // on the page in one read.
-func setRemindability(ctx context.Context, tx *sql.Tx, items []ContractListItem, zone *time.Location, now time.Time) error {
-	var clientIDs []string
+func setRemindability(ctx context.Context, tx *sql.Tx, items []ContractListItem, zone *time.Location) error {
+	var targets []remindTarget
 	for _, item := range items {
 		if item.Status == string(StatusSent) {
-			clientIDs = append(clientIDs, item.ClientID)
+			targets = append(targets, remindTarget{ContractID: item.ContractID, ClientID: item.ClientID})
 		}
 	}
-	emailed, err := clientsEmailedSince(ctx, tx, clientIDs, startOfDay(now, zone))
+	rules, err := remindRules(ctx, tx, targets, zone)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return err
 	}
 	for i := range items {
 		if items[i].Status == string(StatusSent) {
-			items[i].CanRemind, items[i].CanRemindOn = remindability(emailed[items[i].ClientID], now, zone)
+			rule := rules[items[i].ContractID]
+			items[i].CanRemind, items[i].CanRemindOn, items[i].RemindWithheld = rule.Can, rule.On, rule.Why
 		}
 	}
 	return nil

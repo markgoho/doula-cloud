@@ -123,6 +123,25 @@ export const voidRequests: AwaitingVoidRequest[] = [
 
 export const queue: VoidRequestsPage = { items: voidRequests, hasMore: false, total: 2 };
 
+const withheldReasons = ['on_its_way', 'not_invited', 'invite_lost', 'no_access', 'erased', 'merged'] as const;
+
+export const withheldItems: ContractListItem[] = withheldReasons.map((reason, index) => ({
+	contractId: `withheld-${reason}`,
+	engagementId: `eng-withheld-${index}`,
+	clientId: `client-withheld-${index}`,
+	clientName: `Withheld ${reason}`,
+	engagementKind: 'birth',
+	status: 'sent',
+	steppedOn: '2026-11-10',
+	daysWaiting: 4,
+	remindWithheld: reason,
+	sentByName: 'Dee Whitlock',
+	doulaNames: [],
+	amountCents: 150_000,
+	hasSignedPdf: false,
+	voidRequested: false
+}));
+
 export const data: ContractsListData = {
 	items,
 	hasMore: false,

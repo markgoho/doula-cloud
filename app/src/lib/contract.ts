@@ -19,6 +19,18 @@ import { sentPeriodOf, sentPeriodQuery, sentPeriodWords, SENT_PERIOD_RULER, type
 
 export type ReminderDelivery = 'queued' | 'sent' | 'not_delivered';
 
+/**
+ * Why the BFF will not email a reminder for a Sent Contract (#2981).
+ */
+export type RemindWithheld =
+	| 'emailed_today'
+	| 'on_its_way'
+	| 'not_invited'
+	| 'invite_lost'
+	| 'no_access'
+	| 'erased'
+	| 'merged';
+
 export interface ContractReminder {
 	at: string;
 	by?: string;
@@ -73,6 +85,7 @@ export interface Contract {
 	 * Sent Contract; the same rule the reminder endpoint enforces. */
 	canRemind?: boolean;
 	canRemindOn?: string;
+	remindWithheld?: RemindWithheld;
 	/** The current Contract's id, which a list row's `#contract-<id>`
 	 * anchor names. Absent on a Client-portal read (#2958). */
 	id?: string;
@@ -348,6 +361,24 @@ export function reminderDeliveryWords(delivery: ReminderDelivery): string {
 	return delivery === 'not_delivered' ? 'did not arrive' : '';
 }
 
+/** Why Remind is not offered, in a few words for a table cell and as the
+ * sentence a record or a card has room for (#2981). A reminder held only
+ * for today's mail says the day instead, which the caller knows. */
+export const REMIND_WITHHELD_WORDS: Record<Exclude<RemindWithheld, 'emailed_today'>, { label: string; sentence: string }> = {
+	on_its_way: { label: 'Sending', sentence: 'A reminder is already on its way to the Client.' },
+	not_invited: {
+		label: 'No invite',
+		sentence: 'The Client has not been invited to the portal yet, so a reminder has nowhere to go.'
+	},
+	invite_lost: {
+		label: 'Re-invite',
+		sentence: 'The Client’s portal invite is no longer open, so a reminder has nowhere to go. Send a new portal invite first.'
+	},
+	no_access: { label: 'No access', sentence: 'The Client has no portal access, so a reminder has nowhere to go.' },
+	erased: { label: 'Erased', sentence: 'The Client’s details have been erased, so there is nobody to remind.' },
+	merged: { label: 'Merged', sentence: 'This Client record was merged into another, so there is nobody to remind here.' }
+};
+
 /** Signs the sent Contract for engagementId -- transitions it to signed,
  * one-way, and only while it's still sent (a non-sent Contract 409s).
  * fullLegalName and isAttestation are the only fields the caller supplies;
@@ -473,6 +504,10 @@ export interface ContractListItem {
 	On a Sent Contract that cannot be reminded now, the Practice-zone day it can (#2978).
 	*/
 	canRemindOn?: string;
+	/**
+	On a Sent Contract that cannot be reminded now, why not (#2981).
+	*/
+	remindWithheld?: RemindWithheld;
 	sentByName?: string;
 	madeByName?: string;
 	voidedByName?: string;

@@ -3105,6 +3105,7 @@
 				openedAt={contract.openedAt}
 				reminded={contract.reminded}
 				canRemindOn={contract.canRemindOn}
+				remindWithheld={contract.remindWithheld}
 				onRemind={contract.canRemind ? handleRemindContract : undefined}
 				rows={contractFeeRows}
 				onVoid={isPracticeOwnerOrAdmin ? handleVoidContract : undefined}

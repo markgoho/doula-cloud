@@ -29,6 +29,8 @@
 		VOID_REQUEST_REASON_LIMIT,
 		isVoidRequestReasonTooLong,
 		type ContractReminder,
+		type RemindWithheld,
+		REMIND_WITHHELD_WORDS,
 		type VoidRequestSummary
 	} from '#lib/contract.js';
 
@@ -96,9 +98,14 @@
 		openedAt,
 		reminded,
 		canRemindOn,
+		remindWithheld,
 		onRemind,
 		children
 	}: {
+		/**
+		Why a reminder is not offered, said in words in its place (#2981). "emailed_today" is said by canRemindOn's day.
+		*/
+		remindWithheld?: RemindWithheld;
 		/**
 		The latest reminder asked for, who asked, and whether its mail is on its way, sent or never arrived (#2951, #2978), absent until one has been.
 		*/
@@ -324,9 +331,10 @@
 		...rows
 	]);
 
-	const nextReminderWords = $derived(
-		canRemindOn ? `You can remind the Client again on ${formatCalendarDay(canRemindOn)}.` : ''
-	);
+	const nextReminderWords = $derived.by(() => {
+		if (canRemindOn) return `You can remind the Client again on ${formatCalendarDay(canRemindOn)}.`;
+		return remindWithheld && remindWithheld !== 'emailed_today' ? REMIND_WITHHELD_WORDS[remindWithheld].sentence : '';
+	});
 	let isReminding = $state(false);
 	let remindError = $state('');
 

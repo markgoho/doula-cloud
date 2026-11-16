@@ -24,6 +24,7 @@ const (
 	kindReminder       = "reminder"
 	noticePending      = "pending"
 	noticeDeadLettered = "dead_lettered"
+	withheldOnItsWay   = "on_its_way"
 )
 
 func (e *env) remind() string { return e.contractURL("/remind") }
@@ -247,6 +248,7 @@ func TestPostRemindContractHandler_AllowsTheNextDay(t *testing.T) {
 	e := remindable(t)
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.SignedIn)
 
+	e.Exec(`UPDATE contract_notice_outbox SET status = 'sent', sent_at = created_at`)
 	e.MoveClockTo(remindedNov20.Add(24 * time.Hour))
 	reqtest.ExpectStatus(t, http.MethodPost, e.remind(), http.StatusOK, e.As(e.Staff))
 
@@ -464,5 +466,92 @@ func TestListContracts_ASentTodayContractCannotBeRemindedYet(t *testing.T) {
 
 	if item := e.list("?view=sent").Items[0]; item.CanRemind {
 		t.Fatalf("canRemind = true on the day it was sent")
+	}
+}
+
+// #2981: a reminder from an earlier day that is still queued holds Remind
+// from any day, so a press never records an ask that queued no mail.
+func TestPostRemindContractHandler_AnEarlierReminderStillQueuedHoldsRemind(t *testing.T) {
+	e := remindable(t, signedInAs(fixture.Owner()))
+	e.seedNotice(e.Engagement.ID, kindReminder, noticePending, remindedNov20.Add(-30*time.Hour))
+
+	out := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
+
+	if out.Code != apierr.CodeFailedPrecondition || out.Message != "A reminder for this Contract is already on its way." {
+		t.Fatalf("refusal = %+v, want the on-its-way sentence", out)
+	}
+	if got := e.reminders(); len(got) != 0 {
+		t.Fatalf("reminders = %v, want none recorded for a press that queued no mail", got)
+	}
+	if item := e.list("?view=sent").Items[0]; item.CanRemind || item.RemindWithheld != withheldOnItsWay || item.CanRemindOn != "" {
+		t.Fatalf("list = canRemind %v withheld %q on %q, want on_its_way and no day", item.CanRemind, item.RemindWithheld, item.CanRemindOn)
+	}
+	if page := e.contract(); page.CanRemind || page.RemindWithheld != withheldOnItsWay {
+		t.Fatalf("Engagement = canRemind %v withheld %q, want on_its_way", page.CanRemind, page.RemindWithheld)
+	}
+}
+
+// #2981: every reason the endpoint refuses a reminder for is the reason the
+// list and the Engagement withhold it for.
+func TestRemindIsWithheldForTheReasonTheEndpointRefusesFor(t *testing.T) {
+	_, erasedRefusal := clientstanding.ActSendContract.Check(clientstanding.Erased)
+	for _, tc := range []struct {
+		name, withheld, message string
+		prepare                 func(t *testing.T, e *env)
+	}{
+		{"emailed today", "emailed_today", "This Client was already emailed about a Contract today. You can send a reminder tomorrow.", func(_ *testing.T, e *env) {
+			e.seedNotice(e.Engagement.ID, kindReminder, statusSent, remindedNov20.Add(-time.Hour))
+		}},
+		{"on its way", withheldOnItsWay, "A reminder for this Contract is already on its way.", func(_ *testing.T, e *env) {
+			e.seedNotice(e.Engagement.ID, kindReminder, noticePending, remindedNov20.Add(-30*time.Hour))
+		}},
+		{"never invited", "not_invited", msgRemindNoInviteWords, func(_ *testing.T, e *env) {
+			e.Exec(`DELETE FROM client_portal_users WHERE client_id = $1`, e.Engagement.Client.ID)
+		}},
+		{"invite expired", "invite_lost", "This Client's portal invite has expired, so a reminder has nowhere to go. Send a new portal invite first.", func(t *testing.T, e *env) {
+			e.Exec(`DELETE FROM client_portal_users WHERE client_id = $1`, e.Engagement.Client.ID)
+			testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
+			e.Exec(`UPDATE client_portal_users SET invite_token_expires_at = now() - interval '1 day' WHERE client_id = $1`, e.Engagement.Client.ID)
+		}},
+		{"signs in elsewhere", "no_access", "This Client signs in through another record, so a reminder from this one has nowhere to go.", func(t *testing.T, e *env) {
+			e.Exec(`DELETE FROM client_portal_users WHERE client_id = $1`, e.Engagement.Client.ID)
+			testdb.SeedPendingPortalInvite(t, e.DB, e.Engagement.Client.ID)
+			e.Exec(`UPDATE client_portal_users SET state = 'refused', access_refused_at = now() WHERE client_id = $1`, e.Engagement.Client.ID)
+		}},
+		{"erased", "erased", erasedRefusal, func(t *testing.T, e *env) {
+			fixture.EraseClient(t, e.DB, e.Engagement.Client.ID)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := remindable(t, signedInAs(fixture.Owner()))
+			tc.prepare(t, e)
+
+			item := e.list("?view=sent").Items[0]
+			page := e.contract()
+			out := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
+
+			if item.CanRemind || page.CanRemind || item.RemindWithheld != tc.withheld || page.RemindWithheld != tc.withheld {
+				t.Fatalf("list = %v %q, Engagement = %v %q, want withheld %q", item.CanRemind, item.RemindWithheld, page.CanRemind, page.RemindWithheld, tc.withheld)
+			}
+			if out.Message != tc.message {
+				t.Fatalf("refusal = %q, want %q", out.Message, tc.message)
+			}
+		})
+	}
+}
+
+// #2981: a Client merged into another is withheld as merged.
+func TestRemindIsWithheldForAMergedClient(t *testing.T) {
+	e := remindable(t, signedInAs(fixture.Owner()))
+	survivor := e.AnotherEngagement().Client
+	fixture.MergeClient(t, e.DB, e.Engagement.Client.ID, survivor.ID)
+
+	out := apierrtest.Expect(t, http.MethodPost, e.remind(), http.StatusConflict, e.SignedIn)
+
+	if _, want := clientstanding.ActSendContract.Check(clientstanding.Merged); out.Message != want {
+		t.Fatalf("refusal = %q, want %q", out.Message, want)
+	}
+	if page := e.contract(); page.CanRemind || page.RemindWithheld != "merged" {
+		t.Fatalf("Engagement = canRemind %v withheld %q, want merged", page.CanRemind, page.RemindWithheld)
 	}
 }
