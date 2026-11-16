@@ -89,6 +89,9 @@ type ContractResponse struct {
 	// endpoint enforces (#2978).
 	CanRemind   bool   `json:"canRemind,omitempty"`
 	CanRemindOn string `json:"canRemindOn,omitempty"`
+	// RemindWithheld says why Remind is not offered (#2981), one of the
+	// withheld reasons, when a Sent Contract cannot be reminded.
+	RemindWithheld string `json:"remindWithheld,omitempty"`
 	// ID and Earlier are a Staff read's: the current Contract's id, which
 	// the Contracts list's row anchors to, and the voided Contracts it
 	// replaced (#2958), newest first.
@@ -151,7 +154,9 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 			return
 		}
 		if out.Status == string(StatusSent) {
-			out.CanRemind, out.CanRemindOn, err = remindStateOf(r.Context(), tx, staff.PracticeID, out.EngagementID)
+			var rule remindRule
+			rule, err = remindStateOf(r.Context(), tx, staff.PracticeID, out.EngagementID)
+			out.CanRemind, out.CanRemindOn, out.RemindWithheld = rule.Can, rule.On, rule.Why
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			if err != nil {
 				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)

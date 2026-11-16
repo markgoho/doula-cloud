@@ -24,6 +24,7 @@
 		nameWithInitial,
 		EVERY_CONTRACT_ORDER_OPTION,
 		downloadSignedContractPdf,
+		REMIND_WITHHELD_WORDS,
 		remindContract,
 		signedContractFilename,
 		signedPdfDownloadedWords,
@@ -524,6 +525,7 @@
 				if (item.clientId !== contract.clientId || item.status !== 'sent') continue;
 				item.canRemind = false;
 				item.canRemindOn = reminded.canRemindOn;
+				item.remindWithheld = reminded.remindWithheld;
 			}
 			remindedWords = `Reminder on its way to ${contract.clientName}.`;
 		} catch (error_) {
@@ -576,7 +578,11 @@
 		contract.remindedOn ? `Reminded ${formatDay(contract.remindedOn)}` : '';
 	const reminderText = (contract: ContractListItem) => {
 		if (contract.canRemind) return [remindedText(contract), 'Remind the Client'].filter(Boolean).join(', ');
-		const next = contract.canRemindOn ? `Remind again ${formatDay(contract.canRemindOn)}` : '';
+		const withheld =
+			contract.remindWithheld && contract.remindWithheld !== 'emailed_today'
+				? REMIND_WITHHELD_WORDS[contract.remindWithheld].label
+				: '';
+		const next = contract.canRemindOn ? `Remind again ${formatDay(contract.canRemindOn)}` : withheld;
 		return [remindedText(contract), next].filter(Boolean).join(', ');
 	};
 	const columns = $derived([
@@ -780,6 +786,14 @@
 					<span class="visually-hidden">Remind the Client {formatDay(contract.canRemindOn)}</span>
 				{:else}
 					<span>Remind again {formatDay(contract.canRemindOn)}</span>
+				{/if}
+			{:else if contract.remindWithheld && contract.remindWithheld !== 'emailed_today'}
+				{@const words = REMIND_WITHHELD_WORDS[contract.remindWithheld]}
+				{#if tableView === 'table'}
+					<span aria-hidden="true">{words.label}</span>
+					<span class="visually-hidden">{words.sentence}</span>
+				{:else}
+					<span>{words.sentence}</span>
 				{/if}
 			{/if}
 		</span>
@@ -1064,6 +1078,10 @@
 			flex-wrap: wrap;
 			align-items: center;
 			gap: var(--space-1);
+		}
+
+		:global(td) .status {
+			block-size: 1lh;
 		}
 
 		:global(td) .status:not(.tracked) {

@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"doula-cloud/api/internal/clientstanding"
 	"doula-cloud/api/internal/clock"
+	"doula-cloud/api/internal/portalinvite"
 	"doula-cloud/api/internal/practicetimezone"
 )
 
@@ -112,34 +114,197 @@ func clientsEmailedSince(ctx context.Context, tx *sql.Tx, clientIDs []string, si
 	return emailed, nil
 }
 
-// remindability turns "was she emailed today" into what a Staff reader is
-// shown: whether a reminder goes out now and, when it does not, the
-// Practice-zone day it can.
-func remindability(emailedToday bool, now time.Time, zone *time.Location) (can bool, on string) {
-	if !emailedToday {
-		return true, ""
+// The reasons a reminder is withheld, as the list and the Engagement carry
+// them in remindWithheld. The screen words each one; the endpoint refuses
+// with the sentence in remindRule.Refusal.
+const (
+	withheldEmailedToday = "emailed_today"
+	withheldOnItsWay     = "on_its_way"
+	withheldNotInvited   = "not_invited"
+	withheldInviteLost   = "invite_lost"
+	withheldNoAccess     = "no_access"
+	withheldErased       = "erased"
+	withheldMerged       = "merged"
+)
+
+// msgRemindOnItsWay is the refusal while an earlier reminder for this
+// Contract is still queued (retrying), whichever day it was asked for.
+const msgRemindOnItsWay = "A reminder for this Contract is already on its way."
+
+// remindRule is what the BFF will do with a reminder for one Contract: send
+// it (Can), or withhold it for Why. On is the Practice-zone day it can go
+// when the only thing in the way is today's mail. Refusal is the sentence
+// the endpoint refuses with.
+type remindRule struct {
+	Can     bool
+	On      string
+	Why     string
+	Refusal string
+}
+
+// remindTarget is one Sent Contract and the Client it would mail.
+type remindTarget struct{ ContractID, ClientID string }
+
+// remindRules is the one rule for a reminder, read by the endpoint, the
+// Contracts list and the Engagement alike, so Remind is offered exactly
+// where pressing it will mail. It is keyed by Contract id. A reminder is
+// withheld, in this order, for a Client who is erased or merged away, one
+// the portal cannot reach, one already emailed today by a send or a
+// reminder, and a Contract whose earlier reminder is still queued.
+func remindRules(ctx context.Context, tx *sql.Tx, targets []remindTarget, zone *time.Location) (map[string]remindRule, error) {
+	out := make(map[string]remindRule, len(targets))
+	if len(targets) == 0 {
+		return out, nil
 	}
-	return false, startOfDay(now, zone).AddDate(0, 0, 1).Format(dayLayout)
+	clientIDs := make([]string, len(targets))
+	contractIDs := make([]string, len(targets))
+	for i, t := range targets {
+		clientIDs[i], contractIDs[i] = t.ClientID, t.ContractID
+	}
+	now := clock.Now(ctx)
+	reached, err := clientsReach(ctx, tx, clientIDs, now)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, err
+	}
+	emailed, err := clientsEmailedSince(ctx, tx, clientIDs, startOfDay(now, zone))
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, err
+	}
+	queued, err := contractsWithQueuedReminder(ctx, tx, contractIDs)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, err
+	}
+	tomorrow := startOfDay(now, zone).AddDate(0, 0, 1).Format(dayLayout)
+	for _, t := range targets {
+		switch r := reached[t.ClientID]; {
+		case r.withheld != "":
+			out[t.ContractID] = remindRule{Why: r.withheld, Refusal: r.refusal}
+		case emailed[t.ClientID]:
+			out[t.ContractID] = remindRule{Why: withheldEmailedToday, On: tomorrow, Refusal: msgRemindedToday}
+		case queued[t.ContractID]:
+			out[t.ContractID] = remindRule{Why: withheldOnItsWay, Refusal: msgRemindOnItsWay}
+		default:
+			out[t.ContractID] = remindRule{Can: true}
+		}
+	}
+	return out, nil
+}
+
+const clientsReachQuery = `SELECT c.id::text, c.standing::text, ` + portalinvite.HerAccessColumns + `
+	   FROM clients c` + portalinvite.HerAccessJoin + `
+	  WHERE c.id::text = ANY($1)`
+
+// reach is whether a reminder can reach a Client at all and, when not, why.
+type reach struct{ withheld, refusal string }
+
+// clientsReach reads, for each of clientIDs, whether a reminder can reach
+// her: she must be a live record, and the portal must be open to her.
+func clientsReach(ctx context.Context, tx *sql.Tx, clientIDs []string, now time.Time) (map[string]reach, error) {
+	rows, err := tx.QueryContext(ctx, clientsReachQuery, clientIDs)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: read clients' reach: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]reach{}
+	for rows.Next() {
+		var (
+			id, standing     string
+			stored, delivery sql.NullString
+			expiresAt        sql.NullTime
+		)
+		if err := rows.Scan(&id, &standing, &stored, &expiresAt, &delivery); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("contracts: scan client's reach: %w", err)
+		}
+		out[id] = reachOf(clientstanding.Standing(standing), portalinvite.Derive(stored, expiresAt, delivery, now))
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: iterate clients' reach: %w", err)
+	}
+	return out, nil
+}
+
+func reachOf(s clientstanding.Standing, access *portalinvite.Access) reach {
+	if ok, refusal := clientstanding.ActSendContract.Check(s); !ok {
+		if s.IsTombstone() {
+			return reach{withheldMerged, refusal}
+		}
+		return reach{withheldErased, refusal}
+	}
+	if access.CanReachPortal() {
+		return reach{}
+	}
+	refusal := remindRefusal(access)
+	switch {
+	case access == nil:
+		return reach{withheldNotInvited, refusal}
+	case access.State == portalinvite.StateRefused || access.State == portalinvite.StateUnlinked:
+		return reach{withheldNoAccess, refusal}
+	}
+	return reach{withheldInviteLost, refusal}
+}
+
+// contractsWithQueuedReminder reports which of contractIDs has a reminder
+// still pending, from any day.
+func contractsWithQueuedReminder(ctx context.Context, tx *sql.Tx, contractIDs []string) (map[string]bool, error) {
+	rows, err := tx.QueryContext(ctx,
+		`SELECT contract_id::text FROM contract_notice_outbox
+		  WHERE kind = 'reminder' AND status = 'pending' AND contract_id::text = ANY($1)`, contractIDs)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: read queued reminders: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			// coverage:ignore reason: row scan failure, not exercised by unit tests
+			return nil, fmt.Errorf("contracts: scan queued reminder: %w", err)
+		}
+		out[id] = true
+	}
+	if err := rows.Err(); err != nil {
+		// coverage:ignore reason: row iteration failure, not exercised by unit tests
+		return nil, fmt.Errorf("contracts: iterate queued reminders: %w", err)
+	}
+	return out, nil
 }
 
 // remindStateOf is the rule for one Engagement's Sent Contract, read for
 // the Engagement page.
-func remindStateOf(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (can bool, on string, err error) {
+func remindStateOf(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (remindRule, error) {
 	zone, err := practicetimezone.Load(ctx, tx, practiceID)
 	if err != nil {
-		return false, "", fmt.Errorf("contracts: load practice zone: %w", err)
+		return remindRule{}, fmt.Errorf("contracts: load practice zone: %w", err)
 	}
-	var clientID string
-	if err := tx.QueryRowContext(ctx, `SELECT client_id::text FROM engagements WHERE id = $1`, engagementID).Scan(&clientID); err != nil {
-		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read this Engagement's Contract
-		return false, "", fmt.Errorf("contracts: resolve engagement client: %w", err)
-	}
-	now := clock.Now(ctx)
-	emailed, err := clientsEmailedSince(ctx, tx, []string{clientID}, startOfDay(now, zone))
+	t, err := sentTarget(ctx, tx, engagementID)
 	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, "", err
+		return remindRule{}, err
 	}
-	can, on = remindability(emailed[clientID], now, zone)
-	return can, on, nil
+	rules, err := remindRules(ctx, tx, []remindTarget{t}, zone)
+	if err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests
+		return remindRule{}, err
+	}
+	return rules[t.ContractID], nil
+}
+
+// sentTarget is the Engagement's current Contract and its Client.
+func sentTarget(ctx context.Context, tx *sql.Tx, engagementID string) (remindTarget, error) {
+	var t remindTarget
+	if err := tx.QueryRowContext(ctx,
+		`SELECT ct.id::text, e.client_id::text FROM contracts ct JOIN engagements e ON e.id = ct.engagement_id
+		  WHERE ct.engagement_id = $1 ORDER BY ct.created_at DESC, ct.id DESC LIMIT 1`, engagementID,
+	).Scan(&t.ContractID, &t.ClientID); err != nil {
+		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read this Engagement's Sent Contract
+		return t, fmt.Errorf("contracts: resolve engagement's sent contract: %w", err)
+	}
+	return t, nil
 }

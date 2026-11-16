@@ -20,7 +20,7 @@ import {
 	fixture,
 	session
 } from './page.fixture.js';
-import type { Contract } from '#lib/contract.js';
+import { REMIND_WITHHELD_WORDS, type Contract, type RemindWithheld } from '#lib/contract.js';
 import { DOULA_RADIOS_MAX } from '#lib/engagementRequest.js';
 import { OUTCOME_KEPT_ON_COMPLETED } from '#lib/engagementDetail.js';
 import type { Rate } from '#lib/rates.js';
@@ -1836,6 +1836,21 @@ describe('the Contract read first, and its change only when asked (#2004)', () =
 
 		await expect.element(testPage.getByRole('status').filter({ hasText: 'Reminder on its way.' })).toBeVisible();
 		await expect.element(testPage.getByText('Last reminded')).toBeVisible();
+		await expect.element(testPage.getByRole('button', { name: 'Remind the Client' })).not.toBeInTheDocument();
+	});
+
+	it.each(Object.entries(REMIND_WITHHELD_WORDS))('says why Remind is withheld: %s (#2981)', async (reason, words) => {
+		const sentLongAgo = { at: '2020-01-02T15:00:00Z', by: 'Dee Whitlock' };
+		await setupWithContract(() => {
+			const respond = toApiResponder(fixture);
+			apiFetchWithSession.mockImplementation((path: string) =>
+				path.endsWith('/contract')
+					? Promise.resolve(jsonResponse(draftOf({ status: 'sent', sent: sentLongAgo, remindWithheld: reason as RemindWithheld })))
+					: respond(path)
+			);
+		}, accepted);
+
+		await expect.element(testPage.getByText(words.sentence)).toBeVisible();
 		await expect.element(testPage.getByRole('button', { name: 'Remind the Client' })).not.toBeInTheDocument();
 	});
 

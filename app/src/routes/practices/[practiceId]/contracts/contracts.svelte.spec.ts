@@ -6,7 +6,8 @@ import { registerLayoutPrimitives } from '#lib/primitives/index.js';
 import '#lib/styles/app.css';
 import { toPageState } from '../../../routeFixture.js';
 import type { ListReturn } from '#lib/listReturn.js';
-import { contractorItems, data, doulas, fixture, items, queue, voidRequests } from './page.fixture.js';
+import { contractorItems, data, doulas, fixture, items, queue, voidRequests, withheldItems } from './page.fixture.js';
+import { REMIND_WITHHELD_WORDS } from '#lib/contract.js';
 import { pageState } from '#testing/routePage.js';
 import { beforeNavigate, goto, snapshot } from '$app/navigation';
 import Page from './ContractsScreen.svelte';
@@ -303,6 +304,25 @@ describe('the reminder (#2951)', () => {
 		await setup({ width: 600 });
 
 		await expect.element(testPage.getByText('Remind again Nov 15')).toBeVisible();
+	});
+
+	it('says in words why Remind is withheld, for each reason (#2981)', async () => {
+		await setup({ props: { ...ownerProperties, data: { ...data, items: withheldItems, total: withheldItems.length } } });
+
+		for (const [reason, words] of Object.entries(REMIND_WITHHELD_WORDS)) {
+			const row = testPage.getByRole('row', { name: new RegExp(`Withheld ${reason}`) });
+			await expect.element(row.getByText(words.label, { exact: true })).toBeVisible();
+			await expect.element(row.getByText(words.sentence)).toBeInTheDocument();
+			expect(row.getByRole('button', { name: /Remind the Client/ }).elements()).toHaveLength(0);
+		}
+	});
+
+	it('says the whole sentence on the card of a narrow list (#2981)', async () => {
+		await setup({ width: 600, props: { ...ownerProperties, data: { ...data, items: withheldItems, total: withheldItems.length } } });
+
+		for (const words of Object.values(REMIND_WITHHELD_WORDS)) {
+			await expect.element(testPage.getByText(words.sentence).last()).toBeVisible();
+		}
 	});
 
 	it('is not offered on the Signed view, where nothing waits on the Client', async () => {
