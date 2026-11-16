@@ -1460,6 +1460,17 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		await expect.element(testPage.getByText('Invite pending')).toBeVisible();
 	});
 
+	it('says an erased Client was erased, not that her invite needs re-sending (#2989)', async () => {
+		await setup({
+			...fixtureDetail,
+			clientStanding: 'erased',
+			clientPortalInviteStatus: 'revoked'
+		});
+
+		await expect.element(testPage.getByText('Client erased, so nobody can be invited')).toBeVisible();
+		expect(testPage.getByText('Invite withdrawn — needs re-invite').elements()).toHaveLength(0);
+	});
+
 	// #2522: an accept refused because her login reaches another record.
 	it('reads a refused invite, with the way on', async () => {
 		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'refused' });

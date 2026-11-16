@@ -1255,6 +1255,7 @@
 	 * invited at all (#255), which "Never invited" alone would read as
 	 * merely "not invited yet". */
 	function portalInviteSummaryText(portalState: PortalInviteSubject, hasClientEmail: boolean): string {
+		if (isClientErased) return 'Client erased, so nobody can be invited';
 		const text = portalInviteStatusText(portalState);
 		if (isRefusedInvite(portalState)) return `${text}. ${refusedInviteWayOn}`;
 		if (!hasClientEmail && !portalState.portalInviteStatus) {
