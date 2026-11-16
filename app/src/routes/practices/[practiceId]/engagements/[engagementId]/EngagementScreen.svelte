@@ -670,6 +670,7 @@
 	// CanReachPortal): an invite that expired, was withdrawn or never
 	// arrived holds Send back as never-invited does.
 	const canClientReachPortal = $derived(canReachPortal(clientPortalState));
+	const isClientErased = $derived(isErased(detail?.clientStanding ? { standing: detail.clientStanding } : undefined));
 	const hasClientEmailOnFile = $derived(detail?.clientHasEmail ?? true);
 	// InvoiceSection's own standing check (#270) -- defaults true so an
 	// in-flight load never flashes the "cannot pay" Notice before
@@ -686,6 +687,7 @@
 	// empty Messages section has.
 	const messageBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
+		if (isClientErased) return 'This Client was erased, so no message can be sent.';
 		const name = detail.clientName;
 		if (!hasClientEmailOnFile) {
 			return `${name} has no email address on file, so cannot be invited to the portal to read a message. Add an email address first.`;
@@ -703,7 +705,11 @@
 	// header and the empty Contract section, so each says the same thing.
 	const inviteBeforeContractMessage =
 		'Send a portal invite to this Client before sending the Contract — the Contract can only be viewed and signed once portal access exists.';
-	const noEmailForInviteMessage = 'This Client has no email address on file. Add one before sending a portal invite.';
+	const noEmailForInviteMessage = $derived(
+		isClientErased
+			? 'This Client was erased, so nobody can be invited to the portal.'
+			: 'This Client has no email address on file. Add one before sending a portal invite.'
+	);
 	const refusedBeforeContractMessage = `This Client signs in through another record, so cannot sign a Contract sent from this one. ${refusedInviteWayOn}`;
 	const newInviteBeforeContractMessage =
 		'Send this Client a new portal invite before sending the Contract — the last one did not arrive or can no longer be accepted.';
@@ -714,6 +720,7 @@
 	// invite again; one that cannot asks for a new one.
 	const contractInviteBlock = $derived.by(() => {
 		if (hasAcceptedPortalAccess) return;
+		if (isClientErased) return noEmailForInviteMessage;
 		if (isInviteRefused) return refusedBeforeContractMessage;
 		if (hasNeverInvitedClient || !hasClientEmailOnFile) return inviteBeforeContractMessage;
 		if (!canClientReachPortal) return newInviteBeforeContractMessage;
@@ -893,7 +900,6 @@
 	const hasRateForKind = $derived(
 		typeof ratesState.value?.find((rate) => rate.kind === displayKind)?.amountCents === 'number'
 	);
-	const isClientErased = $derived(isErased(detail?.clientStanding ? { standing: detail.clientStanding } : undefined));
 	const canCreateContract = $derived(hasRateForKind && !isClientErased);
 	const isRateMissing = $derived(ratesState.value !== undefined && !hasRateForKind);
 	// The settings hub lists Rates only for an Owner or Admin, so only they
@@ -3220,7 +3226,7 @@
 				-->
 				<EmptyState message="No Contract yet." />
 				<Notice variant="info" message={contractInviteBlock} />
-				{#if !hasClientEmailOnFile}
+				{#if !hasClientEmailOnFile && !isClientErased}
 					<Notice variant="info" message={noEmailForInviteMessage} />
 				{/if}
 				{#if hasClientEmailOnFile || canCreateContract}

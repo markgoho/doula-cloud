@@ -1471,6 +1471,14 @@ describe("the Client's portal-invite state and the Contract section's block (#25
 		expect(testPage.getByText('Invite withdrawn — needs re-invite').elements()).toHaveLength(0);
 	});
 
+	it('says an erased Client was erased in the header notice, not that an email address is missing (#2994)', async () => {
+		await setup({ ...fixtureDetail, clientStanding: 'erased', clientHasEmail: false });
+
+		await expect.element(testPage.getByText('This Client was erased, so nobody can be invited to the portal.').first()).toBeVisible();
+		expect(testPage.getByText(/no email address on file/).elements()).toHaveLength(0);
+		expect(testPage.getByText(/Add one before sending/).elements()).toHaveLength(0);
+	});
+
 	// #2522: an accept refused because her login reaches another record.
 	it('reads a refused invite, with the way on', async () => {
 		await setup({ ...fixtureDetail, clientPortalInviteStatus: 'refused' });
@@ -2023,6 +2031,20 @@ describe('an Engagement with no Contract yet (#2146)', () => {
 
 		await expect.element(contractRegion().getByText('No Contract yet.')).toBeVisible();
 		expect(contractRegion().getByRole('button', { name: 'Create a Draft Contract' }).elements()).toHaveLength(0);
+	});
+
+	it('says an erased Client was erased in the empty Contract section, once (#2994)', async () => {
+		await setupWithContract(
+			() => mockNoContract(birthRateOnly),
+			{ ...fixtureDetail, clientStanding: 'erased', clientHasEmail: false },
+			ownerSession
+		);
+
+		await expect
+			.element(contractRegion().getByText('This Client was erased, so nobody can be invited to the portal.'))
+			.toBeVisible();
+		expect(contractRegion().getByText(/no email address on file/).elements()).toHaveLength(0);
+		expect(contractRegion().getByText(inviteBeforeContract).elements()).toHaveLength(0);
 	});
 
 	it('says why the invite cannot be sent when the Client has no email address', async () => {
@@ -4172,6 +4194,14 @@ describe('the Messages section (#2004)', () => {
 				messagesSection().getByText(`The thread opens once ${fixtureDetail.clientName} has accepted the portal invite.`)
 			)
 			.toBeVisible();
+		expect(messagesSection().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
+	});
+
+	it('says an erased Client was erased in the Messages section, asking for no email address (#2994)', async () => {
+		await setupMoney(sessionFor(['owner']), { ...fixtureDetail, clientStanding: 'erased', clientHasEmail: false });
+
+		await expect.element(messagesSection().getByText('This Client was erased, so no message can be sent.')).toBeVisible();
+		expect(messagesSection().getByText(/email address/).elements()).toHaveLength(0);
 		expect(messagesSection().getByRole('button', { name: 'Send portal invite' }).elements()).toHaveLength(0);
 	});
 
