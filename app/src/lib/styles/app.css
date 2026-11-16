@@ -4,6 +4,7 @@
  */
 @import './layers.css';
 @import './fonts.css';
+@import './properties.css';
 @import './reset.css' layer(reset);
 @import './tokens.css' layer(tokens);
 @import './base.css' layer(base);

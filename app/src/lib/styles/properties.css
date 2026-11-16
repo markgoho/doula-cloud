@@ -1,0 +1,16 @@
+/*
+ * Registered custom properties, imported outside every cascade layer: a
+ * browser ignores an `@property` rule inside one.
+ *
+ * A containment context declares this as the base size, so it computes
+ * where the container sits and not against the container's own width
+ * (#2983): an unregistered property passes the `cqi` down unresolved and
+ * everything inside answers the container. `DataTable`'s frame and
+ * `RecordDetail`'s body declare it, so a table, the facts and the status
+ * line above them carry one px.
+ */
+@property --outer-text-size {
+	syntax: '<length>';
+	inherits: true;
+	initial-value: 16px;
+}

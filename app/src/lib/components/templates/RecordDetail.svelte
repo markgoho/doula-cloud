@@ -704,10 +704,17 @@
 		 */
 		.record-body {
 			container: record-body / inline-size;
+			--outer-text-size: var(--text-body-size);
 		}
 
 		.record-grid {
-			/* The base size, re-declared inside the container it resolves against. */
+			/* The record's one body size (#2983): the length the record's own
+			   container resolved, so the facts, the sections and a table in
+			   them match the status line above. */
+			--text-body-size: var(--outer-text-size);
+			--text-body-sm-size: var(--outer-text-size);
+			--text-label-size: var(--outer-text-size);
+			--text-meta-size: var(--outer-text-size);
 			font-size: var(--text-body-size);
 			display: grid;
 			grid-template-columns: minmax(0, 1fr);
