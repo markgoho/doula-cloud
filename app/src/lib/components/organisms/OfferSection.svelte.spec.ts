@@ -640,3 +640,21 @@ describe('OfferSection.svelte', () => {
 		});
 	});
 });
+
+describe('a refusal of every Offer (#3000)', () => {
+	it.each([false, true])('says why and offers no form to open or to fill (form open: %s)', async (isFormOpen) => {
+		await render(OfferSection, {
+			timeZone: 'America/New_York',
+			offers: [],
+			doulas: [contractor],
+			onCreate: vi.fn(),
+			onWithdraw: vi.fn(),
+			createRefusal: 'This Client was erased, so this work cannot be offered.',
+			isFormOpen
+		});
+
+		await expect.element(page.getByText('This Client was erased, so this work cannot be offered.')).toBeVisible();
+		expect(page.getByRole('button', { name: 'Offer this work' }).elements()).toHaveLength(0);
+		expect(page.getByRole('heading', { name: 'Offer this work' }).elements()).toHaveLength(0);
+	});
+});

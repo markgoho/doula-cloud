@@ -41,6 +41,7 @@
 		dueDate: engagementDueDate = '',
 		onCreate,
 		onWithdraw,
+		createRefusal,
 		isFormOpen = $bindable(false)
 	}: {
 		/** Whether the form for a new Offer is open (#2004). Closed by
@@ -71,6 +72,9 @@
 		dueDate?: string;
 		onCreate: (offer: NewOffer) => Promise<void>;
 		onWithdraw: (offerId: string) => Promise<void>;
+		/** Why no Offer can be made for this Client at all, such as an
+		 * erasure. It stands in place of every control that opens the form. */
+		createRefusal?: string;
 	} = $props();
 
 	// What was last chosen, not what the form acts on: `answer` below is,
@@ -298,7 +302,7 @@
 	rows={offers}
 	rowActions={offers.some((offer) => isOpen(offer)) ? { label: 'Actions', content: offerActions } : undefined}
 	emptyMessage="Nobody has been offered this work yet."
-	emptyAction={isFormOpen
+	emptyAction={isFormOpen || createRefusal
 		? undefined
 		: { label: 'Offer this work', onClick: openForm, focusOnAppearing: isOpenerRefocused }}
 />
@@ -311,13 +315,17 @@
 	<Notice variant="status" message={sentMessage} isFocusedOnAppear />
 {/if}
 
-{#if offers.length > 0 && !isFormOpen}
+{#if createRefusal}
+	<Notice variant="info" message={createRefusal} />
+{/if}
+
+{#if offers.length > 0 && !isFormOpen && !createRefusal}
 	<div>
 		<Button label="Offer this work" variant="secondary" onClick={openForm} focusOnAppearing={isOpenerRefocused} />
 	</div>
 {/if}
 
-{#if isFormOpen}
+{#if isFormOpen && !createRefusal}
 	<StackedForm onSubmit={handleCreate}>
 		<Heading level={3} text="Offer this work" focusOnAppearing />
 		{#if offerSubmission.errors.length > 0}

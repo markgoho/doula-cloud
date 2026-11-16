@@ -4536,3 +4536,50 @@ describe('taking a Doula off the Engagement (#2596)', () => {
 		await expect.element(takeOffLink()).toBeVisible();
 	});
 });
+
+describe('an erased Client is offered no act the BFF refuses (#3000)', () => {
+	const erased = { ...fixtureDetail, clientStanding: 'erased' as const, clientHasEmail: false };
+	const owner = sessionFor(['owner']);
+
+	beforeEach(() => {
+		apiFetchWithSession.mockReset();
+	});
+
+	it('offers no Message the Client link in the header', async () => {
+		await setupMoney(owner, erased);
+
+		await expect.element(testPage.getByRole('link', { name: 'View Client' })).toBeVisible();
+		expect(testPage.getByRole('link', { name: 'Message the Client' }).elements()).toHaveLength(0);
+	});
+
+	it('says no Invoice can be created, in place of Create Invoice and any email or Contract ask', async () => {
+		await setupMoney(owner, erased);
+
+		await expect.element(testPage.getByText('This Client was erased, so no Invoice can be created.')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Create Invoice' }).elements()).toHaveLength(0);
+		expect(testPage.getByText(/Add one before creating an Invoice/).elements()).toHaveLength(0);
+	});
+
+	it('offers no Visit to add', async () => {
+		await setupMoney(owner, erased);
+
+		await expect.element(testPage.getByText('This Client was erased, so no Visit can be added.')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Add a Visit' }).elements()).toHaveLength(0);
+	});
+
+	it('offers no plan to start', async () => {
+		await setupMoney(owner, erased, (path) => (path.includes('/plans/') ? jsonResponse('not found', 404) : undefined));
+
+		await expect
+			.element(planSection('Care Plan').getByText('This Client was erased, so the Care Plan cannot be started.'))
+			.toBeVisible();
+		expect(testPage.getByRole('button', { name: /^Start the/ }).elements()).toHaveLength(0);
+	});
+
+	it('offers no work to offer', async () => {
+		await setupMoney(owner, erased);
+
+		await expect.element(testPage.getByText('This Client was erased, so this work cannot be offered.')).toBeVisible();
+		expect(testPage.getByRole('button', { name: 'Offer this work' }).elements()).toHaveLength(0);
+	});
+});
