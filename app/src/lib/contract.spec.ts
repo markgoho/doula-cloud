@@ -35,7 +35,7 @@ import {
 	saveContractValues,
 	openContract,
 	remindContract,
-	canRemind,
+	reminderDeliveryWords,
 	sendContract,
 	setMergeFieldValue,
 	signContract,
@@ -201,26 +201,11 @@ describe('remindContract', () => {
 	});
 });
 
-describe('canRemind', () => {
-	const now = new Date('2026-11-20T15:00:00Z');
-	const sentEarlier = { at: '2026-11-15T15:00:00Z', by: 'Dee Whitlock' };
-
-	it('offers a reminder on a Sent Contract sent and reminded before today', () => {
-		expect(canRemind({ status: 'sent', sent: sentEarlier }, 'UTC', now)).toBe(true);
-		expect(canRemind({ status: 'sent', sent: sentEarlier, reminded: { at: '2026-11-19T15:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(true);
-	});
-
-	it('does not offer one on any other status', () => {
-		for (const status of ['draft', 'signed', 'voided']) {
-			expect(canRemind({ status, sent: sentEarlier }, 'UTC', now)).toBe(false);
-		}
-	});
-
-	it('does not offer one on the day it was sent or reminded, by the Practice day rather than the UTC day', () => {
-		expect(canRemind({ status: 'sent', sent: { at: '2026-11-20T01:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(false);
-		expect(canRemind({ status: 'sent', sent: sentEarlier, reminded: { at: '2026-11-20T09:00:00Z', by: 'Dee Whitlock' } }, 'UTC', now)).toBe(false);
-		const lateEvening = { at: '2026-11-20T03:00:00Z', by: 'Dee Whitlock' };
-		expect(canRemind({ status: 'sent', sent: lateEvening }, 'America/New_York', now)).toBe(true);
+describe('reminderDeliveryWords', () => {
+	it('says what became of the mail, and nothing once it was sent', () => {
+		expect(reminderDeliveryWords('queued')).toBe('on its way');
+		expect(reminderDeliveryWords('not_delivered')).toBe('did not arrive');
+		expect(reminderDeliveryWords('sent')).toBe('');
 	});
 });
 

@@ -12,11 +12,18 @@ import type { Stamp } from './stamp.js';
 
 import { DATE_MERGE_FIELDS, MERGE_FIELDS } from './contractTemplate.js';
 import { dueParts, type DueParts } from './client.js';
-import { calendarDayIn } from './invoice.js';
 import { formatCalendarDay } from './dates.js';
 import { apiErrorMessage } from './apiErrorMessage.js';
 import { fetchBlob } from './blobDownload.js';
 import { sentPeriodOf, sentPeriodQuery, sentPeriodWords, SENT_PERIOD_RULER, type SentDays, type SentPeriod } from './sentPeriod.js';
+
+export type ReminderDelivery = 'queued' | 'sent' | 'not_delivered';
+
+export interface ContractReminder {
+	at: string;
+	by?: string;
+	delivery: ReminderDelivery;
+}
 
 export interface Contract {
 	engagementId: string;
@@ -56,10 +63,16 @@ export interface Contract {
 	When the Client first opened it. Staff read only.
 	*/
 	openedAt?: string;
-	/** The latest reminder a Staff member emailed the Client about this
-	 * Sent Contract, and who sent it (#2951). Absent until one has been
-	 * sent, and on a Client-portal read. */
-	reminded?: Stamp;
+	/** The latest reminder a Staff member asked for about this Sent
+	 * Contract, who asked, and whether the mail is on its way, sent or
+	 * never arrived (#2951, #2978). Absent until one has been asked for,
+	 * and on a Client-portal read. */
+	reminded?: ContractReminder;
+	/** Whether the BFF would email the Client a reminder now, and when it
+	 * would not, the Practice-zone day it would (#2978). A Staff read of a
+	 * Sent Contract; the same rule the reminder endpoint enforces. */
+	canRemind?: boolean;
+	canRemindOn?: string;
 	/** The current Contract's id, which a list row's `#contract-<id>`
 	 * anchor names. Absent on a Client-portal read (#2958). */
 	id?: string;
@@ -328,15 +341,11 @@ export async function remindContract(
 	return response.json();
 }
 
-/** Whether a reminder is worth offering for this Contract right now: it is
- * Sent, and was neither sent nor reminded earlier today in the Practice's
- * zone. The BFF refuses the same days (and a Client emailed about another
- * Contract today); this only keeps the control from being offered on the
- * days it would be refused. */
-export function canRemind(contract: Pick<Contract, 'status' | 'sent' | 'reminded'>, timeZone: string, now: Date = new Date()): boolean {
-	if (contract.status !== 'sent') return false;
-	const today = calendarDayIn(timeZone, now);
-	return [contract.sent, contract.reminded].every((stamp) => !stamp || calendarDayIn(timeZone, new Date(stamp.at)) !== today);
+/** What became of a reminder's mail, in the words a Staff reader gets
+ * after the time (#2978). A sent one needs none. */
+export function reminderDeliveryWords(delivery: ReminderDelivery): string {
+	if (delivery === 'queued') return 'on its way';
+	return delivery === 'not_delivered' ? 'did not arrive' : '';
 }
 
 /** Signs the sent Contract for engagementId -- transitions it to signed,
@@ -453,13 +462,17 @@ export interface ContractListItem {
 	*/
 	openedOn?: string;
 	/**
-	The Practice-zone day a Staff member last reminded the Client of a Sent Contract (#2951).
+	The Practice-zone day a Staff member last reminded the Client of a Sent Contract (#2951). A reminder that never arrived is not counted (#2978).
 	*/
 	remindedOn?: string;
 	/**
-	Whether a reminder is offered today: Sent, and neither sent nor reminded today (#2951).
+	Whether the BFF would email the Client a reminder now, the same rule its reminder endpoint enforces (#2978).
 	*/
 	canRemind?: boolean;
+	/**
+	On a Sent Contract that cannot be reminded now, the Practice-zone day it can (#2978).
+	*/
+	canRemindOn?: string;
 	sentByName?: string;
 	madeByName?: string;
 	voidedByName?: string;

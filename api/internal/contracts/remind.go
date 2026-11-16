@@ -36,13 +36,15 @@ const (
 
 // PostRemindContractHandler emails the Client of engagement :engagementId's
 // Sent Contract a reminder, and pushes to her subscriptions the way a send
-// does (#2951). It leaves the Contract Sent, stamps reminded_at, and
-// records contract_reminded against the Engagement with the Staff member
-// who sent it.
+// does (#2951). It leaves the Contract Sent and records contract_reminded
+// against the Engagement with the Staff member who asked, the act. Whether
+// the mail arrived is the outbox row's, which the Engagement reads back
+// (#2978).
 //
 // A Client is emailed about a Contract at most once in a Practice day (the
 // day the list reads, in the Practice's zone): a second reminder, or one on
-// the day the Contract was sent, is refused 409 and writes nothing. The day
+// the day the Contract was sent, is refused 409 and writes nothing. Mail
+// that dead-lettered never reached her and does not hold the day. The day
 // is counted across all of her Contracts, and the check and the write sit
 // behind one lock per Client, so two Staff pressing at once cannot both
 // pass. Refused first, before any write: a Contract that is not Sent, a
@@ -77,17 +79,6 @@ func PostRemindContractHandler(pusher push.Pusher) http.Handler {
 			return
 		}
 
-		stamped, err := c.Tx.ExecContext(ctx, `UPDATE contracts SET reminded_at = $1 WHERE id = $2 AND status = 'sent'`, clock.Now(ctx), ct.ID)
-		if err != nil {
-			// coverage:ignore reason: DB query failure, not exercised by unit tests
-			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
-			return
-		}
-		if n, _ := stamped.RowsAffected(); n == 0 {
-			// coverage:ignore reason: the Client signed or Staff voided it between the read and the update, a race a single request cannot reach
-			apierr.WriteError(w, "This Contract is no longer waiting for the Client, so you cannot send a reminder.", http.StatusConflict)
-			return
-		}
 		if err := recordEngagementActivity(ctx, c, activity.ActionContractReminded, nil); err != nil {
 			// coverage:ignore reason: DB query failure, not exercised by unit tests
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
@@ -139,7 +130,7 @@ func remindRefusal(access *portalinvite.Access) string {
 // about any Contract since the start of today in the Practice's zone, by a
 // send or a reminder. It first takes a transaction-scoped advisory lock
 // keyed on her, so a second request for her waits for this one to commit
-// and then sees its reminded_at.
+// and then sees its queued mail.
 func emailedToday(ctx context.Context, c staffauth.Call) (bool, error) {
 	zone, err := practicetimezone.Load(ctx, c.Tx, c.PracticeID)
 	if err != nil {
@@ -154,17 +145,12 @@ func emailedToday(ctx context.Context, c staffauth.Call) (bool, error) {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		return false, fmt.Errorf("contracts: lock client for reminder: %w", err)
 	}
-	var emailed bool
-	if err := c.Tx.QueryRowContext(ctx,
-		`SELECT EXISTS (
-		     SELECT 1 FROM contracts ct JOIN engagements e ON e.id = ct.engagement_id
-		      WHERE e.client_id = $1 AND (ct.reminded_at >= $2 OR ct.sent_at >= $2))`,
-		clientID, startOfDay(clock.Now(ctx), zone),
-	).Scan(&emailed); err != nil {
+	emailed, err := clientsEmailedSince(ctx, c.Tx, []string{clientID}, startOfDay(clock.Now(ctx), zone))
+	if err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
-		return false, fmt.Errorf("contracts: read reminders today: %w", err)
+		return false, err
 	}
-	return emailed, nil
+	return emailed[clientID], nil
 }
 
 // startOfDay is midnight of now's calendar day in zone.

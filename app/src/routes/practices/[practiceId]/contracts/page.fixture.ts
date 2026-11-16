@@ -86,6 +86,7 @@ export const items: ContractListItem[] = [
 		status: 'sent',
 		steppedOn: '2026-11-14',
 		daysWaiting: 0,
+		canRemindOn: '2026-11-15',
 		sentByName: 'Renata Alvarez',
 		pregnancyEndedOn: '2026-10-01',
 		birthOutcome: 'loss',

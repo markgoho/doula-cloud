@@ -520,8 +520,12 @@
 		try {
 			const reminded = await remindContract(apiFetchWithSession, page.params.practiceId!, contract.engagementId);
 			contract.remindedOn = calendarDayIn(timeZone, new Date(reminded.reminded?.at ?? Date.now()));
-			contract.canRemind = false;
-			remindedWords = `Reminder sent for ${contract.clientName}.`;
+			for (const item of contracts.items) {
+				if (item.clientId !== contract.clientId || item.status !== 'sent') continue;
+				item.canRemind = false;
+				item.canRemindOn = reminded.canRemindOn;
+			}
+			remindedWords = `Reminder on its way to ${contract.clientName}.`;
 		} catch (error_) {
 			remindRefusal = error_ instanceof Error ? error_.message : REMIND_FAILED;
 		} finally {
@@ -570,6 +574,11 @@
 	const isRemindable = (contract: ContractListItem) => contract.status === 'sent';
 	const remindedText = (contract: ContractListItem) =>
 		contract.remindedOn ? `Reminded ${formatDay(contract.remindedOn)}` : '';
+	const reminderText = (contract: ContractListItem) => {
+		if (contract.canRemind) return [remindedText(contract), 'Remind the Client'].filter(Boolean).join(', ');
+		const next = contract.canRemindOn ? `Remind again ${formatDay(contract.canRemindOn)}` : '';
+		return [remindedText(contract), next].filter(Boolean).join(', ');
+	};
 	const columns = $derived([
 		{ label: 'Client', accessor: (contract: ContractListItem) => contract.clientName, grows: true, track: '16ch' },
 		{
@@ -618,7 +627,7 @@
 						label: 'Action',
 						track: `calc(8ch + 2 * ${INSET})`,
 						accessor: (contract: ContractListItem) =>
-							canDownload(contract) ? 'Download' : (isRemindable(contract) ? remindedText(contract) : ''),
+							canDownload(contract) ? 'Download' : (isRemindable(contract) ? reminderText(contract) : ''),
 						content: actionCell
 					}
 				]
@@ -627,8 +636,8 @@
 						? [
 								{
 									label: 'Reminder',
-									track: `calc(6ch + 2 * ${INSET})`,
-									accessor: (contract: ContractListItem) => (isRemindable(contract) ? remindedText(contract) : ''),
+									track: `calc(8ch + 2 * ${INSET})`,
+									accessor: (contract: ContractListItem) => (isRemindable(contract) ? reminderText(contract) : ''),
 									content: reminderCell
 								}
 							]
@@ -742,8 +751,8 @@
 
 {#snippet reminderCell(contract: ContractListItem, tableView: DataTableView)}
 	{#if isRemindable(contract)}
-		<span class="reminder" title={tableView === 'table' && contract.remindedOn ? remindedText(contract) : undefined}>
-			{#if contract.remindedOn}
+		<span class="reminder">
+			{#if contract.remindedOn && !(tableView === 'table' && contract.canRemind)}
 				<span class:visually-hidden={tableView === 'table'}>{remindedText(contract)}</span>
 			{/if}
 			{#if contract.canRemind}
@@ -752,7 +761,7 @@
 						variant="link"
 						iconOnly
 						visual={remindWord}
-						label={`Remind the Client, ${contract.clientName}`}
+						label={`Remind the Client, ${contract.clientName}${contract.remindedOn ? `, last reminded ${formatDay(contract.remindedOn)}` : ''}`}
 						loading={remindingId === contract.contractId}
 						onClick={() => remind(contract)}
 					/>
@@ -764,6 +773,13 @@
 						loading={remindingId === contract.contractId}
 						onClick={() => remind(contract)}
 					/>
+				{/if}
+			{:else if contract.canRemindOn}
+				{#if tableView === 'table'}
+					<span aria-hidden="true">Tomorrow</span>
+					<span class="visually-hidden">Remind the Client {formatDay(contract.canRemindOn)}</span>
+				{:else}
+					<span>Remind again {formatDay(contract.canRemindOn)}</span>
 				{/if}
 			{/if}
 		</span>

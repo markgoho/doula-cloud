@@ -78,10 +78,17 @@ type ContractResponse struct {
 	Signed *activitypage.Stamp `json:"signed,omitempty"`
 	// OpenedAt is when the Client first opened it, a Staff read's only.
 	OpenedAt *time.Time `json:"openedAt,omitempty"`
-	// Reminded is the latest reminder a Staff member sent her about this
-	// Contract (#2951) and who sent it, a Staff read's only, read from the
-	// contract_reminded row the ledger holds; omitted until one has been sent.
-	Reminded *activitypage.Stamp `json:"reminded,omitempty"`
+	// Reminded is the latest reminder a Staff member asked for about this
+	// Contract (#2951), who asked, and whether the mail was queued, sent
+	// or never delivered (#2978); a Staff read's only, omitted until one
+	// has been asked for.
+	Reminded *ContractReminder `json:"reminded,omitempty"`
+	// CanRemind and CanRemindOn are a Staff read's, on a Sent Contract:
+	// whether a reminder goes out now, and when it cannot, the
+	// Practice-zone day it can. They come from the rule the reminder
+	// endpoint enforces (#2978).
+	CanRemind   bool   `json:"canRemind,omitempty"`
+	CanRemindOn string `json:"canRemindOn,omitempty"`
 	// ID and Earlier are a Staff read's: the current Contract's id, which
 	// the Contracts list's row anchors to, and the voided Contracts it
 	// replaced (#2958), newest first.
@@ -143,6 +150,14 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 			apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
 			return
 		}
+		if out.Status == string(StatusSent) {
+			out.CanRemind, out.CanRemindOn, err = remindStateOf(r.Context(), tx, staff.PracticeID, out.EngagementID)
+			// coverage:ignore reason: DB query failure, not exercised by unit tests
+			if err != nil {
+				apierr.WriteError(w, apierr.MsgInternalError, http.StatusInternalServerError)
+				return
+			}
+		}
 		out.ID, out.Earlier, err = contractHistory(r.Context(), tx, out.EngagementID)
 		// coverage:ignore reason: DB query failure, not exercised by unit tests
 		if err != nil {
@@ -159,19 +174,19 @@ func writeContractFor(w http.ResponseWriter, r *http.Request, tx *sql.Tx, staff 
 // signed and under what name. A send is recorded against the
 // Engagement, not the Contract, so the lookup starts at this Contract's
 // own created_at: a voided predecessor's send came before it.
-func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (sent, signed *activitypage.Stamp, opened *time.Time, reminded *activitypage.Stamp, err error) {
+func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID string) (sent, signed *activitypage.Stamp, opened *time.Time, reminded *ContractReminder, err error) {
 	var (
+		contractID string
 		createdAt  time.Time
 		signedAt   sql.NullTime
 		openedAt   sql.NullTime
-		remindedAt sql.NullTime
 		signerName sql.NullString
 	)
 	if err := tx.QueryRowContext(ctx,
-		`SELECT created_at, signed_at, signer_full_name, opened_at, reminded_at FROM contracts
+		`SELECT id, created_at, signed_at, signer_full_name, opened_at FROM contracts
 		 WHERE engagement_id = $1 ORDER BY created_at DESC, id DESC LIMIT 1`,
 		engagementID,
-	).Scan(&createdAt, &signedAt, &signerName, &openedAt, &remindedAt); err != nil {
+	).Scan(&contractID, &createdAt, &signedAt, &signerName, &openedAt); err != nil {
 		// coverage:ignore reason: DB query failure, not exercised by unit tests -- every caller has just read or written this Contract
 		return nil, nil, nil, nil, fmt.Errorf("contracts: read contract trail: %w", err)
 	}
@@ -186,21 +201,10 @@ func contractTrail(ctx context.Context, tx *sql.Tx, practiceID, engagementID str
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("contracts: read contract sent: %w", err)
 	}
-	reminded, err = activitypage.Latest(ctx, tx, activitypage.LatestQuery{
-		PracticeID:  practiceID,
-		SubjectKind: activity.SubjectEngagement,
-		SubjectID:   engagementID,
-		Action:      string(activity.ActionContractReminded),
-		NotBefore:   &createdAt,
-	})
+	reminded, err = latestReminder(ctx, tx, contractID)
 	// coverage:ignore reason: DB query failure, not exercised by unit tests
 	if err != nil {
-		return nil, nil, nil, nil, fmt.Errorf("contracts: read contract reminded: %w", err)
-	}
-	// The instant is the Contract's own, read from the clock; the ledger row
-	// only names who.
-	if reminded != nil && remindedAt.Valid {
-		reminded.At = remindedAt.Time
+		return nil, nil, nil, nil, err
 	}
 	if signedAt.Valid {
 		signed = &activitypage.Stamp{At: signedAt.Time, By: signerName.String}

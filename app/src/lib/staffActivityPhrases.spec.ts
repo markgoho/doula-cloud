@@ -29,7 +29,7 @@ const WORDING: readonly (readonly [action: string, named: string, unnamed: strin
 	['contract_edited', 'Contract for Amara changed', 'Contract for the Client changed'],
 	['contract_opened', 'Contract opened by Amara', 'Contract opened by the Client'],
 	['contract_priced', 'Price set on the Contract for Amara', 'Price set on the Contract for the Client'],
-	['contract_reminded', 'Reminder sent to Amara about the Contract', 'Reminder sent to the Client about the Contract'],
+	['contract_reminded', 'Reminder to Amara about the Contract', 'Reminder to the Client about the Contract'],
 	['contract_sent', 'Contract sent to Amara', 'Contract sent to the Client'],
 	['contract_signed', 'Contract signed by Amara', 'Contract signed by the Client'],
 	[
